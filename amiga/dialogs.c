@@ -240,7 +240,9 @@ static void sd_apply(void)
   sd_read();
   pv_drop(&sd.pv);
   set(app, MUIA_Application_Sleep, TRUE);
+  job_begin(sd.pv.d, NULL);                 /* (0.8: progress and Abort; an aborted preview leaves nothing) */
   sd.fn(sd.pv.d, sd.v, sd.cyc ? (int)xget(sd.cyc, MUIA_Cycle_Active) : 0, sd.chk ? (int)xget(sd.chk, MUIA_Selected) : 0);
+  job_end();
   set(app, MUIA_Application_Sleep, FALSE);
   pv_done(&sd.pv);
 }

@@ -213,6 +213,14 @@ static struct NewMenu menus[] = {
 };
 
 /* ------------------------------------------------------------------ small helpers */
+/* 0.8: a menu item's label (for the progress window), or NULL */
+static const char *menu_label(ULONG id)
+{
+  int i;
+  for (i = 0; menus[i].nm_Type != NM_END; i++)
+    if ((menus[i].nm_Type == NM_ITEM || menus[i].nm_Type == NM_SUB) && menus[i].nm_Label != NM_BARLABEL && (ULONG)menus[i].nm_UserData == id) return (const char *)menus[i].nm_Label;
+  return NULL;
+}
 DocView *cur_view(void) { return curdoc >= 0 && curdoc < ndocs ? &docs[curdoc] : NULL; }
 Doc *cur_doc(void) { DocView *v = cur_view(); return v ? v->doc : NULL; }
 static ULONG xget(Object *o, ULONG attr) { ULONG v = 0; get(o, attr, &v); return v; }
@@ -262,7 +270,9 @@ ULONG run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id))
 {
   ULONG sigs = 0, id = 0;
   int i, done = 0;
+  int (*hook)(long, long) = progress_hook;
   if (!w) return ID_DLGCANCEL;
+  progress_hook = NULL;                         /* (0.8: previews show no progress window, unless they start a job) */
   DoMethod(app, OM_ADDMEMBER, (ULONG)w);
   DoMethod(w, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCANCEL);
   set(win, MUIA_Window_Sleep, TRUE);
@@ -280,6 +290,7 @@ ULONG run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id))
   set(win, MUIA_Window_Sleep, FALSE);
   DoMethod(app, OM_REMMEMBER, (ULONG)w);
   redraw_window();
+  progress_hook = hook;
   return id;
 }
 Object *dialog_window(const char *t, Object *contents, const char *oklabel)
@@ -2008,7 +2019,14 @@ int main(int argc, char **argv)
     }
     else if (id == ID_DOCPICK) doc_switch((int)xget(doctabs, MUIA_DocTabs_Pick));
     else if (id == ID_DOCCLOSE) doc_close((int)xget(doctabs, MUIA_DocTabs_Close));
-    else if (id) { set(app, MUIA_Application_Sleep, TRUE); command(id); set(app, MUIA_Application_Sleep, FALSE); }
+    else if (id) {
+      /* (0.8: as a job, so a long operation shows its progress and can be aborted) */
+      set(app, MUIA_Application_Sleep, TRUE);
+      job_begin(cur_doc(), menu_label(id));
+      command(id);
+      if (job_end()) refresh_all();
+      set(app, MUIA_Application_Sleep, FALSE);
+    }
     if (sigs) {
       sigs = Wait(sigs | SIGBREAKF_CTRL_C);
       if (sigs & SIGBREAKF_CTRL_C) break;

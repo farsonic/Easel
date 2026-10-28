@@ -258,6 +258,14 @@ void dlg_load_selection(void);       /* (0.7) Select > Load Selection */
 void dlg_export(int fmt);            /* JPEG quality, ILBM colours... then saved */
 int  dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg);   /* (main.c's New) */
 
+/* ------------------------------------------------------------------ 0.8: long operations (jobs.c) */
+/* a job begun on d (or NULL): while it runs, a slow operation in the core shows a progress window
+   with an Abort button once it has taken half a second. job_end: 1 if Abort was pressed, in which
+   case the undo step the job made was taken back. Jobs nest */
+void job_begin(Doc *d, const char *name);
+int  job_end(void);
+int  job_running(void);
+
 /* ------------------------------------------------------------------ shared bits */
 /* the public screen Easel's windows open on ("": the default one); QWindowObject is a window on it */
 #define QDLG (ULONG)(theme_dialog_font() ? MUIA_Font : TAG_IGNORE), (ULONG)theme_dialog_font(), \

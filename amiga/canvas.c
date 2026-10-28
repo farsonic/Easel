@@ -851,10 +851,12 @@ static void xf_finish(struct Data *d, Object *obj, int apply)
     ov_hide(d, obj);
     d->xf_on = 0; xform_pending = 0;
     set(_app(obj), MUIA_Application_Sleep, TRUE);
+    job_begin(doc, d->xf_sel ? "Transform Selection" : "Free Transform");     /* (0.8: progress and Abort) */
     ok = d->xf_sel ? xform_selection(doc, &d->xf) : !box_empty(xform_layer(doc, doc->active, &d->xf, RS_BICUBIC));
+    if (job_end()) ok = -1;
     set(_app(obj), MUIA_Application_Sleep, FALSE);
-    if (ok) changed(d, obj);
-    else ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
+    if (ok > 0) changed(d, obj);
+    else if (!ok) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
     d->edges_ok = 0;
     comp_free(d);                        /* (the composite made again throughout) */
     draw_all(d, obj);
@@ -989,7 +991,13 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (x > doc->w - 1) x = doc->w - 1;
     if (y > doc->h - 1) y = doc->h - 1;
     if (!d->ml) {
-      if (!(d->ml = maglasso_new(doc, opt.ml_width, opt.ml_contrast, 200 / (opt.ml_freq + 1) + 8, 0))) { ask("OK", "%s", tr("There isn't enough memory for that.")); break; }
+      int stopped;
+      set(_app(obj), MUIA_Application_Sleep, TRUE);
+      job_begin(doc, "Magnetic Lasso Tool");                     /* (0.8: the edge map, with progress and Abort) */
+      d->ml = maglasso_new(doc, opt.ml_width, opt.ml_contrast, 200 / (opt.ml_freq + 1) + 8, 0);
+      stopped = job_end();
+      set(_app(obj), MUIA_Application_Sleep, FALSE);
+      if (!d->ml) { if (!stopped) ask("OK", "%s", tr("There isn't enough memory for that.")); break; }
       d->ml_op = sel_op_of(qual);
       maglasso_anchor(d->ml, x, y);
       d->mlpath = NULL; d->nmlpath = 0;
