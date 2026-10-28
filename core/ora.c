@@ -433,8 +433,10 @@ u8 *ora_write(Doc *doc, size_t *len)
   buf_init(&xml);
   merged.px = thumb.px = NULL;
   ok = zip_add_stored(&zw, "mimetype", "image/openraster", 16);
-  buf_printf(&xml, "<?xml version='1.0' encoding='UTF-8'?>\n<image version=\"0.0.5\" w=\"%ld\" h=\"%ld\" xres=\"%d\" yres=\"%d\" xmlns:easel=\"http://easel.amiga/ora/1\">\n<stack>\n",
+  buf_printf(&xml, "<?xml version='1.0' encoding='UTF-8'?>\n<image version=\"0.0.5\" w=\"%ld\" h=\"%ld\" xres=\"%d\" yres=\"%d\" xmlns:easel=\"http://easel.amiga/ora/1\"",
              (long)doc->w, (long)doc->h, dpi, dpi);
+  ora_put_info(&xml, &doc->info);                        /* 0.6: File Info, as attributes of <image> */
+  buf_adds(&xml, ">\n<stack>\n");
   put_range(&xml, &zw, doc, 0, doc->nlay, &ok);
   buf_adds(&xml, "</stack>\n</image>\n");
   if (ok) ok = !xml.oom && zip_add(&zw, "stack.xml", xml.data, xml.len);

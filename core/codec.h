@@ -150,4 +150,62 @@ u8   *ora_write(Doc *doc, size_t *len);
 const char *ora_op_name(int mode);
 int   ora_op_mode(const char *name);
 
+/* ------------------------------------------------------------------ 0.6: exchange */
+/* the formats Easel 0.6 writes (codec_writable is kept as it was, for the 0.5 UI) */
+#define codec_writable_06(fmt) (codec_writable(fmt) || (fmt) == FMT_GIF || (fmt) == FMT_TIFF || (fmt) == FMT_PSD || (fmt) == FMT_TGA)
+
+/* tiffw.c: TIFF, one image in strips, big-endian. Compression TIFFC_ (LZW and Deflate with the
+   horizontal predictor on 8-bit RGB and grey) */
+enum { TIFFC_NONE, TIFFC_PACKBITS, TIFFC_LZW, TIFFC_DEFLATE, TIFFC_N };
+extern const char *const tiff_comp_names[TIFFC_N + 1];       /* "None", "PackBits", "LZW", "Deflate", NULL */
+/* RGB, or RGBA (unassociated alpha) when anything isn't opaque; dpi 0 for none. Malloc'd, NULL if
+   out of memory */
+u8   *tiff_encode(const Rgba *im, int compression, int dpi, size_t *len);
+/* a document by its mode: RGB(A); Grayscale as grey (with alpha); Indexed as a palette TIFF (RGBA
+   when anything is transparent); Bitmap as 1-bit. Its dpi and File Info */
+u8   *tiff_encode_doc(Doc *d, int compression, size_t *len);
+
+/* tgaw.c: Targa, top-down rows and the TGA 2.0 footer, raw or RLE (rle 1) */
+u8   *tga_encode(const Rgba *im, int rle, size_t *len);          /* 24-bit, 32 when anything isn't opaque */
+/* 8-bit indices into an npal-entry map (24-bit; 32-bit with entry transparent clear, -1 none) */
+u8   *tga_encode_indexed(const u8 *idx, i32 w, i32 h, const u8 *pal, int npal, int transparent, int rle, size_t *len);
+/* a document: Indexed and Bitmap colour-mapped, Grayscale 8-bit grey (32-bit colour with alpha), RGB true colour */
+u8   *tga_write_doc(Doc *d, int rle, size_t *len);
+
+/* psd.c: a Photoshop file as a layered document (8- and 16-bit RGB and grey; names, opacity, blend
+   modes, visibility, clipping, fill opacity, locks, Blend If, layer masks with density and
+   feather, groups with pass-through); any other kind, or one without layers, opens from its
+   composite as one layer. NULL with a message in err */
+Doc  *psd_read_doc(const u8 *d, size_t n, char *err, size_t errcap);
+/* the document as an 8-bit RGB PSD with its layers (fill layers as their pixels, adjustment layers
+   as empty pixel layers), groups, masks, resolution, File Info (XMP) and the merged composite */
+u8   *psd_write_doc(Doc *d, size_t *len);
+
+/* jpegenc.c and docinfo.c: the EXIF orientation (1-8; 1 if none), which jpeg_read applies, and the
+   transformation that makes a picture with orientation o upright (5-8 swap w and h) */
+int   jpeg_orientation(const u8 *d, size_t n);
+void  rgba_orient(Rgba *im, int o);
+
+/* docinfo.c: File Info (doc.h's DocInfo) */
+void  docinfo_clear(DocInfo *f);
+int   docinfo_empty(const DocInfo *f);
+/* n bytes of UTF-8 into one of the fields (cap its size), cut between characters */
+void  docinfo_set(char *dst, size_t cap, const char *s, size_t n);
+/* the File Info a file holds (PNG, JPEG, TIFF, PSD, ORA); 1 if it had any. codec_load_doc fills
+   the document's with it */
+int   codec_read_info(const u8 *d, size_t n, DocInfo *f);
+/* an XMP packet of the six fields appended to b, and one parsed (fields it has replace f's) */
+void  xmp_write(Buf *b, const DocInfo *f);
+int   xmp_parse(const char *s, size_t n, DocInfo *f);
+/* an encoded PNG or JPEG given the File Info (PNG tEXt/iTXt and XMP; JPEG XMP and a comment):
+   takes the file and returns it grown (or as it was when f is empty); NULL if out of memory */
+u8   *png_add_info(u8 *png, size_t *len, const DocInfo *f);
+u8   *jpeg_add_info(u8 *jpg, size_t *len, const DocInfo *f);
+/* the document as PNG (in its mode, as doc_png_encode) and as JPEG (quality 1-100), with its dpi
+   and File Info */
+u8   *png_write_doc(Doc *d, size_t *len);
+u8   *jpeg_write_doc(Doc *d, int quality, size_t *len);
+/* ora.c's stack.xml gets the File Info as easel: attributes of <image> */
+void  ora_put_info(Buf *xml, const DocInfo *f);
+
 #endif
