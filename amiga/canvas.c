@@ -1021,6 +1021,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   }
   if (c == '+' || c == '=') { zoom_to(d, obj, zoom_step(d->z, 1), -1, -1); return 1; }
   if (c == '-') { zoom_to(d, obj, zoom_step(d->z, -1), -1, -1); return 1; }
+  if (c == 9) { DoMethod(_app(obj), MUIM_Application_ReturnID, shift ? ID_TOGGLERIGHT : ID_TOGGLEPANELS); return 1; }   /* Tab, Shift-Tab */
   if (c == 'x' || c == 'X') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_SWAPCOLORS); return 1; }
   if (c == 'd' || c == 'D') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_DEFCOLORS); return 1; }
   /* a tool's letter: that tool, or (pressed again, or with Shift) the next tool sharing the letter */

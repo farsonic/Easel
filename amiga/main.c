@@ -74,6 +74,7 @@ Opts opt;
 int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
 static Object *navpanel, *infopanel;     /* (0.6) the Navigator and Info panels */
+static Object *rightcol;                 /* the panels' column (Tab hides it) */
 static int fonts_assigned;
 static int untitled;
 static LONG win_box[4];
@@ -182,6 +183,7 @@ static struct NewMenu menus[] = {
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
   T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
   I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
+  I("Hide/Show Panels (Tab)", 0, ID_TOGGLEPANELS), I("Hide/Show Right Panels (Shift-Tab)", 0, ID_TOGGLERIGHT), BAR,
   T("Dark Interface", 0, ID_DARKUI),
   M("Window"),
   I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC), BAR,
@@ -1184,6 +1186,14 @@ static void command(ULONG id)
     set(win, MUIA_Window_Open, TRUE);
     refresh_all();
     return;
+  case ID_TOGGLEPANELS: case ID_TOGGLERIGHT: {
+    /* Tab: the toolbox, options bar and panels hidden or shown again; Shift-Tab just the panels */
+    static int hidden;
+    hidden = !hidden;
+    set(rightcol, MUIA_ShowMe, !hidden);
+    if (id == ID_TOGGLEPANELS) { set(toolbox, MUIA_ShowMe, !hidden); set(optbar, MUIA_ShowMe, !hidden); }
+    else { set(toolbox, MUIA_ShowMe, TRUE); set(optbar, MUIA_ShowMe, TRUE); }
+    return; }
   case ID_NEXTDOC: if (ndocs > 1) doc_switch((curdoc + 1) % ndocs); return;
   case ID_PREVDOC: if (ndocs > 1) doc_switch((curdoc + ndocs - 1) % ndocs); return;
   case ID_SWAPCOLORS: if (d) { u32 t = d->fg; d->fg = d->bg; d->bg = t; refresh_panels(); } return;
@@ -1471,7 +1481,7 @@ static int win_make(void)
           End,
           Child, hscroll = flat(1),
         End,
-        Child, VGroup, MUIA_Group_Spacing, 0, MUIA_HorizWeight, 0,
+        Child, rightcol = VGroup, MUIA_Group_Spacing, 0, MUIA_HorizWeight, 0,
           Child, tophead = head(head_color),
           Child, toppages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 0,
             Child, colorpanel = NewObject(color_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
