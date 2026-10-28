@@ -48,7 +48,7 @@ void path_to_selection(Doc *d, const Path *p, int op, double feather, int antial
   long k, n = (long)d->w * d->h;
   if (!(m = (u8 *)calloc((size_t)n, 1))) return;
   poly_init(&pl);
-  if (p && path_flatten(p, 0.2, &pl)) poly_raster(&pl, p->evenodd, doc_box(d), m, d->w);
+  if (p && path_flatten(p, 0.05, &pl)) poly_raster(&pl, p->evenodd, doc_box(d), m, d->w);
   poly_free(&pl);
   if (!antialias) for (k = 0; k < n; k++) m[k] = m[k] >= 128 ? 255 : 0;
   if (feather > 0) blur(m, d->w, d->h, (int)(feather + 1) / 2);
@@ -123,7 +123,7 @@ static int fit_loop(Path *path, const double *p, i32 n, double tol)
       double lu = hypot(ux, uy), lv = hypot(vx, vy), cosang, tx, ty, tl;
       if (lu < 1e-9 || lv < 1e-9) continue;
       cosang = (ux * vx + uy * vy) / (lu * lv);
-      if (cosang < 0.35) continue;                       /* (a turn of more than about 70 degrees: a corner) */
+      if (cosang < 0.7) continue;                        /* (a turn of more than about 45 degrees: a corner) */
       tx = nx[0] - pv[0]; ty = nx[1] - pv[1]; tl = hypot(tx, ty);
       if (tl < 1e-9) continue;
       tx /= tl; ty /= tl;
@@ -251,7 +251,7 @@ Box path_fill(Doc *d, const Path *p, u32 color, int opacity, int blend, int anti
   Poly pl;
   Box r = box_make(0, 0, 0, 0);
   poly_init(&pl);
-  if (p && path_flatten(p, 0.2, &pl)) r = fill_poly_on(d, &pl, p->evenodd, color, opacity, blend, antialias, "Fill Path");
+  if (p && path_flatten(p, 0.05, &pl)) r = fill_poly_on(d, &pl, p->evenodd, color, opacity, blend, antialias, "Fill Path");
   poly_free(&pl);
   return r;
 }
@@ -263,7 +263,7 @@ Box path_stroke_simple(Doc *d, const Path *p, double width, u32 color, int opaci
   memset(&ss, 0, sizeof ss);
   ss.width = width > 0 ? width : 1; ss.cap = CAP_ROUND; ss.join = JOIN_ROUND;
   poly_init(&pl); poly_init(&st);
-  if (p && path_flatten(p, 0.2, &pl) && poly_stroke(&pl, &ss, &st)) r = fill_poly_on(d, &st, 0, color, opacity, blend, 1, "Stroke Path");
+  if (p && path_flatten(p, 0.05, &pl) && poly_stroke(&pl, &ss, &st)) r = fill_poly_on(d, &st, 0, color, opacity, blend, 1, "Stroke Path");
   poly_free(&pl); poly_free(&st);
   return r;
 }

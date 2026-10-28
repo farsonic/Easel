@@ -179,7 +179,7 @@ int shape_render(const ShapeParams *sp, i32 w, i32 h, u8 **px, Box *bx)
   *px = NULL; *bx = box_make(0, 0, 0, 0);
   if (!p.na || (!stroke && !filled)) return 1;
   poly_init(&fill); poly_init(&st);
-  if (!path_flatten(&p, 0.2, &fill)) goto done;
+  if (!path_flatten(&p, 0.05, &fill)) goto done;
   b = poly_box(&fill);
   if (stroke) {
     StrokeStyle ss;
