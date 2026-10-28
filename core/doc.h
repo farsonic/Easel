@@ -109,6 +109,8 @@ typedef struct {
   CycleRange cycle[MAXCYCLES]; int ncycle;
   u32 modeid;                         /* Amiga display ModeID (CAMG), 0 for none chosen */
   u8 aspect_x, aspect_y;              /* pixel aspect ratio (1:1 square); IFF BMHD's x/yAspect */
+  /* 0.2.1: the last selection, for Select > Reselect (selmore.h; 8 bytes of size, then the mask) */
+  u8 *lastsel;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
@@ -146,6 +148,8 @@ extern void (*adjlayer_free)(void *prog);
 extern void (*adjlayer_row)(const void *prog, u8 *px, int n);
 /* one blend: src over dst (both straight RGBA), with opacity 0-255 and mode */
 void   blend_pixel(u8 *dst, const u8 *src, int opacity, int mode);
+/* the same at canvas pixel x, y: Dissolve needs the position (blend_pixel treats it as Normal) */
+void   blend_pixel_at(u8 *dst, const u8 *src, int opacity, int mode, i32 x, i32 y);
 
 /* undo: a step begun, the regions of layers about to change noted, the step ended.
    doc_note_layer saves layer i's pixels in box r; doc_note_all saves the whole document
