@@ -616,8 +616,14 @@ void doc_composite(Doc *d, Box r, u8 *out, long stride)
 /* ------------------------------------------------------------------ undo */
 long undo_budget = 40L * 1024 * 1024;
 #define TS 64
-typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; } Tile;   /* plane 0: pixels (TS*TS*4, or the edge
-                                                                       part's size); 1: the mask (1 byte a pixel) */
+typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; u8 *ix; } Tile;   /* plane 0: pixels (TS*TS*4, or the edge
+                                                                       part's size); 1: the mask (1 byte a pixel);
+                                                                       ix (0.4): an indexed layer's indices, or NULL */
+/* 0.4: the palette state an undo step can keep (doc_note_pal, doc_note_all) */
+typedef struct {
+  u8 mode; int npal; u8 pal[256 * 3]; u8 lock[256];
+  CycleRange cycle[MAXCYCLES]; int ncycle; u32 modeid; u8 ax, ay;
+} PalState;
 typedef Layer Props;                  /* a layer's settings: everything but its buffers (see props_of) */
 struct UndoStep {
   char name[64];
@@ -626,6 +632,7 @@ struct UndoStep {
   /* a copy of the whole document (doc_note_all) */
   int whole; i32 w, h; Layer *lay[MAXLAYERS]; int nlay, active;
   Props *props; int nprops, pactive;   /* the layers' settings before the step (nprops of them) */
+  int has_pal; PalState *pal;         /* 0.4: the palette as it was (malloc'd) */
   long bytes;
   UndoStep *next;
   int open;
@@ -634,9 +641,10 @@ static UndoStep *open_step(Doc *d) { return d->undo && d->undo->open ? d->undo :
 static void step_free(UndoStep *u)
 {
   int i;
-  for (i = 0; i < u->ntiles; i++) free(u->tiles[i].px);
+  for (i = 0; i < u->ntiles; i++) { free(u->tiles[i].px); free(u->tiles[i].ix); }
   free(u->tiles);
   free(u->sel);
+  free(u->pal);                                            /* 0.4 */
   if (u->whole) for (i = 0; i < u->nlay; i++) layer_free(u->lay[i]);
   free(u->props);
   free(u);
@@ -705,8 +713,13 @@ static void note_plane(Doc *d, int li, Box r, int plane)
       }
       t = &u->tiles[u->ntiles];
       if (!(t->px = (u8 *)malloc((size_t)tw * th * bpp))) return;
-      t->layer = li; t->tx = tx; t->ty = ty; t->plane = (u8)plane;
+      t->layer = li; t->tx = tx; t->ty = ty; t->plane = (u8)plane; t->ix = NULL;
       for (row = 0; row < th; row++) memcpy(t->px + (long)row * tw * bpp, buf + ((long)(y0 + row) * d->w + x0) * bpp, (size_t)tw * bpp);
+      /* 0.4: an indexed layer's indices kept with the pixels */
+      if (!plane && d->lay[li]->idx && (t->ix = (u8 *)malloc((size_t)tw * th)) != NULL) {
+        for (row = 0; row < th; row++) memcpy(t->ix + (long)row * tw, d->lay[li]->idx + (long)(y0 + row) * d->w + x0, (size_t)tw);
+        u->bytes += (long)tw * th;
+      }
       u->ntiles++;
       u->bytes += (long)tw * th * bpp;
     }
@@ -720,13 +733,45 @@ void doc_note_sel(Doc *d)
   u->has_sel = 1; u->selbox = d->selbox;
   if (d->sel && (u->sel = (u8 *)malloc((size_t)d->w * d->h))) { memcpy(u->sel, d->sel, (size_t)d->w * d->h); u->bytes += (long)d->w * d->h; }
 }
+/* 0.4: the palette state saved into or swapped with a step */
+static void pal_get(const Doc *d, PalState *p)
+{
+  p->mode = d->mode; p->npal = d->npal; memcpy(p->pal, d->pal, sizeof p->pal); memcpy(p->lock, d->pal_lock, sizeof p->lock);
+  memcpy(p->cycle, d->cycle, sizeof p->cycle); p->ncycle = d->ncycle; p->modeid = d->modeid; p->ax = d->aspect_x; p->ay = d->aspect_y;
+}
+static void pal_put(Doc *d, const PalState *p)
+{
+  d->mode = p->mode; d->npal = p->npal; memcpy(d->pal, p->pal, sizeof d->pal); memcpy(d->pal_lock, p->lock, sizeof d->pal_lock);
+  memcpy(d->cycle, p->cycle, sizeof d->cycle); d->ncycle = p->ncycle; d->modeid = p->modeid; d->aspect_x = p->ax; d->aspect_y = p->ay;
+}
+void doc_note_pal(Doc *d)
+{
+  UndoStep *u = open_step(d);
+  if (!u || u->has_pal) return;
+  if (!(u->pal = (PalState *)malloc(sizeof *u->pal))) return;
+  pal_get(d, u->pal);
+  u->has_pal = 1;
+  u->bytes += (long)sizeof *u->pal;
+}
+/* 0.4: every indexed layer's RGB from its indices (alpha kept), after its palette was swapped back */
+static void pal_rederive(Doc *d)
+{
+  int i;
+  long k, n = (long)d->w * d->h;
+  for (i = 0; i < d->nlay; i++) {
+    Layer *l = d->lay[i];
+    if (!l->px || !l->idx) continue;
+    for (k = 0; k < n; k++) { const u8 *c = d->pal + l->idx[k] * 3; u8 *p = l->px + k * 4; p[0] = c[0]; p[1] = c[1]; p[2] = c[2]; }
+  }
+}
 void doc_note_all(Doc *d)
 {
   UndoStep *u = open_step(d);
   int i;
   if (!u || u->whole) return;
+  doc_note_pal(d);                                         /* 0.4: the palette and mode go with the copy */
   /* tiles noted already are covered by the copy */
-  for (i = 0; i < u->ntiles; i++) free(u->tiles[i].px);
+  for (i = 0; i < u->ntiles; i++) { free(u->tiles[i].px); free(u->tiles[i].ix); }
   free(u->tiles); u->tiles = NULL; u->ntiles = u->captiles = 0;
   free(u->sel); u->sel = NULL; u->has_sel = 0;
   u->whole = 1; u->w = d->w; u->h = d->h; u->nlay = d->nlay; u->active = d->active; u->bytes = 0;
@@ -744,7 +789,7 @@ void doc_end(Doc *d)
   int k;
   if (!u || --u->open > 0) return;
   /* nothing noted and nothing about the layers changed: no step */
-  if (!u->whole && !u->ntiles && !u->has_sel) {
+  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal) {
     int same = u->nprops == d->nlay && u->pactive == d->active, i;
     for (i = 0; same && i < d->nlay; i++) {
       Props now;
@@ -789,6 +834,11 @@ static void swap_step(Doc *d, UndoStep *u)
         u8 *a = t->px + (long)row * tw * bpp, *b = buf + ((long)(y0 + row) * d->w + x0) * bpp;
         memcpy(tmp, a, (size_t)tw * bpp); memcpy(a, b, (size_t)tw * bpp); memcpy(b, tmp, (size_t)tw * bpp);
       }
+      if (t->ix && d->lay[t->layer]->idx)                  /* 0.4: the indices too */
+        for (row = 0; row < th; row++) {
+          u8 *a = t->ix + (long)row * tw, *b = d->lay[t->layer]->idx + (long)(y0 + row) * d->w + x0;
+          memcpy(tmp, a, (size_t)tw); memcpy(a, b, (size_t)tw); memcpy(b, tmp, (size_t)tw);
+        }
     }
     /* the layers' settings */
     if (u->nprops == d->nlay) {
@@ -806,6 +856,10 @@ static void swap_step(Doc *d, UndoStep *u)
     u8 *ts = d->sel;
     Box tb = d->selbox;
     if (u->whole || !u->sel || !ts || 1) { d->sel = u->sel; d->selbox = u->selbox; u->sel = ts; u->selbox = tb; }
+  }
+  if (u->has_pal && u->pal) {                              /* 0.4: the palette and mode swapped */
+    PalState *cur = (PalState *)malloc(sizeof *cur);       /* (off the stack: it is over 1 KB) */
+    if (cur) { pal_get(d, cur); pal_put(d, u->pal); *u->pal = *cur; free(cur); if (!u->whole) pal_rederive(d); }
   }
   if (d->active >= d->nlay) d->active = d->nlay - 1;
   if (d->active < 0) d->active = 0;

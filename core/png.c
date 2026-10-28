@@ -293,3 +293,85 @@ u8 *png_encode(const Rgba *im, int dpi, size_t *len)
   *len = b.len;
   return (u8 *)buf_take(&b);
 }
+
+/* ------------------------------------------------------------------ 0.4: palette and grey PNGs */
+/* the file around already filtered rows: IHDR (depth, colour type), any extra chunks, IDAT, IEND */
+static u8 *png_wrap(i32 w, i32 h, int depth, int ctype, const u8 *filtered, size_t flen, const u8 *pal, int npal,
+                    const u8 *trns, int ntrns, int dpi, size_t *len)
+{
+  u8 hdr[13], *z;
+  size_t zlen;
+  Buf b;
+  if (!(z = zlib_compress(filtered, flen, &zlen))) return NULL;
+  buf_init(&b);
+  buf_add(&b, "\211PNG\r\n\032\n", 8);
+  hdr[0] = (u8)(w >> 24); hdr[1] = (u8)(w >> 16); hdr[2] = (u8)(w >> 8); hdr[3] = (u8)w;
+  hdr[4] = (u8)(h >> 24); hdr[5] = (u8)(h >> 16); hdr[6] = (u8)(h >> 8); hdr[7] = (u8)h;
+  hdr[8] = (u8)depth; hdr[9] = (u8)ctype; hdr[10] = hdr[11] = hdr[12] = 0;
+  chunk(&b, "IHDR", hdr, 13);
+  if (pal) chunk(&b, "PLTE", pal, (u32)npal * 3);
+  if (trns && ntrns > 0) chunk(&b, "tRNS", trns, (u32)ntrns);
+  if (dpi > 0) {
+    u8 phys[9];
+    u32 ppm = (u32)(((unsigned long)dpi * 10000UL + 127) / 254);
+    phys[0] = phys[4] = (u8)(ppm >> 24); phys[1] = phys[5] = (u8)(ppm >> 16); phys[2] = phys[6] = (u8)(ppm >> 8); phys[3] = phys[7] = (u8)ppm;
+    phys[8] = 1;
+    chunk(&b, "pHYs", phys, 9);
+  }
+  chunk(&b, "IDAT", z, (u32)zlen);
+  free(z);
+  chunk(&b, "IEND", NULL, 0);
+  if (b.oom) { buf_free(&b); return NULL; }
+  *len = b.len;
+  return (u8 *)buf_take(&b);
+}
+/* colour type 3: 1, 2, 4 or 8 bits a pixel (the fewest that hold npal entries), rows unfiltered as
+   the PNG specification advises for palette pictures; tRNS gives the first ntrns entries' alpha */
+u8 *png_encode_indexed(const u8 *idx, i32 w, i32 h, const u8 *pal, int npal, const u8 *trns, int ntrns, int dpi, size_t *len)
+{
+  int depth = npal <= 2 ? 1 : npal <= 4 ? 2 : npal <= 16 ? 4 : 8, per = 8 / depth;
+  u32 rb = (u32)((w * depth + 7) / 8), x, y;
+  u8 *f, *out;
+  if (!idx || !pal || w < 1 || h < 1 || npal < 1 || npal > 256) return NULL;
+  if (!(f = (u8 *)calloc((size_t)h, rb + 1))) return NULL;
+  for (y = 0; y < (u32)h; y++) {
+    u8 *o = f + (size_t)y * (rb + 1) + 1;
+    const u8 *s = idx + (size_t)y * w;
+    for (x = 0; x < (u32)w; x++) o[x / per] |= (u8)((s[x] & ((1 << depth) - 1)) << ((per - 1 - x % per) * depth));
+  }
+  if (ntrns > npal) ntrns = npal;
+  out = png_wrap(w, h, depth, 3, f, (size_t)h * (rb + 1), pal, npal, trns, ntrns, dpi, len);
+  free(f);
+  return out;
+}
+/* colour type 0 (grey) or 4 (grey and alpha, when any pixel isn't opaque), 8 bits; the grey is the
+   luminance (Rec. 601), filtered as png_encode does */
+u8 *png_encode_gray(const Rgba *im, int dpi, size_t *len)
+{
+  long i, n = (long)im->w * im->h;
+  int ch = 1, f, best;
+  u32 rb, x, y;
+  u8 *filtered, *rows, *out;
+  for (i = 0; i < n; i++) if (im->px[i * 4 + 3] != 255) { ch = 2; break; }
+  rb = (u32)im->w * ch;
+  if (!(filtered = (u8 *)malloc((size_t)im->h * (rb + 1))) || !(rows = (u8 *)malloc((size_t)rb * 2))) { free(filtered); return NULL; }
+  for (y = 0; y < (u32)im->h; y++) {
+    u8 *cur = rows + (y & 1) * rb, *prev = y ? rows + ((y - 1) & 1) * rb : NULL, *o = filtered + (size_t)y * (rb + 1);
+    const u8 *s = im->px + (size_t)y * im->w * 4;
+    unsigned long sum, bestsum = 0;
+    for (x = 0; x < (u32)im->w; x++) {
+      cur[x * ch] = (u8)((s[x * 4] * 77 + s[x * 4 + 1] * 150 + s[x * 4 + 2] * 29 + 128) >> 8);
+      if (ch == 2) cur[x * 2 + 1] = s[x * 4 + 3];
+    }
+    for (best = 0, f = 0; f < 5; f++) {
+      for (sum = 0, x = 0; x < rb; x++) { int v = filt(f, cur, prev, x, ch); sum += (unsigned long)(v < 128 ? v : 256 - v); }
+      if (!f || sum < bestsum) { bestsum = sum; best = f; }
+    }
+    o[0] = (u8)best;
+    for (x = 0; x < rb; x++) o[x + 1] = filt(best, cur, prev, x, ch);
+  }
+  free(rows);
+  out = png_wrap(im->w, im->h, 8, ch == 2 ? 4 : 0, filtered, (size_t)im->h * (rb + 1), NULL, 0, NULL, 0, dpi, len);
+  free(filtered);
+  return out;
+}

@@ -88,6 +88,20 @@ enum { MODE_RGB, MODE_INDEXED, MODE_GRAY, MODE_BITMAP };
 typedef struct { u8 lo, hi, active, reverse; u16 rate; } CycleRange;
 #define MAXCYCLES 16
 
+/* 0.4: rulers, guides and grid (guides.h works with them): guide positions in image pixels, the
+   grid's spacing (0: 16) and offset, what is shown and what snaps (guides.h's SNAP_ flags) */
+#define MAXGUIDES 64
+typedef struct {
+  i32 h[MAXGUIDES]; int nh;           /* horizontal guides: their y */
+  i32 v[MAXGUIDES]; int nv;           /* vertical guides: their x */
+  u16 grid_x, grid_y;                 /* grid spacing in pixels (0: 16) */
+  i16 grid_ox, grid_oy;               /* where the grid starts */
+  u8 grid_sub;                        /* subdivisions per grid square (0 or 1: none) */
+  u8 show_grid, show_guides, show_rulers, lock_guides;
+  u8 snap;                            /* SNAP_ flags in effect */
+  u16 snap_tol;                       /* how close snaps, in 1/16 image pixels (0: 8 px); the UI sets it per zoom */
+} GuideSet;
+
 typedef struct {
   i32 w, h;
   Layer *lay[MAXLAYERS]; int nlay;
@@ -111,6 +125,8 @@ typedef struct {
   u8 aspect_x, aspect_y;              /* pixel aspect ratio (1:1 square); IFF BMHD's x/yAspect */
   /* 0.2.1: the last selection, for Select > Reselect (selmore.h; 8 bytes of size, then the mask) */
   u8 *lastsel;
+  /* 0.4: guides and grid (not part of undo) */
+  GuideSet guides;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
@@ -159,6 +175,9 @@ void   doc_note_layer(Doc *d, int i, Box r);
 void   doc_note_mask(Doc *d, int i, Box r);                /* layer i's mask in box r (0.3) */
 void   doc_note_sel(Doc *d);
 void   doc_note_all(Doc *d);
+/* 0.4: the palette, mode, cycle ranges, ModeID and aspect saved in the step (doc_note_all saves them
+   too). Undoing a step that saved only these re-derives indexed layers' RGBA from their indices */
+void   doc_note_pal(Doc *d);
 void   doc_end(Doc *d);
 int    doc_undo(Doc *d);
 int    doc_redo(Doc *d);

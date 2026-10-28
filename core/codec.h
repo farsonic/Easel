@@ -98,6 +98,48 @@ int   quantize(const Rgba *im, int maxc, int dither, u8 *pal, u8 *idx);
 /* the first frame of a GIF, on its logical screen (outside the frame transparent), transparency kept */
 int   gif_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap);
 
+/* ------------------------------------------------------------------ 0.4: indexed writers */
+/* png.c: colour type 3 at the fewest bits (1/2/4/8) for npal entries, with PLTE and (ntrns > 0) a
+   tRNS of the first ntrns entries' alpha; and 8-bit grey (grey and alpha if anything isn't opaque) */
+u8   *png_encode_indexed(const u8 *idx, i32 w, i32 h, const u8 *pal, int npal, const u8 *trns, int ntrns, int dpi, size_t *len);
+u8   *png_encode_gray(const Rgba *im, int dpi, size_t *len);
+/* gifenc.c: GIF89a of indices with a global palette (npal entries, padded to a power of two),
+   transparent the index made transparent (-1 none), interlace 1 for the 4-pass order */
+u8   *gif_encode(const u8 *idx, i32 w, i32 h, const u8 *pal, int npal, int transparent, int interlace, size_t *len);
+/* any picture quantized (palette.h's QM_/DI_) to maxc colours, one more for transparency when
+   any alpha is under 128 */
+u8   *gif_encode_rgba(const Rgba *im, int maxc, int method, int dither, int interlace, size_t *len);
+/* a document: an indexed one's exact palette and indices, anything else quantized as above */
+u8   *gif_write_doc(Doc *d, int maxc, int method, int dither, int interlace, size_t *len);
+
+/* ilbm.c: the ILBM writer's choices */
+enum { IK_NORMAL, IK_EHB, IK_HAM6, IK_HAM8, IK_DEEP24, IK_SHAM, IK_N };
+enum { IMK_NONE, IMK_PLANE, IMK_TRANSPARENT };
+typedef struct {
+  int kind;                           /* IK_ */
+  int planes;                         /* IK_NORMAL: 1-8 (0: the fewest that hold the palette) */
+  int mask;                           /* IMK_: a mask plane from alpha, or a transparent colour */
+  int transparent;                    /* IMK_TRANSPARENT's entry (-1: an unused one, or one added) */
+  int cycles;                         /* write the document's cycle ranges as CRNG */
+  int method, dither;                 /* palette.h's QM_ and DI_ when it has to quantize */
+  int compress;                       /* 1 ByteRun1, 0 none */
+  u32 modeid;                         /* CAMG: 0 for the document's, or one chosen from the size */
+  u8 aspect_x, aspect_y;              /* BMHD: 0 for the document's */
+} IlbmOpts;
+void  ilbm_opts_default(IlbmOpts *o);
+/* any picture as an ILBM: pal/idx (npal entries) are used exactly when given (IK_NORMAL and IK_EHB),
+   else the picture is quantized; cyc/ncyc the CRNG ranges. Malloc'd, NULL with a message in err */
+u8   *ilbm_write(const Rgba *im, const u8 *pal, int npal, const u8 *idx, const CycleRange *cyc, int ncyc,
+                 const IlbmOpts *o, size_t *len, char *err, size_t errcap);
+/* a document: an indexed one's palette and indices kept exactly; its ModeID, aspect and cycles */
+u8   *ilbm_write_doc(Doc *d, const IlbmOpts *o, size_t *len, char *err, size_t errcap);
+/* an ILBM, PBM or ACBM of 1-8 planes without HAM as an indexed document: CMAP, indices, the CRNG,
+   CCRT and DRNG ranges, CAMG and aspect kept; EHB gets a 64-entry palette; a mask plane or the
+   transparent colour becomes alpha. NULL with a message in err */
+Doc  *ilbm_read_indexed(const u8 *d, size_t n, char *err, size_t errcap);
+/* 1 if ilbm_read_indexed can take the file (what the UI asks before opening one as indexed) */
+int   ilbm_indexable(const u8 *d, size_t n);
+
 /* ------------------------------------------------------------------ ora.c */
 /* an OpenRaster file as a document (see ora.c for what is kept); NULL with a message in err */
 Doc  *ora_read(const u8 *d, size_t n, char *err, size_t errcap);

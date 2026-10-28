@@ -9,7 +9,7 @@
  *
  * Build and run from the easel folder:
  *   cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c \
- *      core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c \
+ *      core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/palette.c core/gifenc.c \
  *      tests/codectest.c -o /tmp/codectest -lm && /tmp/codectest
  */
 #include <stdio.h>
