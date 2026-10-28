@@ -34,7 +34,7 @@ typedef struct {
   char label[72];                     /* "Edit > Preferences..." */
   char amiga[2];                      /* the Amiga key ("" none) */
   UWORD xkey; UBYTE xqual;            /* the extra key: a character (< 256), 256 + a raw key code; 0 none */
-  char line[128];                     /* as the list shows it */
+  char line[96], keys[48];            /* as the list shows it: the command, its keys */
 } KeyEntry;
 static KeyEntry ke[MAXKEYS];
 static int nke;
@@ -78,10 +78,20 @@ static int xkey_parse(const char *s, UWORD *k, UBYTE *q)
 static void ke_line(KeyEntry *e)
 {
   char x[40];
-  if (!e->id) { sprintf(e->line, "%s: %s   \33r[%c]", tr("Tool"), tr(tool_names[e->tool]), tool_keys[e->tool]); return; }
+  if (!e->id) { sprintf(e->line, "%s: %s", tr("Tool"), tr(tool_names[e->tool])); sprintf(e->keys, "%c", tool_keys[e->tool]); return; }
   xkey_text(e->xkey, e->xqual, x);
-  snprintf(e->line, sizeof e->line, "%s\33r%s%s%s%s", e->label, e->amiga[0] ? "Amiga " : "", e->amiga, e->amiga[0] && x[0] ? "   " : "", x);
+  snprintf(e->line, sizeof e->line, "%s", e->label);
+  snprintf(e->keys, sizeof e->keys, "%s%s%s%s", e->amiga[0] ? "Amiga " : "", e->amiga, e->amiga[0] && x[0] ? "   " : "", x);
 }
+/* the list's two columns for an entry (MUI calls this hook with the entry in a1, the columns in a2) */
+static ULONG ke_display(__reg("a0") struct Hook *h, __reg("a2") char **cols, __reg("a1") KeyEntry *e)
+{
+  (void)h;
+  if (!e) { cols[0] = (char *)tr("Command"); cols[1] = (char *)tr("Keys"); return 0; }
+  cols[0] = e->line; cols[1] = e->keys;
+  return 0;
+}
+static struct Hook ke_hook = { { NULL, NULL }, (HOOKFUNC)ke_display, NULL, NULL };
 /* (see easel.h) the commands gathered from the menus (before the window is made), and Easel.keys read */
 void keys_init(struct NewMenu *menus)
 {
@@ -217,6 +227,7 @@ void dlg_keys(void)
   w = dialog_window("Keyboard Shortcuts", VGroup,
         Child, klist = ListviewObject, MUIA_Listview_Input, TRUE, MUIA_CycleChain, 1,
           MUIA_Listview_List, ListObject, InputListFrame, (ULONG)(theme_dialog_font() ? MUIA_Font : TAG_IGNORE), (ULONG)theme_dialog_font(),
+            MUIA_List_DisplayHook, (ULONG)&ke_hook, MUIA_List_Format, (ULONG)"BAR,", MUIA_List_Title, TRUE,
             MUIA_FixHeightTxt, (ULONG)"\n\n\n\n\n\n\n\n\n\n\n\n\n\n", MUIA_FixWidthTxt, (ULONG)"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", End, End,
         Child, HGroup,
           Child, QLabel(tr("Amiga key:"), MUIO_Label_SingleFrame),
@@ -228,7 +239,7 @@ void dlg_keys(void)
         Child, knote = TextObject, MUIA_Text_Contents, (ULONG)"", MUIA_Text_SetMin, FALSE, End,
       End, "Save");
   if (!w) return;
-  for (i = 0; i < nke; i++) DoMethod(klist, MUIM_List_InsertSingle, (ULONG)ke[i].line, MUIV_List_Insert_Bottom);
+  for (i = 0; i < nke; i++) DoMethod(klist, MUIM_List_InsertSingle, (ULONG)&ke[i], MUIV_List_Insert_Bottom);
   DoMethod(klist, MUIM_Notify, MUIA_List_Active, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
   DoMethod(kamiga, MUIM_Notify, MUIA_String_Contents, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGAUTO);
   DoMethod(kextra, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGAUTO);
