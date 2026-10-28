@@ -493,6 +493,19 @@ static void ilbm(void)
     ok(name, r && r->mode == MODE_INDEXED && r->npal == (1 << planes) && !memcmp(r->pal, d->pal, (size_t)d->npal * 3) &&
        !memcmp(r->lay[0]->idx, d->lay[0]->idx, (size_t)n) && r->ncycle == 1 && r->cycle[0].hi == (1 << planes) - 1 && r->cycle[0].rate == 5000 &&
        r->modeid == 0x00029004 && r->aspect_x == 10 && r->aspect_y == 11 && ilbm_indexable(data, len) && doc_consistent(r));
+    if (planes == 4 && data) {
+      /* damaged and truncated copies: refused or read safely (under ASan) */
+      size_t cut;
+      u8 *bad = (u8 *)malloc(len);
+      for (cut = 0; cut < len; cut += len / 37 + 1) { Doc *x = ilbm_read_indexed(data, cut, err, sizeof err); if (x) doc_free(x); }
+      for (cut = 12; cut < len && cut < 200; cut += 3) {
+        Doc *x;
+        memcpy(bad, data, len); bad[cut] ^= 0xA5;
+        if ((x = ilbm_read_indexed(bad, len, err, sizeof err)) != NULL) doc_free(x);
+      }
+      free(bad);
+      ok("damaged ILBMs read safely", 1);
+    }
     if (planes == 5 && data) { save("idx5.iff", data, len); if (manifest) fprintf(manifest, "ilbm idx5.iff idx5.rgba\n"); back.w = w; back.h = h; back.px = flat; dump_rgba("idx5.rgba", &back); }
     if (r) doc_free(r);
     free(flat); free(data); doc_free(d);
