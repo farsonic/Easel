@@ -36,6 +36,12 @@ static const u8 *first_hunk(const u8 *d, size_t len, u32 *hlen)
       *hlen = n * 4;
       return d + at;
     }
+    if (type == 0x3E8) {                                   /* HUNK_NAME: skipped */
+      n = be32(d + at + 4);
+      if (n > (len - at - 8) / 4) return NULL;
+      at += 8 + (size_t)n * 4;
+      continue;
+    }
     return NULL;
   }
   return NULL;

@@ -628,8 +628,19 @@ void sel_from_alpha(Doc *d, int li)
 {
   u8 *m;
   long k, n = (long)d->w * d->h;
+  Layer *l;
   if (li < 0 || li >= d->nlay || !(m = new_mask(d))) return;
-  for (k = 0; k < n; k++) m[k] = d->lay[li]->px[k * 4 + 3];
+  l = d->lay[li];
+  if (l->px) for (k = 0; k < n; k++) m[k] = l->px[k * 4 + 3];
+  else if (l->live) {
+    /* 0.9: a type or shape layer: its rendering's coverage */
+    Box b;
+    i32 x, y;
+    if (!l->live_ok) live_render(d, l);
+    b = l->livebox;
+    if (l->livepx)
+      for (y = b.y0; y < b.y1; y++) for (x = b.x0; x < b.x1; x++) m[(long)y * d->w + x] = l->livepx[((size_t)(y - b.y0) * (b.x1 - b.x0) + (x - b.x0)) * 4 + 3];
+  } else { free(m); return; }
   sel_combine(d, m, SEL_REPLACE, "Load Selection");
 }
 void sel_color_range(Doc *d, u32 color, int fuzz)
@@ -1048,7 +1059,7 @@ int canvas_resize(Doc *d, i32 w, i32 h, int anchor, u32 fill)
   a.ox = anchor % 3 == 0 ? 0 : anchor % 3 == 1 ? (w - d->w) / 2 : w - d->w;
   a.oy = anchor / 3 == 0 ? 0 : anchor / 3 == 1 ? (h - d->h) / 2 : h - d->h;
   /* the background gets the fill colour where it grows, if it has no transparency of its own */
-  for (k = 0; k < n && opaque; k++) if (d->lay[0]->px[k * 4 + 3] != 255) opaque = 0;
+  for (k = 0; k < n && opaque; k++) if (!d->lay[0]->px || d->lay[0]->px[k * 4 + 3] != 255) opaque = 0;   /* (0.9: a bottom layer without pixels isn't opaque) */
   a.fill = opaque ? fill : 0xFFFFFFFFUL;
   {
     double m[6];

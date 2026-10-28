@@ -256,7 +256,7 @@ static void test_trace(void)
     if (i == 2) CHECK(p->ns == 2, "outline and hole: two subpaths");
     path_to_selection(d, p, SEL_REPLACE, 0, 1);
     b = d->sel;
-    if (b) printf("  trace %d: IoU %.4f, %d anchors\n", i, iou(a, b, 160 * 140), p->na);
+    if (b && iou(a, b, 160 * 140) <= 0.97) printf("  trace %d: IoU %.4f, %d anchors\n", i, iou(a, b, 160 * 140), p->na);
     CHECK(b && iou(a, b, 160 * 140) > 0.97, "selection -> path -> selection IoU > 0.97");
     if (b && i == 0) CHECK(iou(a, b, 160 * 140) > 0.985, "ellipse IoU > 0.985");
     if (i == 0) CHECK(p->na < 80, "the ellipse fitted with few anchors");
@@ -630,6 +630,54 @@ static void test_remap(void)
   doc_free(d);
 }
 
+static void test_ora_paths(void)
+{
+  Doc *d = doc_new(120, 90, 0xFFFFFF, 0), *e;
+  Path *p = path_new();
+  ShapeParams sp;
+  u8 *ora;
+  size_t len;
+  char err[128];
+  Box b;
+  shape_ellipse_path(p, 10, 10, 60, 50);
+  path_move_to(p, 70, 70); path_line_to(p, 100, 80);
+  p->evenodd = 1;
+  doc_path_set(d, -1, p, "Pen");
+  doc_path_save_work(d, "Oval & line <1>");
+  path_clear(p);
+  shape_polygon_path(p, 60, 10, 110, 60, 5, 1, 40, 0);
+  doc_path_set(d, -1, p, "Pen");
+  ora = ora_write(d, &len);
+  e = ora ? ora_read(ora, len, err, sizeof err) : NULL;
+  CHECK(e && e->npaths == 1 && e->workpath && !strcmp(e->path_name[0], "Oval & line <1>"), "ORA keeps the paths and their names");
+  if (e && e->npaths == 1 && e->workpath) {
+    Path *q = e->path[0];
+    i32 i;
+    double err2 = 0;
+    CHECK(q->na == d->path[0]->na && q->ns == 2 && q->s[0].closed && !q->s[1].closed && q->evenodd, "subpaths, closing and fill rule back");
+    for (i = 0; i < q->na && q->na == d->path[0]->na; i++) err2 += fabs(q->a[i].ox - d->path[0]->a[i].ox) + fabs(q->a[i].y - d->path[0]->a[i].y);
+    CHECK(err2 < 0.01 * q->na, "anchors and handles back");
+    CHECK(q->a[0].type == d->path[0]->a[0].type && e->workpath->na == 10 && e->path_active == -1, "types, the work path, the active one");
+  }
+  doc_free(e);
+  free(ora);
+  /* a shape layer: Load Selection from it, its content box, a group moving it */
+  shape_defaults(&sp, SH_RECT, 20, 20, 50, 40, 0x00FF00);
+  doc_new_shape(d, &sp, NULL, NULL);
+  sel_from_alpha(d, 1);
+  CHECK(d->sel && fabs(sel_area(d) - 600) < 1, "selection from a shape layer");
+  sel_none(d);
+  CHECK(layer_content_box(d, 1, &b) && b.x0 == 20 && b.y0 == 20 && b.x1 == 50 && b.y1 == 40, "content box of a shape layer");
+  doc_group_layers(d);
+  CHECK(d->lay[2]->kind == LK_GROUP, "grouped");
+  doc_move_group(d, 2, 5, 6);
+  CHECK(layer_shape(d->lay[1])->x0 == 25 && layer_shape(d->lay[1])->y0 == 26, "the group's move moves the shape");
+  doc_undo(d);
+  CHECK(layer_shape(d->lay[1])->x0 == 20, "undone");
+  path_free(p);
+  doc_free(d);
+}
+
 int main(void)
 {
   test_model();
@@ -642,6 +690,7 @@ int main(void)
   test_shapes();
   test_shape_layers();
   test_remap();
+  test_ora_paths();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

@@ -545,9 +545,9 @@ static int add_pos(Poly *out, const double *xy, int n)
 static int add_disc(Poly *out, double cx, double cy, double r)
 {
   int n = (int)ceil(M_PI / acos(r > 0.5 ? 1 - 0.2 / r : 0.6)), i;
-  double xy[2 * 256];
+  double xy[2 * 64];                                     /* (small: Amiga stack frames) */
   if (n < 8) n = 8;
-  if (n > 256) n = 256;
+  if (n > 64) n = 64;
   for (i = 0; i < n; i++) { xy[2 * i] = cx + r * cos(2 * M_PI * i / n); xy[2 * i + 1] = cy + r * sin(2 * M_PI * i / n); }
   return add_pos(out, xy, n);
 }
