@@ -19,6 +19,9 @@
 #include "../core/paint.h"
 #include "../core/adjust.h"
 #include "../core/fonts.h"
+#include "../core/gradient.h"
+#include "../core/pattern.h"
+#include "../core/brush.h"
 
 extern struct Library *MUIMasterBase, *CyberGfxBase;
 
@@ -33,6 +36,7 @@ typedef struct {
   double zoom;                        /* 1.0 = 100% */
   LONG sx, sy;                        /* the scroll: the zoomed image's pixel at the canvas's top left */
   int placed;                         /* zoom and scroll have been set for the window */
+  Snapshot *snap;                     /* 0.5: what the History Brush paints back (taken at opening) */
 } DocView;
 #define MAXDOCS 12
 extern DocView docs[MAXDOCS];
@@ -44,8 +48,12 @@ Doc *cur_doc(void);
 enum {
   TL_MOVE, TL_MARQUEE, TL_EMARQUEE, TL_LASSO, TL_PLASSO, TL_WAND, TL_CROP, TL_EYEDROPPER,
   TL_CLONE, TL_BRUSH, TL_PENCIL, TL_ERASER, TL_BUCKET, TL_GRADIENT, TL_BLUR, TL_SHARPEN, TL_SMUDGE,
-  TL_DODGE, TL_BURN, TL_SPONGE, TL_TEXT, TL_RECT, TL_ELLIPSE, TL_LINE, TL_HAND, TL_ZOOM, TL_N
+  TL_DODGE, TL_BURN, TL_SPONGE, TL_TEXT, TL_RECT, TL_ELLIPSE, TL_LINE, TL_HAND, TL_ZOOM,
+  /* 0.5 */
+  TL_PATTERN, TL_HISTORY, TL_REPLACE, TL_BGERASE, TL_MAGICERASE, TL_N
 };
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's after the rest */
+#define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */
   int size[TL_N], hardness[TL_N], opacity[TL_N], flow[TL_N], mode[TL_N], strength[TL_N];
@@ -59,7 +67,24 @@ typedef struct {
   int sample;                         /* eyedropper: 0 point, 1 3x3, 2 5x5; all layers or one (all_layers) */
   int auto_select;                    /* move: the layer under the pointer chosen */
   int range;                          /* dodge/burn: 0 shadows, 1 midtones, 2 highlights; sponge 0 desaturate, 1 saturate */
+  /* 0.5 */
+  int fill_source;                    /* bucket: 0 foreground, 1 pattern */
+  int grad_dither;                    /* gradient: dithered */
+  int pattern;                        /* the pattern chosen (pattern stamp, bucket, Edit > Fill) */
+  int pattern_aligned;                /* pattern stamp */
+  int replace_mode, limits, sampling; /* colour replacement and background eraser: RPL_, LIM_, SMP_ */
+  int protect_fg;                     /* background eraser */
+  int grad_preset;                    /* gradient: the preset (grad_names), the last one "Custom" (cur_grad) */
 } Opts;
+/* 0.5: the gradient and pattern the tools use (main.c) */
+#define MAXNAMES 64
+extern Gradient cur_grad;             /* the edited ("Custom") gradient */
+extern PatternList patterns;          /* the patterns: built-in, defined and loaded */
+extern const char *grad_names[MAXNAMES + 1], *pat_names[MAXNAMES];
+extern int ngrad_names, npat_names;
+void names_refresh(void);             /* grad_names and pat_names made again from the lists */
+const Gradient *tool_gradient(void);  /* the gradient the Gradient tool draws */
+const Pattern *tool_pattern(void);    /* the pattern chosen, or NULL */
 extern Opts opt;
 extern int tool;                      /* TL_ */
 extern const char *const tool_names[TL_N];
@@ -87,6 +112,7 @@ struct MUIP_Canvas_Zoom { ULONG MethodID; LONG permille; LONG how; };  /* how: 0
 #define MUIM_Canvas_Commit  (QTAG + 0x104) /* a crop or polygon being made finished (Return) */
 #define MUIM_Canvas_Cancel  (QTAG + 0x105) /* and dropped (Esc) */
 #define MUIM_Canvas_Tool    (QTAG + 0x106) /* the tool changed: what it was doing put away */
+#define MUIM_Canvas_StrokeTick (QTAG + 0x107) /* (timer, 0.5) airbrush build-up and smoothing while the button is held */
 struct MUI_CustomClass *canvas_class(void);
 void canvas_class_free(void);
 /* the pointer's place in the image and the colour there, for the status bar ("" when outside) */

@@ -25,6 +25,7 @@
 #include "core/palette.h"
 #include "core/amigamodes.h"
 #include "core/guides.h"
+#include "core/paint.h"
 
 static int ntests, nfailed;
 static const char *outdir = "/tmp/easel_pal_out";
@@ -751,6 +752,32 @@ static void guides(void)
   doc_free(d);
 }
 
+/* painting on an indexed or grey picture: brought back to the palette (or grey) in the same undo step */
+static void painting(void)
+{
+  Doc *d = doc_new(64, 48, 0xff808080, 0);
+  Brush b;
+  Stroke *st;
+  Box ch;
+  long k, n;
+  int grey = 1;
+  memset(&b, 0, sizeof b);
+  b.tool = PT_BRUSH; b.size = 12; b.hardness = 50; b.opacity = 100; b.flow = 100; b.spacing = 25;
+  ok("painting: to indexed", d && doc_to_indexed(d, 16, QM_WU, DI_NONE, NULL, 0));
+  st = stroke_begin(d, &b, 0x2468AC, 5, 5, &ch);
+  if (st) { stroke_to(st, 50, 40, &ch); stroke_end(st); }
+  ok("painting: stroke kept to the palette", st && doc_consistent(d));
+  fill_bucket(d, 60, 2, 0xF01020, 32, 1, 0, 100, 1);
+  ok("painting: fill kept to the palette", doc_consistent(d));
+  ok("painting: undo", doc_undo(d) && doc_undo(d) && doc_consistent(d));
+  ok("painting: to grey", doc_to_gray(d));
+  st = stroke_begin(d, &b, 0xFF0000, 5, 40, &ch);
+  if (st) { stroke_to(st, 60, 5, &ch); stroke_end(st); }
+  n = (long)d->w * d->h;
+  for (k = 0; k < n; k++) { u8 *q = d->lay[0]->px + k * 4; if (q[0] != q[1] || q[1] != q[2]) grey = 0; }
+  ok("painting: stroke on a grey picture stays grey", st && grey);
+  doc_free(d);
+}
 int main(int argc, char **argv)
 {
   char path[512];
@@ -771,6 +798,7 @@ int main(int argc, char **argv)
   writers();
   screenmodes();
   guides();
+  painting();
   if (manifest) fclose(manifest);
   printf("%d tests, %d failed\n", ntests, nfailed);
   return nfailed != 0;

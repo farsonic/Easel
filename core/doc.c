@@ -10,6 +10,7 @@
 #include <string.h>
 #include <math.h>
 #include "doc.h"
+#include "palette.h"
 
 const char *const blend_names[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Linear Dodge (Add)",
   "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
@@ -797,6 +798,16 @@ void doc_end(Doc *d)
       same = !memcmp(&now, &u->props[i], sizeof now);
     }
     if (same) { d->undo = u->next; step_free(u); return; }
+  }
+  /* 0.4: in an indexed, grey or bitmap document whatever was painted is brought back to the palette
+     (or grey) inside the same step; palette edits and mode changes keep their own pixels */
+  if (d->mode != MODE_RGB && !u->has_pal) {
+    if (u->whole) doc_index_sync_all(d);
+    else
+      for (k = 0; k < u->ntiles; k++) {
+        Tile *t = &u->tiles[k];
+        if (!t->plane) doc_index_sync(d, t->layer, box_make(t->tx * TS, t->ty * TS, t->tx * TS + TS, t->ty * TS + TS));
+      }
   }
   list_free(d->redo); d->redo = NULL;
   d->dirty = 1;

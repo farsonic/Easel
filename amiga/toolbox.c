@@ -31,7 +31,7 @@ static int fh(void) { return theme_font()->tf_YSize; }
 typedef struct { int n; int tools[3]; } Group;
 static const Group groups[] = {
   { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 2, { TL_LASSO, TL_PLASSO } }, { 1, { TL_WAND } },
-  { 1, { TL_CROP } }, { 1, { TL_EYEDROPPER } }, { 1, { TL_CLONE } }, { 2, { TL_BRUSH, TL_PENCIL } }, { 1, { TL_ERASER } },
+  { 1, { TL_CROP } }, { 1, { TL_EYEDROPPER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
   { 1, { TL_TEXT } }, { 3, { TL_RECT, TL_ELLIPSE, TL_LINE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
 };
@@ -77,7 +77,7 @@ static void tb_draw(struct TData *d, Object *obj)
     y = tb_y(obj, g); x = tb_x(obj, g);
     if (on) theme_fill(rp, x - 2, y, x + 25, y + TB_H - 3, tpen(T_PRESSED));
     else if (d->hot == g) theme_fill(rp, x - 2, y, x + 25, y + TB_H - 3, tpen(T_HOVER));
-    theme_icon(rp, IC_T_MOVE + t, x + 4, y + (TB_H - 3 - 16) / 2, 16, 0);
+    theme_icon(rp, TOOL_ICON(t), x + 4, y + (TB_H - 3 - 16) / 2, 16, 0);
     if (groups[g].n > 1) {
       /* the small triangle: there are more in the group */
       LONG tx = x + 25, ty = y + TB_H - 4;
@@ -127,7 +127,12 @@ static const char *const tool_help[TL_N] = {
   "Draws a filled ellipse in the foreground colour.",
   "Draws a straight line in the foreground colour.",
   "Scrolls the picture as you drag. Hold the space bar for it with any tool.",
-  "Zooms in where you click; Alt-click zooms out."
+  "Zooms in where you click; Alt-click zooms out.",
+  "Paints with the chosen pattern.",
+  "Paints back the picture as it was when it was opened (or at the last snapshot).",
+  "Paints the foreground colour over the colours you brush, keeping their light and shade.",
+  "Rubs out the colour under the brush's centre, wherever it reaches, leaving the rest.",
+  "Rubs out the area of similar colour where you click, at once."
 };
 
 static int tb_hit(Object *obj, LONG mx, LONG my, int *corner)
@@ -296,6 +301,10 @@ static const char *const layersample[] = { "Current Layer", "All Layers" };
 static const char *const gradkinds[] = { "Linear", "Radial", "Angle", "Reflected", "Diamond" };
 static const char *const gradcols[] = { "Foreground to Background", "Foreground to Transparent" };
 static const char *const aligns[] = { "Left", "Centre", "Right" };
+static const char *const fillsrc[] = { "Foreground", "Pattern" };
+static const char *const rplmodes[] = { "Hue", "Saturation", "Color", "Luminosity" };
+static const char *const samplings[] = { "Continuous", "Once", "Background Swatch" };
+static const char *const limitlist[] = { "Contiguous", "Discontiguous", "Find Edges" };
 static const char *fontlist[64];
 
 static int fields_for(int t, Field *f)
@@ -319,14 +328,28 @@ static int fields_for(int t, Field *f)
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); TEXT("Alt-click sets the source"); break;
   case TL_BRUSH: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); BUTTON("Brush Settings...", ID_WIN_BRUSHSET); break;
+  case TL_PATTERN: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
+    if (npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
+    CHECK("Aligned", opt.pattern_aligned); break;
+  case TL_HISTORY: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); BUTTON("Snapshot", ID_SNAPSHOT); TEXT("Paints back the snapshot"); break;
+  case TL_REPLACE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.replace_mode, rplmodes, 4); CHOICE("", opt.sampling, samplings, 3);
+    CHOICE("Limits:", opt.limits, limitlist, 3); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); break;
+  case TL_BGERASE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("", opt.sampling, samplings, 3); CHOICE("Limits:", opt.limits, limitlist, 3);
+    SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Protect Foreground", opt.protect_fg); break;
+  case TL_MAGICERASE: SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); CHECK("Anti-alias", opt.antialias);
+    CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
   case TL_PENCIL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); break;
   case TL_ERASER: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); break;
-  case TL_BUCKET: SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.antialias);
+  case TL_BUCKET: CHOICE("Fill:", opt.fill_source, fillsrc, 2);
+    if (opt.fill_source && npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
+    SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.antialias);
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
-  case TL_GRADIENT: CHOICE("", opt.grad_fade, gradcols, 2); CHOICE("Style:", opt.grad_kind, gradkinds, 5); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); break;
+  case TL_GRADIENT: if (ngrad_names) CHOICE("", opt.grad_preset, grad_names, ngrad_names);
+    BUTTON("Edit...", ID_GRADEDIT); CHOICE("Style:", opt.grad_kind, gradkinds, 5); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); CHECK("Dither", opt.grad_dither); break;
   case TL_BLUR: case TL_SHARPEN: case TL_SMUDGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%");
     SCRUB("Strength:", opt.strength[t], 1, 100, "%"); break;
   case TL_DODGE: case TL_BURN: case TL_SPONGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%");
@@ -442,7 +465,7 @@ static void ob_draw(struct OData *d, Object *obj)
   theme_fill(rp, _mleft(obj), t, _mright(obj), b, tpen(T_PANEL));
   SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj), b); Draw(rp, _mright(obj), b);
   /* the tool's icon, and a divider */
-  theme_icon(rp, IC_T_MOVE + tool, _mleft(obj) + 10, my - 9, 18, 0);
+  theme_icon(rp, TOOL_ICON(tool), _mleft(obj) + 10, my - 9, 18, 0);
   SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj) + 36, t + 4); Draw(rp, _mleft(obj) + 36, b - 4);
   ob_layout(d, obj);
   for (i = 0; i < d->n; i++) {

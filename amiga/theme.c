@@ -1043,6 +1043,11 @@ static const char *const icons[IC_N] = {
   /* ADDMASK: a frame with a round hole */ "ci R 1 2 14 13 ca F 2 3 13 12 cw E 7 7 3",
   /* LOCKPOS: a cross of arrows */ "ci L 8 1 8 15 L 1 8 15 8 L 6 3 8 1 L 10 3 8 1 L 6 13 8 15 L 10 13 8 15 L 3 6 1 8 L 3 10 1 8 L 13 6 15 8 L 13 10 15 8",
   /* LOCKALL: a padlock, filled */ "ci R 4 2 11 8 R 5 3 10 8 F 2 7 13 14 cw F 7 9 8 12",
+  /* T_PATTERN: pattern stamp: a stamp over a checkerboard */ "ci F 6 1 9 6 F 3 7 12 9 R 1 10 14 14 ca F 2 11 4 12 F 7 11 9 12 F 12 11 13 12 F 4 13 6 13 F 9 13 11 13",
+  /* T_HISTORY: history brush: a brush and a turning arrow */ "ci L 8 8 14 14 L 9 8 15 14 F 13 13 15 15 ca P 2 7 2 3 7 3 L 7 3 5 1 L 7 3 5 5 P 2 7 4 9 7 9",
+  /* T_REPLACE: colour replacement: a brush between two colours */ "ci L 3 14 10 7 L 4 14 11 7 F 2 13 4 15 R 10 1 14 5 ca F 11 2 13 4 F 1 1 5 5",
+  /* T_BGERASE: background eraser: an eraser and a dotted edge */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 10 1 10 2 L 12 2 12 3 L 14 4 14 5",
+  /* T_MAGICERASE: magic eraser: an eraser and a sparkle */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 13 0 13 6 L 10 3 16 3 L 11 1 15 5 L 15 1 11 5",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

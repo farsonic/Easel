@@ -26,6 +26,8 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "../core/layers.h"
+#include "brushwin.h"
+#include "../core/guides.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -40,6 +42,8 @@ struct Data {
   Object *obj, *vprop, *hprop;
   struct MUI_EventHandlerNode ehn;
   struct MUI_InputHandlerNode ihn;
+  struct MUI_InputHandlerNode sihn; int sihn_on;   /* 0.5: the stroke's timer while it wants one */
+  Box sbox;                              /* what the stroke has changed so far */
   int handlers, shown;
   /* the composite of the document's layers (comp, cw x ch RGBA), for doc */
   Doc *doc; u8 *comp; i32 cw, ch;
@@ -72,7 +76,13 @@ static struct MUI_CustomClass *ccls;
 static const double zooms[] = { 1.0 / 32, 1.0 / 24, 1.0 / 16, 1.0 / 12, 1.0 / 8, 1.0 / 6, 1.0 / 4, 1.0 / 3, 1.0 / 2, 2.0 / 3, 1, 1.5, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32 };
 #define NZOOMS (int)(sizeof zooms / sizeof zooms[0])
 
-static int brushlike(int t) { return t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE); }
+static int brushlike(int t) { return t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE); }
+/* 0.3: painting a layer mask: its feathered copy made again so the composite shows it */
+static void mask_painted(Doc *doc)
+{
+  Layer *l = doc && doc->active >= 0 && doc->active < doc->nlay ? doc->lay[doc->active] : NULL;
+  if (l && l->edit_mask && l->mask) layer_mask_changed(l);
+}
 static int pt_of(int t)
 {
   switch (t) {
@@ -170,6 +180,88 @@ static const u8 *comp_row(struct Data *d, Doc *doc, LONG iy, LONG ix0, LONG ix1)
   }
   return d->rowbuf;
 }
+/* 0.4: the grid, the guides and the rulers drawn into the view's pixels in x0..x1, y0..y1 */
+#define RULER 14
+static void vpix(struct Data *d, LONG x, LONG y, ULONG c, int mix)
+{
+  UBYTE *o = d->view + (y * d->vw + x) * 3;
+  if (mix) { o[0] = (UBYTE)((o[0] + (c >> 16 & 255)) / 2); o[1] = (UBYTE)((o[1] + (c >> 8 & 255)) / 2); o[2] = (UBYTE)((o[2] + (c & 255)) / 2); }
+  else { o[0] = (UBYTE)(c >> 16); o[1] = (UBYTE)(c >> 8); o[2] = (UBYTE)c; }
+}
+static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, LONG y1)
+{
+  GuideSet *g = &doc->guides;
+  LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
+  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
+  int i, k;
+  if (ix1 > x1) ix1 = x1;
+  if (iy1 > y1) iy1 = y1;
+  if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
+    for (k = 0; k < 2; k++) {
+      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->z, 1, &step);
+      if (step * d->z < 4) continue;                     /* (too close together to see) */
+      for (; ; p += step) {
+        LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
+        if (s >= (k == 0 ? ix1 : iy1)) break;
+        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, 0x808080, 1); }
+        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, 0x808080, 1);
+      }
+    }
+  }
+  if (g->show_guides) {
+    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, 0x00C0FF, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, 0x00C0FF, 0); }
+  }
+  if (g->show_rulers) {
+    int minor, major = ruler_step(d->z, 50, &minor);
+    double mstep = (double)major / (minor > 0 ? minor : 1);
+    for (k = 0; k < 2; k++) {
+      LONG a0 = k == 0 ? x0 : y0, a1 = k == 0 ? x1 : y1, b0 = k == 0 ? y0 : x0, b1 = k == 0 ? y1 : x1, off = k == 0 ? d->ox : d->oy, s, b;
+      double p;
+      if (b0 >= RULER) continue;
+      for (s = a0; s < a1; s++) for (b = b0; b < b1 && b < RULER; b++) { if (k == 0) vpix(d, s, b, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); else vpix(d, b, s, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); }
+      for (p = floor((a0 - off) / d->z / mstep) * mstep; ; p += mstep) {
+        LONG len;
+        s = (LONG)floor(p * d->z) + off;
+        if (s >= a1) break;
+        if (s < a0) continue;
+        len = fmod(fabs(p) + 0.001, major) < 0.01 ? RULER : RULER / 3;
+        for (b = RULER - len; b < RULER; b++) if (b >= b0 && b < b1) { if (k == 0) vpix(d, s, b, 0x404040, 0); else vpix(d, b, s, 0x404040, 0); }
+      }
+    }
+  }
+}
+/* the rulers' numbers, drawn over the view after it is put on the screen */
+static void ruler_labels(struct Data *d, Object *obj)
+{
+  Doc *doc = cur_doc();
+  struct RastPort *rp = _rp(obj);
+  int minor, major;
+  double p;
+  char buf[16];
+  APTR clip;
+  if (!doc || !doc->guides.show_rulers || !d->shown) return;
+  major = ruler_step(d->z, 50, &minor);
+  clip = (APTR)MUI_AddClipping(muiRenderInfo(obj), _mleft(obj), _mtop(obj), _mwidth(obj), _mheight(obj));
+  SetFont(rp, theme_small());
+  SetDrMd(rp, JAM1);
+  SetAPen(rp, tpen(T_DIM));
+  for (p = floor(-d->ox / d->z / major) * major; (LONG)(p * d->z) + d->ox < d->vw; p += major) {
+    LONG s = (LONG)floor(p * d->z) + d->ox;
+    if (s < RULER) continue;
+    sprintf(buf, "%ld", (long)p);
+    Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
+  }
+  for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
+    LONG s = (LONG)floor(p * d->z) + d->oy;
+    int c, n;
+    if (s < RULER) continue;
+    sprintf(buf, "%ld", (long)p);
+    /* (the digits one under another, as the ruler is narrow) */
+    for (c = 0, n = (int)strlen(buf); c < n; c++) { Move(rp, _mleft(obj) + 3, _mtop(obj) + s + 2 + c * rp->TxHeight + rp->TxBaseline); Text(rp, (STRPTR)buf + c, 1); }
+  }
+  MUI_RemoveClipping(muiRenderInfo(obj), (struct Region *)clip);
+}
 static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
 {
   Doc *doc = d->comp ? d->doc : cur_doc();
@@ -210,6 +302,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
       }
     }
   }
+  if (doc) guides_render(d, doc, x0, y0, x1, y1);
 }
 static void blit(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1)
 {
@@ -374,6 +467,7 @@ static void draw_all(struct Data *d, Object *obj)
   render(d, 0, 0, d->vw, d->vh);
   d->ov_on = 0;
   blit(d, obj, 0, 0, d->vw, d->vh);
+  ruler_labels(d, obj);
   ants(d, obj, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj));
   ov_show(d, obj);
   update_props(d, obj);
@@ -393,6 +487,7 @@ static void update_box(struct Data *d, Object *obj, Box b)
   render(d, x0, y0, x1, y1);
   ov_hide(d, obj);
   blit(d, obj, x0, y0, x1, y1);
+  if (x0 < RULER || y0 < RULER) ruler_labels(d, obj);
   ants(d, obj, _mleft(obj) + x0 - 1, _mtop(obj) + y0 - 1, _mleft(obj) + x1 + 1, _mtop(obj) + y1 + 1);
   ov_show(d, obj);
 }
@@ -553,6 +648,11 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   Box ch;
   d->secs = secs; d->micros = micros;
   d->modifiers = qual;
+  /* 0.4: snapping (guides, grid, edges) for the tools that drag out shapes */
+  if (doc && doc->guides.snap && (t == TL_MARQUEE || t == TL_EMARQUEE || t == TL_RECT || t == TL_ELLIPSE || t == TL_LINE || t == TL_GRADIENT || t == TL_CROP)) {
+    doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
+    snap_point(doc, &x, &y, SNAP_DOC);
+  }
   d->ax = d->bx = x; d->ay = d->by = y;
   if (!doc) return;
   ov_hide(d, obj);
@@ -569,7 +669,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
       /* the topmost visible layer with something at the pointer */
       int i;
       for (i = doc->nlay - 1; i >= 0; i--)
-        if (doc->lay[i]->visible && doc->lay[i]->px[((long)(i32)y * doc->w + (i32)x) * 4 + 3] > 16) break;
+        if (doc->lay[i]->visible && doc->lay[i]->px && doc->lay[i]->px[((long)(i32)y * doc->w + (i32)x) * 4 + 3] > 16) break;
       if (i >= 0 && i != doc->active) { doc->active = i; changed(d, obj); tell_changed(d, obj); }
     }
     d->drag = DR_MOVE;
@@ -588,7 +688,15 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     break;
   case TL_BUCKET:
     if (x >= 0 && y >= 0 && x < doc->w && y < doc->h) {
-      ch = fill_bucket(doc, (i32)x, (i32)y, doc->fg, opt.tolerance, opt.contiguous, opt.all_layers, opt.fill_opacity, opt.antialias);
+      if (opt.fill_source && tool_pattern()) ch = fill_bucket_pattern(doc, (i32)x, (i32)y, tool_pattern(), opt.tolerance, opt.contiguous, opt.all_layers, opt.fill_opacity, opt.antialias);
+      else ch = fill_bucket(doc, (i32)x, (i32)y, doc->fg, opt.tolerance, opt.contiguous, opt.all_layers, opt.fill_opacity, opt.antialias);
+      if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
+      tell_changed(d, obj);
+    }
+    break;
+  case TL_MAGICERASE:
+    if (x >= 0 && y >= 0 && x < doc->w && y < doc->h) {
+      ch = magic_erase(doc, (i32)x, (i32)y, opt.tolerance, opt.contiguous, opt.all_layers, opt.fill_opacity, opt.antialias);
       if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
       tell_changed(d, obj);
     }
@@ -622,13 +730,26 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
         if (d->stroke) { update_box(d, obj, ch); stroke_to(d->stroke, x, y, &ch); }
       } else d->stroke = stroke_begin(doc, &b, color, x, y, &ch);
       if (!d->stroke) {
-        if (doc->lay[doc->active]->locked) ask("OK", "%s", tr("The layer is locked."));
+        Layer *al = doc->lay[doc->active];
+        if (al->locked || al->lock_all) ask("OK", "%s", tr("The layer is locked."));
+        else if (al->kind != LK_PIXEL && !al->edit_mask) ask("OK", "%s", tr("This layer has no pixels to paint on: paint on its mask, or rasterize it first."));
+        else if (t == TL_HISTORY) ask("OK", "%s", tr("There is no snapshot to paint from (Edit > Take Snapshot)."));
+        else if (t == TL_PATTERN) ask("OK", "%s", tr("Choose a pattern first."));
         else if (!doc->lay[doc->active]->visible) ask("OK", "%s", tr("The layer is hidden: it can't be painted on."));
         break;
       }
       d->drag = DR_STROKE;
+      d->sbox = ch;
       changed(d, obj);
+      mask_painted(doc);
       update_box(d, obj, ch);
+      if (stroke_wants_tick(&b) && !d->sihn_on) {
+        int ms = stroke_tick_ms(&b);
+        d->sihn.ihn_Object = obj; d->sihn.ihn_Flags = MUIIHNF_TIMER; d->sihn.ihn_Method = MUIM_Canvas_StrokeTick;
+        d->sihn.ihn_stuff.ihn_timer.ihn_millis = ms < 40 ? 40 : ms;
+        DoMethod(_app(obj), MUIM_Application_AddInputHandler, (ULONG)&d->sihn);
+        d->sihn_on = 1;
+      }
     }
     break;
   }
@@ -649,7 +770,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break;
   case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
   case DR_STROKE:
-    if (d->stroke) { stroke_to(d->stroke, x, y, &ch); update_box(d, obj, ch); }
+    if (d->stroke) { stroke_to(d->stroke, x, y, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch); }
     d->bx = x; d->by = y;
     break;
   case DR_LASSO:
@@ -659,6 +780,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break;
   case DR_MARQUEE: case DR_SHAPE: case DR_LINE: case DR_MOVE:
     ov_hide(d, obj);
+    if (doc->guides.snap && d->drag != DR_MOVE) snap_point(doc, &x, &y, SNAP_DOC);
     d->bx = x; d->by = y;
     if (d->modifiers & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
       if (d->drag == DR_MARQUEE || d->drag == DR_SHAPE) {
@@ -677,6 +799,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break;
   case DR_CROP:
     ov_hide(d, obj);
+    if (doc->guides.snap) snap_point(doc, &x, &y, SNAP_DOC);
     d->c1x = x; d->c1y = y;
     ov_show(d, obj);
     break;
@@ -696,6 +819,10 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break; }
   }
 }
+static void stroke_timer_off(struct Data *d, Object *obj)
+{
+  if (d->sihn_on) { DoMethod(_app(obj), MUIM_Application_RemInputHandler, (ULONG)&d->sihn); d->sihn_on = 0; }
+}
 static void release(struct Data *d, Object *obj)
 {
   Doc *doc = cur_doc();
@@ -705,7 +832,12 @@ static void release(struct Data *d, Object *obj)
   d->drag = DR_NONE;
   switch (drag) {
   case DR_STROKE:
-    if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; }
+    stroke_timer_off(d, obj);
+    if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; mask_painted(doc);
+      /* (smoothing finishes the stroke at the pointer; an indexed or grey picture was brought back to its colours) */
+      if (brushui.b.dyn.smoothing || brushui.b.dyn.pulled_string) DoMethod(obj, MUIM_Canvas_Update, 0, 0, doc->w, doc->h);
+      else if (doc->mode != MODE_RGB) update_box(d, obj, d->sbox);
+    }
     d->lastx = d->bx; d->lasty = d->by; d->has_last = 1;
     tell_changed(d, obj);
     break;
@@ -743,7 +875,11 @@ static void release(struct Data *d, Object *obj)
     d->drag = DR_LINE; ov_hide(d, obj); d->drag = DR_NONE;
     if (fabs(d->bx - d->ax) + fabs(d->by - d->ay) > 0.5 / d->z) {
       if (tool == TL_GRADIENT)
-        ch = fill_gradient(doc, d->ax, d->ay, d->bx, d->by, opt.grad_kind, doc->fg, opt.grad_fade ? doc->fg : doc->bg, opt.grad_fade, opt.grad_reverse, opt.opacity[TL_GRADIENT], opt.mode[TL_GRADIENT]);
+      {
+        Gradient g = *tool_gradient();
+        g.fg = doc->fg; g.bg = doc->bg;
+        ch = fill_gradient_ex(doc, d->ax, d->ay, d->bx, d->by, opt.grad_kind, &g, opt.grad_reverse, opt.grad_dither, opt.opacity[TL_GRADIENT], opt.mode[TL_GRADIENT]);
+      }
       else ch = shape_line(doc, d->ax, d->ay, d->bx, d->by, opt.line_width, doc->fg, opt.opacity[TL_LINE]);
       if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
     }
@@ -1002,6 +1138,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
   case MUIM_Cleanup:
     d = INST_DATA(cl, obj);
     if (d->handlers) {
+      stroke_timer_off(d, obj);
       DoMethod(_app(obj), MUIM_Application_RemInputHandler, (ULONG)&d->ihn);
       theme_cleanup(obj);
       pens_free();
@@ -1029,8 +1166,14 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
       ov_show(d, obj);
     }
     return 0;
+  case MUIM_Canvas_StrokeTick: {
+    Box ch;
+    d = INST_DATA(cl, obj);
+    if (d->stroke && d->drag == DR_STROKE) { stroke_tick(d->stroke, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(cur_doc()); update_box(d, obj, ch); }
+    return 0; }
   case MUIM_Canvas_Refresh:
     d = INST_DATA(cl, obj);
+    stroke_timer_off(d, obj);
     if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; }
     d->drag = DR_NONE;
     comp_free(d);

@@ -40,6 +40,7 @@ typedef u8 *(*SwatchWriter)(const SwatchSet *s, size_t *len);
 extern SwatchReader swatch_hook_read[SWF_N];
 extern SwatchWriter swatch_hook_write[SWF_N];
 void swatch_init_hooks(void);                                   /* (called by the load and save functions too) */
+void swatch_palette_hooks(void);                                /* (swatchpal.c) .aco, .act, .ase and IFF CMAP through palette.c */
 int  swatch_format_of(const char *path);                        /* by extension; SWF_EASEL when unknown */
 int  swatch_supported(int fmt, int writing);
 /* the built-in formats */

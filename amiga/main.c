@@ -37,6 +37,16 @@
 #include "../core/image.h"
 #include "../core/layers.h"
 #include "../core/selmore.h"
+#include "../core/palette.h"
+#include "../core/amigamodes.h"
+#include "../core/guides.h"
+#include "../core/swatch.h"
+#include "palwin.h"
+#include "modedlg.h"
+#include "brushwin.h"
+#include "gradwin.h"
+#include "swatchwin.h"
+#include "colorpick.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -71,9 +81,11 @@ const char *const tool_names[TL_N] = {
   "Move Tool", "Rectangular Marquee Tool", "Elliptical Marquee Tool", "Lasso Tool", "Polygonal Lasso Tool", "Magic Wand Tool",
   "Crop Tool", "Eyedropper Tool", "Clone Stamp Tool", "Brush Tool", "Pencil Tool", "Eraser Tool", "Paint Bucket Tool",
   "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Text Tool",
-  "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool"
+  "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool",
+  "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool"
 };
-const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z' };
+const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
+  'S', 'Y', 'B', 'E', 'E' };
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -88,18 +100,22 @@ static struct NewMenu menus[] = {
   I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN), I("Place as Layer...", 0, ID_PLACE), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Revert", 0, ID_REVERT),
-  H("Export"), S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), BAR,
+  H("Export"), S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), SBAR,
+  S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
   I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
   I("Paste Into", 0, ID_PASTEINTO), I("Clear", 0, ID_CLEAR), BAR,
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
+  I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN), BAR,
   I("Free Transform...", "T", ID_FREETRANSFORM),
   H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
-  I("Purge Undo History", 0, ID_PURGE),
+  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE),
   M("Image"),
+  H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
+  S("Color Table...", 0, ID_COLORTABLE), S("Amiga Screen Mode...", 0, ID_SCREENMODE),
   H("Adjustments"),
   S("Brightness/Contrast...", 0, ID_ADJ_BC), S("Levels...", "L", ID_ADJ_LEVELS), S("Curves...", "M", ID_ADJ_CURVES), S("Exposure...", 0, ID_ADJ_EXPOSURE), SBAR,
   S("Vibrance...", 0, ID_ADJ_VIBRANCE), S("Hue/Saturation...", "U", ID_ADJ_HUESAT), S("Color Balance...", "B", ID_ADJ_BALANCE), S("Black & White...", 0, ID_ADJ_BW),
@@ -159,9 +175,12 @@ static struct NewMenu menus[] = {
   H("Other"), S("Custom...", 0, ID_F_CUSTOM), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
   M("View"),
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
+  T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
+  I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
   T("Dark Interface", 0, ID_DARKUI),
   M("Window"),
-  I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC),
+  I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC), BAR,
+  I("Palette", 0, ID_WIN_PALETTE), I("Brush Settings", 0, ID_WIN_BRUSHSET), I("DPaint Brush", 0, ID_WIN_DPAINT),
   { NM_END, 0, 0, 0, 0, 0 }
 };
 
@@ -320,11 +339,39 @@ Brush tool_brush(int t)
   memset(&b, 0, sizeof b);
   b.tool = t == TL_PENCIL ? PT_PENCIL : t == TL_ERASER ? PT_ERASER : t == TL_CLONE ? PT_CLONE : t == TL_BLUR ? PT_BLUR :
            t == TL_SHARPEN ? PT_SHARPEN : t == TL_SMUDGE ? PT_SMUDGE : t == TL_DODGE ? PT_DODGE : t == TL_BURN ? PT_BURN :
-           t == TL_SPONGE ? PT_SPONGE : PT_BRUSH;
+           t == TL_SPONGE ? PT_SPONGE : t == TL_PATTERN ? PT_PATTERN : t == TL_HISTORY ? PT_HISTORY : t == TL_REPLACE ? PT_REPLACE :
+           t == TL_BGERASE ? PT_BGERASE : PT_BRUSH;
   b.size = opt.size[t]; b.hardness = opt.hardness[t]; b.opacity = opt.opacity[t]; b.flow = opt.flow[t];
   b.spacing = 25; b.blend = opt.mode[t]; b.strength = opt.strength[t];
+  /* 0.5: the tip, dynamics and symmetry from the Brush Settings window; then the options bar's */
+  brushwin_apply(&b);
+  b.pattern = tool_pattern(); b.pattern_aligned = opt.pattern_aligned;
+  if (t == TL_REPLACE || t == TL_BGERASE) { b.sampling = opt.sampling; b.limits = opt.limits; b.tolerance = opt.tolerance; b.replace_mode = opt.replace_mode; b.protect_fg = opt.protect_fg; }
+  if (t == TL_HISTORY) { DocView *v = cur_view(); b.snapshot = v ? v->snap : NULL; }
   return b;
 }
+/* ------------------------------------------------------------------ 0.5: gradients and patterns */
+Gradient cur_grad;
+PatternList patterns;
+const char *grad_names[MAXNAMES + 1], *pat_names[MAXNAMES];
+int ngrad_names, npat_names;
+void names_refresh(void)
+{
+  GradientList *g = gradwin_presets();
+  int i;
+  ngrad_names = npat_names = 0;
+  for (i = 0; g && i < g->n && i < MAXNAMES; i++) grad_names[ngrad_names++] = g->g[i].name;
+  grad_names[ngrad_names++] = "Custom";
+  for (i = 0; i < patterns.n && i < MAXNAMES; i++) pat_names[npat_names++] = patterns.p[i]->name;
+  if (opt.grad_preset >= ngrad_names) opt.grad_preset = ngrad_names - 1;
+  if (opt.pattern >= npat_names) opt.pattern = npat_names ? npat_names - 1 : 0;
+}
+const Gradient *tool_gradient(void)
+{
+  GradientList *g = gradwin_presets();
+  return g && opt.grad_preset >= 0 && opt.grad_preset < g->n ? &g->g[opt.grad_preset] : &cur_grad;
+}
+const Pattern *tool_pattern(void) { return opt.pattern >= 0 && opt.pattern < patterns.n ? patterns.p[opt.pattern] : NULL; }
 static void opts_defaults(void)
 {
   int t;
@@ -340,7 +387,7 @@ static signed char key_tool[26];
 int tool_for_key(int c)
 {
   static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
-    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM };
+    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM, TL_HISTORY };
   int i;
   if (c < 'A' || c > 'Z') return -1;
   if (key_tool[c - 'A']) return key_tool[c - 'A'] - 1;
@@ -378,7 +425,9 @@ static void update_menus(void)
     ID_PURGE, ID_LOCKLAYER, ID_ALPHALOCK, ID_HIDELAYER, ID_NEWGROUP, ID_GROUPLAYERS, ID_MERGELAYERS, ID_NEWFILLSOLID, ID_NEWFILLGRAD,
     ID_MASK_REVEALALL, ID_MASK_HIDEALL, ID_MASK_REVEALSEL, ID_MASK_HIDESEL, ID_MASK_ALPHA, ID_CLIP, ID_LOCKPOS, ID_LOCKALL,
     ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V, ID_RESELECT, ID_GROWSIM, ID_SIMILAR,
-    ID_F_AGAIN, 0 };
+    ID_F_AGAIN, ID_MODE_RGB, ID_MODE_GRAY, ID_MODE_INDEXED, ID_MODE_BITMAP, ID_COLORTABLE, ID_SCREENMODE, ID_EXPGIF, ID_EXPILBMOPT,
+    ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_DEFBRUSH, ID_PICKUPBRUSH, ID_DEFPATTERN,
+    ID_FILLPATTERN, ID_SNAPSHOT, 0 };
   static const ULONG needmask[] = { ID_MASK_DELETE, ID_MASK_APPLY, ID_MASK_ENABLE, ID_MASK_LINK, ID_MASK_INVERT, ID_MASK_EDIT, ID_SELFROMMASK, 0 };
   Layer *al = has ? d->lay[d->active] : NULL;
   int i;
@@ -402,9 +451,14 @@ static void update_menus(void)
   menu_set(ID_UNDO, MUIA_Menuitem_Title, (ULONG)undo);
   menu_set(ID_REDO, MUIA_Menuitem_Title, (ULONG)redo);
   menu_set(ID_DARKUI, MUIA_Menuitem_Checked, pref_dark);
+  menu_set(ID_RULERS, MUIA_Menuitem_Checked, has && d->guides.show_rulers);
+  menu_set(ID_SHOWGRID, MUIA_Menuitem_Checked, has && d->guides.show_grid);
+  menu_set(ID_SHOWGUIDES, MUIA_Menuitem_Checked, has && d->guides.show_guides);
+  menu_set(ID_SNAP, MUIA_Menuitem_Checked, has && d->guides.snap);
 }
 void refresh_panels(void)
 {
+  palwin_set_doc(cur_doc());
   DoMethod(layerpanel, MUIM_Layers_Refresh);
   DoMethod(historypanel, MUIM_History_Refresh);
   DoMethod(colorpanel, MUIM_Color_Refresh);
@@ -439,6 +493,8 @@ static int doc_show(Doc *d, const char *path, int fmt)
   if (path && path[0]) { strncpy(v->path, path, sizeof v->path - 1); base_name(path, v->name, sizeof v->name); }
   else sprintf(v->name, "%s-%d", tr("Untitled"), ++untitled);
   if (!d->fg && !d->bg) { d->fg = 0x000000; d->bg = 0xFFFFFF; }
+  /* the History Brush's source: the picture as it opened, if there is room for a copy */
+  if (AvailMem(MEMF_ANY | MEMF_LARGEST) > (ULONG)d->w * d->h * 8) v->snap = snapshot_take(d);
   curdoc = ndocs++;
   refresh_all();
   return 1;
@@ -572,7 +628,9 @@ static Doc *load(const char *path, int *fmt)
   }
   *fmt = codec_detect(data, len);
   err[0] = 0;
-  d = load_doc_big_stack(data, len, err, sizeof err);
+  /* 0.4: a palette ILBM (or PBM, ACBM) opens as an indexed picture, its colours and cycling kept */
+  d = ilbm_indexable(data, len) ? ilbm_read_indexed(data, len, err, sizeof err) : NULL;
+  if (!d) d = load_doc_big_stack(data, len, err, sizeof err);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!d && codec_oom) d = load_smaller(path, err);
@@ -616,6 +674,7 @@ static int ext_fmt(const char *path)
   if (!Stricmp((STRPTR)e, (STRPTR)".bmp")) return FMT_BMP;
   if (!Stricmp((STRPTR)e, (STRPTR)".iff") || !Stricmp((STRPTR)e, (STRPTR)".ilbm") || !Stricmp((STRPTR)e, (STRPTR)".lbm")) return FMT_ILBM;
   if (!Stricmp((STRPTR)e, (STRPTR)".ora")) return FMT_ORA;
+  if (!Stricmp((STRPTR)e, (STRPTR)".gif")) return FMT_GIF;
   return FMT_UNKNOWN;
 }
 int export_quality = 85, export_indexed;
@@ -629,6 +688,15 @@ static int write_doc(Doc *d, const char *path, int fmt)
   static char msg[300];
   set(app, MUIA_Application_Sleep, TRUE);
   if (fmt == FMT_ORA) data = ora_write(d, &len);
+  /* 0.4: GIF; an indexed (or grey) picture's own palette kept in PNG and ILBM */
+  else if (fmt == FMT_GIF) data = gif_write_doc(d, 256, QM_WU, DI_FS, 0, &len);
+  else if (fmt == FMT_PNG && d->mode != MODE_RGB) data = doc_png_encode(d, d->dpi, &len);
+  else if (fmt == FMT_ILBM && d->mode == MODE_INDEXED && !export_indexed) {
+    IlbmOpts o;
+    char err[120];
+    ilbm_opts_default(&o);
+    data = ilbm_write_doc(d, &o, &len, err, sizeof err);
+  }
   else if (flat_image(d, &im)) {
     switch (fmt) {
     case FMT_JPEG: data = jpeg_encode(&im, export_quality, d->dpi, &len); break;
@@ -652,7 +720,7 @@ static int save(void)
 {
   DocView *v = cur_view();
   if (!v) return 0;
-  if (!v->path[0] || !codec_writable(v->fmt)) return save_as();
+  if (!v->path[0] || (!codec_writable(v->fmt) && v->fmt != FMT_GIF)) return save_as();
   if (v->fmt != FMT_ORA && v->doc->nlay > 1 &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
@@ -678,7 +746,7 @@ static int save_as(void)
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
   if (v->doc->nlay > 1 || !v->path[0]) with_ext(path, sizeof path, ".ora");
-  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff)")) return 0;
+  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff|gif)")) return 0;
   fmt = ext_fmt(path);
   if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
@@ -695,7 +763,7 @@ static void export_as(int fmt, int indexed)
 {
   DocView *v = cur_view();
   char path[512];
-  static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff" };
+  static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff", ".gif" };
   if (!v) return;
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
@@ -705,6 +773,42 @@ static void export_as(int fmt, int indexed)
   export_indexed = indexed;
   write_doc(v->doc, path, fmt);
   export_indexed = 0;
+}
+/* File > Export > IFF ILBM (Amiga options): planes, EHB, HAM, SHAM, mask, colour cycling, ModeID */
+static void export_ilbm_options(void)
+{
+  DocView *v = cur_view();
+  IlbmOpts o;
+  char path[512], err[160];
+  static char msg[300];
+  u8 *data;
+  size_t len = 0;
+  if (!v) return;
+  ilbm_opts_default(&o);
+  if (!modedlg_ilbm(v->doc, &o)) return;
+  strcpy(path, v->path[0] ? v->path : lastdir);
+  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
+  with_ext(path, sizeof path, ".iff");
+  if (!file_request(1, "Export as IFF ILBM", path, sizeof path, NULL)) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  err[0] = 0;
+  data = ilbm_write_doc(v->doc, &o, &len, err, sizeof err);
+  if (data && !write_file(path, data, len)) { free(data); data = NULL; strcpy(err, tr("the disk is full or write-protected")); }
+  free(data);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!data) { snprintf(msg, sizeof msg, tr("%s couldn't be saved:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not enough memory")); ask("OK", "%s", msg); }
+}
+/* the Brushes panel and DPaint window ask for a brush made from the picture: the selection (or all of it) */
+static void brushui_request(int what)
+{
+  Doc *d = cur_doc();
+  if (!d) return;
+  if (what == BWR_DEFINE) brushwin_define(d);
+  else if (what == BWR_PICKUP || what == BWR_PICKUP_SEL) {
+    if (!d->sel) { ask("OK", "%s", tr("Select what to pick up as the brush first (with a marquee or lasso).")); return; }
+    brushwin_pickup(d, d->selbox, what == BWR_PICKUP_SEL);
+  }
+  refresh_all();
 }
 static int may_discard(int i)
 {
@@ -722,6 +826,9 @@ static int doc_close(int i)
   if (i < 0 || i >= ndocs) return 1;
   if (!may_discard(i)) return 0;
   DoMethod(canvas, MUIM_Canvas_Cancel);
+  palwin_stop();
+  if (curdoc == i) palwin_set_doc(NULL);
+  snapshot_free(docs[i].snap);
   doc_free(docs[i].doc);
   memmove(&docs[i], &docs[i + 1], (size_t)(ndocs - i - 1) * sizeof docs[0]);
   ndocs--;
@@ -844,13 +951,30 @@ static void command(ULONG id)
   case ID_EXPBMP: export_as(FMT_BMP, 0); return;
   case ID_EXPILBM: export_as(FMT_ILBM, 0); return;
   case ID_EXPILBM8: export_as(FMT_ILBM, 1); return;
+  case ID_EXPGIF: export_as(FMT_GIF, 0); return;
+  case ID_EXPILBMOPT: export_ilbm_options(); return;
+  case ID_WIN_PALETTE: case ID_COLORTABLE: palwin_open(1); return;
+  case ID_WIN_BRUSHSET: { Object *w = brushwin_settings_window(); if (w) set(w, MUIA_Window_Open, TRUE); return; }
+  case ID_WIN_DPAINT: { Object *w = brushwin_dpaint_window(); if (w) set(w, MUIA_Window_Open, TRUE); return; }
+  case ID_GRADEDIT: {
+    /* the Gradient Editor, starting from the gradient chosen; what it makes becomes "Custom" */
+    Gradient g = *tool_gradient();
+    if (gradwin_edit(&g, gradwin_presets(), d ? d->fg : 0, d ? d->bg : 0xFFFFFF)) { cur_grad = g; names_refresh(); opt.grad_preset = ngrad_names - 1; }
+    names_refresh();
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    return; }
   case ID_REVERT: {
     DocView *v = cur_view();
     int fmt;
     Doc *n;
     if (!v || !v->path[0]) return;
     if (v->doc->dirty && ask("Revert|Cancel", "%s", tr("Go back to the picture as it was last saved? The changes are lost.")) != 1) return;
-    if ((n = load(v->path, &fmt))) { DoMethod(canvas, MUIM_Canvas_Cancel); doc_free(v->doc); v->doc = n; v->placed = 0; refresh_all(); }
+    if ((n = load(v->path, &fmt))) {
+      DoMethod(canvas, MUIM_Canvas_Cancel); palwin_stop(); palwin_set_doc(NULL);
+      doc_free(v->doc); v->doc = n; v->placed = 0;
+      snapshot_free(v->snap); v->snap = snapshot_take(n);
+      refresh_all();
+    }
     return; }
   case ID_ABOUT:
     ask("OK", "%s", "\33cEasel 0.2\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
@@ -885,6 +1009,75 @@ static void command(ULONG id)
   case ID_UNDO: case ID_STEPBACK: doc_undo(d); break;
   case ID_REDO: case ID_STEPFWD: doc_redo(d); break;
   case ID_PURGE: doc_forget_undo(d); break;
+  /* 0.4: modes, the palette, the Amiga screen mode */
+  case ID_MODE_RGB: palwin_stop(); if (d->mode != MODE_RGB) doc_to_rgb(d); break;
+  case ID_MODE_GRAY: palwin_stop(); if (d->mode != MODE_GRAY && !doc_to_gray(d)) ask("OK", "%s", tr("There isn't enough memory for that.")); break;
+  case ID_MODE_INDEXED: {
+    IndexedOpts o;
+    palwin_stop();
+    modedlg_indexed_defaults(&o);
+    if (modedlg_indexed(d, &o) && !modedlg_apply_indexed(d, &o)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break; }
+  case ID_MODE_BITMAP: {
+    int m = 0;
+    palwin_stop();
+    if (modedlg_bitmap(&m) && !doc_to_bitmap(d, m)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break; }
+  case ID_SCREENMODE: {
+    ScreenModeChoice c;
+    memset(&c, 0, sizeof c);
+    c.modeid = d->modeid; c.mode = -1;
+    if (modedlg_screenmode(d, &c)) modedlg_apply_screenmode(d, &c);
+    break; }
+  /* 0.4: rulers, grid and guides */
+  case ID_RULERS: d->guides.show_rulers = !d->guides.show_rulers; DoMethod(canvas, MUIM_Canvas_Refresh); break;
+  case ID_SHOWGRID: d->guides.show_grid = !d->guides.show_grid; break;
+  case ID_SHOWGUIDES: d->guides.show_guides = !d->guides.show_guides; break;
+  case ID_SNAP: d->guides.snap = d->guides.snap ? 0 : SNAP_GUIDES | SNAP_GRID | SNAP_EDGES | SNAP_CENTER; break;
+  case ID_GRIDSET: {
+    char buf[64];
+    int sx, sy, sub = 1;
+    sprintf(buf, "%d %d %d", grid_spacing_x(d), grid_spacing_y(d), d->guides.grid_sub > 1 ? d->guides.grid_sub : 1);
+    if (!ask_string("Grid", "Spacing across, down (pixels), subdivisions:", buf, sizeof buf)) return;
+    if (sscanf(buf, "%d %d %d", &sx, &sy, &sub) < 2) { if (sscanf(buf, "%d", &sx) != 1) return; sy = sx; }
+    grid_set(d, sx, sy, d->guides.grid_ox, d->guides.grid_oy, sub);
+    d->guides.show_grid = 1;
+    break; }
+  case ID_NEWGUIDE: {
+    char buf[64] = "V 0";
+    char o = 'V';
+    int pos = 0;
+    if (!ask_string("New Guide", "V (vertical) or H (horizontal), and its position in pixels:", buf, sizeof buf)) return;
+    if (sscanf(buf, " %c %d", &o, &pos) != 2) return;
+    guide_add(d, o == 'v' || o == 'V', pos);
+    d->guides.show_guides = 1;
+    break; }
+  case ID_CLEARGUIDES: guide_clear(d); break;
+  /* 0.5: brushes, patterns, the history brush */
+  case ID_DEFBRUSH: brushwin_define(d); break;
+  case ID_PICKUPBRUSH: brushui_request(BWR_PICKUP_SEL); break;
+  case ID_DEFPATTERN: {
+    Box b = d->sel ? d->selbox : doc_box(d);
+    char name[64];
+    Pattern *p;
+    sprintf(name, "%s %d", tr("Pattern"), patterns.n + 1);
+    if (!ask_string("Pattern Name", "Name:", name, sizeof name)) return;
+    if (box_empty(b) || b.x1 - b.x0 > 1024 || b.y1 - b.y0 > 1024) { ask("OK", "%s", tr("A pattern is made from a selection up to 1024 pixels across.")); return; }
+    if (!(p = pattern_from_doc(d, b, 1)) || (strcpy(p->name, name), !patlist_add(&patterns, p))) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+    names_refresh();
+    opt.pattern = patterns.n - 1;
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    return; }
+  case ID_FILLPATTERN: {
+    const Pattern *p = tool_pattern();
+    if (p) fill_pattern(d, p, 0, 0, 100, BM_NORMAL);
+    break; }
+  case ID_SNAPSHOT: {
+    DocView *v = cur_view();
+    Snapshot *s = snapshot_take(d);
+    if (!s) { ask("OK", "%s", tr("There isn't enough memory for a snapshot.")); return; }
+    snapshot_free(v->snap); v->snap = s;
+    return; }
   case ID_CUT: case ID_COPY: case ID_COPYMERGED: {
     Clip *c = clip_copy(d, id == ID_COPYMERGED);
     if (!c) { ask("OK", "%s", tr("There is nothing to copy: the selection is empty.")); return; }
@@ -1028,8 +1221,31 @@ static void command(ULONG id)
 }
 
 /* ------------------------------------------------------------------ the window */
-static const char *const head_color[] = { "Color", "History", NULL };
-static Object *toppages, *tophead;
+static const char *const head_color[] = { "Color", "Swatches", "Brushes", "History", NULL };
+static Object *toppages, *tophead, *swatchpanel, *brushpanel;
+/* 0.4/0.5: what the Palette window, the Swatches and the Brushes panel tell the rest */
+static void pal_redraw(void)
+{
+  DoMethod(canvas, MUIM_Canvas_Refresh);
+  if (!palwin_cycling()) { DoMethod(layerpanel, MUIM_Layers_Refresh); DoMethod(historypanel, MUIM_History_Refresh); update_menus(); }
+}
+static void pal_picked(int i)
+{
+  Doc *d = cur_doc();
+  if (!d || i < 0 || i >= 256) return;
+  d->fg = ((u32)d->pal[i * 3] << 16) | ((u32)d->pal[i * 3 + 1] << 8) | d->pal[i * 3 + 2];
+  DoMethod(colorpanel, MUIM_Color_Refresh); DoMethod(toolbox, MUIM_Tools_Refresh);
+}
+static void brush_picked(const Brush *b)
+{
+  int t = tool;
+  if (!(t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE))) set_tool(t = TL_BRUSH);
+  opt.size[t] = b->size; opt.hardness[t] = b->hardness;
+  if (b->opacity) opt.opacity[t] = b->opacity;
+  if (b->flow) opt.flow[t] = b->flow;
+  DoMethod(optbar, MUIM_Opts_Refresh);
+}
+static void brush_changed(void) { DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); }
 static const char *const head_layers[] = { "Layers", NULL };
 static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
@@ -1065,6 +1281,8 @@ static int win_make(void)
           Child, tophead = head(head_color),
           Child, toppages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 0,
             Child, colorpanel = NewObject(color_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+            Child, swatchpanel = swatchwin_panel(),
+            Child, brushpanel = brushwin_panel(),
             Child, historypanel = NewObject(history_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
           End,
           Child, head(head_layers),
@@ -1094,6 +1312,7 @@ static int win_make(void)
   DoMethod(tophead, MUIM_Notify, MUIA_Head_Active, MUIV_EveryTime, (ULONG)toppages, 3, MUIM_Set, MUIA_Group_ActivePage, MUIV_TriggerValue);
   set(win, MUIA_Window_Open, TRUE);
   if (!xget(win, MUIA_Window_Open)) return 0;
+  if (swatchpanel) DoMethod(swatchpanel, MUIM_Notify, MUIA_Swatches_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_COLORCHG);
   {
     struct Window *w = (struct Window *)xget(win, MUIA_Window_Window);
     if (w) LOG("screen %ld x %ld, window %ld,%ld %ld x %ld", (long)w->WScreen->Width, (long)w->WScreen->Height, (long)w->LeftEdge, (long)w->TopEdge, (long)w->Width, (long)w->Height);
@@ -1215,6 +1434,7 @@ int main(int argc, char **argv)
   char start[8][512];
   int nstart = 0;
   char arg_screen[64] = "";
+  ULONG start_cmd = 0;                   /* CMD=n: a menu command run once the pictures are open (for testing) */
   if (!(IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39)) ||
       !(GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39)) ||
       !(LayersBase = OpenLibrary((STRPTR)"layers.library", 39)) ||
@@ -1227,6 +1447,7 @@ int main(int argc, char **argv)
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");
     else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"PUBSCREEN=", 10)) { strncpy(arg_screen, argv[i] + 10, sizeof arg_screen - 1); }
+    else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"CMD=", 4)) start_cmd = (ULONG)atol(argv[i] + 4);
     else if (nstart < 8) { strncpy(start[nstart], argv[i], 511); start[nstart++][511] = 0; }
   }
   if (argc == 0 && _WBenchMsg) {
@@ -1246,7 +1467,7 @@ int main(int argc, char **argv)
   lang_set(LANG_EN);
   theme_set_dark(pref_dark);
   opts_defaults();
-  splash_open(pub_screen, "Easel 0.2");
+  splash_open(pub_screen, "Easel 0.5");
   splash_step(3, tr("Adding Easel's fonts drawer"));
   DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
   add_fonts();
@@ -1257,6 +1478,15 @@ int main(int argc, char **argv)
   splash_step(45, tr("Preparing"));
   if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
       !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
+  /* 0.5: brushes, swatches, patterns, gradients (before the window, which shows their panels) */
+  swatch_palette_hooks();
+  brushwin_init();
+  brushui.picked = brush_picked; brushui.changed = brush_changed; brushui.request = brushui_request;
+  swatchwin_init();
+  patlist_init(&patterns);
+  patlist_builtin(&patterns);
+  gradient_init(&cur_grad, "Custom", 0x000000, 0xFFFFFF);
+  names_refresh();
   splash_step(60, tr("Building the window"));
   app = ApplicationObject,
     MUIA_Application_Title, (ULONG)"Easel",
@@ -1267,6 +1497,8 @@ int main(int argc, char **argv)
   if (!app) { printf("Easel: the application could not be made (MUI classes missing?)\n"); goto done; }
   splash_step(75, tr("Opening the window"));
   if (!win_make()) { printf("Easel: the window could not be made\n"); goto done; }
+  palwin_create(app);
+  palwin_redraw = pal_redraw; palwin_picked = pal_picked;
   for (i = 0; i < nstart; i++) {
     static char what[300];
     snprintf(what, sizeof what, tr("Opening %s"), (const char *)FilePart((STRPTR)start[i]));
@@ -1278,6 +1510,7 @@ int main(int argc, char **argv)
   for (i = 0; i < font_count(); i++) if (!strcmp(font_name(i), "Liberation Sans")) opt.text_font = i;
   set_tool(TL_BRUSH);
   refresh_all();
+  if (start_cmd) command(start_cmd);
   if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel."));
   for (;;) {
     ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
@@ -1294,7 +1527,7 @@ int main(int argc, char **argv)
       Doc *d = cur_doc();
       int which = (int)xget(toolbox, MUIA_Tools_Color);
       LONG c;
-      if (d && (c = pick_color(which == 1 ? "Color Picker (Foreground Color)" : "Color Picker (Background Color)", which == 1 ? d->fg : d->bg)) >= 0) {
+      if (d && (c = colorpick_run(which == 1 ? "Color Picker (Foreground Color)" : "Color Picker (Background Color)", which == 1 ? d->fg : d->bg)) >= 0) {
         if (which == 1) d->fg = (u32)c; else d->bg = (u32)c;
       }
       refresh_panels();
@@ -1310,10 +1543,17 @@ int main(int argc, char **argv)
   save_prefs();
   rc = 0;
 done:
-  for (i = 0; i < ndocs; i++) doc_free(docs[i].doc);
+  palwin_stop();
+  for (i = 0; i < ndocs; i++) { snapshot_free(docs[i].snap); doc_free(docs[i].doc); }
   ndocs = 0; curdoc = -1;
+  palwin_dispose();
   clip_free(clip); clip = NULL;
   if (app) MUI_DisposeObject(app);
+  brushwin_free(); brushwin_classes_free();
+  swatchwin_free(); swatchwin_class_free();
+  gradwin_free();
+  colorpick_free();
+  patlist_free(&patterns);
   pens_free();
   canvas_class_free();
   toolbox_free();

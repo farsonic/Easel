@@ -956,7 +956,7 @@ static void tab_label(int i, char *buf, size_t cap)
   Doc *doc = v->doc;
   char lay[48];
   to_latin1(doc->lay[doc->active]->name, lay, sizeof lay);
-  snprintf(buf, cap, "%s @ %ld%% (%s, RGB/8)%s", v->name, (long)(v->zoom * 100 + 0.5), lay, doc->dirty ? "*" : "");
+  snprintf(buf, cap, "%s @ %ld%% (%s, %s)%s", v->name, (long)(v->zoom * 100 + 0.5), lay, doc->mode == MODE_INDEXED ? tr("Indexed") : doc->mode == MODE_GRAY ? tr("Gray/8") : doc->mode == MODE_BITMAP ? tr("Bitmap") : "RGB/8", doc->dirty ? "*" : "");
 }
 static ULONG tabdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
