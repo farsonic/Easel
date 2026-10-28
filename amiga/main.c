@@ -196,13 +196,17 @@ static struct NewMenu menus[] = {
   H("Sharpen"), S("Smart Sharpen...", 0, ID_F_SMARTSHARPEN), S("Unsharp Mask...", 0, ID_F_UNSHARP), SBAR, S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen Edges", 0, ID_F_SHARPENEDGES), S("Sharpen More", 0, ID_F_SHARPENMORE),
   H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Dust & Scratches...", 0, ID_F_DUST), S("Median...", 0, ID_F_MEDIAN), S("Reduce Noise...", 0, ID_F_REDUCENOISE),
   S("Despeckle", 0, ID_F_DESPECKLE),
-  H("Distort"), S("Displace...", 0, ID_F_DISPLACE), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
+  H("Distort"), S("Diffuse Glow...", 0, ID_F_DIFFUSEGLOW), S("Displace...", 0, ID_F_DISPLACE), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
   S("Polar Coordinates...", 0, ID_F_POLAR), S("Shear...", 0, ID_F_SHEAR), S("ZigZag...", 0, ID_F_ZIGZAG), S("Glass...", 0, ID_F_GLASS), S("Ocean Ripple...", 0, ID_F_OCEAN),
   H("Pixelate"), S("Mosaic...", 0, ID_F_MOSAIC), S("Crystallize...", 0, ID_F_CRYSTALLIZE), S("Pointillize...", 0, ID_F_POINTILLIZE), S("Color Halftone...", 0, ID_F_HALFTONE),
   S("Mezzotint...", 0, ID_F_MEZZOTINT), S("Facet", 0, ID_F_FACET), S("Fragment", 0, ID_F_FRAGMENT),
   H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Trace Contour...", 0, ID_F_CONTOUR), S("Solarize", 0, ID_F_SOLARIZE),
   S("Oil Paint...", 0, ID_F_OIL), S("Diffuse...", 0, ID_F_DIFFUSE), S("Tiles...", 0, ID_F_TILES), S("Wind...", 0, ID_F_WIND),
-  S("Extrude...", 0, ID_F_EXTRUDE), S("Glowing Edges...", 0, ID_F_GLOWEDGES), S("Plastic Wrap...", 0, ID_F_PLASTIC), S("Detect Edges...", 0, ID_F_EDGEDETECT),
+  S("Extrude...", 0, ID_F_EXTRUDE), S("Glowing Edges...", 0, ID_F_GLOWEDGES), S("Detect Edges...", 0, ID_F_EDGEDETECT),
+  H("Artistic"), S("Cutout...", 0, ID_F_CUTOUT), S("Film Grain...", 0, ID_F_FILMGRAIN), S("Plastic Wrap...", 0, ID_F_PLASTIC), S("Poster Edges...", 0, ID_F_POSTEREDGES),
+  H("Brush Strokes"), S("Spatter...", 0, ID_F_SPATTER),
+  H("Sketch"), S("Halftone Pattern...", 0, ID_F_HALFTONEPAT), S("Photocopy...", 0, ID_F_PHOTOCOPY),
+  H("Texture"), S("Mosaic Tiles...", 0, ID_F_MOSAICTILES), S("Patchwork...", 0, ID_F_PATCHWORK), S("Stained Glass...", 0, ID_F_STAINEDGLASS), S("Texturizer...", 0, ID_F_TEXTURIZER),
   H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
   S("Lighting Effects...", 0, ID_F_LIGHTING), S("Vignette...", 0, ID_F_VIGNETTE),
   H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC), S("PAL Colors", 0, ID_F_PAL),
@@ -488,7 +492,9 @@ static void update_menus(void)
     ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK,
     /* 1.0 */
     ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
-    ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL, 0 };
+    ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
+    ID_F_FILMGRAIN, ID_F_CUTOUT, ID_F_POSTEREDGES, ID_F_DIFFUSEGLOW, ID_F_STAINEDGLASS, ID_F_HALFTONEPAT, ID_F_PHOTOCOPY, ID_F_TEXTURIZER,
+    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, 0 };
   /* 0.7: what works on the selection, greyed out while it is being edited as a Quick Mask */
   static const ULONG needsel[] = { ID_SELALL, ID_DESELECT, ID_RESELECT, ID_INVERSE, ID_COLORRANGE, ID_SELALPHA, ID_FEATHER, ID_EXPAND,
     ID_CONTRACT, ID_BORDER, ID_SMOOTH, ID_GROWSIM, ID_SIMILAR, ID_SAVESEL, ID_LOADSEL, ID_XFSEL, 0 };

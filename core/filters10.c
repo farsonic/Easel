@@ -909,3 +909,285 @@ int flt_lighting_ex(Doc *d, int type, i32 lx, i32 ly, int radius, int angle, int
   }
   return op_end(&o);
 }
+
+/* ------------------------------------------------------------------ gallery effects (1.0) */
+/* a hash of a pixel and a seed, 0 to 1 (the same pixel, the same grain) */
+static double hash01(i32 x, i32 y, unsigned seed)
+{
+  unsigned long n = (unsigned long)x * 374761393UL + (unsigned long)y * 668265263UL + seed * 2246822519UL;
+  n = (n ^ (n >> 13)) * 1274126177UL;
+  return ((n ^ (n >> 16)) & 0xFFFF) / 65535.0;
+}
+int flt_film_grain(Doc *d, int grain, int highlight, int intensity, unsigned seed)
+{
+  Op o;
+  i32 x, y;
+  double g = clampi(grain, 0, 20) * 4.0, ha = clampi(highlight, 0, 20) / 20.0, in = clampi(intensity, 0, 10) / 10.0;
+  if (!op_begin(&o, d, "Film Grain")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      double l = lumd(p) / 255.0, n = (hash01(x, y, seed) + hash01(x, y, seed + 1) - 1) * g, lift = 0;
+      int c;
+      /* grain most in the shadows and midtones; the brightest parts lifted into a glow */
+      n *= 1 - l * 0.7;
+      if (ha > 0 && l > 1 - ha) lift = (l - (1 - ha)) / ha * in * 120;
+      for (c = 0; c < 3; c++) p[c] = (u8)clamp255(p[c] + n + lift);
+    }
+  return op_end(&o);
+}
+int flt_cutout(Doc *d, int levels, int simplicity, int fidelity)
+{
+  Op o;
+  u8 *bl;
+  i32 x, y;
+  int lv = clampi(levels, 2, 8);
+  if (!op_begin(&o, d, "Cutout")) return 0;
+  if (!(bl = canvas_buf(d))) { op_end(&o); return 0; }
+  /* simplified (blurred more for more simplicity, less for more fidelity), then flat colours */
+  gblur(o.orig, bl, d->w, d->h, o.b, clampi(simplicity, 0, 10) * 0.8 / clampi(fidelity, 1, 3) + 0.3);
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      const u8 *q = bl + ((long)y * d->w + x) * 4;
+      u8 *p = DEST(&o, x, y);
+      int c;
+      for (c = 0; c < 3; c++) { int k = q[c] * lv / 256; p[c] = (u8)(k * 255 / (lv - 1)); }
+    }
+  free(bl);
+  return op_end(&o);
+}
+int flt_poster_edges(Doc *d, int thickness, int intensity, int posterize)
+{
+  Op o;
+  i32 x, y;
+  int lv = clampi(posterize, 0, 6) + 2;
+  double th = 40 + (10 - clampi(thickness, 0, 10)) * 12, in = clampi(intensity, 0, 10) / 10.0;
+  if (!op_begin(&o, d, "Poster Edges")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      double l[9], gx, gy, mag, k;
+      int i, j, c;
+      u8 *p = DEST(&o, x, y);
+      for (j = -1; j <= 1; j++) for (i = -1; i <= 1; i++) l[(j + 1) * 3 + i + 1] = lumd(orig_at(&o, x + i, y + j));
+      gx = l[2] + 2 * l[5] + l[8] - l[0] - 2 * l[3] - l[6];
+      gy = l[6] + 2 * l[7] + l[8] - l[0] - 2 * l[1] - l[2];
+      mag = sqrt(gx * gx + gy * gy);
+      k = mag > th ? 1 - in * (mag - th) / (mag + 1) * 2 : 1;
+      if (k < 0) k = 0;
+      for (c = 0; c < 3; c++) { int q = p[c] * lv / 256; p[c] = (u8)clamp255(q * 255 / (lv - 1) * k); }
+    }
+  return op_end(&o);
+}
+int flt_diffuse_glow(Doc *d, int graininess, int glow, int clear, u32 bg, unsigned seed)
+{
+  Op o;
+  i32 x, y;
+  double gr = clampi(graininess, 0, 10) * 6.0, ga = clampi(glow, 0, 20) / 20.0, cl = clampi(clear, 0, 20) / 20.0;
+  u8 b[3];
+  b[0] = (u8)(bg >> 16); b[1] = (u8)(bg >> 8); b[2] = (u8)bg;
+  if (!op_begin(&o, d, "Diffuse Glow")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      double l = lumd(p) / 255.0, t = (l - cl * 0.8) / (1 - cl * 0.8 + 1e-6), n;
+      int c;
+      /* the background colour glowing out of the light parts, with grain in it */
+      if (t < 0) t = 0;
+      t = t * t * ga;
+      n = (hash01(x, y, seed) - 0.5) * gr * t;
+      for (c = 0; c < 3; c++) p[c] = (u8)clamp255(p[c] + (b[c] - p[c]) * t + n);
+    }
+  return op_end(&o);
+}
+/* Stained Glass: cells about a jittered grid, each its average colour, leaded in fg */
+int flt_stained_glass(Doc *d, int cell, int border, int light, u32 fg, unsigned seed)
+{
+  Op o;
+  i32 x, y, gw, gh;
+  int cs = clampi(cell, 2, 50);
+  double bw = clampi(border, 1, 20) * 0.5, li = clampi(light, 0, 10) / 10.0;
+  double *acc;
+  u8 lead[3];
+  long ncell;
+  lead[0] = (u8)(fg >> 16); lead[1] = (u8)(fg >> 8); lead[2] = (u8)fg;
+  if (!op_begin(&o, d, "Stained Glass")) return 0;
+  gw = (o.b.x1 - o.b.x0) / cs + 3; gh = (o.b.y1 - o.b.y0) / cs + 3; ncell = (long)gw * gh;
+  if (!(acc = (double *)calloc((size_t)ncell * 5, sizeof(double)))) { op_end(&o); return 0; }
+  /* two passes: the cells' averages, then the colours and leading */
+  {
+    int pass;
+    for (pass = 0; pass < 2; pass++)
+      for (y = o.b.y0; y < o.b.y1; y++)
+        for (x = o.b.x0; x < o.b.x1; x++) {
+          i32 cx = (x - o.b.x0) / cs + 1, cy = (y - o.b.y0) / cs + 1, i, j, best = -1;
+          double d1 = 1e30, d2 = 1e30, bx = 0, by = 0;
+          for (j = cy - 1; j <= cy + 1; j++) for (i = cx - 1; i <= cx + 1; i++) {
+            double px = o.b.x0 + (i - 1 + 0.15 + 0.7 * hash01(i, j, seed)) * cs, py = o.b.y0 + (j - 1 + 0.15 + 0.7 * hash01(i, j, seed + 7)) * cs;
+            double dd = (x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py);
+            if (dd < d1) { d2 = d1; d1 = dd; best = j * gw + i; bx = px; by = py; }
+            else if (dd < d2) d2 = dd;
+          }
+          if (pass == 0) {
+            const u8 *q = ORIG(&o, x, y);
+            double *a = acc + (long)best * 5;
+            int c;
+            for (c = 0; c < 3; c++) a[c] += q[c] * q[3];
+            a[3] += q[3]; a[4] += 1;
+          } else {
+            u8 *p = DEST(&o, x, y);
+            const double *a = acc + (long)best * 5;
+            int c;
+            /* near the line between two cells: the lead */
+            if (sqrt(d2) - sqrt(d1) < bw) { p[0] = lead[0]; p[1] = lead[1]; p[2] = lead[2]; continue; }
+            {
+              double r = sqrt(d1) / cs, f = 1 + li * 0.6 * (0.5 - r);
+              (void)bx; (void)by;
+              for (c = 0; c < 3; c++) p[c] = (u8)clamp255((a[3] > 0 ? a[c] / a[3] : 0) * f);
+            }
+          }
+        }
+  }
+  free(acc);
+  return op_end(&o);
+}
+int flt_halftone_pattern(Doc *d, int size, int contrast, int type, u32 fg, u32 bg)
+{
+  Op o;
+  i32 x, y;
+  int s = clampi(size, 1, 12) * 2 + 2;
+  double ct = 1 + clampi(contrast, 0, 50) / 10.0;
+  if (!op_begin(&o, d, "Halftone Pattern")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      double l = lumd(p) / 255.0, t, v;
+      int c;
+      if (type == 1) { double dx = (x % s) - s / 2.0 + 0.5, dy = (y % s) - s / 2.0 + 0.5; t = fmod(sqrt(dx * dx + dy * dy) * 2 / s + 1, 1.0); }
+      else if (type == 2) t = (y % s + 0.5) / s;
+      else { double dx = (x % s) - s / 2.0 + 0.5, dy = (y % s) - s / 2.0 + 0.5; t = sqrt(dx * dx + dy * dy) / (s * 0.7071); }
+      /* ink (the foreground) where the picture is darker than the pattern, sharpened by contrast */
+      v = (l - t) * ct * 4 + 0.5;
+      if (v < 0) v = 0;
+      if (v > 1) v = 1;
+      for (c = 0; c < 3; c++) { int a = (int)((fg >> (16 - 8 * c)) & 255), b = (int)((bg >> (16 - 8 * c)) & 255); p[c] = (u8)clamp255(a + (b - a) * v); }
+    }
+  return op_end(&o);
+}
+int flt_photocopy(Doc *d, int detail, int darkness, u32 fg, u32 bg)
+{
+  Op o;
+  u8 *bl;
+  i32 x, y;
+  double dk = clampi(darkness, 1, 50) / 10.0;
+  if (!op_begin(&o, d, "Photocopy")) return 0;
+  if (!(bl = canvas_buf(d))) { op_end(&o); return 0; }
+  gblur(o.orig, bl, d->w, d->h, o.b, clampi(detail, 1, 24) * 0.5 + 0.5);
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      double diff = lumd(bl + ((long)y * d->w + x) * 4) - lumd(ORIG(&o, x, y)), v = 1 - diff * dk / 40;
+      int c;
+      /* toner where it is darker than round it */
+      if (v < 0) v = 0;
+      if (v > 1) v = 1;
+      for (c = 0; c < 3; c++) { int a = (int)((fg >> (16 - 8 * c)) & 255), b = (int)((bg >> (16 - 8 * c)) & 255); p[c] = (u8)clamp255(a + (b - a) * v); }
+    }
+  free(bl);
+  return op_end(&o);
+}
+/* Texturizer: a relief (0 brick, 1 burlap, 2 canvas, 3 sandstone) lit from angle degrees */
+static double tex_height(int type, double x, double y, unsigned seed)
+{
+  switch (type) {
+  case 0: {
+    /* bricks 32 x 16 with every other row offset, mortar lines lower */
+    double row = floor(y / 16), bx = fmod(x + (fmod(row, 2) ? 16 : 0), 32), by = fmod(y, 16);
+    double e = bx < by ? bx : by, e2 = 32 - bx < 16 - by ? 32 - bx : 16 - by;
+    if (e2 < e) e = e2;
+    return (e < 2 ? e / 2 : 1) * (0.85 + 0.15 * hash01((i32)floor(x / 3), (i32)floor(y / 3), seed));
+  }
+  case 1: return 0.5 + 0.25 * sin(x * 1.2) * (fmod(floor(y / 3), 2) ? 1 : -1) + 0.25 * sin(y * 1.2) * (fmod(floor(x / 3), 2) ? 1 : -1);
+  case 2: return 0.5 + 0.25 * sin(x * 2.1) + 0.25 * sin(y * 2.1) + 0.1 * (hash01((i32)x, (i32)y, seed) - 0.5);
+  default: return hash01((i32)x, (i32)y, seed) * 0.5 + hash01((i32)(x / 2), (i32)(y / 2), seed + 3) * 0.5;
+  }
+}
+int flt_texturizer(Doc *d, int type, int scaling, int relief, int angle, unsigned seed)
+{
+  Op o;
+  i32 x, y;
+  double sc = clampi(scaling, 50, 200) / 100.0, rl = clampi(relief, 0, 50) / 10.0, lx = cos(angle * M_PI / 180), ly = -sin(angle * M_PI / 180);
+  if (!op_begin(&o, d, "Texturizer")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      double h0 = tex_height(type, x / sc, y / sc, seed), hx = tex_height(type, (x + 1) / sc, y / sc, seed), hy = tex_height(type, x / sc, (y + 1) / sc, seed);
+      double shade = ((hx - h0) * -lx + (hy - h0) * -ly) * rl;
+      int c;
+      for (c = 0; c < 3; c++) p[c] = (u8)clamp255(shade > 0 ? p[c] + (255 - p[c]) * (shade > 1 ? 1 : shade) : p[c] * (1 + (shade < -1 ? -1 : shade)));
+    }
+  return op_end(&o);
+}
+int flt_mosaic_tiles(Doc *d, int tile, int grout, int lighten)
+{
+  Op o;
+  i32 x, y;
+  int ts = clampi(tile, 2, 100), gw = clampi(grout, 1, 15), lt = clampi(lighten, 0, 10);
+  if (!op_begin(&o, d, "Mosaic Tiles")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      u8 *p = DEST(&o, x, y);
+      int tx = (x - o.b.x0) % ts, ty = (y - o.b.y0) % ts, c;
+      /* grout round each tile; the tiles' edges catch the light from the top left */
+      if (tx < gw || ty < gw) { for (c = 0; c < 3; c++) p[c] = (u8)clamp255(p[c] * 0.35 + lt * 18); continue; }
+      if (tx == gw || ty == gw) for (c = 0; c < 3; c++) p[c] = (u8)clamp255(p[c] + (255 - p[c]) * 0.3);
+      else if (tx == ts - 1 || ty == ts - 1) for (c = 0; c < 3; c++) p[c] = (u8)(p[c] * 7 / 10);
+    }
+  return op_end(&o);
+}
+int flt_patchwork(Doc *d, int square, int relief)
+{
+  Op o;
+  i32 x, y;
+  int s = clampi(square, 2, 50);
+  double rl = clampi(relief, 0, 25) / 25.0;
+  if (!op_begin(&o, d, "Patchwork")) return 0;
+  for (y = o.b.y0; y < o.b.y1; y += s)
+    for (x = o.b.x0; x < o.b.x1; x += s) {
+      i32 x1 = x + s > o.b.x1 ? o.b.x1 : x + s, y1 = y + s > o.b.y1 ? o.b.y1 : y + s, i, j;
+      u8 avg[4];
+      cell_avg(&o, x, y, x1, y1, avg);
+      for (j = y; j < y1; j++)
+        for (i = x; i < x1; i++) {
+          u8 *p = DEST(&o, i, j);
+          double f = 0;
+          int c;
+          if (i == x || j == y) f = 0.5 * rl;
+          else if (i == x1 - 1 || j == y1 - 1) f = -0.5 * rl;
+          for (c = 0; c < 3; c++) p[c] = (u8)clamp255(f > 0 ? avg[c] + (255 - avg[c]) * f : avg[c] * (1 + f));
+          p[3] = avg[3];
+        }
+    }
+  return op_end(&o);
+}
+int flt_spatter(Doc *d, int radius, int smoothness, unsigned seed)
+{
+  Op o;
+  u8 *tmp;
+  i32 x, y;
+  int r = clampi(radius, 0, 25);
+  if (!op_begin(&o, d, "Spatter")) return 0;
+  if (!(tmp = canvas_buf(d))) { op_end(&o); return 0; }
+  memcpy(tmp, o.orig, (size_t)d->w * d->h * 4);
+  /* each pixel from one up to radius away, the offsets smoothed into blobs */
+  for (y = o.b.y0; y < o.b.y1; y++)
+    for (x = o.b.x0; x < o.b.x1; x++) {
+      int sm = clampi(smoothness, 1, 15);
+      i32 qx = x / sm, qy = y / sm;
+      double ox = (hash01(qx, qy, seed) - 0.5) * 2 * r, oy = (hash01(qx, qy, seed + 5) - 0.5) * 2 * r;
+      ox += (hash01(x, y, seed + 9) - 0.5) * r * 0.6; oy += (hash01(x, y, seed + 11) - 0.5) * r * 0.6;
+      memcpy(tmp + ((long)y * d->w + x) * 4, orig_at(&o, (i32)floor(x + ox + 0.5), (i32)floor(y + oy + 0.5)), 4);
+    }
+  for (y = o.b.y0; y < o.b.y1; y++) memcpy(DEST(&o, o.b.x0, y), tmp + ((long)y * d->w + o.b.x0) * 4, (size_t)(o.b.x1 - o.b.x0) * 4);
+  free(tmp);
+  return op_end(&o);
+}

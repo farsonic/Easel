@@ -1026,6 +1026,7 @@ AdjProg *adj_prog_make(const AdjParams *p)
   else switch (p->kind) {
   case AK_BRIGHTNESS: {
     int br = p->v[0], ct = p->v[1];
+    if (p->v[2]) { adj10_brightness_lut(p, g->lut); break; }     /* 1.0: Use Legacy */
     double cc = ct >= 0 ? 1 + ct / 50.0 * (ct > 0 ? 1.5 : 1) : 1 + ct / 100.0;
     if (ct >= 100) cc = 255;
     for (i = 0; i < 256; i++) {

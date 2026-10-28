@@ -690,3 +690,46 @@ const u32 photo_filter_colors[PHOTO_FILTERS] = {
   0xEC8A00, 0xFA9600, 0xEBB113, 0x006DFF, 0x005DFF, 0x00B5FF, 0xEA1A1A, 0xF38417, 0xF9E31C, 0x19C900, 0x1DCBEA, 0x1D35EA, 0x9B1DEA,
   0xE318E3, 0xAC7A33, 0xFF0000, 0x0022CD, 0x008C00, 0xFFD500, 0x00C2B1
 };
+
+/* ------------------------------------------------------------------ Auto, and legacy Brightness/Contrast */
+/* the darkest and lightest levels of a histogram with 0.1% of the pixels clipped at each end */
+static void clip_ends(const u32 *h, int *lo, int *hi)
+{
+  double total = 0, acc = 0;
+  int i;
+  for (i = 0; i < 256; i++) total += h[i];
+  *lo = 0; *hi = 255;
+  if (total <= 0) return;
+  for (i = 0; i < 256; i++) { acc += h[i]; if (acc > total * 0.001) { *lo = i; break; } }
+  acc = 0;
+  for (i = 255; i >= 0; i--) { acc += h[i]; if (acc > total * 0.001) { *hi = i; break; } }
+  if (*hi <= *lo + 1) { *lo = 0; *hi = 255; }
+}
+void adj_levels_auto(AdjParams *p, const u32 *hist4)
+{
+  int c;
+  p->v[0] = 0; p->v[1] = 255; p->v[2] = 100; p->v[3] = 0; p->v[4] = 255;
+  levels_rows(p);
+  for (c = 0; c < 3; c++) {
+    int lo, hi;
+    clip_ends(hist4 + 256 * (c + 1), &lo, &hi);
+    p->pts[c * 5] = lo; p->pts[c * 5 + 1] = hi; p->pts[c * 5 + 2] = 100; p->pts[c * 5 + 3] = 0; p->pts[c * 5 + 4] = 255;
+  }
+}
+void adj_curves_auto(AdjParams *p, const u32 *hist4)
+{
+  int c;
+  if (p->kind != AK_CURVES) return;
+  curves10_convert(p);
+  for (c = 1; c < 4; c++) {
+    int lo, hi, *q = p->pts + 16 * c;
+    clip_ends(hist4 + 256 * c, &lo, &hi);
+    q[0] = lo; q[1] = 0; q[2] = hi; q[3] = 255; p->v[2 + c] = 2;
+  }
+}
+void adj10_brightness_lut(const AdjParams *p, u8 *lut)
+{
+  int i, br = p->v[0], ct = p->v[1];
+  double f = ct >= 0 ? 1 + ct / 25.0 : 1 + ct / 100.0;
+  for (i = 0; i < 256; i++) lut[i] = lut[256 + i] = lut[512 + i] = (u8)clamp255((i + br - 127.5) * f + 127.5);
+}

@@ -62,6 +62,13 @@ int adj_match_color(Doc *d, const u8 *src, i32 sw, i32 sh, int luminance, int in
 void adj_levels_pick(AdjParams *p, int which, u32 c);
 void adj_curves_pick(AdjParams *p, int which, u32 c);
 
+/* Auto (the Levels and Curves dialogs' button): each colour channel stretched, 0.1% of the pixels
+   clipped at either end; hist4 is histogram()'s four tables */
+void adj_levels_auto(AdjParams *p, const u32 *hist4);
+void adj_curves_auto(AdjParams *p, const u32 *hist4);
+/* AK_BRIGHTNESS with v[2] set: Photoshop's "Use Legacy" (brightness added, contrast linear) */
+void adj10_brightness_lut(const AdjParams *p, u8 *lut);
+
 /* presets: built in for Levels, Curves, Hue/Saturation and Black & White (adj_preset_count is 0 for
    other kinds), and as text ("EaselAdjust 1" files) */
 int  adj_preset_count(int kind);

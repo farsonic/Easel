@@ -72,4 +72,28 @@ int flt_hsb_hsl(Doc *d, int mode);
    colour; ambient -100..100; texture 0-100 (bumps from the brightness), gloss 0-100 */
 int flt_lighting_ex(Doc *d, int type, i32 lx, i32 ly, int radius, int angle, int cone, int intensity, u32 color, int ambient,
                     int texture, int gloss);
+
+/* ------------------------------------------------------------------ gallery effects */
+/* Film Grain: grain 0-20, highlight area 0-20, intensity 0-10 */
+int flt_film_grain(Doc *d, int grain, int highlight, int intensity, unsigned seed);
+/* Cutout: levels 2-8, edge simplicity 0-10, edge fidelity 1-3 */
+int flt_cutout(Doc *d, int levels, int simplicity, int fidelity);
+/* Poster Edges: edge thickness 0-10, edge intensity 0-10, posterization 0-6 */
+int flt_poster_edges(Doc *d, int thickness, int intensity, int posterize);
+/* Diffuse Glow: graininess 0-10, glow amount 0-20, clear amount 0-20, in the background colour bg */
+int flt_diffuse_glow(Doc *d, int graininess, int glow, int clear, u32 bg, unsigned seed);
+/* Stained Glass: cell size 2-50, border thickness 1-20 (in fg), light intensity 0-10 */
+int flt_stained_glass(Doc *d, int cell, int border, int light, u32 fg, unsigned seed);
+/* Halftone Pattern: size 1-12, contrast 0-50, type 0 dot, 1 circle, 2 line; in fg on bg */
+int flt_halftone_pattern(Doc *d, int size, int contrast, int type, u32 fg, u32 bg);
+/* Photocopy: detail 1-24, darkness 1-50; in fg on bg */
+int flt_photocopy(Doc *d, int detail, int darkness, u32 fg, u32 bg);
+/* Texturizer: type 0 brick, 1 burlap, 2 canvas, 3 sandstone; scaling 50-200 %, relief 0-50, light angle */
+int flt_texturizer(Doc *d, int type, int scaling, int relief, int angle, unsigned seed);
+/* Mosaic Tiles: tile size 2-100, grout width 1-15, lighten grout 0-10 */
+int flt_mosaic_tiles(Doc *d, int tile, int grout, int lighten);
+/* Patchwork: square size 2-50, relief 0-25 */
+int flt_patchwork(Doc *d, int square, int relief);
+/* Spatter: spray radius 0-25, smoothness 1-15 */
+int flt_spatter(Doc *d, int radius, int smoothness, unsigned seed);
 #endif

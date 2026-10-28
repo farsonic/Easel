@@ -109,6 +109,19 @@ static int f_light2(Doc *d) { return flt_lighting_ex(d, 2, 0, 0, 30, 135, 30, 50
 static int f_sh(Doc *d) { return adj_shadows_highlights(d, 50, 50, 8, 40, 40, 6, 20, 15); }
 static int f_match(Doc *d) { return adj_match_color(d, NULL, 0, 0, 120, 80, 10, 1); }
 static int f_redeye(Doc *d) { return !box_empty(redeye_fix(d, doc_box(d), 50, 50)); }
+static int g_grain(Doc *d) { return flt_film_grain(d, 8, 10, 5, 3); }
+static int g_cutout(Doc *d) { return flt_cutout(d, 4, 4, 2); }
+static int g_poster(Doc *d) { return flt_poster_edges(d, 2, 1, 2); }
+static int g_glow(Doc *d) { return flt_diffuse_glow(d, 6, 10, 15, 0xFFFFFF, 4); }
+static int g_glass(Doc *d) { return flt_stained_glass(d, 7, 2, 3, 0x000000, 5); }
+static int g_half(Doc *d) { return flt_halftone_pattern(d, 1, 5, 0, 0, 0xFFFFFF); }
+static int g_half2(Doc *d) { return flt_halftone_pattern(d, 3, 20, 2, 0x000080, 0xFFFF00); }
+static int g_copy(Doc *d) { return flt_photocopy(d, 7, 8, 0, 0xFFFFFF); }
+static int g_tex0(Doc *d) { return flt_texturizer(d, 0, 100, 4, 135, 1); }
+static int g_tex3(Doc *d) { return flt_texturizer(d, 3, 150, 10, 45, 1); }
+static int g_tiles(Doc *d) { return flt_mosaic_tiles(d, 8, 2, 9); }
+static int g_patch(Doc *d) { return flt_patchwork(d, 5, 8); }
+static int g_spatter(Doc *d) { return flt_spatter(d, 6, 4, 6); }
 static void determinism(void)
 {
   static const struct { const char *name; Fn fn; } fl[] = {
@@ -120,7 +133,10 @@ static void determinism(void)
     { "prewitt", f_e1 }, { "laplacian", f_e2 }, { "roberts", f_e3 }, { "minimum round", f_minr }, { "maximum square", f_maxs },
     { "offset repeat", f_off }, { "offset background", f_offbg }, { "color to alpha", f_c2a }, { "hsl", f_hsl },
     { "lighting point", f_light0 }, { "lighting spot", f_light1 }, { "lighting infinite", f_light2 }, { "shadows/highlights", f_sh },
-    { "match color neutralize", f_match }, { "red eye (none in noise or some)", f_redeye }
+    { "match color neutralize", f_match }, { "red eye (none in noise or some)", f_redeye },
+    { "film grain", g_grain }, { "cutout", g_cutout }, { "poster edges", g_poster }, { "diffuse glow", g_glow }, { "stained glass", g_glass },
+    { "halftone pattern dot", g_half }, { "halftone pattern line", g_half2 }, { "photocopy", g_copy }, { "texturizer brick", g_tex0 },
+    { "texturizer sandstone", g_tex3 }, { "mosaic tiles", g_tiles }, { "patchwork", g_patch }, { "spatter", g_spatter }
   };
   int i;
   char msg[120];
@@ -298,6 +314,27 @@ static void filters(void)
   d = flat(40, 40, 0x808080);
   flt_lighting_ex(d, 1, 0, 20, 60, 0, 20, 80, 0xFFFFFF, 0, 0, 0);
   ok("spot light: lit in the cone, dark outside", px(d, 15, 20)[0] > px(d, 15, 2)[0] && px(d, 15, 2)[0] < 0x80);
+  doc_free(d);
+  /* gallery: known answers */
+  d = flat(20, 20, 0x808080); c = copy_px(d);
+  flt_film_grain(d, 0, 0, 0, 1); ok("film grain 0 does nothing", same_px(d, c));
+  flt_spatter(d, 0, 3, 1); ok("spatter 0 does nothing", same_px(d, c));
+  flt_poster_edges(d, 2, 5, 6); ok("poster edges of flat grey: posterized", px(d, 5, 5)[0] == 145);
+  free(c); doc_free(d);
+  d = flat(20, 20, 0xFFFFFF); flt_halftone_pattern(d, 2, 10, 0, 0, 0xFFFFFF); ok("halftone of white is white", px(d, 3, 3)[0] == 255);
+  doc_free(d);
+  d = flat(20, 20, 0x000000); flt_halftone_pattern(d, 2, 10, 0, 0, 0xFFFFFF); ok("halftone of black is black", px(d, 3, 3)[0] == 0 && px(d, 9, 9)[0] == 0);
+  doc_free(d);
+  d = flat(20, 20, 0x8090A0); flt_photocopy(d, 5, 10, 0, 0xFFFFFF); ok("photocopy of flat is paper", px(d, 10, 10)[0] == 255);
+  doc_free(d);
+  d = flat(30, 30, 0x3060C0); flt_stained_glass(d, 8, 2, 0, 0xFF0000, 1);
+  {
+    int lead = 0, glass = 0;
+    for (k = 0; k < 900; k++) { const u8 *q = d->lay[0]->px + k * 4; if (q[0] == 255 && q[1] == 0) lead++; else if (q[0] == 0x30 && q[2] == 0xC0) glass++; }
+    ok("stained glass: lead and glass", lead > 50 && glass > 300 && lead + glass == 900);
+  }
+  doc_free(d);
+  d = flat(16, 16, 0x808080); flt_mosaic_tiles(d, 8, 2, 0); ok("mosaic tiles: grout darker", px(d, 0, 4)[0] < 0x80 && px(d, 5, 5)[0] == 0x80);
   doc_free(d);
   /* lens correction: barrel taken out pulls the corners in from further out */
   d = flat(40, 40, 0); for (k = 0; k < 40 * 40; k++) d->lay[0]->px[k * 4] = (u8)(k % 40 * 6);
@@ -509,6 +546,34 @@ static void adjustments(void)
       free(comp); doc_free(e); doc_free(d);
     }
   }
+  /* Auto */
+  {
+    u32 h[1024];
+    d = flat(16, 16, 0);
+    for (k = 0; k < 256; k++) set_px(d, (i32)(k % 16), (i32)(k / 16), 40 + (int)(k % 100), 60 + (int)(k % 80), 30 + (int)(k % 150));
+    histogram(d, 0, h);
+    adj_defaults(AK_LEVELS, &p); adj_levels_auto(&p, h);
+    e = dup_doc(d); apply_p(e, &p);
+    {
+      int mn = 255, mx = 0;
+      for (k = 0; k < 256; k++) { int v = e->lay[0]->px[k * 4]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      ok("levels auto stretches", mn <= 2 && mx >= 253);
+    }
+    doc_free(e);
+    adj_defaults(AK_CURVES, &p); adj_curves_auto(&p, h);
+    e = dup_doc(d); apply_p(e, &p);
+    {
+      int mn = 255, mx = 0;
+      for (k = 0; k < 256; k++) { int v = e->lay[0]->px[k * 4 + 2]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      ok("curves auto stretches", mn <= 2 && mx >= 253);
+    }
+    doc_free(e); doc_free(d);
+  }
+  /* legacy Brightness/Contrast: brightness adds */
+  adj_defaults(AK_BRIGHTNESS, &p); p.v[0] = 20; p.v[2] = 1;
+  d = flat(1, 1, 0x406080); apply_p(d, &p);
+  ok("legacy brightness", px(d, 0, 0)[0] == 0x54 && px(d, 0, 0)[2] == 0x94);
+  doc_free(d);
   /* Photo Filter's list */
   ok("photo filters", PHOTO_FILTERS == 20 && !strcmp(photo_filter_names[0], "Warming Filter (85)") && photo_filter_colors[0] == 0xEC8A00);
 }

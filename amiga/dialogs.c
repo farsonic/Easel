@@ -359,7 +359,7 @@ static void put_adj(Doc *d, const AdjParams *p)
   if (adj_editing && d->lay[d->active]->kind == LK_ADJUST) doc_set_adjust(d, d->active, p);
   else adj_apply(d, p, adj_names[p->kind]);
 }
-static void a_bc(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
+static void a_bc(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = t; put_adj(d, &p); }
 static void a_exposure(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; put_adj(d, &p); }
 static void a_vibrance(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
 static void a_posterize(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; put_adj(d, &p); }
@@ -369,6 +369,7 @@ static void a_threshold(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj
    tone range) keep all of it in adj_base, and show the part chosen in the list when it changes
    (adj_reshow shows adj_base as it stands, after a preset or an eyedropper changed it) */
 static void (*adj_reshow)(void);
+static const u32 *auto_hist;          /* the histogram Auto stretches (the Levels and Curves dialogs') */
 static void a_balance(Doc *d, const LONG *v, int c, int t)
 {
   int k;
@@ -591,7 +592,10 @@ static void adj_btn(int k)
   Doc *d = cur_doc();
   int kind = adj_base.kind, picks = kind == AK_LEVELS || kind == AK_CURVES;
   if (kind == AK_REPLACECOLOR) { if (d) adj_base.v[0] = (int)(d->fg & 0xFFFFFF); return; }
-  if (picks && k < 3) {
+  if (picks && k == 5) {
+    if (!auto_hist) return;
+    if (kind == AK_LEVELS) adj_levels_auto(&adj_base, auto_hist); else adj_curves_auto(&adj_base, auto_hist);
+  } else if (picks && k < 3) {
     /* the eyedroppers: the foreground colour (pick it from the picture with the Eyedropper first) */
     if (!d) return;
     if (kind == AK_LEVELS) adj_levels_pick(&adj_base, k, d->fg); else adj_curves_pick(&adj_base, k, d->fg);
@@ -612,7 +616,7 @@ static void adj_btn(int k)
   } else return;
   if (adj_reshow) adj_reshow();
 }
-static const char *const pick_btns[] = { "Black Point", "Grey Point", "White Point", "Load...", "Save...", NULL };
+static const char *const pick_btns[] = { "Black Point", "Grey Point", "White Point", "Load...", "Save...", "Auto", NULL };
 static const char *const file_btns[] = { "Load...", "Save...", NULL };
 static const char *const fg_btn[] = { "Use Foreground Color", NULL };
 /* the adjustment a menu item stands for */
@@ -681,7 +685,8 @@ void dlg_adjust(ULONG id)
   }
   adj_reshow = NULL;
   switch (id) {
-  case ID_ADJ_BC: { static const Param p[] = { { "Brightness:", -150, 150, 0 }, { "Contrast:", -50, 100, 0 } }; slider_dialog("Brightness/Contrast", p, 2, NULL, NULL, NULL, 0, a_bc, NULL); break; }
+  case ID_ADJ_BC: { static const Param p[] = { { "Brightness:", -150, 150, 0 }, { "Contrast:", -50, 100, 0 } }; if (adj_editing) sd_init_tick = adj_base.v[2];
+    slider_dialog("Brightness/Contrast", p, 2, NULL, NULL, "Use Legacy", 0, a_bc, NULL); break; }
   case ID_ADJ_EXPOSURE: { static const Param p[] = { { "Exposure (x0.01):", -500, 500, 0 }, { "Offset (x0.001):", -500, 500, 0 }, { "Gamma (x0.01):", 1, 999, 100 } }; slider_dialog("Exposure", p, 3, NULL, NULL, NULL, 0, a_exposure, NULL); break; }
   case ID_ADJ_VIBRANCE: { static const Param p[] = { { "Vibrance:", -100, 100, 0 }, { "Saturation:", -100, 100, 0 } }; slider_dialog("Vibrance", p, 2, NULL, NULL, NULL, 0, a_vibrance, NULL); break; }
   case ID_ADJ_HUESAT: {
@@ -749,6 +754,7 @@ void dlg_adjust(ULONG id)
     histogram(d, 0, lev_hist);
     lev[0] = 0; lev[1] = 255; lev[2] = 100;
     lev_graph = graph(0, lev_hist, lev);
+    auto_hist = lev_hist;
     adj_reshow = levels_reshow; sd_cfg_cychook = levels_show; presets_for(AK_LEVELS); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Levels", p, 5, channels, "Channel:", NULL, 0, a_levels, lev_graph ? VGroup, Child, lev_graph,
                   Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Black, Grey and White Point take the foreground colour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End : NULL);
@@ -770,6 +776,7 @@ void dlg_adjust(ULONG id)
       sd_init_set = 1; sd_init_choice = c;
     }
     notify_change(curve_obj, MUIA_Graph_Changed);
+    auto_hist = hist;
     adj_reshow = curves_reshow; sd_cfg_cychook = curves_show; presets_for(AK_CURVES); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Curves", NULL, 0, channels, "Channel:", NULL, 0, a_curves, VGroup, Child, curve_obj,
                   Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Click the line to add a point (up to eight), drag points to bend it;\ndrag a point out of the box to take it away. Black, Grey and White Point\ntake the foreground colour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End);
@@ -780,7 +787,7 @@ void dlg_adjust(ULONG id)
   case ID_ADJ_EQUALIZE: adj_equalize(d); break;
   }
   sd_init_set = 0; sd_init_tick = -1; sd_init_choice = 0;
-  adj_editing = 0; adj_reshow = NULL;
+  adj_editing = 0; adj_reshow = NULL; auto_hist = NULL;
 }
 /* the Curves dialog's graph tells of a moved point through its notification */
 /* (wired in slider_dialog by the extra object: see graph_notify) */
@@ -853,6 +860,17 @@ static void f_plastic(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; f
 static void f_edgedet(Doc *d, const LONG *v, int c, int t) { (void)v; flt_edge_detect(d, c, t); }
 static void f_coloralpha(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_color_to_alpha(d, c == 0 ? d->fg : c == 1 ? d->bg : c == 2 ? 0xFFFFFF : 0); }
 static void f_hsbhsl(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_hsb_hsl(d, c); }
+static void g_grain(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_film_grain(d, (int)v[0], (int)v[1], (int)v[2], 31); }
+static void g_cutout(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_cutout(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_poster(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_poster_edges(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_glow(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_diffuse_glow(d, (int)v[0], (int)v[1], (int)v[2], d->bg, 32); }
+static void g_glass(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_stained_glass(d, (int)v[0], (int)v[1], (int)v[2], d->fg, 33); }
+static void g_half(Doc *d, const LONG *v, int c, int t) { (void)t; flt_halftone_pattern(d, (int)v[0], (int)v[1], c, d->fg, d->bg); }
+static void g_copy(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_photocopy(d, (int)v[0], (int)v[1], d->fg, d->bg); }
+static void g_tex(Doc *d, const LONG *v, int c, int t) { (void)t; flt_texturizer(d, c, (int)v[0], (int)v[1], (int)v[2], 34); }
+static void g_tiles(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_mosaic_tiles(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_patch(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_patchwork(d, (int)v[0], (int)v[1]); }
+static void g_spatter(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spatter(d, (int)v[0], (int)v[1], 35); }
 static void f_deint(Doc *d, const LONG *v, int c, int t) { (void)v; flt_de_interlace(d, c == 1, t); }
 static void f_custom(Doc *d, const LONG *v, int c, int t)
 {
@@ -951,6 +969,28 @@ void dlg_filter(ULONG id)
   case ID_F_EDGEDETECT: slider_dialog("Detect Edges", NULL, 0, edgemeth, "Method:", "Dark Edges on White", 1, f_edgedet, NULL); break;
   case ID_F_COLORALPHA: slider_dialog("Color to Alpha", NULL, 0, c2a, "Color:", NULL, 0, f_coloralpha, NULL); break;
   case ID_F_HSBHSL: slider_dialog("HSB/HSL", NULL, 0, hsbmodes, "Mode:", NULL, 0, f_hsbhsl, NULL); break;
+  case ID_F_FILMGRAIN: { static const Param p[] = { { "Grain:", 0, 20, 4 }, { "Highlight Area:", 0, 20, 0 }, { "Intensity:", 0, 10, 10 } };
+    slider_dialog("Film Grain", p, 3, NULL, NULL, NULL, 0, g_grain, NULL); break; }
+  case ID_F_CUTOUT: { static const Param p[] = { { "Number of Levels:", 2, 8, 4 }, { "Edge Simplicity:", 0, 10, 4 }, { "Edge Fidelity:", 1, 3, 2 } };
+    slider_dialog("Cutout", p, 3, NULL, NULL, NULL, 0, g_cutout, NULL); break; }
+  case ID_F_POSTEREDGES: { static const Param p[] = { { "Edge Thickness:", 0, 10, 2 }, { "Edge Intensity:", 0, 10, 1 }, { "Posterization:", 0, 6, 2 } };
+    slider_dialog("Poster Edges", p, 3, NULL, NULL, NULL, 0, g_poster, NULL); break; }
+  case ID_F_DIFFUSEGLOW: { static const Param p[] = { { "Graininess:", 0, 10, 6 }, { "Glow Amount:", 0, 20, 10 }, { "Clear Amount:", 0, 20, 15 } };
+    slider_dialog("Diffuse Glow", p, 3, NULL, NULL, NULL, 0, g_glow, TextObject, MUIA_Text_Contents, (ULONG)tr("The glow is in the background colour."), MUIA_Font, MUIV_Font_Tiny, End); break; }
+  case ID_F_STAINEDGLASS: { static const Param p[] = { { "Cell Size:", 2, 50, 10 }, { "Border Thickness:", 1, 20, 4 }, { "Light Intensity:", 0, 10, 3 } };
+    slider_dialog("Stained Glass", p, 3, NULL, NULL, NULL, 0, g_glass, TextObject, MUIA_Text_Contents, (ULONG)tr("The leading is in the foreground colour."), MUIA_Font, MUIV_Font_Tiny, End); break; }
+  case ID_F_HALFTONEPAT: { static const char *const ht[] = { "Dot", "Circle", "Line", NULL }; static const Param p[] = { { "Size:", 1, 12, 1 }, { "Contrast:", 0, 50, 5 } };
+    slider_dialog("Halftone Pattern", p, 2, ht, "Pattern Type:", NULL, 0, g_half, NULL); break; }
+  case ID_F_PHOTOCOPY: { static const Param p[] = { { "Detail:", 1, 24, 7 }, { "Darkness:", 1, 50, 8 } };
+    slider_dialog("Photocopy", p, 2, NULL, NULL, NULL, 0, g_copy, NULL); break; }
+  case ID_F_TEXTURIZER: { static const char *const tt[] = { "Brick", "Burlap", "Canvas", "Sandstone", NULL }; static const Param p[] = { { "Scaling (%):", 50, 200, 100 }, { "Relief:", 0, 50, 4 }, { "Light Angle:", -180, 180, 135 } };
+    slider_dialog("Texturizer", p, 3, tt, "Texture:", NULL, 0, g_tex, NULL); break; }
+  case ID_F_MOSAICTILES: { static const Param p[] = { { "Tile Size:", 2, 100, 12 }, { "Grout Width:", 1, 15, 3 }, { "Lighten Grout:", 0, 10, 9 } };
+    slider_dialog("Mosaic Tiles", p, 3, NULL, NULL, NULL, 0, g_tiles, NULL); break; }
+  case ID_F_PATCHWORK: { static const Param p[] = { { "Square Size:", 2, 50, 4 }, { "Relief:", 0, 25, 8 } };
+    slider_dialog("Patchwork", p, 2, NULL, NULL, NULL, 0, g_patch, NULL); break; }
+  case ID_F_SPATTER: { static const Param p[] = { { "Spray Radius:", 0, 25, 10 }, { "Smoothness:", 1, 15, 5 } };
+    slider_dialog("Spatter", p, 2, NULL, NULL, NULL, 0, g_spatter, NULL); break; }
   case ID_F_DUST: { static const Param p[] = { { "Radius (px):", 1, 100, 1 }, { "Threshold:", 0, 255, 0 } }; slider_dialog("Dust & Scratches", p, 2, NULL, NULL, NULL, 0, f_dust, NULL); break; }
   case ID_F_REDUCENOISE: { static const Param p[] = { { "Strength:", 0, 10, 6 }, { "Preserve Details (%):", 0, 100, 60 } }; slider_dialog("Reduce Noise", p, 2, NULL, NULL, "Reduce Colour Noise", 1, f_rnoise, NULL); break; }
   case ID_F_SMARTBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 3 }, { "Threshold:", 1, 100, 25 } }; slider_dialog("Smart Blur", p, 2, smodes, "Mode:", NULL, 0, f_smart, NULL); break; }
