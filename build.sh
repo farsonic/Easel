@@ -7,7 +7,7 @@ export PATH=$VBCC/bin:$PATH
 NDK=${NDK:-/opt/amiga/ndk/Include_H}
 MUI=${MUI:-/opt/amiga/mui/include}
 cd "$(dirname "$0")"
-CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c"
+CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c"
 if [ "$1" != "fast" ]; then
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
@@ -23,7 +23,17 @@ if [ "$1" != "fast" ]; then
   python3 tests/check_palette.py | tail -2
   # 0.5: brushes, strokes, gradients, patterns, presets
   t brushtest;    /tmp/easel_brushtest | tail -2
+  # 0.6: Workbench icons (each read back by the icon reader) and batch conversion
+  t icontest;     /tmp/easel_icontest | tail -2
 fi
 av1/build-av1.sh amiga
-vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$MUI" -I"$NDK" amiga/*.c amiga/bigstack.s $CORE av1/obj/*.o -o Easel -lamiga -lm040
+# Easel itself: every amiga/*.c but convert.c, which is EaselConvert's main
+EASEL_SRC=$(ls amiga/*.c | grep -v '^amiga/convert\.c$')
+vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$MUI" -I"$NDK" $EASEL_SRC amiga/bigstack.s $CORE av1/obj/*.o -o Easel -lamiga -lm040
 ls -l Easel
+# 0.6: EaselConvert, the Shell command for batch conversion (the core's codecs, datatypes as a last resort)
+# (the core files it needs: the codecs, the document, resizing and its dependencies; if a link
+# fails for an undefined symbol, add the core file that defines it here)
+CONVERT_CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/brush.c core/gradient.c core/adjust.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/iconwrite.c core/batch.c"
+vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$NDK" amiga/convert.c amiga/dtload.c amiga/bigstack.s $CONVERT_CORE av1/obj/*.o -o EaselConvert -lamiga -lm040
+ls -l EaselConvert
