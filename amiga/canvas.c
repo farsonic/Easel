@@ -1161,7 +1161,11 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     return 0;
   case MUIM_HandleEvent:
     return handle(cl, obj, (struct MUIP_HandleEvent *)msg);
-  case MUIM_Canvas_Tick:
+  case MUIM_Canvas_Tick: {
+    static ULONG ticks;
+    /* (once a minute: time for main.c to see whether an autosave is due) */
+    if (++ticks % 240 == 0) DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)_app(obj), 2, MUIM_Application_ReturnID, ID_AUTOSAVE);
+    }
     d = INST_DATA(cl, obj);
     if (d->shown && d->nedges && d->nedges < 6000 && !d->drag && d->view) {
       d->phase++;

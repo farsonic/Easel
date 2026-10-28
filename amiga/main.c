@@ -68,6 +68,7 @@ Object *app, *win, *canvas, *toolbox, *optbar, *colorpanel, *layerpanel, *histor
 static Object *vscroll, *hscroll;
 FontSet fonts;
 int pref_dark = 1;
+int pref_autosave = 5;                   /* minutes between autosaves (0: none) */
 DocView docs[MAXDOCS];
 int ndocs, curdoc = -1;
 Opts opt;
@@ -118,7 +119,8 @@ static struct NewMenu menus[] = {
   I("Free Transform...", "T", ID_FREETRANSFORM),
   H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
-  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE),
+  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE), BAR,
+  I("Autosave...", 0, ID_AUTOSAVESET),
   M("Image"),
   H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
   S("Color Table...", 0, ID_COLORTABLE), S("Amiga Screen Mode...", 0, ID_SCREENMODE),
@@ -195,9 +197,20 @@ static struct NewMenu menus[] = {
 DocView *cur_view(void) { return curdoc >= 0 && curdoc < ndocs ? &docs[curdoc] : NULL; }
 Doc *cur_doc(void) { DocView *v = cur_view(); return v ? v->doc : NULL; }
 static ULONG xget(Object *o, ULONG attr) { ULONG v = 0; get(o, attr, &v); return v; }
+/* the main window drawn again throughout (a requester's or dialog's window closing over it isn't
+   always repaired on its own) */
+void redraw_window(void)
+{
+  Object *root = NULL;
+  if (!win || !xget(win, MUIA_Window_Open)) return;
+  get(win, MUIA_Window_RootObject, &root);
+  if (root && DoMethod(root, MUIM_Group_InitChange)) DoMethod(root, MUIM_Group_ExitChange);
+}
 int ask(const char *gadgets, const char *fmt, const char *arg)
 {
-  return (int)MUI_Request(app, win, 0, (STRPTR)"Easel", (STRPTR)tr(gadgets), (STRPTR)tr(fmt), arg);
+  int r = (int)MUI_Request(app, win, 0, (STRPTR)"Easel", (STRPTR)tr(gadgets), (STRPTR)tr(fmt), arg);
+  redraw_window();
+  return r;
 }
 static void menu_set(ULONG id, ULONG attr, ULONG val)
 {
@@ -247,6 +260,7 @@ ULONG run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id))
   set(w, MUIA_Window_Open, FALSE);
   set(win, MUIA_Window_Sleep, FALSE);
   DoMethod(app, OM_REMMEMBER, (ULONG)w);
+  redraw_window();
   return id;
 }
 Object *dialog_window(const char *t, Object *contents, const char *oklabel)
@@ -744,6 +758,83 @@ static int write_doc(Doc *d, const char *path, int fmt)
   }
   return ok;
 }
+/* ------------------------------------------------------------------ 0.6: autosave and recovery */
+#define RECOVERY "PROGDIR:Recovery"
+/* the state an autosave holds: the undo step on top and how deep */
+static ULONG doc_sig(Doc *d) { return (ULONG)d->undo ^ ((ULONG)d->undo_depth << 20) ^ (ULONG)d->nlay; }
+static void recovery_drop(DocView *v)
+{
+  if (v->recov[0]) { DeleteFile((STRPTR)v->recov); v->recov[0] = 0; }
+  v->asig = 0;
+}
+/* every changed picture written to the Recovery drawer as .ora (to a new file, then put in place) */
+static void autosave(int force)
+{
+  static int minutes;
+  int i;
+  BPTR l;
+  if (!force && (!pref_autosave || ++minutes < pref_autosave)) return;
+  minutes = 0;
+  if (!(l = Lock((STRPTR)RECOVERY, ACCESS_READ)) && !(l = CreateDir((STRPTR)RECOVERY))) return;
+  UnLock(l);
+  for (i = 0; i < ndocs; i++) {
+    DocView *v = &docs[i];
+    char tmp[170], clean[64];
+    u8 *data;
+    size_t len;
+    int k;
+    if (!v->doc->dirty || doc_sig(v->doc) == v->asig) continue;
+    if (!v->recov[0]) {
+      for (k = 0; v->name[k] && k < 40; k++) clean[k] = strchr("/:*?#\"", v->name[k]) ? '_' : v->name[k];
+      clean[k] = 0;
+      snprintf(v->recov, sizeof v->recov, "%s/%s-%lx.ora", RECOVERY, clean, (unsigned long)(ULONG)v->doc);
+    }
+    if (!(data = ora_write(v->doc, &len))) continue;
+    snprintf(tmp, sizeof tmp, "%s.new", v->recov);
+    if (write_file(tmp, data, len)) { DeleteFile((STRPTR)v->recov); Rename((STRPTR)tmp, (STRPTR)v->recov); v->asig = doc_sig(v->doc); }
+    free(data);
+  }
+}
+/* at start-up: pictures autosaved by an Easel that didn't close properly, offered back */
+static void recovery_offer(void)
+{
+  static char names[16][160];
+  struct FileInfoBlock *fib;
+  BPTR l = Lock((STRPTR)RECOVERY, ACCESS_READ);
+  int n = 0, i, r;
+  static char msg[200];
+  if (!l) return;
+  if ((fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) {
+    if (Examine(l, fib))
+      while (ExNext(l, fib) && n < 16) {
+        int len = (int)strlen(fib->fib_FileName);
+        if (fib->fib_DirEntryType < 0 && len > 4 && !Stricmp((STRPTR)fib->fib_FileName + len - 4, (STRPTR)".ora"))
+          snprintf(names[n++], sizeof names[0], "%s/%s", RECOVERY, fib->fib_FileName);
+      }
+    FreeDosObject(DOS_FIB, fib);
+  }
+  UnLock(l);
+  if (!n) return;
+  if (n == 1) snprintf(msg, sizeof msg, "%s", tr("Easel didn't close properly last time.\nA picture was saved for you. Open it?"));
+  else snprintf(msg, sizeof msg, tr("Easel didn't close properly last time.\n%d pictures were saved for you. Open them?"), n);
+  r = ask("Open|Delete Them|Later", "%s", msg);
+  if (r == 0) return;
+  for (i = 0; i < n; i++) {
+    if (r == 1) {
+      int fmt;
+      Doc *d = load(names[i], &fmt);
+      if (d && doc_show(d, "", FMT_ORA)) {
+        DocView *v = &docs[curdoc];
+        char *dash;
+        base_name(names[i], v->name, sizeof v->name);
+        if ((dash = strrchr(v->name, '-'))) *dash = 0;
+        d->dirty = 1;
+      }
+    }
+    DeleteFile((STRPTR)names[i]);
+  }
+  refresh_all();
+}
 static int save_as(void);
 static int save(void)
 {
@@ -757,6 +848,7 @@ static int save(void)
   if (v->fmt == FMT_JPEG) export_quality = 90;
   if (!write_doc(v->doc, v->path, v->fmt)) return 0;
   v->doc->dirty = 0;
+  recovery_drop(v);
   refresh_panels();
   return 1;
 }
@@ -784,6 +876,7 @@ static int save_as(void)
   recent_add(path);
   base_name(path, v->name, sizeof v->name);
   v->doc->dirty = 0;
+  recovery_drop(v);
   strcpy(lastdir, path);
   refresh_panels();
   return 1;
@@ -1007,6 +1100,7 @@ static int doc_close(int i)
   DoMethod(canvas, MUIM_Canvas_Cancel);
   palwin_stop();
   if (curdoc == i) palwin_set_doc(NULL);
+  recovery_drop(&docs[i]);
   snapshot_free(docs[i].snap);
   doc_free(docs[i].doc);
   memmove(&docs[i], &docs[i + 1], (size_t)(ndocs - i - 1) * sizeof docs[0]);
@@ -1186,6 +1280,13 @@ static void command(ULONG id)
     set(win, MUIA_Window_Open, TRUE);
     refresh_all();
     return;
+  case ID_AUTOSAVE: autosave(0); return;
+  case ID_AUTOSAVESET: {
+    char buf[16];
+    sprintf(buf, "%d", pref_autosave);
+    if (!ask_string("Autosave", "Minutes between autosaves (0 for none):", buf, sizeof buf)) return;
+    pref_autosave = atoi(buf) < 0 ? 0 : atoi(buf) > 120 ? 120 : atoi(buf);
+    return; }
   case ID_TOGGLEPANELS: case ID_TOGGLERIGHT: {
     /* Tab: the toolbox, options bar and panels hidden or shown again; Shift-Tab just the panels */
     static int hidden;
@@ -1623,6 +1724,7 @@ static void load_prefs(void)
   while (fgets(line, sizeof line, f)) {
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "dark=", 5)) pref_dark = atoi(line + 5);
+    else if (!strncmp(line, "autosave=", 9)) pref_autosave = atoi(line + 9);
     else if (!strncmp(line, "screen=", 7)) { strncpy(pub_screen, line + 7, sizeof pub_screen - 1); }
     else if (!strncmp(line, "dir=", 4)) { strncpy(lastdir, line + 4, sizeof lastdir - 1); }
     else if (!strncmp(line, "recent=", 7) && nr < NRECENT) { strncpy(recent[nr], line + 7, sizeof recent[0] - 1); nr++; }
@@ -1634,6 +1736,7 @@ static void save_prefs(void)
   FILE *f = fopen("PROGDIR:Easel.prefs", "w");
   if (!f) return;
   fprintf(f, "dark=%d\n", pref_dark);
+  fprintf(f, "autosave=%d\n", pref_autosave);
   if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
   if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
   { int i; for (i = 0; i < NRECENT; i++) if (recent[i][0]) fprintf(f, "recent=%s\n", recent[i]); }
@@ -1720,6 +1823,7 @@ int main(int argc, char **argv)
     open_path(start[i]);
   }
   splash_close();
+  recovery_offer();
   for (i = 0; i < font_count(); i++) if (!strcmp(font_name(i), "Liberation Sans")) opt.text_font = i;
   set_tool(TL_BRUSH);
   refresh_all();

@@ -37,6 +37,7 @@ typedef struct {
   LONG sx, sy;                        /* the scroll: the zoomed image's pixel at the canvas's top left */
   int placed;                         /* zoom and scroll have been set for the window */
   Snapshot *snap;                     /* 0.5: what the History Brush paints back (taken at opening) */
+  char recov[160]; ULONG asig;        /* 0.6: its autosaved copy in PROGDIR:Recovery, and the state it holds */
 } DocView;
 #define MAXDOCS 12
 extern DocView docs[MAXDOCS];
@@ -201,6 +202,7 @@ int    ask(const char *gadgets, const char *fmt, const char *arg);
 ULONG  run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id));
 Object *dialog_window(const char *title, Object *contents, const char *oklabel);
 int    ask_string(const char *title, const char *label, char *buf, int cap);
+void   redraw_window(void);              /* (main.c) the main window drawn again throughout */
 int    ask_number(const char *title, const char *label, LONG *v, LONG min, LONG max);
 /* the colour picker: 0xRRGGBB, or -1 if cancelled */
 LONG   pick_color(const char *title, ULONG start);
