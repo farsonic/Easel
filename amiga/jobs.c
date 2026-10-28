@@ -29,6 +29,7 @@ static struct { Doc *doc; void *top; int (*hook)(long, long); } jobs[MAXJOBS];
 static int njobs;
 static Object *pwin, *pgauge, *ptext;
 static LONG abort_flag;
+static int pwin_depth;                   /* the nesting of the job that opened the window (it goes with that job) */
 static LONG started;                     /* when the operation now running began */
 static char what[80];                    /* its name, for the window's text */
 int jobs_shown;                          /* (for testing) how many times the window has opened */
@@ -92,6 +93,7 @@ static void pwin_open(void)
   /* the application is asleep while a command runs: this window alone woken */
   for (i = 0; i < 8 && xget(pwin, MUIA_Window_Sleep); i++) set(pwin, MUIA_Window_Sleep, FALSE);
   jobs_shown++;
+  pwin_depth = njobs;
   LOG("progress window opened: %s", what);
 }
 static void pwin_close(void)
@@ -169,7 +171,9 @@ int job_end(void)
     progress_reset();
   }
   progress_hook = jobs[njobs].hook;      /* (as it was: a dialog's previews run without it) */
-  if (!njobs) pwin_close();
+  /* the window closes with the job that opened it: a dialog's preview (a job within the command's)
+     doesn't leave it standing over the dialog */
+  if (njobs < pwin_depth || !njobs) { pwin_close(); started = now_ticks(); }
   return aborted;
 }
 int job_running(void) { return njobs > 0; }

@@ -809,7 +809,10 @@ Interface colours always go through the theme's pens (section 7), never the cube
 **Small displays.** Test at 640 × 480 and 640 × 512 as well as at 800 × 600 and larger. The
 classes adapt in `MUIM_Setup`, where the screen is known:
 
-- Easel's toolbox becomes two columns when the screen is under 600 pixels tall.
+- Easel's toolbox becomes two columns when one column wouldn't fit (under 700 lines since it has
+  19 groups). Work the threshold out from the content, and revisit it whenever tools are added.
+- An options bar or toolbar must not depend on its last fields being visible: at 640 pixels the
+  tail can be cut off, so every setting it holds must also be in a menu or dialog.
 - Panels share space through tabs, and the less-used ones go behind tabs on short screens.
 - Thumbnails and rows shrink (Layers panel rows 18 or 28 pixels).
 - Long tab labels switch to short forms when they don't fit.
@@ -881,6 +884,7 @@ drawing, input and the feel of it.
 | An icon shows the wrong picture, and so does every one after it | A string missing or extra in `icons[]` | Keep enum and array in the same order with a comment per line. Count after editing. |
 | A dialog's preview is slow while dragging a slider | Rendering on every notification | Note the change, render on idle (`id == 0`) |
 | Painting on a palette screen not shown until something else redraws | Indexed documents redrawn only on full refresh | Update the changed box when the stroke ends |
+| Code right natively and at -O1, wrong on the Amiga at -O2 (Easel's text: every line on the first baseline, the line step computed as 0) | A vbcc optimiser bug | Make the variable `volatile`, with a comment saying why. Test new core code in the emulator, not only natively. |
 | Fonts don't load from the program's drawer on some systems | diskfont.library versions | Own hunk loader for our fonts (`theme.c`), plus an `AssignAdd` of `PROGDIR:Fonts` to `FONTS:` for other programs' benefit |
 
 ## 19. Checklist for a new program

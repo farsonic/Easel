@@ -1745,7 +1745,7 @@ static void command(ULONG id)
   case ID_ABOUT:
     ask("OK", "%s", "\33cEasel 1.0\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
         "Live layers (groups, masks, adjustment and fill layers), palettes,\nindexed pictures and colour cycling, the Amiga's screen modes,\n"
-        "brushes, gradients and patterns, selections, adjustments and filters.\n"
+        "brushes, gradients and patterns, selections and transforms,\neditable type, paths and shapes, retouching tools, adjustments and filters.\n"
         "Reads and writes PNG, JPEG, BMP, GIF, TIFF, Targa, Photoshop PSD,\nIFF ILBM and OpenRaster (.ora), and reads many more.\n\n"
         "Written in C for MUI; drawn with its own icons.\n\n"
         "AVIF decoding: dav1d, by VideoLAN and the dav1d authors.\n"
