@@ -2493,6 +2493,7 @@ int main(int argc, char **argv)
     if (id) LOG("id %lu", (unsigned long)id);
     if (id == MUIV_Application_ReturnID_Quit || id == ID_QUIT) { if (close_all()) break; }
     else if (id == ID_OPTCHG) DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_OPTS, 0);    /* 0.9: the Type tool takes the options bar's change */
+    else if (id == ID_PATHSCHG) { DoMethod(canvas, MUIM_Canvas_Paths); DoMethod(pathpanel, MUIM_Paths_Refresh); }   /* (no job: a double-click's second click isn't lost) */
     else if (id == ID_CANVASCHG || id == ID_LAYERSCHG || id == ID_HISTCHG || id == ID_CHANSCHG) {
       /* 0.9: the text being typed: kept when the Layers panel changes something, forgotten when
          the History panel has gone back over it */
