@@ -695,7 +695,7 @@ void dlg_adjust(ULONG id)
     else { sd_init_v[3] = 15; sd_init_v[4] = 30; }
     adj_reshow = huesat_reshow; sd_cfg_cychook = huesat_show; presets_for(AK_HUESAT); sd_cfg_btns = file_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Hue/Saturation", p, 5, hsedit, "Edit:", "Colorize", 0, a_huesat,
-                  TextObject, MUIA_Text_Contents, (ULONG)tr("Range and Fuzziness set how far round the colour wheel each colour range reaches."), MUIA_Font, MUIV_Font_Tiny, End);
+                  TextObject, MUIA_Text_Contents, (ULONG)tr("Range and Fuzziness: how far round the colour\nwheel each colour range reaches."), MUIA_Font, MUIV_Font_Tiny, End);
     break; }
   case ID_ADJ_BALANCE: { static const Param p[] = { { "Cyan - Red:", -100, 100, 0 }, { "Magenta - Green:", -100, 100, 0 }, { "Yellow - Blue:", -100, 100, 0 } };
     sd_cfg_cychook = balance_show;
@@ -757,7 +757,7 @@ void dlg_adjust(ULONG id)
     auto_hist = lev_hist;
     adj_reshow = levels_reshow; sd_cfg_cychook = levels_show; presets_for(AK_LEVELS); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Levels", p, 5, channels, "Channel:", NULL, 0, a_levels, lev_graph ? VGroup, Child, lev_graph,
-                  Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Black, Grey and White Point take the foreground colour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End : NULL);
+                  Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Black, Grey and White Point take the foreground\ncolour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End : NULL);
     lev_graph = NULL;
     break; }
   case ID_ADJ_CURVES: {
