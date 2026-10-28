@@ -99,10 +99,11 @@ const char *const tool_names[TL_N] = {
   "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool",
   "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool",
   "Magnetic Lasso Tool", "Ruler Tool",
-  "Color Sampler Tool"
+  "Color Sampler Tool",
+  "Spot Healing Brush Tool", "Healing Brush Tool", "Patch Tool", "Red Eye Tool"     /* 1.0 */
 };
 char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
-  'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I' };
+  'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I', 'J', 'J', 'J', 'J' };
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -147,7 +148,8 @@ static struct NewMenu menus[] = {
   S("Vibrance...", 0, ID_ADJ_VIBRANCE), S("Hue/Saturation...", "U", ID_ADJ_HUESAT), S("Color Balance...", "B", ID_ADJ_BALANCE), S("Black & White...", 0, ID_ADJ_BW),
   S("Photo Filter...", 0, ID_ADJ_PHOTO), S("Channel Mixer...", 0, ID_ADJ_MIXER), S("Gradient Map...", 0, ID_ADJ_GRADMAP), S("Selective Color...", 0, ID_ADJ_SELCOLOR), SBAR,
   S("Invert", "I", ID_ADJ_INVERT), S("Posterize...", 0, ID_ADJ_POSTERIZE), S("Threshold...", 0, ID_ADJ_THRESHOLD), SBAR,
-  S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE),
+  S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE), SBAR,
+  S("Shadows/Highlights...", 0, ID_ADJ_SHADOWHI), S("Match Color...", 0, ID_ADJ_MATCH), S("Replace Color...", 0, ID_ADJ_REPLACE),     /* 1.0 */
   I("Auto Tone", 0, ID_AUTOTONE), I("Auto Contrast", 0, ID_AUTOCONTRAST), I("Auto Color", 0, ID_AUTOCOLOR), BAR,
   I("Image Size...", 0, ID_IMAGESIZE), I("Canvas Size...", 0, ID_CANVASSIZE),
   H("Image Rotation"), S("180\260", 0, ID_IMG_R180), S("90\260 Clockwise", 0, ID_IMG_R90R), S("90\260 Anticlockwise", 0, ID_IMG_R90L), S("Arbitrary...", 0, ID_IMG_RANY), SBAR,
@@ -162,6 +164,7 @@ static struct NewMenu menus[] = {
   S("Color Balance...", 0, ID_NEWADJ0 + AK_COLORBALANCE), S("Black & White...", 0, ID_NEWADJ0 + AK_BLACKWHITE), S("Photo Filter...", 0, ID_NEWADJ0 + AK_PHOTOFILTER),
   S("Channel Mixer...", 0, ID_NEWADJ0 + AK_CHANNELMIXER), SBAR, S("Invert", 0, ID_NEWADJ0 + AK_INVERT), S("Posterize...", 0, ID_NEWADJ0 + AK_POSTERIZE),
   S("Threshold...", 0, ID_NEWADJ0 + AK_THRESHOLD), S("Gradient Map...", 0, ID_NEWADJ0 + AK_GRADIENTMAP), S("Selective Color...", 0, ID_NEWADJ0 + AK_SELECTIVECOLOR),
+  S("Replace Color...", 0, ID_NEWADJ0 + AK_REPLACECOLOR),
   H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
   I("Layer Content Options...", 0, ID_FILLSETTINGS), BAR,
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
@@ -186,22 +189,31 @@ static struct NewMenu menus[] = {
   I("Load Selection...", 0, ID_LOADSEL), I("Save Selection...", 0, ID_SAVESEL),
   M("Filter"),
   I("Last Filter", "F", ID_F_AGAIN), BAR,
-  H("Blur"), S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
+  I("Lens Correction...", 0, ID_F_LENSCORR), BAR,
+  H("Blur"), S("Average", 0, ID_F_AVERAGE), S("Blur", 0, ID_F_BLUR), S("Blur More", 0, ID_F_BLURMORE), SBAR,
+  S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
   S("Spin Blur...", 0, ID_F_SPINBLUR), S("Lens Blur...", 0, ID_F_LENSBLUR), S("Shape Blur...", 0, ID_F_SHAPEBLUR), S("Smart Blur...", 0, ID_F_SMARTBLUR),
-  S("Surface Blur...", 0, ID_F_SURFACEBLUR), S("Blur", 0, ID_F_BLUR),
-  H("Sharpen"), S("Unsharp Mask...", 0, ID_F_UNSHARP), S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen More", 0, ID_F_SHARPENMORE),
+  S("Surface Blur...", 0, ID_F_SURFACEBLUR),
+  H("Blur Gallery"), S("Iris Blur...", 0, ID_F_IRIS), S("Tilt-Shift...", 0, ID_F_TILTSHIFT),
+  H("Sharpen"), S("Smart Sharpen...", 0, ID_F_SMARTSHARPEN), S("Unsharp Mask...", 0, ID_F_UNSHARP), SBAR, S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen Edges", 0, ID_F_SHARPENEDGES), S("Sharpen More", 0, ID_F_SHARPENMORE),
   H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Dust & Scratches...", 0, ID_F_DUST), S("Median...", 0, ID_F_MEDIAN), S("Reduce Noise...", 0, ID_F_REDUCENOISE),
   S("Despeckle", 0, ID_F_DESPECKLE),
-  H("Distort"), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
+  H("Distort"), S("Diffuse Glow...", 0, ID_F_DIFFUSEGLOW), S("Displace...", 0, ID_F_DISPLACE), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
   S("Polar Coordinates...", 0, ID_F_POLAR), S("Shear...", 0, ID_F_SHEAR), S("ZigZag...", 0, ID_F_ZIGZAG), S("Glass...", 0, ID_F_GLASS), S("Ocean Ripple...", 0, ID_F_OCEAN),
   H("Pixelate"), S("Mosaic...", 0, ID_F_MOSAIC), S("Crystallize...", 0, ID_F_CRYSTALLIZE), S("Pointillize...", 0, ID_F_POINTILLIZE), S("Color Halftone...", 0, ID_F_HALFTONE),
   S("Mezzotint...", 0, ID_F_MEZZOTINT), S("Facet", 0, ID_F_FACET), S("Fragment", 0, ID_F_FRAGMENT),
   H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Trace Contour...", 0, ID_F_CONTOUR), S("Solarize", 0, ID_F_SOLARIZE),
   S("Oil Paint...", 0, ID_F_OIL), S("Diffuse...", 0, ID_F_DIFFUSE), S("Tiles...", 0, ID_F_TILES), S("Wind...", 0, ID_F_WIND),
+  S("Extrude...", 0, ID_F_EXTRUDE), S("Glowing Edges...", 0, ID_F_GLOWEDGES), S("Detect Edges...", 0, ID_F_EDGEDETECT),
+  H("Artistic"), S("Cutout...", 0, ID_F_CUTOUT), S("Film Grain...", 0, ID_F_FILMGRAIN), S("Plastic Wrap...", 0, ID_F_PLASTIC), S("Poster Edges...", 0, ID_F_POSTEREDGES),
+  H("Brush Strokes"), S("Spatter...", 0, ID_F_SPATTER),
+  H("Sketch"), S("Halftone Pattern...", 0, ID_F_HALFTONEPAT), S("Photocopy...", 0, ID_F_PHOTOCOPY),
+  H("Texture"), S("Mosaic Tiles...", 0, ID_F_MOSAICTILES), S("Patchwork...", 0, ID_F_PATCHWORK), S("Stained Glass...", 0, ID_F_STAINEDGLASS), S("Texturizer...", 0, ID_F_TEXTURIZER),
   H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
   S("Lighting Effects...", 0, ID_F_LIGHTING), S("Vignette...", 0, ID_F_VIGNETTE),
-  H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC),
+  H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC), S("PAL Colors", 0, ID_F_PAL),
   H("Other"), S("Custom...", 0, ID_F_CUSTOM), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
+  S("Color to Alpha...", 0, ID_F_COLORALPHA), S("HSB/HSL...", 0, ID_F_HSBHSL),
   M("View"),
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
   T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
@@ -395,7 +407,7 @@ Brush tool_brush(int t)
   b.tool = t == TL_PENCIL ? PT_PENCIL : t == TL_ERASER ? PT_ERASER : t == TL_CLONE ? PT_CLONE : t == TL_BLUR ? PT_BLUR :
            t == TL_SHARPEN ? PT_SHARPEN : t == TL_SMUDGE ? PT_SMUDGE : t == TL_DODGE ? PT_DODGE : t == TL_BURN ? PT_BURN :
            t == TL_SPONGE ? PT_SPONGE : t == TL_PATTERN ? PT_PATTERN : t == TL_HISTORY ? PT_HISTORY : t == TL_REPLACE ? PT_REPLACE :
-           t == TL_BGERASE ? PT_BGERASE : PT_BRUSH;
+           t == TL_BGERASE ? PT_BGERASE : t == TL_HEAL ? PT_HEAL : t == TL_SPOTHEAL ? PT_SPOTHEAL : PT_BRUSH;
   b.size = opt.size[t]; b.hardness = opt.hardness[t]; b.opacity = opt.opacity[t]; b.flow = opt.flow[t];
   b.spacing = 25; b.blend = opt.mode[t]; b.strength = opt.strength[t];
   /* 0.5: the tip, dynamics and symmetry from the Brush Settings window; then the options bar's */
@@ -439,13 +451,15 @@ static void opts_defaults(void)
   /* 0.7 */
   opt.sel_antialias = 1; opt.mq_w = 4; opt.mq_h = 3;
   opt.ml_width = 10; opt.ml_contrast = 10; opt.ml_freq = 57;
+  /* 1.0 */
+  opt.size[TL_SPOTHEAL] = 19; opt.size[TL_HEAL] = 19; opt.hardness[TL_HEAL] = 100; opt.redeye_pupil = 50; opt.redeye_darken = 50;
 }
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
 static signed char key_tool[26];
 int tool_for_key(int c)
 {
   static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
-    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM, TL_HISTORY };
+    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM, TL_HISTORY, TL_SPOTHEAL };
   int i;
   if (c < 'A' || c > 'Z') return -1;
   if (key_tool[c - 'A']) return key_tool[c - 'A'] - 1;
@@ -491,7 +505,12 @@ static void update_menus(void)
     ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_DEFBRUSH, ID_PICKUPBRUSH, ID_DEFPATTERN,
     ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, ID_FADE, ID_TOGGLELAST,
     ID_NUMTRANSFORM, ID_XF_SCALE, ID_XF_ROTATE, ID_XF_SKEW, ID_XF_DISTORT, ID_XF_PERSPECTIVE, ID_XF_AGAIN, ID_ROTATE180, ID_ROTATE90R,
-    ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK, 0 };
+    ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK,
+    /* 1.0 */
+    ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
+    ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
+    ID_F_FILMGRAIN, ID_F_CUTOUT, ID_F_POSTEREDGES, ID_F_DIFFUSEGLOW, ID_F_STAINEDGLASS, ID_F_HALFTONEPAT, ID_F_PHOTOCOPY, ID_F_TEXTURIZER,
+    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, 0 };
   /* 0.7: what works on the selection, greyed out while it is being edited as a Quick Mask */
   static const ULONG needsel[] = { ID_SELALL, ID_DESELECT, ID_RESELECT, ID_INVERSE, ID_COLORRANGE, ID_SELALPHA, ID_FEATHER, ID_EXPAND,
     ID_CONTRACT, ID_BORDER, ID_SMOOTH, ID_GROWSIM, ID_SIMILAR, ID_SAVESEL, ID_LOADSEL, ID_XFSEL, 0 };
@@ -1464,7 +1483,7 @@ static void command(ULONG id)
 {
   Doc *d = cur_doc();
   Box ch;
-  if (id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) { if (d) dlg_adjust(id); refresh_all(); return; }
+  if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
@@ -1925,7 +1944,7 @@ static void pal_picked(int i)
 static void brush_picked(const Brush *b)
 {
   int t = tool;
-  if (!(t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE))) set_tool(t = TL_BRUSH);
+  if (!(t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE) || t == TL_HEAL || t == TL_SPOTHEAL)) set_tool(t = TL_BRUSH);
   opt.size[t] = b->size; opt.hardness[t] = b->hardness;
   if (b->opacity) opt.opacity[t] = b->opacity;
   if (b->flow) opt.flow[t] = b->flow;

@@ -25,6 +25,10 @@
 #include "../core/selx.h"
 #include "../core/channels.h"
 #include "../core/util.h"
+#include <proto/dos.h>
+#include "../core/adjust10.h"
+#include "../core/filters10.h"
+#include "brushwin.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -79,6 +83,7 @@ struct GData {
   int pts[MAXPTS * 2];
   const u32 *hist; const LONG *lev;
   struct MUI_EventHandlerNode ehn;
+  int maxpts;                           /* 1.0: the most points (0: MAXPTS) */
 };
 static struct MUI_CustomClass *gcls;
 #define GS 256
@@ -198,7 +203,7 @@ static ULONG gdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
     if (im->Code == SELECTUP && g->drag >= 0) { g->drag = -1; MUI_Redraw(obj, MADF_DRAWOBJECT); SetAttrs(obj, MUIA_Graph_Changed, TRUE, TAG_DONE); return MUI_EventHandlerRC_Eat; }
     if (im->Code != SELECTDOWN || im->MouseX < _mleft(obj) || im->MouseX > _mright(obj) || im->MouseY < _mtop(obj) || im->MouseY > _mbottom(obj)) return 0;
     for (i = 0; i < g->npts; i++) if (abs(g->pts[i * 2] - x) <= 6 && abs(g->pts[i * 2 + 1] - y) <= 10) { g->drag = i; break; }
-    if (g->drag < 0 && g->npts < MAXPTS) {
+    if (g->drag < 0 && g->npts < (g->maxpts ? g->maxpts : MAXPTS)) {
       /* a new point on the curve where it was clicked */
       for (i = 0; i < g->npts && g->pts[i * 2] < x; i++) ;
       if (i > 0 && i < g->npts && g->pts[i * 2] != x) {
@@ -224,18 +229,36 @@ static Object *graph(int mode, const u32 *hist, const LONG *lev)
 typedef struct { const char *label; LONG min, max, def; } Param;
 typedef void (*ApplyFn)(Doc *d, const LONG *v, int choice, int tick);
 /* the starting values of the sliders, list and tick (set before a dialog to show a layer's settings) */
-static LONG sd_init_v[6]; static int sd_init_set, sd_init_choice, sd_init_tick = -1;
+#define SDMAX 8                      /* (1.0: eight sliders, was six) */
+static LONG sd_init_v[SDMAX]; static int sd_init_set, sd_init_choice, sd_init_tick = -1;
 static int sd_remember;              /* the dialog is a filter's: remembered for Last Filter */
 /* Filter > Last Filter: the last filter applied through a dialog, with its settings */
-static ApplyFn last_fn; static LONG last_v[6]; static int last_choice, last_tick; static ULONG last_plain;
+static ApplyFn last_fn; static LONG last_v[SDMAX]; static int last_choice, last_tick; static ULONG last_plain;
+/* 1.0: what else a dialog may have, set before slider_dialog and cleared after it: a second list
+   (its choice comes to the ApplyFn as v[7]), a row of buttons (labels NULL-ended, up to six), and
+   calls when the first list, the second list or a button is chosen (to show other settings) */
+static const char *const *sd_cfg_cyc2; static const char *sd_cfg_cyc2label; static int sd_cfg_cyc2init;
+static const char *const *sd_cfg_btns; static void (*sd_cfg_cychook)(int), (*sd_cfg_cyc2hook)(int), (*sd_cfg_btnhook)(int);
+#define ID_DLGCYC (ID_DLGBTN0 + 7)
+#define ID_DLGCYC2 (ID_DLGBTN0 + 6)
 static struct {
-  Object *sl[6]; int n; Object *cyc, *chk, *pre; ApplyFn fn; Preview pv; LONG v[6]; int pending;
+  Object *sl[SDMAX]; int n; Object *cyc, *chk, *pre; ApplyFn fn; Preview pv; LONG v[SDMAX]; int pending;
+  Object *cyc2; void (*cychook)(int), (*cyc2hook)(int), (*btnhook)(int);
 } sd;
 static void sd_read(void)
 {
   int i;
   for (i = 0; i < sd.n; i++) sd.v[i] = (LONG)xget(sd.sl[i], MUIA_Numeric_Value);
+  if (sd.cyc2 && sd.n < SDMAX) sd.v[SDMAX - 1] = (LONG)xget(sd.cyc2, MUIA_Cycle_Active);
 }
+/* (1.0) the sliders, tick and lists shown with other values, without each telling of the change */
+static void sd_show(const LONG *v, int n)
+{
+  int i;
+  for (i = 0; i < n && i < sd.n; i++) nnset(sd.sl[i], MUIA_Numeric_Value, v[i]);
+}
+static void sd_show_tick(int t) { if (sd.chk) nnset(sd.chk, MUIA_Selected, t); }
+static int sd_choice(void) { return sd.cyc ? (int)xget(sd.cyc, MUIA_Cycle_Active) : 0; }
 static void sd_apply(void)
 {
   sd_read();
@@ -250,6 +273,9 @@ static void sd_apply(void)
 static void sd_each(ULONG id)
 {
   if (id == ID_DLGCHANGE) { sd.pending = 1; return; }      /* (shown once the input has been dealt with) */
+  if (id == ID_DLGCYC) { if (sd.cychook) sd.cychook(sd_choice()); sd.pending = 1; return; }
+  if (id == ID_DLGCYC2) { if (sd.cyc2hook) sd.cyc2hook((int)xget(sd.cyc2, MUIA_Cycle_Active)); sd.pending = 1; return; }
+  if (id >= ID_DLGBTN0 && id < ID_DLGBTN0 + 6) { if (sd.btnhook) sd.btnhook((int)(id - ID_DLGBTN0)); sd.pending = 1; return; }
   if (id == 0 && sd.pending) {
     sd.pending = 0;
     if (xget(sd.pre, MUIA_Selected)) sd_apply();
@@ -265,21 +291,31 @@ static void sd_each(ULONG id)
 static int slider_dialog(const char *title, const Param *p, int n, const char *const *choices, const char *choicelabel, const char *ticklabel, int tickdef, ApplyFn fn, Object *extra)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *grp, *w, *reset;
-  int i, ok;
+  Object *grp, *w, *reset, *btns = NULL, *bt[6];
+  int i, ok, nb = 0;
   memset(&sd, 0, sizeof sd);
-  sd.n = n; sd.fn = fn;
+  sd.n = n > SDMAX ? SDMAX : n; sd.fn = fn;
+  n = sd.n;
+  sd.cychook = sd_cfg_cychook; sd.cyc2hook = sd_cfg_cyc2hook; sd.btnhook = sd_cfg_btnhook;
   pv_start(&sd.pv);
   grp = ColGroup(2), End;
-  if (!grp) return 0;
+  if (!grp) { sd_cfg_cyc2 = NULL; sd_cfg_btns = NULL; sd_cfg_cychook = NULL; sd_cfg_cyc2hook = NULL; sd_cfg_btnhook = NULL; return 0; }
   if (choices) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(choicelabel), MUIO_Label_Centered));
     DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.cyc = cycle(choices, sd_init_set ? sd_init_choice : 0)));
   }
+  if (sd_cfg_cyc2) {
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(sd_cfg_cyc2label), MUIO_Label_Centered));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.cyc2 = cycle(sd_cfg_cyc2, sd_cfg_cyc2init)));
+  }
+  if (sd_cfg_btns) {
+    btns = HGroup, End;
+    for (nb = 0; nb < 6 && sd_cfg_btns[nb]; nb++) DoMethod(btns, OM_ADDMEMBER, (ULONG)(bt[nb] = QButton(tr(sd_cfg_btns[nb]))));
+  }
   for (i = 0; i < n; i++) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(p[i].label), MUIO_Label_Centered));
     DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.sl[i] = SliderObject, MUIA_Numeric_Min, p[i].min, MUIA_Numeric_Max, p[i].max,
-                                         MUIA_Numeric_Value, sd_init_set && i < 6 ? sd_init_v[i] : p[i].def,
+                                         MUIA_Numeric_Value, sd_init_set && i < SDMAX ? sd_init_v[i] : p[i].def,
                                          MUIA_Numeric_Default, p[i].def, MUIA_CycleChain, 1, MUIA_FixWidthTxt, (ULONG)"MMMMMMMMMMMMMMMMMMMMMM", End));
   }
   if (ticklabel) {
@@ -289,11 +325,14 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   w = dialog_window(title, VGroup,
         Child, extra ? extra : (Object *)HVSpace,
         Child, grp,
+        Child, btns ? btns : (Object *)HVSpace,
         Child, HGroup, Child, sd.pre = check(1), Child, QLabel(tr("Preview"), 0), Child, HSpace(0), Child, reset = QButton(tr("Reset")), End,
       End, NULL);
-  if (!w) return 0;
+  if (!w) { sd_cfg_cyc2 = NULL; sd_cfg_btns = NULL; sd_cfg_cychook = NULL; sd_cfg_cyc2hook = NULL; sd_cfg_btnhook = NULL; return 0; }
   for (i = 0; i < n; i++) notify_change(sd.sl[i], MUIA_Numeric_Value);
-  notify_change(sd.cyc, MUIA_Cycle_Active);
+  if (sd.cyc) DoMethod(sd.cyc, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, sd.cychook ? ID_DLGCYC : ID_DLGCHANGE);
+  if (sd.cyc2) DoMethod(sd.cyc2, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCYC2);
+  for (i = 0; i < nb; i++) DoMethod(bt[i], MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGBTN0 + i);
   notify_change(sd.chk, MUIA_Selected);
   notify_change(sd.pre, MUIA_Selected);
   DoMethod(reset, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGRESET);
@@ -308,6 +347,8 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   if (!ok) pv_drop(&sd.pv);
   MUI_DisposeObject(w);
   DoMethod(canvas, MUIM_Canvas_Refresh);
+  sd_cfg_cyc2 = NULL; sd_cfg_btns = NULL; sd_cfg_cyc2init = 0;
+  sd_cfg_cychook = NULL; sd_cfg_cyc2hook = NULL; sd_cfg_btnhook = NULL;
   return ok;
 }
 
@@ -321,68 +362,101 @@ static void put_adj(Doc *d, const AdjParams *p)
   if (adj_editing && d->lay[d->active]->kind == LK_ADJUST) doc_set_adjust(d, d->active, p);
   else adj_apply(d, p, adj_names[p->kind]);
 }
-static void a_bc(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
+static void a_bc(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = t; put_adj(d, &p); }
 static void a_exposure(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; put_adj(d, &p); }
 static void a_vibrance(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
-static void a_huesat(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; p.v[3] = t; put_adj(d, &p); }
-static void a_bw(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; put_adj(d, &p); }
 static void a_posterize(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; put_adj(d, &p); }
 static void a_threshold(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; put_adj(d, &p); }
+
+/* 1.0: the dialogs that edit one part of their settings at a time (a channel, a colour range, a
+   tone range) keep all of it in adj_base, and show the part chosen in the list when it changes
+   (adj_reshow shows adj_base as it stands, after a preset or an eyedropper changed it) */
+static void (*adj_reshow)(void);
+static const u32 *auto_hist;          /* the histogram Auto stretches (the Levels and Curves dialogs') */
 static void a_balance(Doc *d, const LONG *v, int c, int t)
 {
-  AdjParams p = adj_base;
   int k;
-  if (!adj_editing) for (k = 0; k < 9; k++) p.v[k] = 0;  /* (applied to pixels: one tone range at a time) */
-  for (k = 0; k < 3; k++) p.v[(c >= 0 && c < 3 ? c : 0) * 3 + k] = (int)v[k];
-  p.v[9] = t;
-  put_adj(d, &p);
+  for (k = 0; k < 3; k++) adj_base.v[(c >= 0 && c < 3 ? c : 0) * 3 + k] = (int)v[k];
+  adj_base.v[9] = t;
+  put_adj(d, &adj_base);
 }
+static void balance_show(int c) { LONG v[3]; int k; for (k = 0; k < 3; k++) v[k] = adj_base.v[(c >= 0 && c < 3 ? c : 0) * 3 + k]; sd_show(v, 3); }
+/* Photo Filter: Photoshop's twenty, the foreground colour, or (a layer's own colour) as it was */
+static const char *photo_labels[PHOTO_FILTERS + 3];
+static u32 photo_orig;
 static void a_photo(Doc *d, const LONG *v, int c, int t)
 {
-  static const ULONG cols[] = { 0xEC8A00, 0xFA9600, 0x006DFF, 0x005DFF, 0xEA1A1A, 0x19C900, 0x6B0ACD };
-  AdjParams p = adj_base;
-  p.v[0] = (int)cols[c >= 0 && c < 7 ? c : 0]; p.v[1] = (int)v[0]; p.v[2] = t;
-  put_adj(d, &p);
+  adj_base.v[0] = (int)(c >= 0 && c < PHOTO_FILTERS ? photo_filter_colors[c] : c == PHOTO_FILTERS ? d->fg : photo_orig);
+  adj_base.v[1] = (int)v[0]; adj_base.v[2] = t;
+  put_adj(d, &adj_base);
 }
-/* Levels: the five numbers and the channel; Curves: the editor's points */
+/* Levels: the five numbers of the channel chosen; Curves: the editor's points of the channel chosen */
 static LONG lev[3] = { 0, 255, 100 };
 static Object *lev_graph;
 static u32 lev_hist[1024];
+static void lev_rows(void)
+{
+  int k;
+  if (adj_base.npts >= 15) return;
+  for (k = 0; k < 3; k++) { adj_base.pts[k * 5] = 0; adj_base.pts[k * 5 + 1] = 255; adj_base.pts[k * 5 + 2] = 100; adj_base.pts[k * 5 + 3] = 0; adj_base.pts[k * 5 + 4] = 255; }
+  adj_base.npts = 15;
+}
 static void a_levels(Doc *d, const LONG *v, int c, int t)
 {
-  AdjParams p = adj_base;
   int q[5], k;
   (void)t;
   lev[0] = v[0]; lev[1] = v[2] > v[0] ? v[2] : v[0] + 1; lev[2] = v[1];
   if (lev_graph) set(lev_graph, MUIA_Graph_Hist, (ULONG)(lev_hist + 256 * c));
   q[0] = (int)v[0]; q[1] = (int)lev[1]; q[2] = (int)v[1]; q[3] = (int)v[3]; q[4] = (int)v[4];
-  if (c == 0) for (k = 0; k < 5; k++) p.v[k] = q[k];
-  else {
-    if (p.npts < 15) { for (k = 0; k < 3; k++) { p.pts[k * 5] = 0; p.pts[k * 5 + 1] = 255; p.pts[k * 5 + 2] = 100; p.pts[k * 5 + 3] = 0; p.pts[k * 5 + 4] = 255; } p.npts = 15; }
-    for (k = 0; k < 5; k++) p.pts[(c - 1) * 5 + k] = q[k];
-  }
-  put_adj(d, &p);
+  if (c == 0) for (k = 0; k < 5; k++) adj_base.v[k] = q[k];
+  else { lev_rows(); for (k = 0; k < 5; k++) adj_base.pts[(c - 1) * 5 + k] = q[k]; }
+  put_adj(d, &adj_base);
 }
+static void levels_show(int c)
+{
+  static const int def[5] = { 0, 255, 100, 0, 255 };
+  const int *q = c == 0 ? adj_base.v : adj_base.npts >= 15 ? adj_base.pts + (c - 1) * 5 : def;
+  LONG v[5];
+  v[0] = q[0]; v[1] = q[2] ? q[2] : 100; v[2] = q[1] ? q[1] : 255; v[3] = q[3]; v[4] = q[4] ? q[4] : 255;
+  sd_show(v, 5);
+  lev[0] = v[0]; lev[1] = v[2]; lev[2] = v[1];
+  if (lev_graph) set(lev_graph, MUIA_Graph_Hist, (ULONG)(lev_hist + 256 * c));
+}
+static void levels_reshow(void) { levels_show(sd_choice()); }
 static Object *curve_obj;
+static u32 *curve_hist;
 static void a_curves(Doc *d, const LONG *v, int c, int t)
 {
   struct GData *g = INST_DATA(gcls->mcc_Class, curve_obj);
-  AdjParams p = adj_base;
-  int k;
+  int k, n = g->npts > CURVE10_MAX ? CURVE10_MAX : g->npts;
   (void)v; (void)t;
-  p.v[0] = c; p.npts = g->npts > 32 ? 32 : g->npts;
-  for (k = 0; k < p.npts * 2; k++) p.pts[k] = g->pts[k];
-  put_adj(d, &p);
+  curves10_convert(&adj_base);
+  if (c < 0 || c > 3) c = 0;
+  adj_base.v[0] = c; adj_base.v[2 + c] = n;
+  for (k = 0; k < n * 2; k++) adj_base.pts[16 * c + k] = g->pts[k];
+  put_adj(d, &adj_base);
 }
+static void curves_show(int c)
+{
+  struct GData *g = INST_DATA(gcls->mcc_Class, curve_obj);
+  int k, n;
+  if (c < 0 || c > 3) c = 0;
+  n = adj_base.v[2 + c];
+  if (n < 2) { g->npts = 2; g->pts[0] = 0; g->pts[1] = 0; g->pts[2] = 255; g->pts[3] = 255; }
+  else { g->npts = n > CURVE10_MAX ? CURVE10_MAX : n; for (k = 0; k < g->npts * 2; k++) g->pts[k] = adj_base.pts[16 * c + k]; }
+  g->drag = -1;
+  set(curve_obj, MUIA_Graph_Hist, (ULONG)(curve_hist ? curve_hist + 256 * c : NULL));    /* (redrawn) */
+}
+static void curves_reshow(void) { curves_show(sd_choice()); }
 /* Channel Mixer: one output channel's row at a time */
 static void a_mixer(Doc *d, const LONG *v, int c, int t)
 {
-  AdjParams p = adj_base;
   int row = c >= 0 && c < 3 ? c : 0, k;
-  for (k = 0; k < 4; k++) p.v[row * 4 + k] = (int)v[k];
-  p.v[12] = t;
-  put_adj(d, &p);
+  for (k = 0; k < 4; k++) adj_base.v[row * 4 + k] = (int)v[k];
+  adj_base.v[12] = t;
+  put_adj(d, &adj_base);
 }
+static void mixer_show(int c) { LONG v[4]; int k; for (k = 0; k < 4; k++) v[k] = adj_base.v[(c >= 0 && c < 3 ? c : 0) * 4 + k]; sd_show(v, 4); }
 /* Gradient Map: a preset gradient (the colours in use, black to white, and some classic ramps) */
 static void gradmap_preset(int k, AdjParams *p)
 {
@@ -409,12 +483,145 @@ static void a_gradmap(Doc *d, const LONG *v, int c, int t)
 /* Selective Color: one colour range at a time (cyan, magenta, yellow, black) */
 static void a_selcolor(Doc *d, const LONG *v, int c, int t)
 {
-  AdjParams p = adj_base;
   int r = c >= 0 && c < 9 ? c : 0, k;
-  for (k = 0; k < 4; k++) p.pts[r * 4 + k] = (int)v[k];
-  p.v[0] = t;
-  put_adj(d, &p);
+  for (k = 0; k < 4; k++) adj_base.pts[r * 4 + k] = (int)v[k];
+  adj_base.v[0] = t;
+  put_adj(d, &adj_base);
 }
+static void selcolor_show(int c) { LONG v[4]; int k; for (k = 0; k < 4; k++) v[k] = adj_base.pts[(c >= 0 && c < 9 ? c : 0) * 4 + k]; sd_show(v, 4); }
+/* Hue/Saturation: Master or one of the six ranges (hue, saturation, lightness, its width and fuzziness) */
+static void hs_ranges(void)
+{
+  if (adj_base.npts != 15) { AdjParams q; adj_defaults(AK_HUESAT, &q); adj_base.npts = 15; memcpy(adj_base.pts, q.pts, 30 * sizeof(int)); }
+}
+static void a_huesat(Doc *d, const LONG *v, int c, int t)
+{
+  int k;
+  hs_ranges();
+  if (c <= 0) for (k = 0; k < 3; k++) adj_base.v[k] = (int)v[k];
+  else for (k = 0; k < 5; k++) adj_base.pts[(c - 1) * 5 + k] = (int)v[k];
+  adj_base.v[3] = t;
+  put_adj(d, &adj_base);
+}
+static void huesat_show(int c)
+{
+  LONG v[5];
+  int k;
+  hs_ranges();
+  if (c <= 0) { for (k = 0; k < 3; k++) v[k] = adj_base.v[k]; v[3] = 15; v[4] = 30; }
+  else for (k = 0; k < 5; k++) v[k] = adj_base.pts[(c - 1) * 5 + k];
+  sd_show(v, 5);
+}
+static void huesat_reshow(void) { huesat_show(sd_choice()); sd_show_tick(adj_base.v[3]); }
+/* Black & White: six colours and a tint (Easel 0.9's three weights made six) */
+static void bw_six(void)
+{
+  if (adj_base.v[9] != 1) {
+    int r = adj_base.v[0], g = adj_base.v[1], b = adj_base.v[2];
+    adj_base.v[0] = r; adj_base.v[1] = r + g; adj_base.v[2] = g; adj_base.v[3] = g + b; adj_base.v[4] = b; adj_base.v[5] = r + b;
+    adj_base.v[6] = 0; adj_base.v[7] = 42; adj_base.v[8] = 20; adj_base.v[9] = 1;
+  }
+}
+static void a_bw(Doc *d, const LONG *v, int c, int t)
+{
+  int k;
+  (void)c;
+  bw_six();
+  for (k = 0; k < 6; k++) adj_base.v[k] = (int)v[k];
+  adj_base.v[6] = t; adj_base.v[7] = (int)v[6]; adj_base.v[8] = (int)v[7];
+  put_adj(d, &adj_base);
+}
+static void bw_reshow(void)
+{
+  LONG v[8];
+  int k;
+  bw_six();
+  for (k = 0; k < 6; k++) v[k] = adj_base.v[k];
+  v[6] = adj_base.v[7]; v[7] = adj_base.v[8];
+  sd_show(v, 8); sd_show_tick(adj_base.v[6]);
+}
+/* Replace Color: the colour (the foreground's when the dialog opened) and what it becomes */
+static void a_replace(Doc *d, const LONG *v, int c, int t)
+{
+  (void)c; (void)t;
+  adj_base.v[1] = (int)v[0]; adj_base.v[2] = (int)v[1]; adj_base.v[3] = (int)v[2]; adj_base.v[4] = (int)v[3];
+  put_adj(d, &adj_base);
+}
+/* Shadows/Highlights and Match Color work on the pixels only (as in Photoshop) */
+static void a_shadowhi(Doc *d, const LONG *v, int c, int t)
+{
+  (void)c; (void)t;
+  adj_shadows_highlights(d, (int)v[0], (int)v[1], (int)v[2], (int)v[3], (int)v[4], (int)v[5], (int)v[6], (int)v[7]);
+}
+static int match_doc[MAXDOCS], nmatch, match_have = -1;
+static u8 *match_px; static i32 match_w, match_h;
+static const char *match_labels[MAXDOCS + 2];
+static void a_match(Doc *d, const LONG *v, int c, int t)
+{
+  const u8 *src = NULL;
+  if (c > 0 && c <= nmatch) {
+    Doc *s = docs[match_doc[c - 1]].doc;
+    if (match_have != c) {
+      /* the other picture merged, once */
+      free(match_px);
+      match_have = -1;
+      if ((match_px = (u8 *)malloc((size_t)s->w * s->h * 4))) { doc_composite(s, doc_box(s), match_px, (long)s->w * 4); match_w = s->w; match_h = s->h; match_have = c; }
+      else out_of_memory();
+    }
+    if (match_have == c) src = match_px;
+  }
+  adj_match_color(d, src, match_w, match_h, (int)v[0], (int)v[1], (int)v[2], t);
+}
+/* presets (the second list) and the dialogs' buttons: the eyedroppers, Load and Save */
+static const char *preset_labels[26];
+static char preset_path[300] = "PROGDIR:Presets/";
+static void adjpreset_pick(int k)
+{
+  int kind = adj_base.kind;
+  if (k <= 0) adj_defaults(kind, &adj_base); else adj_preset_get(kind, k - 1, &adj_base);
+  if (kind == AK_CURVES) curves10_convert(&adj_base);
+  if (adj_reshow) adj_reshow();
+}
+static void presets_for(int kind)
+{
+  int i, n = adj_preset_count(kind);
+  preset_labels[0] = tr("Default");
+  for (i = 0; i < n && i < 24; i++) preset_labels[i + 1] = tr(adj_preset_name(kind, i));
+  preset_labels[i + 1] = NULL;
+  sd_cfg_cyc2 = preset_labels; sd_cfg_cyc2label = "Preset:"; sd_cfg_cyc2init = 0; sd_cfg_cyc2hook = adjpreset_pick;
+}
+static void adj_btn(int k)
+{
+  Doc *d = cur_doc();
+  int kind = adj_base.kind, picks = kind == AK_LEVELS || kind == AK_CURVES;
+  if (kind == AK_REPLACECOLOR) { if (d) adj_base.v[0] = (int)(d->fg & 0xFFFFFF); return; }
+  if (picks && k == 5) {
+    if (!auto_hist) return;
+    if (kind == AK_LEVELS) adj_levels_auto(&adj_base, auto_hist); else adj_curves_auto(&adj_base, auto_hist);
+  } else if (picks && k < 3) {
+    /* the eyedroppers: the foreground colour (pick it from the picture with the Eyedropper first) */
+    if (!d) return;
+    if (kind == AK_LEVELS) adj_levels_pick(&adj_base, k, d->fg); else adj_curves_pick(&adj_base, k, d->fg);
+  } else if (k == (picks ? 3 : 0)) {
+    AdjParams p;
+    if (!ui_file_request(0, "Load Preset", preset_path, sizeof preset_path, "#?.preset")) return;
+    if (!adj_preset_load(preset_path, &p) || p.kind != kind) { ask("OK", "%s", tr("That file isn't a preset for this adjustment.")); return; }
+    adj_base = p;
+    if (kind == AK_CURVES) curves10_convert(&adj_base);
+  } else if (k == (picks ? 4 : 1)) {
+    BPTR l = Lock((STRPTR)"PROGDIR:Presets", ACCESS_READ);
+    if (l) UnLock(l);
+    else if ((l = CreateDir((STRPTR)"PROGDIR:Presets"))) UnLock(l);
+    if (!ui_file_request(1, "Save Preset", preset_path, sizeof preset_path, "#?.preset")) return;
+    if (!strchr(FilePart((STRPTR)preset_path), '.') && strlen(preset_path) + 8 < sizeof preset_path) strcat(preset_path, ".preset");
+    if (!adj_preset_save(&adj_base, preset_path)) ask("OK", "%s", tr("The preset couldn't be saved."));
+    return;
+  } else return;
+  if (adj_reshow) adj_reshow();
+}
+static const char *const pick_btns[] = { "Black Point", "Grey Point", "White Point", "Load...", "Save...", "Auto", NULL };
+static const char *const file_btns[] = { "Load...", "Save...", NULL };
+static const char *const fg_btn[] = { "Use Foreground Color", NULL };
 /* the adjustment a menu item stands for */
 static int adj_kind_of(ULONG id)
 {
@@ -434,13 +641,15 @@ static int adj_kind_of(ULONG id)
   case ID_ADJ_THRESHOLD: return AK_THRESHOLD;
   case ID_ADJ_GRADMAP: return AK_GRADIENTMAP;
   case ID_ADJ_SELCOLOR: return AK_SELECTIVECOLOR;
+  case ID_ADJ_REPLACE: return AK_REPLACECOLOR;
+  case ID_ADJ_DESAT: case ID_ADJ_EQUALIZE: case ID_ADJ_SHADOWHI: case ID_ADJ_MATCH: return AK_N;     /* (pixels only) */
   default: return -1;
   }
 }
 ULONG adj_menu_id(int kind)
 {
   static const ULONG ids[AK_N] = { ID_ADJ_BC, ID_ADJ_LEVELS, ID_ADJ_CURVES, ID_ADJ_EXPOSURE, ID_ADJ_VIBRANCE, ID_ADJ_HUESAT, ID_ADJ_BALANCE,
-    ID_ADJ_BW, ID_ADJ_PHOTO, ID_ADJ_MIXER, ID_ADJ_INVERT, ID_ADJ_POSTERIZE, ID_ADJ_THRESHOLD, ID_ADJ_GRADMAP, ID_ADJ_SELCOLOR };
+    ID_ADJ_BW, ID_ADJ_PHOTO, ID_ADJ_MIXER, ID_ADJ_INVERT, ID_ADJ_POSTERIZE, ID_ADJ_THRESHOLD, ID_ADJ_GRADMAP, ID_ADJ_SELCOLOR, ID_ADJ_REPLACE };
   return kind >= 0 && kind < AK_N ? ids[kind] : 0;
 }
 void dlg_adjust(ULONG id)
@@ -449,15 +658,15 @@ void dlg_adjust(ULONG id)
   static const char *const ranges[] = { "Shadows", "Midtones", "Highlights", NULL };
   static const char *const channels[] = { "RGB", "Red", "Green", "Blue", NULL };
   static const char *const outs[] = { "Red", "Green", "Blue", NULL };
-  static const char *const photos[] = { "Warming (85)", "Warming (LBA)", "Cooling (80)", "Cooling (LBB)", "Red", "Green", "Violet", NULL };
   static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", NULL };
   static const char *const scolors[] = { "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", "Whites", "Neutrals", "Blacks", NULL };
+  static const char *const hsedit[] = { "Master", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", NULL };
   int kind = adj_kind_of(id);
   Layer *l;
   if (!d || kind < 0) return;
   l = d->lay[d->active];
-  adj_editing = l->kind == LK_ADJUST && l->adj.kind == kind;
-  if (adj_editing) adj_base = l->adj; else adj_defaults(kind, &adj_base);
+  adj_editing = kind < AK_N && l->kind == LK_ADJUST && l->adj.kind == kind;
+  if (adj_editing) adj_base = l->adj; else if (kind < AK_N) adj_defaults(kind, &adj_base);
   /* a layer's settings shown as the starting values */
   sd_init_set = adj_editing; sd_init_choice = 0; sd_init_tick = -1;
   if (adj_editing) {
@@ -472,54 +681,116 @@ void dlg_adjust(ULONG id)
     case AK_CHANNELMIXER: for (k = 0; k < 4; k++) sd_init_v[k] = v[k]; sd_init_tick = v[12]; break;
     case AK_GRADIENTMAP: sd_init_tick = v[0]; break;
     case AK_SELECTIVECOLOR: for (k = 0; k < 4; k++) sd_init_v[k] = l->adj.pts[k]; sd_init_tick = v[0]; break;
+    case AK_BLACKWHITE: bw_six(); for (k = 0; k < 6; k++) sd_init_v[k] = adj_base.v[k]; sd_init_v[6] = adj_base.v[7]; sd_init_v[7] = adj_base.v[8]; sd_init_tick = adj_base.v[6]; break;
+    case AK_REPLACECOLOR: for (k = 0; k < 4; k++) sd_init_v[k] = v[k + 1]; break;
     default: break;
     }
   }
+  adj_reshow = NULL;
   switch (id) {
-  case ID_ADJ_BC: { static const Param p[] = { { "Brightness:", -150, 150, 0 }, { "Contrast:", -50, 100, 0 } }; slider_dialog("Brightness/Contrast", p, 2, NULL, NULL, NULL, 0, a_bc, NULL); break; }
+  case ID_ADJ_BC: { static const Param p[] = { { "Brightness:", -150, 150, 0 }, { "Contrast:", -50, 100, 0 } }; if (adj_editing) sd_init_tick = adj_base.v[2];
+    slider_dialog("Brightness/Contrast", p, 2, NULL, NULL, "Use Legacy", 0, a_bc, NULL); break; }
   case ID_ADJ_EXPOSURE: { static const Param p[] = { { "Exposure (x0.01):", -500, 500, 0 }, { "Offset (x0.001):", -500, 500, 0 }, { "Gamma (x0.01):", 1, 999, 100 } }; slider_dialog("Exposure", p, 3, NULL, NULL, NULL, 0, a_exposure, NULL); break; }
   case ID_ADJ_VIBRANCE: { static const Param p[] = { { "Vibrance:", -100, 100, 0 }, { "Saturation:", -100, 100, 0 } }; slider_dialog("Vibrance", p, 2, NULL, NULL, NULL, 0, a_vibrance, NULL); break; }
-  case ID_ADJ_HUESAT: { static const Param p[] = { { "Hue:", -180, 180, 0 }, { "Saturation:", -100, 100, 0 }, { "Lightness:", -100, 100, 0 } }; slider_dialog("Hue/Saturation", p, 3, NULL, NULL, "Colorize", 0, a_huesat, NULL); break; }
+  case ID_ADJ_HUESAT: {
+    static const Param p[] = { { "Hue:", -180, 180, 0 }, { "Saturation:", -100, 100, 0 }, { "Lightness:", -100, 100, 0 }, { "Range (degrees):", 0, 90, 15 }, { "Fuzziness (degrees):", 0, 90, 30 } };
+    if (!adj_editing) { sd_init_set = 1; sd_init_v[0] = sd_init_v[1] = sd_init_v[2] = 0; sd_init_v[3] = 15; sd_init_v[4] = 30; }
+    else { sd_init_v[3] = 15; sd_init_v[4] = 30; }
+    adj_reshow = huesat_reshow; sd_cfg_cychook = huesat_show; presets_for(AK_HUESAT); sd_cfg_btns = file_btns; sd_cfg_btnhook = adj_btn;
+    slider_dialog("Hue/Saturation", p, 5, hsedit, "Edit:", "Colorize", 0, a_huesat,
+                  TextObject, MUIA_Text_Contents, (ULONG)tr("Range and Fuzziness: how far round the colour\nwheel each colour range reaches."), MUIA_Font, MUIV_Font_Tiny, End);
+    break; }
   case ID_ADJ_BALANCE: { static const Param p[] = { { "Cyan - Red:", -100, 100, 0 }, { "Magenta - Green:", -100, 100, 0 }, { "Yellow - Blue:", -100, 100, 0 } };
+    sd_cfg_cychook = balance_show;
     slider_dialog("Color Balance", p, 3, ranges, "Tone:", "Preserve Luminosity", 1, a_balance, NULL); break; }
-  case ID_ADJ_BW: { static const Param p[] = { { "Reds (%):", -200, 300, 40 }, { "Greens (%):", -200, 300, 40 }, { "Blues (%):", -200, 300, 20 } }; slider_dialog("Black & White", p, 3, NULL, NULL, NULL, 0, a_bw, NULL); break; }
-  case ID_ADJ_PHOTO: { static const Param p[] = { { "Density (%):", 1, 100, 25 } }; slider_dialog("Photo Filter", p, 1, photos, "Filter:", "Preserve Luminosity", 1, a_photo, NULL); break; }
+  case ID_ADJ_BW: {
+    static const Param p[] = { { "Reds (%):", -200, 300, 40 }, { "Yellows (%):", -200, 300, 60 }, { "Greens (%):", -200, 300, 40 }, { "Cyans (%):", -200, 300, 60 },
+                               { "Blues (%):", -200, 300, 20 }, { "Magentas (%):", -200, 300, 80 }, { "Tint Hue:", 0, 360, 42 }, { "Tint Saturation (%):", 0, 100, 20 } };
+    adj_reshow = bw_reshow; presets_for(AK_BLACKWHITE); sd_cfg_btns = file_btns; sd_cfg_btnhook = adj_btn;
+    slider_dialog("Black & White", p, 8, NULL, NULL, "Tint", 0, a_bw, NULL); break; }
+  case ID_ADJ_PHOTO: {
+    static const Param p[] = { { "Density (%):", 1, 100, 25 } };
+    int k, np = 0;
+    for (k = 0; k < PHOTO_FILTERS; k++) photo_labels[np++] = tr(photo_filter_names[k]);
+    photo_labels[np++] = tr("Foreground Color");
+    photo_orig = (u32)adj_base.v[0] & 0xFFFFFF;
+    if (adj_editing) {
+      for (k = 0; k < PHOTO_FILTERS && photo_filter_colors[k] != photo_orig; k++) continue;
+      if (k == PHOTO_FILTERS) { photo_labels[np] = tr("The Layer's Color"); k = np++; }
+      sd_init_choice = k;
+    }
+    photo_labels[np] = NULL;
+    slider_dialog("Photo Filter", p, 1, photo_labels, "Filter:", "Preserve Luminosity", 1, a_photo, NULL); break; }
   case ID_ADJ_POSTERIZE: { static const Param p[] = { { "Levels:", 2, 255, 4 } }; slider_dialog("Posterize", p, 1, NULL, NULL, NULL, 0, a_posterize, NULL); break; }
   case ID_ADJ_THRESHOLD: { static const Param p[] = { { "Threshold Level:", 1, 255, 128 } }; slider_dialog("Threshold", p, 1, NULL, NULL, NULL, 0, a_threshold, NULL); break; }
   case ID_ADJ_MIXER: { static const Param p[] = { { "Red (%):", -200, 200, 100 }, { "Green (%):", -200, 200, 0 }, { "Blue (%):", -200, 200, 0 }, { "Constant (%):", -200, 200, 0 } };
+    sd_cfg_cychook = mixer_show;
     slider_dialog("Channel Mixer", p, 4, outs, "Output Channel:", "Monochrome", 0, a_mixer, NULL); break; }
   case ID_ADJ_GRADMAP: slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
   case ID_ADJ_SELCOLOR: { static const Param p[] = { { "Cyan (%):", -100, 100, 0 }, { "Magenta (%):", -100, 100, 0 }, { "Yellow (%):", -100, 100, 0 }, { "Black (%):", -100, 100, 0 } };
+    sd_cfg_cychook = selcolor_show;
     slider_dialog("Selective Color", p, 4, scolors, "Colors:", "Absolute", 0, a_selcolor, NULL); break; }
+  case ID_ADJ_REPLACE: {
+    static const Param p[] = { { "Fuzziness:", 0, 200, 40 }, { "Hue:", -180, 180, 0 }, { "Saturation:", -100, 100, 0 }, { "Lightness:", -100, 100, 0 } };
+    if (!adj_editing) adj_base.v[0] = (int)(d->fg & 0xFFFFFF);
+    sd_cfg_btns = fg_btn; sd_cfg_btnhook = adj_btn;
+    slider_dialog("Replace Color", p, 4, NULL, NULL, NULL, 0, a_replace,
+                  TextObject, MUIA_Text_Contents, (ULONG)tr("The colour replaced is the foreground colour: pick it from the picture\nwith the Eyedropper, then press Use Foreground Color."), MUIA_Font, MUIV_Font_Tiny, End);
+    break; }
+  case ID_ADJ_SHADOWHI: {
+    static const Param p[] = { { "Shadows Amount (%):", 0, 100, 35 }, { "Shadows Tone (%):", 1, 100, 50 }, { "Shadows Radius (px):", 0, 500, 30 },
+                               { "Highlights Amount (%):", 0, 100, 0 }, { "Highlights Tone (%):", 1, 100, 50 }, { "Highlights Radius (px):", 0, 500, 30 },
+                               { "Color Correction:", -100, 100, 20 }, { "Midtone Contrast:", -100, 100, 0 } };
+    slider_dialog("Shadows/Highlights", p, 8, NULL, NULL, NULL, 0, a_shadowhi, NULL); break; }
+  case ID_ADJ_MATCH: {
+    static const Param p[] = { { "Luminance:", 1, 200, 100 }, { "Color Intensity:", 1, 200, 100 }, { "Fade:", 0, 100, 0 } };
+    int k;
+    nmatch = 0; match_have = -1;
+    match_labels[0] = tr("None");
+    for (k = 0; k < ndocs; k++) if (k != curdoc && docs[k].doc) { match_doc[nmatch] = k; match_labels[++nmatch] = docs[k].name; }
+    match_labels[nmatch + 1] = NULL;
+    slider_dialog("Match Color", p, 3, match_labels, "Source:", "Neutralize", 0, a_match, NULL);
+    free(match_px); match_px = NULL; match_have = -1;
+    break; }
   case ID_ADJ_LEVELS: {
     static const Param p[] = { { "Input Black:", 0, 253, 0 }, { "Gamma (x0.01):", 10, 999, 100 }, { "Input White:", 2, 255, 255 }, { "Output Black:", 0, 255, 0 }, { "Output White:", 0, 255, 255 } };
     histogram(d, 0, lev_hist);
     lev[0] = 0; lev[1] = 255; lev[2] = 100;
     lev_graph = graph(0, lev_hist, lev);
-    slider_dialog("Levels", p, 5, channels, "Channel:", NULL, 0, a_levels, lev_graph);
+    auto_hist = lev_hist;
+    adj_reshow = levels_reshow; sd_cfg_cychook = levels_show; presets_for(AK_LEVELS); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
+    slider_dialog("Levels", p, 5, channels, "Channel:", NULL, 0, a_levels, lev_graph ? VGroup, Child, lev_graph,
+                  Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Black, Grey and White Point take the foreground\ncolour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End : NULL);
     lev_graph = NULL;
     break; }
   case ID_ADJ_CURVES: {
     static u32 hist[1024];
     histogram(d, 0, hist);
+    curve_hist = hist;
     curve_obj = graph(1, hist, NULL);
     if (!curve_obj) return;
-    if (adj_editing && l->adj.npts >= 2) {
+    curves10_convert(&adj_base);
+    ((struct GData *)INST_DATA(gcls->mcc_Class, curve_obj))->maxpts = CURVE10_MAX;
+    {
       struct GData *g = INST_DATA(gcls->mcc_Class, curve_obj);
-      int k;
-      g->npts = l->adj.npts;
-      for (k = 0; k < l->adj.npts * 2; k++) g->pts[k] = l->adj.pts[k];
+      int c = adj_base.v[0] >= 0 && adj_base.v[0] <= 3 ? adj_base.v[0] : 0, k, n = adj_base.v[2 + c];
+      if (n >= 2) { g->npts = n; for (k = 0; k < n * 2; k++) g->pts[k] = adj_base.pts[16 * c + k]; }
+      g->hist = hist + 256 * c;
+      sd_init_set = 1; sd_init_choice = c;
     }
     notify_change(curve_obj, MUIA_Graph_Changed);
+    auto_hist = hist;
+    adj_reshow = curves_reshow; sd_cfg_cychook = curves_show; presets_for(AK_CURVES); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Curves", NULL, 0, channels, "Channel:", NULL, 0, a_curves, VGroup, Child, curve_obj,
-                  Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Click the line to add a point, drag points to bend it;\ndrag a point out of the box to take it away."), MUIA_Font, MUIV_Font_Tiny, End, End);
+                  Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Click the line to add a point (up to eight), drag points to bend it;\ndrag a point out of the box to take it away. Black, Grey and White Point\ntake the foreground colour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End);
+    curve_hist = NULL;
     break; }
   case ID_ADJ_INVERT: if (!adj_editing) adj_invert(d); break;
   case ID_ADJ_DESAT: adj_desaturate(d); break;
   case ID_ADJ_EQUALIZE: adj_equalize(d); break;
   }
   sd_init_set = 0; sd_init_tick = -1; sd_init_choice = 0;
-  adj_editing = 0;
+  adj_editing = 0; adj_reshow = NULL; auto_hist = NULL;
 }
 /* the Curves dialog's graph tells of a moved point through its notification */
 /* (wired in slider_dialog by the extra object: see graph_notify) */
@@ -528,7 +799,7 @@ void dlg_adjust(ULONG id)
 static void f_gauss(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_gaussian_blur(d, v[0] / 10.0); }
 static void f_box(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_box_blur(d, (int)v[0]); }
 static void f_motion(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_motion_blur(d, (double)v[0], (int)v[1]); }
-static void f_radial(Doc *d, const LONG *v, int c, int t) { (void)t; flt_radial_blur(d, (int)v[0], c); }
+static void f_radial(Doc *d, const LONG *v, int c, int t) { (void)t; flt_radial_blur_ex(d, (int)v[0], c, (i32)(d->w * v[1] / 100), (i32)(d->h * v[2] / 100), (int)v[SDMAX - 1]); }
 static void f_unsharp(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_unsharp_mask(d, (int)v[0], v[1] / 10.0, (int)v[2]); }
 static void f_noise(Doc *d, const LONG *v, int c, int t) { flt_add_noise(d, (double)v[0], c, t); }
 static void f_median(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_median(d, (int)v[0]); }
@@ -537,12 +808,12 @@ static void f_highpass(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; 
 static void f_mosaic(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_mosaic(d, (int)v[0]); }
 static void f_twirl(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_twirl(d, (double)v[0]); }
 static void f_pinch(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_pinch(d, (int)v[0]); }
-static void f_spherize(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spherize(d, (int)v[0]); }
+static void f_spherize(Doc *d, const LONG *v, int c, int t) { (void)t; flt_spherize_ex(d, (int)v[0], c); }
 static void f_ripple(Doc *d, const LONG *v, int c, int t) { (void)t; flt_ripple(d, (int)v[0], c); }
-static void f_wave(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_wave(d, (int)v[0], (int)v[1]); }
-static void f_min(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_minimum(d, (int)v[0]); }
-static void f_max(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_maximum(d, (int)v[0]); }
-static void f_offset(Doc *d, const LONG *v, int c, int t) { (void)c; flt_offset(d, v[0], v[1], t); }
+static void f_wave(Doc *d, const LONG *v, int c, int t) { flt_wave_ex(d, (int)v[0], (int)v[1], (int)v[2], (int)v[3], (int)v[4], (int)v[5], (int)v[6], c, t, (unsigned)v[7]); }
+static void f_min(Doc *d, const LONG *v, int c, int t) { (void)t; flt_minmax(d, (int)v[0], 0, c); }
+static void f_max(Doc *d, const LONG *v, int c, int t) { (void)t; flt_minmax(d, (int)v[0], 1, c); }
+static void f_offset(Doc *d, const LONG *v, int c, int t) { (void)t; flt_offset_ex(d, v[0], v[1], c, d->bg); }
 static void f_oil(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_oil_paint(d, (int)v[0], (int)v[1]); }
 static void f_vignette(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_vignette(d, (int)v[0]); }
 /* 0.2.1's filters (filters2.c) */
@@ -574,7 +845,35 @@ static void f_tiles(Doc *d, const LONG *v, int c, int t) { (void)t; flt_tiles(d,
 static void f_wind(Doc *d, const LONG *v, int c, int t) { (void)v; flt_wind(d, c, t, 557); }
 static void f_fibers(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_fibers(d, (int)v[0], (int)v[1], (unsigned)v[2]); }
 static void f_flare(Doc *d, const LONG *v, int c, int t) { (void)t; flt_lens_flare(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)v[2], c); }
-static void f_lighting(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lighting_basic(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)(v[2] * (d->w > d->h ? d->w : d->h) / 100), (int)v[3], 0xFFFFFF, (int)v[4]); }
+static void f_lighting(Doc *d, const LONG *v, int c, int t)
+{
+  flt_lighting_ex(d, c, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)(v[2] * (d->w > d->h ? d->w : d->h) / 100), (int)v[3], (int)v[4], (int)v[5],
+                  0xFFFFFF, (int)v[6], (int)v[7], t ? 60 : 0);
+}
+/* 1.0's filters (filters10.c) */
+static Rgba displace_map;            /* the map Displace last loaded (kept for Last Filter) */
+static void f_tilt(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_tilt_shift(d, (int)v[0], (i32)(d->h * v[1] / 100), (int)v[2], (int)(d->h * v[3] / 100), (int)(d->h * v[4] / 100)); }
+static void f_iris(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_iris_blur(d, (int)v[0], (i32)(d->w * v[1] / 100), (i32)(d->h * v[2] / 100), (i32)(d->w * v[3] / 200), (i32)(d->h * v[4] / 200), (int)v[5]); }
+static void f_smartsh(Doc *d, const LONG *v, int c, int t) { (void)t; flt_smart_sharpen(d, (int)v[0], (int)v[1], (int)v[2], c, (int)v[3]); }
+static void f_displace(Doc *d, const LONG *v, int c, int t) { flt_displace(d, displace_map.px, displace_map.w, displace_map.h, (int)v[0], (int)v[1], c == 0, t); }
+static void f_lenscorr(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lens_correction(d, (int)v[0], (int)v[1], (int)v[2], (int)v[3], (int)v[4], (int)v[5]); }
+static void f_extrude(Doc *d, const LONG *v, int c, int t) { flt_extrude(d, c, (int)v[0], (int)v[1], v[SDMAX - 1] == 0, t, 1, 4242); }
+static void f_glowedges(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_glowing_edges(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void f_plastic(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_plastic_wrap(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void f_edgedet(Doc *d, const LONG *v, int c, int t) { (void)v; flt_edge_detect(d, c, t); }
+static void f_coloralpha(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_color_to_alpha(d, c == 0 ? d->fg : c == 1 ? d->bg : c == 2 ? 0xFFFFFF : 0); }
+static void f_hsbhsl(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_hsb_hsl(d, c); }
+static void g_grain(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_film_grain(d, (int)v[0], (int)v[1], (int)v[2], 31); }
+static void g_cutout(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_cutout(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_poster(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_poster_edges(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_glow(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_diffuse_glow(d, (int)v[0], (int)v[1], (int)v[2], d->bg, 32); }
+static void g_glass(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_stained_glass(d, (int)v[0], (int)v[1], (int)v[2], d->fg, 33); }
+static void g_half(Doc *d, const LONG *v, int c, int t) { (void)t; flt_halftone_pattern(d, (int)v[0], (int)v[1], c, d->fg, d->bg); }
+static void g_copy(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_photocopy(d, (int)v[0], (int)v[1], d->fg, d->bg); }
+static void g_tex(Doc *d, const LONG *v, int c, int t) { (void)t; flt_texturizer(d, c, (int)v[0], (int)v[1], (int)v[2], 34); }
+static void g_tiles(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_mosaic_tiles(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void g_patch(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_patchwork(d, (int)v[0], (int)v[1]); }
+static void g_spatter(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spatter(d, (int)v[0], (int)v[1], 35); }
 static void f_deint(Doc *d, const LONG *v, int c, int t) { (void)v; flt_de_interlace(d, c == 1, t); }
 static void f_custom(Doc *d, const LONG *v, int c, int t)
 {
@@ -612,11 +911,89 @@ void dlg_filter(ULONG id)
   static const char *const winds[] = { "Wind", "Blast", "Stagger", NULL };
   static const char *const lenses[] = { "50-300mm Zoom", "35mm Prime", "105mm Prime", "Movie Prime", NULL };
   static const char *const deint[] = { "Odd Fields", "Even Fields", NULL };
+  /* 1.0 */
+  static const char *const quality[] = { "Draft", "Good", "Best", NULL };
+  static const char *const sphmodes[] = { "Normal", "Horizontal Only", "Vertical Only", NULL };
+  static const char *const wtypes[] = { "Sine", "Triangle", "Square", NULL };
+  static const char *const preserve[] = { "Squareness", "Roundness", NULL };
+  static const char *const offmodes[] = { "Set to Transparent", "Set to Background", "Repeat Edge Pixels", "Wrap Around", NULL };
+  static const char *const lights[] = { "Point", "Spot", "Infinite", NULL };
+  static const char *const removes[] = { "Gaussian Blur", "Lens Blur", "Motion Blur", NULL };
+  static const char *const dmaps[] = { "Stretch to Fit", "Tile", NULL };
+  static const char *const extypes[] = { "Blocks", "Pyramids", NULL };
+  static const char *const exdepth[] = { "Random", "Level-based", NULL };
+  static const char *const edgemeth[] = { "Sobel", "Prewitt", "Laplacian", "Roberts", NULL };
+  static const char *const c2a[] = { "Foreground Color", "Background Color", "White", "Black", NULL };
+  static const char *const hsbmodes[] = { "RGB to HSL", "HSL to RGB", "RGB to HSB", "HSB to RGB", NULL };
   if (!d) return;
   sd_remember = 1;
   if (id == ID_F_BLUR || id == ID_F_SHARPEN || id == ID_F_SHARPENMORE || id == ID_F_DESPECKLE || id == ID_F_EDGES || id == ID_F_SOLARIZE ||
-      id == ID_F_CLOUDS || id == ID_F_DIFFCLOUDS || id == ID_F_FACET || id == ID_F_FRAGMENT || id == ID_F_NTSC) { last_fn = NULL; last_plain = id; }
+      id == ID_F_CLOUDS || id == ID_F_DIFFCLOUDS || id == ID_F_FACET || id == ID_F_FRAGMENT || id == ID_F_NTSC ||
+      id == ID_F_PAL || id == ID_F_AVERAGE || id == ID_F_BLURMORE || id == ID_F_SHARPENEDGES) { last_fn = NULL; last_plain = id; }
   switch (id) {
+  /* 1.0 */
+  case ID_F_PAL: flt_ntsc_colors(d, 1); break;
+  case ID_F_AVERAGE: flt_average(d); break;
+  case ID_F_BLURMORE: flt_blur_more(d); break;
+  case ID_F_SHARPENEDGES: flt_sharpen_edges(d); break;
+  case ID_F_TILTSHIFT: { static const Param p[] = { { "Blur (px):", 1, 200, 15 }, { "Position (%):", 0, 100, 50 }, { "Angle:", -90, 90, 0 }, { "Focus (%):", 0, 100, 20 }, { "Transition (%):", 0, 100, 25 } };
+    slider_dialog("Tilt-Shift", p, 5, NULL, NULL, NULL, 0, f_tilt, NULL); break; }
+  case ID_F_IRIS: { static const Param p[] = { { "Blur (px):", 1, 200, 15 }, { "Centre X (%):", 0, 100, 50 }, { "Centre Y (%):", 0, 100, 50 }, { "Width (%):", 1, 200, 50 },
+                                               { "Height (%):", 1, 200, 50 }, { "Transition (%):", 0, 300, 60 } };
+    slider_dialog("Iris Blur", p, 6, NULL, NULL, NULL, 0, f_iris, NULL); break; }
+  case ID_F_SMARTSHARPEN: { static const Param p[] = { { "Amount (%):", 1, 500, 150 }, { "Radius (x0.1 px):", 1, 640, 10 }, { "Reduce Noise (%):", 0, 100, 10 }, { "Motion Angle:", -180, 180, 0 } };
+    slider_dialog("Smart Sharpen", p, 4, removes, "Remove:", NULL, 0, f_smartsh, NULL); break; }
+  case ID_F_DISPLACE: {
+    static const Param p[] = { { "Horizontal Scale (%):", -999, 999, 10 }, { "Vertical Scale (%):", -999, 999, 10 } };
+    static char mpath[300];
+    size_t len;
+    u8 *data;
+    char err[120];
+    Rgba m;
+    if (!ui_file_request(0, "Choose a displacement map", mpath, sizeof mpath, NULL)) break;
+    if (!(data = file_read(mpath, &len))) { ask("OK", "%s", tr("The map couldn't be read.")); break; }
+    memset(&m, 0, sizeof m);
+    if (!codec_decode(data, len, &m, err, sizeof err)) { free(data); ask("OK", "%s", err); break; }
+    free(data);
+    rgba_free(&displace_map); displace_map = m;
+    slider_dialog("Displace", p, 2, dmaps, "Displacement Map:", "Wrap Around (else repeat edge pixels)", 0, f_displace,
+                  TextObject, MUIA_Text_Contents, (ULONG)tr("The map's red moves the picture across, its green up and down;\nmid-grey stays put. 100% moves up to 128 pixels."), MUIA_Font, MUIV_Font_Tiny, End);
+    break; }
+  case ID_F_LENSCORR: { static const Param p[] = { { "Remove Distortion:", -100, 100, 0 }, { "Fix Red/Cyan Fringe:", -100, 100, 0 }, { "Fix Blue/Yellow Fringe:", -100, 100, 0 },
+                                                   { "Vignette Amount:", -100, 100, 0 }, { "Vignette Midpoint:", 0, 100, 50 }, { "Scale (%):", 50, 150, 100 } };
+    slider_dialog("Lens Correction", p, 6, NULL, NULL, NULL, 0, f_lenscorr, NULL); break; }
+  case ID_F_EXTRUDE: { static const Param p[] = { { "Size (px):", 2, 255, 30 }, { "Depth:", 1, 255, 30 } };
+    sd_cfg_cyc2 = exdepth; sd_cfg_cyc2label = "Depth:"; sd_cfg_cyc2init = 1;
+    slider_dialog("Extrude", p, 2, extypes, "Type:", "Solid Front Faces", 0, f_extrude, NULL); break; }
+  case ID_F_GLOWEDGES: { static const Param p[] = { { "Edge Width:", 1, 14, 2 }, { "Edge Brightness:", 0, 20, 6 }, { "Smoothness:", 1, 15, 5 } };
+    slider_dialog("Glowing Edges", p, 3, NULL, NULL, NULL, 0, f_glowedges, NULL); break; }
+  case ID_F_PLASTIC: { static const Param p[] = { { "Highlight Strength:", 0, 20, 15 }, { "Detail:", 1, 15, 9 }, { "Smoothness:", 1, 15, 7 } };
+    slider_dialog("Plastic Wrap", p, 3, NULL, NULL, NULL, 0, f_plastic, NULL); break; }
+  case ID_F_EDGEDETECT: slider_dialog("Detect Edges", NULL, 0, edgemeth, "Method:", "Dark Edges on White", 1, f_edgedet, NULL); break;
+  case ID_F_COLORALPHA: slider_dialog("Color to Alpha", NULL, 0, c2a, "Color:", NULL, 0, f_coloralpha, NULL); break;
+  case ID_F_HSBHSL: slider_dialog("HSB/HSL", NULL, 0, hsbmodes, "Mode:", NULL, 0, f_hsbhsl, NULL); break;
+  case ID_F_FILMGRAIN: { static const Param p[] = { { "Grain:", 0, 20, 4 }, { "Highlight Area:", 0, 20, 0 }, { "Intensity:", 0, 10, 10 } };
+    slider_dialog("Film Grain", p, 3, NULL, NULL, NULL, 0, g_grain, NULL); break; }
+  case ID_F_CUTOUT: { static const Param p[] = { { "Number of Levels:", 2, 8, 4 }, { "Edge Simplicity:", 0, 10, 4 }, { "Edge Fidelity:", 1, 3, 2 } };
+    slider_dialog("Cutout", p, 3, NULL, NULL, NULL, 0, g_cutout, NULL); break; }
+  case ID_F_POSTEREDGES: { static const Param p[] = { { "Edge Thickness:", 0, 10, 2 }, { "Edge Intensity:", 0, 10, 1 }, { "Posterization:", 0, 6, 2 } };
+    slider_dialog("Poster Edges", p, 3, NULL, NULL, NULL, 0, g_poster, NULL); break; }
+  case ID_F_DIFFUSEGLOW: { static const Param p[] = { { "Graininess:", 0, 10, 6 }, { "Glow Amount:", 0, 20, 10 }, { "Clear Amount:", 0, 20, 15 } };
+    slider_dialog("Diffuse Glow", p, 3, NULL, NULL, NULL, 0, g_glow, TextObject, MUIA_Text_Contents, (ULONG)tr("The glow is in the background colour."), MUIA_Font, MUIV_Font_Tiny, End); break; }
+  case ID_F_STAINEDGLASS: { static const Param p[] = { { "Cell Size:", 2, 50, 10 }, { "Border Thickness:", 1, 20, 4 }, { "Light Intensity:", 0, 10, 3 } };
+    slider_dialog("Stained Glass", p, 3, NULL, NULL, NULL, 0, g_glass, TextObject, MUIA_Text_Contents, (ULONG)tr("The leading is in the foreground colour."), MUIA_Font, MUIV_Font_Tiny, End); break; }
+  case ID_F_HALFTONEPAT: { static const char *const ht[] = { "Dot", "Circle", "Line", NULL }; static const Param p[] = { { "Size:", 1, 12, 1 }, { "Contrast:", 0, 50, 5 } };
+    slider_dialog("Halftone Pattern", p, 2, ht, "Pattern Type:", NULL, 0, g_half, NULL); break; }
+  case ID_F_PHOTOCOPY: { static const Param p[] = { { "Detail:", 1, 24, 7 }, { "Darkness:", 1, 50, 8 } };
+    slider_dialog("Photocopy", p, 2, NULL, NULL, NULL, 0, g_copy, NULL); break; }
+  case ID_F_TEXTURIZER: { static const char *const tt[] = { "Brick", "Burlap", "Canvas", "Sandstone", NULL }; static const Param p[] = { { "Scaling (%):", 50, 200, 100 }, { "Relief:", 0, 50, 4 }, { "Light Angle:", -180, 180, 135 } };
+    slider_dialog("Texturizer", p, 3, tt, "Texture:", NULL, 0, g_tex, NULL); break; }
+  case ID_F_MOSAICTILES: { static const Param p[] = { { "Tile Size:", 2, 100, 12 }, { "Grout Width:", 1, 15, 3 }, { "Lighten Grout:", 0, 10, 9 } };
+    slider_dialog("Mosaic Tiles", p, 3, NULL, NULL, NULL, 0, g_tiles, NULL); break; }
+  case ID_F_PATCHWORK: { static const Param p[] = { { "Square Size:", 2, 50, 4 }, { "Relief:", 0, 25, 8 } };
+    slider_dialog("Patchwork", p, 2, NULL, NULL, NULL, 0, g_patch, NULL); break; }
+  case ID_F_SPATTER: { static const Param p[] = { { "Spray Radius:", 0, 25, 10 }, { "Smoothness:", 1, 15, 5 } };
+    slider_dialog("Spatter", p, 2, NULL, NULL, NULL, 0, g_spatter, NULL); break; }
   case ID_F_DUST: { static const Param p[] = { { "Radius (px):", 1, 100, 1 }, { "Threshold:", 0, 255, 0 } }; slider_dialog("Dust & Scratches", p, 2, NULL, NULL, NULL, 0, f_dust, NULL); break; }
   case ID_F_REDUCENOISE: { static const Param p[] = { { "Strength:", 0, 10, 6 }, { "Preserve Details (%):", 0, 100, 60 } }; slider_dialog("Reduce Noise", p, 2, NULL, NULL, "Reduce Colour Noise", 1, f_rnoise, NULL); break; }
   case ID_F_SMARTBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 3 }, { "Threshold:", 1, 100, 25 } }; slider_dialog("Smart Blur", p, 2, smodes, "Mode:", NULL, 0, f_smart, NULL); break; }
@@ -641,8 +1018,9 @@ void dlg_filter(ULONG id)
   case ID_F_FIBERS: { static const Param p[] = { { "Variance:", 1, 64, 16 }, { "Strength:", 1, 64, 4 }, { "Seed:", 1, 9999, 1 } }; slider_dialog("Fibers", p, 3, NULL, NULL, NULL, 0, f_fibers, NULL); break; }
   case ID_F_FLARE: { static const Param p[] = { { "Centre X (%):", 0, 100, 30 }, { "Centre Y (%):", 0, 100, 30 }, { "Brightness (%):", 10, 300, 100 } };
     slider_dialog("Lens Flare", p, 3, lenses, "Lens Type:", NULL, 0, f_flare, NULL); break; }
-  case ID_F_LIGHTING: { static const Param p[] = { { "Light X (%):", 0, 100, 35 }, { "Light Y (%):", 0, 100, 35 }, { "Radius (%):", 5, 200, 60 }, { "Intensity:", 0, 100, 60 }, { "Ambience:", 0, 100, 20 } };
-    slider_dialog("Lighting Effects", p, 5, NULL, NULL, NULL, 0, f_lighting, NULL); break; }
+  case ID_F_LIGHTING: { static const Param p[] = { { "Light X (%):", 0, 100, 35 }, { "Light Y (%):", 0, 100, 35 }, { "Radius (%):", 5, 200, 60 }, { "Direction:", -180, 180, -45 },
+                                                   { "Spot Cone:", 1, 90, 30 }, { "Intensity:", -100, 100, 60 }, { "Ambience:", -100, 100, 20 }, { "Texture:", 0, 100, 0 } };
+    slider_dialog("Lighting Effects", p, 8, lights, "Light Type:", "Shiny", 0, f_lighting, NULL); break; }
   case ID_F_DEINTERLACE: slider_dialog("De-Interlace", NULL, 0, deint, "Eliminate:", "Interpolate (else duplicate)", 1, f_deint, NULL); break;
   case ID_F_CUSTOM: { static const Param p[] = { { "Centre:", -99, 99, 5 }, { "Edges:", -99, 99, -1 }, { "Corners:", -99, 99, 0 }, { "Scale:", 1, 99, 1 }, { "Offset:", -255, 255, 0 } };
     slider_dialog("Custom", p, 5, NULL, NULL, NULL, 0, f_custom, NULL); break; }
@@ -653,7 +1031,9 @@ void dlg_filter(ULONG id)
   case ID_F_GAUSS: { static const Param p[] = { { "Radius (x0.1 px):", 1, 2500, 20 } }; slider_dialog("Gaussian Blur", p, 1, NULL, NULL, NULL, 0, f_gauss, NULL); break; }
   case ID_F_BOX: { static const Param p[] = { { "Radius (px):", 1, 500, 5 } }; slider_dialog("Box Blur", p, 1, NULL, NULL, NULL, 0, f_box, NULL); break; }
   case ID_F_MOTION: { static const Param p[] = { { "Angle:", -180, 180, 0 }, { "Distance (px):", 1, 500, 10 } }; slider_dialog("Motion Blur", p, 2, NULL, NULL, NULL, 0, f_motion, NULL); break; }
-  case ID_F_RADIAL: { static const Param p[] = { { "Amount:", 1, 100, 10 } }; slider_dialog("Radial Blur", p, 1, radial, "Method:", NULL, 0, f_radial, NULL); break; }
+  case ID_F_RADIAL: { static const Param p[] = { { "Amount:", 1, 100, 10 }, { "Centre X (%):", 0, 100, 50 }, { "Centre Y (%):", 0, 100, 50 } };
+    sd_cfg_cyc2 = quality; sd_cfg_cyc2label = "Quality:"; sd_cfg_cyc2init = 1;
+    slider_dialog("Radial Blur", p, 3, radial, "Method:", NULL, 0, f_radial, NULL); break; }
   case ID_F_UNSHARP: { static const Param p[] = { { "Amount (%):", 1, 500, 100 }, { "Radius (x0.1 px):", 1, 2500, 10 }, { "Threshold:", 0, 255, 0 } }; slider_dialog("Unsharp Mask", p, 3, NULL, NULL, NULL, 0, f_unsharp, NULL); break; }
   case ID_F_NOISE: { static const Param p[] = { { "Amount (%):", 1, 400, 12 } }; slider_dialog("Add Noise", p, 1, dist, "Distribution:", "Monochromatic", 0, f_noise, NULL); break; }
   case ID_F_MEDIAN: { static const Param p[] = { { "Radius (px):", 1, 100, 1 } }; slider_dialog("Median", p, 1, NULL, NULL, NULL, 0, f_median, NULL); break; }
@@ -662,12 +1042,17 @@ void dlg_filter(ULONG id)
   case ID_F_MOSAIC: { static const Param p[] = { { "Cell Size (px):", 2, 200, 8 } }; slider_dialog("Mosaic", p, 1, NULL, NULL, NULL, 0, f_mosaic, NULL); break; }
   case ID_F_TWIRL: { static const Param p[] = { { "Angle:", -999, 999, 50 } }; slider_dialog("Twirl", p, 1, NULL, NULL, NULL, 0, f_twirl, NULL); break; }
   case ID_F_PINCH: { static const Param p[] = { { "Amount (%):", -100, 100, 50 } }; slider_dialog("Pinch", p, 1, NULL, NULL, NULL, 0, f_pinch, NULL); break; }
-  case ID_F_SPHERIZE: { static const Param p[] = { { "Amount (%):", -100, 100, 100 } }; slider_dialog("Spherize", p, 1, NULL, NULL, NULL, 0, f_spherize, NULL); break; }
+  case ID_F_SPHERIZE: { static const Param p[] = { { "Amount (%):", -100, 100, 100 } }; slider_dialog("Spherize", p, 1, sphmodes, "Mode:", NULL, 0, f_spherize, NULL); break; }
   case ID_F_RIPPLE: { static const Param p[] = { { "Amount (%):", -999, 999, 100 } }; slider_dialog("Ripple", p, 1, rsize, "Size:", NULL, 0, f_ripple, NULL); break; }
-  case ID_F_WAVE: { static const Param p[] = { { "Wavelength (px):", 2, 500, 40 }, { "Amplitude (px):", 1, 200, 8 } }; slider_dialog("Wave", p, 2, NULL, NULL, NULL, 0, f_wave, NULL); break; }
-  case ID_F_MIN: { static const Param p[] = { { "Radius (px):", 1, 100, 1 } }; slider_dialog("Minimum", p, 1, NULL, NULL, NULL, 0, f_min, NULL); break; }
-  case ID_F_MAX: { static const Param p[] = { { "Radius (px):", 1, 100, 1 } }; slider_dialog("Maximum", p, 1, NULL, NULL, NULL, 0, f_max, NULL); break; }
-  case ID_F_OFFSET: { static const Param p[] = { { "Horizontal (px):", -2000, 2000, 0 }, { "Vertical (px):", -2000, 2000, 0 } }; slider_dialog("Offset", p, 2, NULL, NULL, "Wrap Around", 1, f_offset, NULL); break; }
+  case ID_F_WAVE: { static const Param p[] = { { "Generators:", 1, 20, 5 }, { "Wavelength Min. (px):", 1, 999, 10 }, { "Wavelength Max. (px):", 1, 999, 120 },
+                                               { "Amplitude Min. (px):", 0, 999, 5 }, { "Amplitude Max. (px):", 0, 999, 35 }, { "Horizontal Scale (%):", 0, 100, 100 },
+                                               { "Vertical Scale (%):", 0, 100, 100 }, { "Randomize (seed):", 1, 9999, 1 } };
+    slider_dialog("Wave", p, 8, wtypes, "Type:", "Wrap Around (else repeat edge pixels)", 1, f_wave, NULL); break; }
+  case ID_F_MIN: { static const Param p[] = { { "Radius (px):", 1, 100, 1 } }; slider_dialog("Minimum", p, 1, preserve, "Preserve:", NULL, 0, f_min, NULL); break; }
+  case ID_F_MAX: { static const Param p[] = { { "Radius (px):", 1, 100, 1 } }; slider_dialog("Maximum", p, 1, preserve, "Preserve:", NULL, 0, f_max, NULL); break; }
+  case ID_F_OFFSET: { static const Param p[] = { { "Horizontal (px):", -2000, 2000, 0 }, { "Vertical (px):", -2000, 2000, 0 } };
+    sd_init_set = 1; sd_init_v[0] = sd_init_v[1] = 0; sd_init_choice = 3;
+    slider_dialog("Offset", p, 2, offmodes, "Undefined Areas:", NULL, 0, f_offset, NULL); sd_init_set = 0; sd_init_choice = 0; break; }
   case ID_F_OIL: { static const Param p[] = { { "Radius (px):", 1, 10, 3 }, { "Levels:", 2, 64, 20 } }; slider_dialog("Oil Paint", p, 2, NULL, NULL, NULL, 0, f_oil, NULL); break; }
   case ID_F_VIGNETTE: { static const Param p[] = { { "Amount (%):", -100, 100, 50 } }; slider_dialog("Vignette", p, 1, NULL, NULL, NULL, 0, f_vignette, NULL); break; }
   case ID_F_BLUR: flt_blur(d); break;

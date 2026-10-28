@@ -61,9 +61,12 @@ enum {
   /* 0.7 */
   TL_MAGLASSO, TL_RULER,
   /* 0.8 */
-  TL_SAMPLER, TL_N
+  TL_SAMPLER,
+  /* 1.0: retouching (core/retouch.h) */
+  TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REDEYE,
+  TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest */
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's and 1.0's) after the rest */
 #define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */
@@ -92,6 +95,8 @@ typedef struct {
   int ml_width, ml_contrast, ml_freq; /* magnetic lasso: pixels, per cent, 0-100 */
   int crop_preset, crop_swap;         /* crop: crop_presets[], width and height swapped */
   int ruler_image;                    /* ruler: Straighten turns the whole picture (and crops) */
+  /* 1.0 */
+  int redeye_pupil, redeye_darken;    /* red eye: per cent */
 } Opts;
 /* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
 enum { MQS_NORMAL, MQS_RATIO, MQS_SIZE, MQS_ROW, MQS_COL };

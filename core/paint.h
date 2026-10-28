@@ -17,6 +17,9 @@ enum { PT_BRUSH, PT_PENCIL, PT_ERASER, PT_CLONE, PT_BLUR, PT_SHARPEN, PT_SMUDGE,
        PT_HISTORY,                    /* History Brush: paints b.snapshot back */
        PT_REPLACE,                    /* Color Replacement */
        PT_BGERASE,                    /* Background Eraser */
+       /* 1.0 (retouch.h) */
+       PT_HEAL,                       /* Healing Brush: paints as the Clone Stamp, healed when the stroke ends */
+       PT_SPOTHEAL,                   /* Spot Healing Brush: marks the area, filled from round it when the stroke ends */
        PT_N };
 enum { ER_BRUSH, ER_PENCIL, ER_BLOCK };                    /* the Eraser's modes */
 enum { SMP_CONTINUOUS, SMP_ONCE, SMP_SWATCH };             /* Color Replacement and Background Eraser: what they sample */
