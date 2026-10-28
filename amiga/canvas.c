@@ -93,6 +93,7 @@ struct Data {
   MagLasso *ml; double *mlpath; int nmlpath, ml_op;
   int ruler_end;                         /* the Ruler's end being dragged (0 the start, 1 the end) */
   int ov_ruler;                          /* the Ruler's line is in the overlay drawn */
+  int ov_tool;                           /* the tool whose brush outline the overlay drawn has */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -454,7 +455,7 @@ static void ov_draw(struct Data *d, Object *obj)
 {
   struct RastPort *rp = _rp(obj);
   APTR clip;
-  int t = d->space ? TL_HAND : tool, i;
+  int t = d->ov_tool, i;
   if (!d->shown) return;
   clip = (APTR)MUI_AddClipping(muiRenderInfo(obj), _mleft(obj), _mtop(obj), _mwidth(obj), _mheight(obj));
   SetDrMd(rp, COMPLEMENT);
@@ -542,7 +543,9 @@ static void ov_hide(struct Data *d, Object *obj) { if (d->ov_on) { ov_draw(d, ob
 static void ov_show(struct Data *d, Object *obj)
 {
   if (d->ov_on) return;
-  d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();   /* (taken away later as it was put up) */
+  /* (what depends on the tool is remembered, so it is taken away later as it was put up) */
+  d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();
+  d->ov_tool = d->space ? TL_HAND : tool;
   ov_draw(d, obj);
   d->ov_on = 1;
 }

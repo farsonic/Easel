@@ -338,8 +338,8 @@ static int fields_for(int t, Field *f)
   case TL_LASSO: case TL_PLASSO: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px"); CHECK("Anti-alias", opt.sel_antialias);
     if (t == TL_PLASSO) TEXT("Click the corners; double-click or Return closes it");
     break;
-  case TL_MAGLASSO: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px"); CHECK("Anti-alias", opt.sel_antialias);
-    SCRUB("Width:", opt.ml_width, 1, 256, "px"); SCRUB("Contrast:", opt.ml_contrast, 1, 100, "%"); SCRUB("Frequency:", opt.ml_freq, 0, 100, "");
+  case TL_MAGLASSO: SELOPS(); SCRUB("Width:", opt.ml_width, 1, 256, "px"); SCRUB("Contrast:", opt.ml_contrast, 1, 100, "%"); SCRUB("Frequency:", opt.ml_freq, 0, 100, "");
+    CHECK("Anti-alias", opt.sel_antialias); SCRUB("Feather:", opt.feather, 0, 250, "px");
     break;
   case TL_WAND: SELOPS(); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.sel_antialias); CHECK("Contiguous", opt.contiguous); CHECK("Sample All Layers", opt.all_layers); break;
   case TL_CROP:
