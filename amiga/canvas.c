@@ -97,6 +97,8 @@ struct Data {
   /* 0.8: the colour samplers in the overlay drawn (image pixels), and the one being dragged */
   LONG ov_sx[4], ov_sy[4]; int ov_nsamp, samp_drag;
   int ov_cursor;                         /* the painting cursor drawn: 0 outline, 1 crosshair, 2 both */
+  /* 0.8: a spring-loaded tool key: the key held, the tool before it, when it went down, used meanwhile */
+  UWORD spring_code; int spring_prev, spring_used; ULONG spring_secs, spring_micros;
 };
 
 static struct MUI_CustomClass *ccls;
@@ -956,6 +958,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   Box ch;
   d->secs = secs; d->micros = micros;
   d->modifiers = qual;
+  if (d->spring_code) d->spring_used = 1;               /* (0.8: the spring-loaded tool used) */
   /* 0.4: snapping (guides, grid, edges) for the tools that drag out shapes */
   if (doc && doc->guides.snap && (t == TL_MARQUEE || t == TL_EMARQUEE || t == TL_RECT || t == TL_ELLIPSE || t == TL_LINE || t == TL_GRADIENT || t == TL_CROP)) {
     doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
@@ -1378,6 +1381,20 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     if (down != d->space) { ov_hide(d, obj); d->space = down; ov_show(d, obj); }
     return 1;
   }
+  if (d->spring_code && (code & ~IECODE_UP_PREFIX) == d->spring_code) {
+    /* 0.8: a tool key held: repeats change nothing; let go after half a second (or after using the
+       tool) and the tool before comes back */
+    if (!(code & IECODE_UP_PREFIX)) return 1;
+    {
+      ULONG ds = im->Seconds - d->spring_secs;
+      LONG dm = (LONG)im->Micros - (LONG)d->spring_micros;
+      long held = (long)ds * 1000 + dm / 1000;
+      int prev = d->spring_prev;
+      d->spring_code = 0;
+      if ((held >= 500 || d->spring_used) && prev != tool) set_tool(prev);
+    }
+    return 1;
+  }
   if (code & IECODE_UP_PREFIX) return 0;
   if (!(q & IEQUALIFIER_REPEAT)) {
     /* 0.8: a command's extra key (Edit > Keyboard Shortcuts) */
@@ -1501,10 +1518,13 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   /* a tool's letter: that tool, or (pressed again, or with Shift) the next tool sharing the letter */
   c = ToUpper((ULONG)c);
   if ((i = tool_for_key(c)) < 0) return 0;
+  if (q & IEQUALIFIER_REPEAT) return 1;                 /* (a letter held: not round and round its tools) */
   if (tool_keys[tool] == c && (shift || i == tool)) {
     int k;
     for (k = 1; k < TL_N; k++) if (tool_keys[(tool + k) % TL_N] == c) { i = (tool + k) % TL_N; break; }
   }
+  /* 0.8: spring-loaded: held, the tool is only for as long as the key is down */
+  d->spring_code = code; d->spring_prev = tool; d->spring_used = 0; d->spring_secs = im->Seconds; d->spring_micros = im->Micros;
   set_tool(i);
   return 1;
 }
