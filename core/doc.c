@@ -53,6 +53,8 @@ void layer_free(Layer *l)
   free(l->px);
   free(l->mask);
   free(l->idx);
+  free(l->maskfx);
+  if (l->adjprog) { if (adjlayer_free) adjlayer_free(l->adjprog); else free(l->adjprog); }
   free(l);
 }
 Layer *layer_copy(const Layer *l, i32 w, i32 h)
@@ -60,7 +62,8 @@ Layer *layer_copy(const Layer *l, i32 w, i32 h)
   Layer *c = (Layer *)malloc(sizeof *c);
   if (!c) return NULL;
   *c = *l;
-  c->px = c->mask = c->idx = NULL;
+  c->px = c->mask = c->idx = c->maskfx = NULL; c->maskfx_ok = 0;
+  c->adjprog = NULL; c->adjprog_ok = 0;
   if (l->px && !(c->px = (u8 *)malloc((size_t)w * h * 4))) { free(c); return NULL; }
   if (l->px) memcpy(c->px, l->px, (size_t)w * h * 4);
   if (l->mask && (c->mask = (u8 *)malloc((size_t)w * h)) != NULL) memcpy(c->mask, l->mask, (size_t)w * h);
@@ -189,7 +192,7 @@ void blend_pixel(u8 *dst, const u8 *src, int opacity, int mode)
     for (i = 0; i < 3; i++) dst[i] = (u8)((src[i] * as + dst[i] * (ab - mul255(as, ab)) + ao / 2) / ao);
   } else {
     int bl[3];
-    if (mode >= BM_HUE) blend_nonsep(mode, dst, src, bl);
+    if (mode >= BM_HUE && mode <= BM_LUMINOSITY) blend_nonsep(mode, dst, src, bl);
     else for (i = 0; i < 3; i++) bl[i] = blend_ch(mode, dst[i], src[i]);
     /* the blend where both are opaque, the source alone where the backdrop isn't, the backdrop alone where the source isn't */
     for (i = 0; i < 3; i++) {
@@ -199,11 +202,332 @@ void blend_pixel(u8 *dst, const u8 *src, int opacity, int mode)
   }
   dst[3] = (u8)ao;
 }
+/* ------------------------------------------------------------------ compositing (0.3: live layers)
+   The stack is flat, bottom first. A group's members are the layers just below it whose depth is
+   greater than the group's. Each row is composited by comp_range: layers are blended onto an
+   accumulating row; a group is composited into a row of its own (isolated) and then blended, or
+   straight onto the accumulation (Pass Through); a layer with clipped layers above it is
+   composited with them into a row of its own first, the clipped layers keeping to its alpha; an
+   adjustment layer changes the accumulation itself. Masks, fill opacity and Blend If thin each
+   pixel's opacity. Rows come from a small pool, as deep as the nesting. */
+
+/* one pixel's colour (not alpha) blended by mode: b backdrop, s source, out */
+static void blend_color(int mode, const u8 *b, const u8 *s, int *out)
+{
+  int i;
+  if (mode == BM_NORMAL) { out[0] = s[0]; out[1] = s[1]; out[2] = s[2]; return; }
+  if (mode >= BM_HUE && mode <= BM_LUMINOSITY) { blend_nonsep(mode, b, s, out); return; }
+  for (i = 0; i < 3; i++) out[i] = blend_ch(mode, b[i], s[i]);
+}
+/* the layer's mask, feathered if it asks (worked out once, kept until the mask changes) */
+static void box_blur_u8(u8 *m, i32 w, i32 h, int r)
+{
+  u8 *t = (u8 *)malloc((size_t)(w > h ? w : h));
+  i32 x, y;
+  if (!t || r < 1) { free(t); return; }
+  for (y = 0; y < h; y++) {
+    u8 *row = m + (long)y * w;
+    long sum = 0;
+    for (x = -r; x <= r; x++) sum += row[x < 0 ? 0 : x >= w ? w - 1 : x];
+    for (x = 0; x < w; x++) {
+      i32 a = x - r, b = x + r + 1;
+      t[x] = (u8)(sum / (2 * r + 1));
+      sum += row[b >= w ? w - 1 : b] - row[a < 0 ? 0 : a];
+    }
+    memcpy(row, t, (size_t)w);
+  }
+  for (x = 0; x < w; x++) {
+    long sum = 0;
+    for (y = -r; y <= r; y++) sum += m[(long)(y < 0 ? 0 : y >= h ? h - 1 : y) * w + x];
+    for (y = 0; y < h; y++) {
+      i32 a = y - r, b = y + r + 1;
+      t[y] = (u8)(sum / (2 * r + 1));
+      sum += m[(long)(b >= h ? h - 1 : b) * w + x] - m[(long)(a < 0 ? 0 : a) * w + x];
+    }
+    for (y = 0; y < h; y++) m[(long)y * w + x] = t[y];
+  }
+  free(t);
+}
+const u8 *layer_mask_used(Doc *d, Layer *l)
+{
+  if (!l->mask || !l->mask_on) return NULL;
+  if (!l->mask_feather) return l->mask;
+  if (!l->maskfx_ok) {
+    int pass, r = (l->mask_feather + 1) / 2;
+    if (!l->maskfx && !(l->maskfx = (u8 *)malloc((size_t)d->w * d->h))) return l->mask;
+    memcpy(l->maskfx, l->mask, (size_t)d->w * d->h);
+    for (pass = 0; pass < 3; pass++) box_blur_u8(l->maskfx, d->w, d->h, r > 1 ? r / 2 + 1 : 1);
+    l->maskfx_ok = 1;
+  }
+  return l->maskfx;
+}
+/* hooks for adjustment layers (adjust.c): set by adjust.c's adjlayer_init, so doc.c needs no
+   adjustment code of its own (the tests that link doc.c alone see plain layers) */
+void *(*adjlayer_make)(const AdjParams *p);
+void (*adjlayer_free)(void *prog);
+void (*adjlayer_row)(const void *prog, u8 *px, int n);
+/* hook for fill layers' gradients (paint.c may set a better one); the default is linear/radial here */
+typedef struct {
+  Doc *d;
+  i32 y, x0, n;
+  u8 *pool; int nrows, used;
+  int simple;
+} Comp;
+static u8 *row_get(Comp *c) { if (c->used >= c->nrows) return NULL; return c->pool + (size_t)(c->used++) * c->n * 4; }
+/* a fill layer's row: solid, or a gradient across the canvas */
+static void fill_row(Comp *c, const Layer *l, u8 *o)
+{
+  const FillParams *f = &l->fillp;
+  i32 x;
+  if (f->kind == 0) {
+    for (x = 0; x < c->n; x++) { o[x * 4] = (u8)(f->c0 >> 16); o[x * 4 + 1] = (u8)(f->c0 >> 8); o[x * 4 + 2] = (u8)f->c0; o[x * 4 + 3] = 255; }
+    return;
+  }
+  {
+    double cx = c->d->w / 2.0, cy = c->d->h / 2.0, a = f->angle * 3.14159265358979 / 180, ca = cos(a), sa = -sin(a);
+    double half = sqrt(cx * cx + cy * cy) * (f->scale > 0 ? f->scale : 100) / 100.0, len;
+    if (half < 1) half = 1;
+    len = fabs(cx * ca) + fabs(cy * sa);
+    if (len < 1) len = 1;
+    len = len * (f->scale > 0 ? f->scale : 100) / 100.0;
+    for (x = 0; x < c->n; x++) {
+      double px = c->x0 + x + 0.5 - cx, py = c->y + 0.5 - cy, t;
+      int k, ti;
+      switch (f->gkind) {
+      case 1: t = sqrt(px * px + py * py) / half; break;                                   /* radial */
+      case 2: t = fmod(atan2(py, px) - a + 4 * 3.14159265358979, 2 * 3.14159265358979) / (2 * 3.14159265358979); break;   /* angle */
+      case 3: t = fabs(px * ca + py * sa) / len; break;                                    /* reflected */
+      case 4: t = (fabs(px) / (cx > 0 ? cx : 1) > fabs(py) / (cy > 0 ? cy : 1) ? fabs(px) / (cx > 0 ? cx : 1) : fabs(py) / (cy > 0 ? cy : 1)) * 100.0 / (f->scale > 0 ? f->scale : 100); break;   /* diamond */
+      default: t = (px * ca + py * sa) / (2 * len) + 0.5; break;                           /* linear */
+      }
+      if (f->reverse) t = 1 - t;
+      ti = (int)(t * 256);
+      if (ti < 0) ti = 0;
+      if (ti > 256) ti = 256;
+      for (k = 0; k < 3; k++) {
+        int c0 = (int)((f->c0 >> (16 - 8 * k)) & 255), c1 = (int)((f->c1 >> (16 - 8 * k)) & 255);
+        o[x * 4 + k] = (u8)(c0 + ((c1 - c0) * ti) / 256);
+      }
+      o[x * 4 + 3] = 255;
+    }
+  }
+}
+/* the opacity layer l has at pixel x (its opacity, fill, mask; Blend If against the source s and the backdrop b) */
+static int px_cover(Comp *c, const Layer *l, const u8 *mask, int base, i32 x, const u8 *s, const u8 *b)
+{
+  int op = base;
+  if (mask) {
+    int m = mask[(long)c->y * c->d->w + c->x0 + x];
+    m = 255 - mul255(255 - m, 255 - l->mask_fade);
+    op = mul255(op, m);
+  }
+  if (s && (l->blendif[0] || l->blendif[1])) {
+    int g = (s[0] * 77 + s[1] * 150 + s[2] * 29 + 128) >> 8;
+    if (g < l->blendif[0] || g > 255 - l->blendif[1]) return 0;
+  }
+  if (b && (l->blendif[2] || l->blendif[3]) && b[3]) {
+    int g = (b[0] * 77 + b[1] * 150 + b[2] * 29 + 128) >> 8;
+    if (g < l->blendif[2] || g > 255 - l->blendif[3]) return 0;
+  }
+  return op;
+}
+/* the source row of a pixel or fill layer (NULL for others) */
+static const u8 *src_row(Comp *c, const Layer *l, u8 *tmp)
+{
+  if (l->kind == LK_FILL) { fill_row(c, l, tmp); return tmp; }
+  if (!l->px) return NULL;
+  return l->px + ((long)c->y * c->d->w + c->x0) * 4;
+}
+static void adj_mix(Comp *c, Layer *l, u8 *acc, int keep_alpha_only);
+/* layer l (pixel or fill) blended onto acc; keep: the clipped case, acc's alpha kept */
+static void put_layer(Comp *c, Layer *l, u8 *acc, int keep)
+{
+  int base = mul255(l->opacity, 255 - l->fill_cut);
+  const u8 *mask, *s;
+  u8 *tmp;
+  i32 x;
+  if (!l->visible || (!base && !keep)) return;
+  if (l->kind == LK_ADJUST) { adj_mix(c, l, acc, keep); return; }
+  mask = layer_mask_used(c->d, l);
+  tmp = l->kind == LK_FILL ? row_get(c) : NULL;
+  if (l->kind == LK_FILL && !tmp) return;
+  s = src_row(c, l, tmp);
+  if (s) {
+    for (x = 0; x < c->n; x++, s += 4) {
+      u8 *p = acc + x * 4;
+      int op;
+      if (!s[3] || (keep && !p[3])) continue;
+      op = (mask || l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3]) ? px_cover(c, l, mask, base, x, s, p) : base;
+      if (!op) continue;
+      if (keep) { u8 a = p[3]; blend_pixel(p, s, op, l->blend); p[3] = a; }
+      else blend_pixel(p, s, op, l->blend);
+    }
+  }
+  if (tmp) c->used--;
+}
+/* an adjustment layer: acc adjusted, mixed back by the layer's opacity and mask, alpha untouched */
+static void adj_mix(Comp *c, Layer *l, u8 *acc, int keep)
+{
+  int base = mul255(l->opacity, 255 - l->fill_cut);
+  const u8 *mask = layer_mask_used(c->d, l);
+  u8 *t;
+  i32 x;
+  (void)keep;
+  if (!adjlayer_make || !base) return;
+  if (!l->adjprog_ok) {
+    if (l->adjprog && adjlayer_free) adjlayer_free(l->adjprog);
+    l->adjprog = adjlayer_make(&l->adj);
+    l->adjprog_ok = 1;
+  }
+  if (!l->adjprog || !(t = row_get(c))) return;
+  memcpy(t, acc, (size_t)c->n * 4);
+  adjlayer_row(l->adjprog, t, c->n);
+  for (x = 0; x < c->n; x++) {
+    u8 *p = acc + x * 4, *q = t + x * 4;
+    int op, bl[3], k;
+    if (!p[3]) continue;
+    op = (mask || l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3]) ? px_cover(c, l, mask, base, x, q, p) : base;
+    if (!op) continue;
+    blend_color(l->blend, p, q, bl);
+    for (k = 0; k < 3; k++) p[k] = (u8)(p[k] + ((bl[k] - p[k]) * op + (bl[k] >= p[k] ? 127 : -127)) / 255);
+  }
+  c->used--;
+}
+static void comp_range(Comp *c, int lo, int hi, int depth, u8 *acc);
+/* group g (members lo..g-1) onto acc */
+static void put_group(Comp *c, int lo, int g, u8 *acc)
+{
+  Layer *G = c->d->lay[g];
+  const u8 *mask;
+  u8 *t;
+  i32 x;
+  if (!G->visible || !G->opacity) return;
+  mask = layer_mask_used(c->d, G);
+  if (G->blend == BM_PASS && G->opacity == 255 && !mask) { comp_range(c, lo, g, G->depth + 1, acc); return; }
+  if (!(t = row_get(c))) { comp_range(c, lo, g, G->depth + 1, acc); return; }
+  if (G->blend == BM_PASS) {
+    /* the members straight onto a copy of what's below, then mixed in by the group's opacity and mask */
+    memcpy(t, acc, (size_t)c->n * 4);
+    comp_range(c, lo, g, G->depth + 1, t);
+    for (x = 0; x < c->n; x++) {
+      int op = mask ? px_cover(c, G, mask, G->opacity, x, NULL, NULL) : G->opacity, k;
+      u8 *p = acc + x * 4, *q = t + x * 4;
+      if (op == 255) memcpy(p, q, 4);
+      else if (op) for (k = 0; k < 4; k++) p[k] = (u8)(p[k] + ((q[k] - p[k]) * op + (q[k] >= p[k] ? 127 : -127)) / 255);
+    }
+  } else {
+    memset(t, 0, (size_t)c->n * 4);
+    comp_range(c, lo, g, G->depth + 1, t);
+    for (x = 0; x < c->n; x++) {
+      u8 *q = t + x * 4;
+      int op;
+      if (!q[3]) continue;
+      op = mask ? px_cover(c, G, mask, G->opacity, x, NULL, NULL) : G->opacity;
+      if (op) blend_pixel(acc + x * 4, q, op, G->blend);
+    }
+  }
+  c->used--;
+}
+static void comp_range(Comp *c, int lo, int hi, int depth, u8 *acc)
+{
+  Doc *d = c->d;
+  int i = lo;
+  while (i < hi) {
+    Layer *l = d->lay[i];
+    int j, k;
+    if (l->depth > depth) {
+      /* a group's members: up to its header */
+      for (j = i; j < hi && d->lay[j]->depth > depth; j++) continue;
+      if (j < hi && d->lay[j]->kind == LK_GROUP && d->lay[j]->depth == depth) { put_group(c, i, j, acc); i = j + 1; }
+      else { comp_range(c, i, j, depth + 1, acc); i = j; }
+      continue;
+    }
+    if (l->kind == LK_GROUP) { i++; continue; }              /* an empty group */
+    /* layers clipped to this one */
+    for (k = i + 1; k < hi && d->lay[k]->depth == depth && d->lay[k]->clip && d->lay[k]->kind != LK_GROUP; k++) continue;
+    if (k > i + 1 && l->kind != LK_ADJUST) {
+      u8 *t = row_get(c);
+      int m;
+      if (!t) { put_layer(c, l, acc, 0); i++; continue; }
+      if (l->visible) {
+        /* the base at full opacity (its fill, mask and Blend If kept), the clipped ones on it, then the
+           result by the base's opacity and mode */
+        u8 op = l->opacity, bl = l->blend;
+        memset(t, 0, (size_t)c->n * 4);
+        l->opacity = 255; l->blend = BM_NORMAL;
+        put_layer(c, l, t, 0);
+        l->opacity = op; l->blend = bl;
+        for (m = i + 1; m < k; m++) put_layer(c, d->lay[m], t, 1);
+        if (op) {
+          i32 x;
+          for (x = 0; x < c->n; x++) if (t[x * 4 + 3]) blend_pixel(acc + x * 4, t + x * 4, op, bl);
+        }
+      }
+      c->used--;
+      i = k;
+      continue;
+    }
+    put_layer(c, l, acc, 0);
+    i++;
+  }
+}
+/* is the stack plain (no groups, masks, clipping, adjustment or fill layers, fill or Blend If)? */
+static int doc_plain(const Doc *d)
+{
+  int i;
+  for (i = 0; i < d->nlay; i++) {
+    const Layer *l = d->lay[i];
+    if (l->kind != LK_PIXEL || l->depth || l->clip || (l->mask && l->mask_on) || l->fill_cut ||
+        l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3] || !l->px) return 0;
+  }
+  return 1;
+}
+static int doc_maxdepth(const Doc *d)
+{
+  int i, m = 0;
+  for (i = 0; i < d->nlay; i++) if (d->lay[i]->depth > m) m = d->lay[i]->depth;
+  return m;
+}
+/* layers lo..hi-1 (and their nesting from depth) composited in rect r onto out (stride a row);
+   out is not cleared first when onto is set */
+void doc_composite_range(Doc *d, int lo, int hi, int depth, Box r, u8 *out, long stride, int onto)
+{
+  Comp c;
+  i32 y;
+  r = box_clip(r, doc_box(d));
+  if (box_empty(r)) return;
+  memset(&c, 0, sizeof c);
+  c.d = d; c.x0 = r.x0; c.n = r.x1 - r.x0;
+  c.nrows = 3 * (doc_maxdepth(d) + 2) + 2;
+  if (!(c.pool = (u8 *)malloc((size_t)c.nrows * c.n * 4))) {
+    /* no room for the working rows: the pixel layers alone, plainly */
+    for (y = r.y0; y < r.y1; y++) {
+      u8 *o = out + (long)(y - r.y0) * stride;
+      int i;
+      i32 x;
+      if (!onto) memset(o, 0, (size_t)c.n * 4);
+      for (i = lo; i < hi; i++) {
+        const Layer *l = d->lay[i];
+        if (l->px && l->visible && l->opacity)
+          for (x = 0; x < c.n; x++) { const u8 *s = l->px + ((long)y * d->w + r.x0 + x) * 4; if (s[3]) blend_pixel(o + x * 4, s, l->opacity, l->blend); }
+      }
+    }
+    return;
+  }
+  for (y = r.y0; y < r.y1; y++) {
+    u8 *o = out + (long)(y - r.y0) * stride;
+    if (!onto) memset(o, 0, (size_t)c.n * 4);
+    c.y = y; c.used = 0;
+    comp_range(&c, lo, hi, depth, o);
+  }
+  free(c.pool);
+}
 void doc_composite(Doc *d, Box r, u8 *out, long stride)
 {
   i32 y, x;
   int i;
   r = box_clip(r, doc_box(d));
+  if (!doc_plain(d)) { doc_composite_range(d, 0, d->nlay, 0, r, out, stride, 0); return; }
   for (y = r.y0; y < r.y1; y++) {
     u8 *o = out + (long)(y - r.y0) * stride;
     memset(o, 0, (size_t)(r.x1 - r.x0) * 4);
@@ -226,16 +550,18 @@ void doc_composite(Doc *d, Box r, u8 *out, long stride)
 }
 
 /* ------------------------------------------------------------------ undo */
+long undo_budget = 40L * 1024 * 1024;
 #define TS 64
-typedef struct { int layer; i32 tx, ty; u8 *px; } Tile;      /* px: TS*TS*4, or the edge part's size */
-typedef struct { char name[64]; u8 opacity, blend, visible, locked, alpha_lock; } Props;
+typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; } Tile;   /* plane 0: pixels (TS*TS*4, or the edge
+                                                                       part's size); 1: the mask (1 byte a pixel) */
+typedef Layer Props;                  /* a layer's settings: everything but its buffers (see props_of) */
 struct UndoStep {
   char name[64];
   Tile *tiles; int ntiles, captiles;
   int has_sel; u8 *sel; Box selbox;
   /* a copy of the whole document (doc_note_all) */
   int whole; i32 w, h; Layer *lay[MAXLAYERS]; int nlay, active;
-  Props props[MAXLAYERS]; int nprops, pactive;
+  Props *props; int nprops, pactive;   /* the layers' settings before the step (nprops of them) */
   long bytes;
   UndoStep *next;
   int open;
@@ -248,20 +574,35 @@ static void step_free(UndoStep *u)
   free(u->tiles);
   free(u->sel);
   if (u->whole) for (i = 0; i < u->nlay; i++) layer_free(u->lay[i]);
+  free(u->props);
   free(u);
 }
 static void list_free(UndoStep *u) { while (u) { UndoStep *n = u->next; step_free(u); u = n; } }
 void doc_forget_undo(Doc *d) { list_free(d->undo); list_free(d->redo); d->undo = d->redo = NULL; d->undo_depth = 0; d->undo_bytes = 0; }
+/* a layer's settings without its buffers, caches or panel state (what undo keeps and compares) */
+static void props_of(const Layer *l, Props *p)
+{
+  *p = *l;
+  p->px = p->mask = p->idx = p->maskfx = NULL; p->adjprog = NULL;
+  p->maskfx_ok = p->adjprog_ok = 0; p->picked = 0; p->edit_mask = 0;
+}
+/* settings p put back on layer l (its buffers, caches and panel state kept) */
+static void props_set(Layer *l, const Props *p)
+{
+  Layer keep = *l;
+  *l = *p;
+  l->px = keep.px; l->mask = keep.mask; l->idx = keep.idx; l->maskfx = keep.maskfx; l->adjprog = keep.adjprog;
+  l->picked = keep.picked; l->edit_mask = keep.edit_mask;
+  l->maskfx_ok = keep.maskfx_ok && p->mask_feather == keep.mask_feather;
+  l->adjprog_ok = 0;
+}
 static void save_props(Doc *d, UndoStep *u)
 {
   int i;
-  u->nprops = d->nlay; u->pactive = d->active;
-  for (i = 0; i < d->nlay; i++) {
-    Layer *l = d->lay[i];
-    memcpy(u->props[i].name, l->name, sizeof l->name);
-    u->props[i].opacity = l->opacity; u->props[i].blend = l->blend; u->props[i].visible = l->visible;
-    u->props[i].locked = l->locked; u->props[i].alpha_lock = l->alpha_lock;
-  }
+  u->nprops = 0; u->pactive = d->active;
+  if (!(u->props = (Props *)malloc((size_t)(d->nlay ? d->nlay : 1) * sizeof(Props)))) return;
+  u->nprops = d->nlay;
+  for (i = 0; i < d->nlay; i++) props_of(d->lay[i], &u->props[i]);
 }
 void doc_begin(Doc *d, const char *action)
 {
@@ -274,11 +615,15 @@ void doc_begin(Doc *d, const char *action)
   u->next = d->undo;
   d->undo = u;
 }
-void doc_note_layer(Doc *d, int li, Box r)
+static void note_plane(Doc *d, int li, Box r, int plane)
 {
   UndoStep *u = open_step(d);
   i32 tx, ty;
+  int bpp = plane ? 1 : 4;
+  u8 *buf;
   if (!u || u->whole || li < 0 || li >= d->nlay) return;
+  buf = plane ? d->lay[li]->mask : d->lay[li]->px;
+  if (!buf) return;
   r = box_clip(r, doc_box(d));
   if (box_empty(r)) return;
   for (ty = r.y0 / TS; ty <= (r.y1 - 1) / TS; ty++)
@@ -286,7 +631,7 @@ void doc_note_layer(Doc *d, int li, Box r)
       int k, row;
       i32 x0 = tx * TS, y0 = ty * TS, tw = d->w - x0 < TS ? d->w - x0 : TS, th = d->h - y0 < TS ? d->h - y0 : TS;
       Tile *t;
-      for (k = 0; k < u->ntiles; k++) if (u->tiles[k].layer == li && u->tiles[k].tx == tx && u->tiles[k].ty == ty) break;
+      for (k = 0; k < u->ntiles; k++) if (u->tiles[k].layer == li && u->tiles[k].tx == tx && u->tiles[k].ty == ty && u->tiles[k].plane == plane) break;
       if (k < u->ntiles) continue;                         /* (saved already in this step) */
       if (u->ntiles == u->captiles) {
         int nc = u->captiles ? u->captiles * 2 : 32;
@@ -295,13 +640,15 @@ void doc_note_layer(Doc *d, int li, Box r)
         u->tiles = nt; u->captiles = nc;
       }
       t = &u->tiles[u->ntiles];
-      if (!(t->px = (u8 *)malloc((size_t)tw * th * 4))) return;
-      t->layer = li; t->tx = tx; t->ty = ty;
-      for (row = 0; row < th; row++) memcpy(t->px + (long)row * tw * 4, d->lay[li]->px + ((long)(y0 + row) * d->w + x0) * 4, (size_t)tw * 4);
+      if (!(t->px = (u8 *)malloc((size_t)tw * th * bpp))) return;
+      t->layer = li; t->tx = tx; t->ty = ty; t->plane = (u8)plane;
+      for (row = 0; row < th; row++) memcpy(t->px + (long)row * tw * bpp, buf + ((long)(y0 + row) * d->w + x0) * bpp, (size_t)tw * bpp);
       u->ntiles++;
-      u->bytes += (long)tw * th * 4;
+      u->bytes += (long)tw * th * bpp;
     }
 }
+void doc_note_layer(Doc *d, int li, Box r) { note_plane(d, li, r, 0); }
+void doc_note_mask(Doc *d, int li, Box r) { note_plane(d, li, r, 1); }
 void doc_note_sel(Doc *d)
 {
   UndoStep *u = open_step(d);
@@ -335,9 +682,11 @@ void doc_end(Doc *d)
   /* nothing noted and nothing about the layers changed: no step */
   if (!u->whole && !u->ntiles && !u->has_sel) {
     int same = u->nprops == d->nlay && u->pactive == d->active, i;
-    for (i = 0; same && i < d->nlay; i++)
-      same = !strcmp(u->props[i].name, d->lay[i]->name) && u->props[i].opacity == d->lay[i]->opacity && u->props[i].blend == d->lay[i]->blend &&
-             u->props[i].visible == d->lay[i]->visible && u->props[i].locked == d->lay[i]->locked && u->props[i].alpha_lock == d->lay[i]->alpha_lock;
+    for (i = 0; same && i < d->nlay; i++) {
+      Props now;
+      props_of(d->lay[i], &now);
+      same = !memcmp(&now, &u->props[i], sizeof now);
+    }
     if (same) { d->undo = u->next; step_free(u); return; }
   }
   list_free(d->redo); d->redo = NULL;
@@ -347,7 +696,7 @@ void doc_end(Doc *d)
   /* the oldest steps forgotten past the memory budget (the newest is always kept) */
   for (total = 0, k = 0, p = d->undo; p; p = p->next, k++) {
     total += p->bytes;
-    if (p->next && (total + p->next->bytes > UNDO_BUDGET || k >= 99)) { list_free(p->next); p->next = NULL; d->undo_depth = k + 1; break; }
+    if (p->next && (total + p->next->bytes > undo_budget || k >= 99)) { list_free(p->next); p->next = NULL; d->undo_depth = k + 1; break; }
   }
   d->undo_bytes = total;
 }
@@ -366,25 +715,26 @@ static void swap_step(Doc *d, UndoStep *u)
     for (i = 0; i < u->ntiles; i++) {
       Tile *t = &u->tiles[i];
       i32 x0 = t->tx * TS, y0 = t->ty * TS, tw = d->w - x0 < TS ? d->w - x0 : TS, th = d->h - y0 < TS ? d->h - y0 : TS, row;
-      u8 tmp[TS * 4];
+      int bpp = t->plane ? 1 : 4;
+      u8 tmp[TS * 4], *buf;
       if (t->layer >= d->nlay) continue;
+      buf = t->plane ? d->lay[t->layer]->mask : d->lay[t->layer]->px;
+      if (!buf) continue;
+      if (t->plane) d->lay[t->layer]->maskfx_ok = 0;
       for (row = 0; row < th; row++) {
-        u8 *a = t->px + (long)row * tw * 4, *b = d->lay[t->layer]->px + ((long)(y0 + row) * d->w + x0) * 4;
-        memcpy(tmp, a, (size_t)tw * 4); memcpy(a, b, (size_t)tw * 4); memcpy(b, tmp, (size_t)tw * 4);
+        u8 *a = t->px + (long)row * tw * bpp, *b = buf + ((long)(y0 + row) * d->w + x0) * bpp;
+        memcpy(tmp, a, (size_t)tw * bpp); memcpy(a, b, (size_t)tw * bpp); memcpy(b, tmp, (size_t)tw * bpp);
       }
     }
     /* the layers' settings */
     if (u->nprops == d->nlay) {
-      Props cur[MAXLAYERS];
+      Props cur;
       int ca = d->active;
       for (i = 0; i < d->nlay; i++) {
-        Layer *l = d->lay[i];
-        memcpy(cur[i].name, l->name, sizeof l->name); cur[i].opacity = l->opacity; cur[i].blend = l->blend; cur[i].visible = l->visible;
-        cur[i].locked = l->locked; cur[i].alpha_lock = l->alpha_lock;
-        memcpy(l->name, u->props[i].name, sizeof l->name); l->opacity = u->props[i].opacity; l->blend = u->props[i].blend;
-        l->visible = u->props[i].visible; l->locked = u->props[i].locked; l->alpha_lock = u->props[i].alpha_lock;
+        props_of(d->lay[i], &cur);
+        props_set(d->lay[i], &u->props[i]);
+        u->props[i] = cur;
       }
-      memcpy(u->props, cur, sizeof(Props) * (size_t)d->nlay);
       d->active = u->pactive < d->nlay ? u->pactive : d->nlay - 1; u->pactive = ca;
     }
   }
@@ -446,10 +796,20 @@ int doc_redo_history(Doc *d, const char **names, int max)
 }
 
 /* ------------------------------------------------------------------ the stack */
+/* the lowest index of layer i's block (a group's first member; i itself for any other layer) */
+static int blk_start(const Doc *d, int i)
+{
+  int j;
+  if (i < 0 || i >= d->nlay || d->lay[i]->kind != LK_GROUP) return i;
+  for (j = i; j > 0 && d->lay[j - 1]->depth > d->lay[i]->depth; j--) continue;
+  return j;
+}
 int doc_add_layer(Doc *d, Layer *l, int at)
 {
   if (!l || d->nlay >= MAXLAYERS) { layer_free(l); return 0; }
   if (at < 0 || at > d->nlay) at = d->nlay;
+  /* a new layer joins the group of the layer just below where it goes */
+  if (!l->depth) l->depth = at > 0 ? d->lay[at - 1]->depth : d->nlay ? d->lay[0]->depth : 0;
   doc_begin(d, "New Layer");
   doc_note_all(d);
   memmove(&d->lay[at + 1], &d->lay[at], (size_t)(d->nlay - at) * sizeof(Layer *));
@@ -460,13 +820,17 @@ int doc_add_layer(Doc *d, Layer *l, int at)
 }
 int doc_delete_layer(Doc *d, int i)
 {
-  if (i < 0 || i >= d->nlay || d->nlay < 2) return 0;
+  int s, n, k;
+  if (i < 0 || i >= d->nlay) return 0;
+  s = blk_start(d, i); n = i - s + 1;                    /* a group goes with its members */
+  if (n >= d->nlay) return 0;
   doc_begin(d, "Delete Layer");
   doc_note_all(d);
-  layer_free(d->lay[i]);
-  memmove(&d->lay[i], &d->lay[i + 1], (size_t)(d->nlay - i - 1) * sizeof(Layer *));
-  d->nlay--;
-  if (d->active >= d->nlay) d->active = d->nlay - 1;
+  for (k = s; k <= i; k++) layer_free(d->lay[k]);
+  memmove(&d->lay[s], &d->lay[i + 1], (size_t)(d->nlay - i - 1) * sizeof(Layer *));
+  d->nlay -= n;
+  d->active = s < d->nlay ? s : d->nlay - 1;
+  if (d->active > 0 && s > 0 && s >= d->nlay) d->active = d->nlay - 1;
   doc_end(d);
   return 1;
 }
@@ -486,54 +850,67 @@ int doc_move_layer(Doc *d, int from, int to)
 }
 int doc_duplicate_layer(Doc *d, int i)
 {
-  Layer *c;
-  if (i < 0 || i >= d->nlay || d->nlay >= MAXLAYERS || !(c = layer_copy(d->lay[i], d->w, d->h))) return 0;
+  Layer *c[MAXLAYERS];
+  int s, n, k;
+  if (i < 0 || i >= d->nlay) return 0;
+  s = blk_start(d, i); n = i - s + 1;
+  if (d->nlay + n > MAXLAYERS) return 0;
+  for (k = 0; k < n; k++)
+    if (!(c[k] = layer_copy(d->lay[s + k], d->w, d->h))) { while (k--) layer_free(c[k]); return 0; }
   {
     char nm[64];
     size_t l = strlen(d->lay[i]->name);
     if (l > 54) l = 54;
     memcpy(nm, d->lay[i]->name, l); strcpy(nm + l, " copy");
-    strcpy(c->name, nm);
+    strcpy(c[n - 1]->name, nm);
   }
   doc_begin(d, "Duplicate Layer");
-  doc_add_layer(d, c, i + 1);
+  doc_note_all(d);
+  memmove(&d->lay[i + 1 + n], &d->lay[i + 1], (size_t)(d->nlay - i - 1) * sizeof(Layer *));
+  memcpy(&d->lay[i + 1], c, (size_t)n * sizeof(Layer *));
+  d->nlay += n;
+  d->active = i + n;
   doc_end(d);
   return 1;
 }
-/* layer src blended onto layer dst (both canvas-size) */
-static void merge_into(Doc *d, Layer *dst, const Layer *src)
+/* layers s..e (whole blocks at one level) replaced by one pixel layer of their composite */
+static int merge_blocks(Doc *d, int s, int e, const char *name)
 {
-  long i, n = (long)d->w * d->h;
-  if (!src->visible) return;
-  for (i = 0; i < n; i++) if (src->px[i * 4 + 3]) blend_pixel(dst->px + i * 4, src->px + i * 4, src->opacity, src->blend);
+  Layer *m;
+  int depth = d->lay[e]->depth, k;
+  if (!(m = layer_new(d, d->lay[s]->kind == LK_PIXEL ? d->lay[s]->name : d->lay[e]->name))) return 0;
+  doc_composite_range(d, s, e + 1, depth, doc_box(d), m->px, (long)d->w * 4, 0);
+  doc_begin(d, name);
+  doc_note_all(d);
+  for (k = s; k <= e; k++) layer_free(d->lay[k]);
+  memmove(&d->lay[s + 1], &d->lay[e + 1], (size_t)(d->nlay - e - 1) * sizeof(Layer *));
+  d->nlay -= e - s;
+  d->lay[s] = m; m->depth = (u8)depth;
+  d->active = s;
+  doc_end(d);
+  return 1;
 }
 int doc_merge_down(Doc *d, int i)
 {
-  Layer *below;
-  if (i < 1 || i >= d->nlay) return 0;
-  doc_begin(d, "Merge Down");
-  doc_note_all(d);
-  below = d->lay[i - 1];
-  if (below->opacity != 255 || !below->visible) {
-    /* the layer below's opacity goes into its pixels first, so the merge looks as before */
-    long k, n = (long)d->w * d->h;
-    if (!below->visible) memset(below->px, 0, (size_t)n * 4);
-    else for (k = 0; k < n; k++) below->px[k * 4 + 3] = (u8)mul255(below->px[k * 4 + 3], below->opacity);
-    below->opacity = 255; below->visible = 1;
-  }
-  merge_into(d, below, d->lay[i]);
-  layer_free(d->lay[i]);
-  memmove(&d->lay[i], &d->lay[i + 1], (size_t)(d->nlay - i - 1) * sizeof(Layer *));
-  d->nlay--;
-  d->active = i - 1;
-  doc_end(d);
-  return 1;
+  int below;
+  if (i < 0 || i >= d->nlay) return 0;
+  if (d->lay[i]->kind == LK_GROUP) return merge_blocks(d, blk_start(d, i), i, "Merge Group");
+  below = i - 1;
+  if (below < 0 || d->lay[below]->depth < d->lay[i]->depth) return 0;    /* the bottom of its group */
+  return merge_blocks(d, blk_start(d, below), i, "Merge Down");
 }
 int doc_merge_visible(Doc *d)
 {
   Layer *m;
-  int i, k, first = -1;
-  for (i = 0; i < d->nlay; i++) if (d->lay[i]->visible) { if (first < 0) first = i; }
+  int i, k, first = -1, shown[MAXLAYERS];
+  /* what shows: visible, inside groups that are all visible (each enclosing header found going up) */
+  for (i = 0; i < d->nlay; i++) {
+    int j, cur = d->lay[i]->depth, ok = d->lay[i]->visible;
+    for (j = i + 1; ok && cur > 0 && j < d->nlay; j++)
+      if (d->lay[j]->depth < cur) { cur = d->lay[j]->depth; if (!d->lay[j]->visible) ok = 0; }
+    shown[i] = ok;
+  }
+  for (i = 0; i < d->nlay; i++) if (shown[i] && d->lay[i]->kind != LK_GROUP) { first = i; break; }
   if (first < 0) return 0;
   if (!(m = layer_new(d, d->lay[first]->name))) return 0;
   doc_composite(d, doc_box(d), m->px, (long)d->w * 4);
@@ -541,8 +918,8 @@ int doc_merge_visible(Doc *d)
   doc_note_all(d);
   for (i = k = 0; i < d->nlay; i++) {
     if (i == first) { layer_free(d->lay[i]); d->lay[k++] = m; }
-    else if (d->lay[i]->visible) layer_free(d->lay[i]);
-    else d->lay[k++] = d->lay[i];
+    else if (shown[i] || d->lay[i]->kind == LK_GROUP) layer_free(d->lay[i]);
+    else { d->lay[i]->depth = 0; d->lay[k++] = d->lay[i]; }
   }
   d->nlay = k;
   for (i = 0; i < d->nlay; i++) if (d->lay[i] == m) d->active = i;
@@ -578,7 +955,7 @@ void doc_set_layer_props(Doc *d, int i, const char *name, int opacity, int blend
   doc_begin(d, name ? "Rename Layer" : visible >= 0 ? "Layer Visibility" : opacity >= 0 ? "Layer Opacity" : "Blend Mode");
   if (name) { strncpy(l->name, name, sizeof l->name - 1); l->name[sizeof l->name - 1] = 0; }
   if (opacity >= 0) l->opacity = (u8)(opacity > 255 ? 255 : opacity);
-  if (blend >= 0 && blend < BM_N) l->blend = (u8)blend;
+  if (blend >= 0 && (blend < BM_N || (blend == BM_PASS && l->kind == LK_GROUP))) l->blend = (u8)blend;
   if (visible >= 0) l->visible = (u8)(visible != 0);
   doc_end(d);
 }

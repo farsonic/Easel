@@ -47,7 +47,7 @@ static Layer *paintable(Doc *d)
   Layer *l;
   if (d->active < 0 || d->active >= d->nlay) return NULL;
   l = d->lay[d->active];
-  return l->locked || !l->visible ? NULL : l;
+  return !l->px || l->kind != LK_PIXEL || l->locked || l->lock_all || !l->visible ? NULL : l;
 }
 /* the area tools work in: the selection's box, or the canvas */
 static Box work_box(Doc *d) { return d->sel ? box_clip(d->selbox, doc_box(d)) : doc_box(d); }
@@ -286,6 +286,7 @@ Box clear_selection(Doc *d)
    the active layer or the composite */
 static u8 *similar(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers)
 {
+  if (!d->lay[d->active]->px) all_layers = 1;            /* a group, adjustment or fill layer: what shows */
   u8 *img = all_layers ? (u8 *)malloc((size_t)d->w * d->h * 4) : NULL, *m, seed[4];
   const u8 *src;
   long n = (long)d->w * d->h, k;
@@ -870,10 +871,23 @@ Box move_layer(Doc *d, i32 dx, i32 dy)
   Layer *l = paintable(d);
   u8 *f;
   i32 x, y;
-  if (!l || (!dx && !dy)) return box_make(0, 0, 0, 0);
+  if (!l || l->lock_pos || (!dx && !dy)) return box_make(0, 0, 0, 0);
   doc_begin(d, "Move");
   doc_note_layer(d, d->active, doc_box(d));
   if (d->sel) doc_note_sel(d);
+  /* a linked mask moves with the layer (0.3) */
+  if (l->mask && l->mask_linked && !d->sel) {
+    u8 *m = (u8 *)malloc((size_t)d->w * d->h);
+    doc_note_mask(d, d->active, doc_box(d));
+    if (m) {
+      memset(m, 255, (size_t)d->w * d->h);
+      for (y = 0; y < d->h; y++) for (x = 0; x < d->w; x++) {
+        i32 sx = x - dx, sy = y - dy;
+        if (sx >= 0 && sy >= 0 && sx < d->w && sy < d->h) m[(long)y * d->w + x] = l->mask[(long)sy * d->w + sx];
+      }
+      memcpy(l->mask, m, (size_t)d->w * d->h); free(m); l->maskfx_ok = 0;
+    }
+  }
   if (!(f = lift(d, l))) { doc_end(d); return box_make(0, 0, 0, 0); }
   for (y = 0; y < d->h; y++)
     for (x = 0; x < d->w; x++) {
@@ -1125,6 +1139,7 @@ Clip *clip_copy(Doc *d, int merged)
   u8 *src = NULL;
   i32 x, y;
   if (d->sel) { if (!sel_bounds(d, &b)) return NULL; } else b = doc_box(d);
+  if (!d->lay[d->active]->px) merged = 1;
   if (merged) {
     if (!(src = (u8 *)malloc((size_t)d->w * d->h * 4))) return NULL;
     doc_composite(d, doc_box(d), src, (long)d->w * 4);
@@ -1174,6 +1189,7 @@ u32 doc_pick(Doc *d, i32 x, i32 y, int all_layers, int radius)
   long r = 0, g = 0, b = 0, n = 0;
   i32 i, j;
   u8 px[4];
+  if (!d->lay[d->active]->px) all_layers = 1;
   for (j = y - radius; j <= y + radius; j++)
     for (i = x - radius; i <= x + radius; i++) {
       if (i < 0 || j < 0 || i >= d->w || j >= d->h) continue;

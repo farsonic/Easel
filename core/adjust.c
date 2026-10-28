@@ -24,7 +24,7 @@ static int op_begin(Op *o, Doc *d, const char *name, int copy)
   o->d = d; o->orig = NULL;
   if (d->active < 0 || d->active >= d->nlay) return 0;
   l = d->lay[d->active];
-  if (l->locked || !l->visible) return 0;
+  if (!l->px || l->locked || l->lock_all || !l->visible) return 0;
   o->l = l;
   o->b = d->sel ? box_clip(d->selbox, doc_box(d)) : doc_box(d);
   if (box_empty(o->b)) return 0;
@@ -922,3 +922,274 @@ int flt_vignette(Doc *d, int amount)
     }
   return op_end(&o);
 }
+
+/* ------------------------------------------------------------------ adjustment programs (0.3)
+   Any adjustment, as AdjParams, compiled once into something quick to apply to a row of pixels:
+   three lookup tables when it treats each channel alone, or else a 33 x 33 x 33 colour cube
+   looked up with trilinear interpolation (the exact maths runs only at the cube's corners). The
+   adjustment layers apply these as they composite; Image > Adjustments uses them too. */
+struct AdjProg {
+  int kind;
+  int haslut;                       /* lut is used (else the cube) */
+  u8 lut[768];
+  u8 *cube;                         /* 33^3 * 3 */
+  AdjParams p;
+};
+
+/* channel mixer: rows R, G, B each (r, g, b, constant) in per cent; v[12] monochrome (row R used) */
+static void fn_mixer(u8 *px, const double *a)
+{
+  int c;
+  double in[3], o[3];
+  for (c = 0; c < 3; c++) in[c] = px[c];
+  for (c = 0; c < 3; c++) {
+    const double *r = a + (a[12] ? 0 : 4 * c);
+    o[c] = (in[0] * r[0] + in[1] * r[1] + in[2] * r[2]) / 100.0 + r[3] * 2.55;
+  }
+  for (c = 0; c < 3; c++) px[c] = (u8)clamp255(o[c]);
+}
+/* gradient map: the luminosity looked up in stops (position 0-255, 0xRRGGBB) */
+static void gradmap_lut(u8 *lut, const int *pts, int n, int reverse)
+{
+  int i, k;
+  for (i = 0; i < 256; i++) {
+    int t = reverse ? 255 - i : i;
+    u32 c0, c1;
+    int p0, p1;
+    if (n <= 0) { lut[i * 3] = lut[i * 3 + 1] = lut[i * 3 + 2] = (u8)t; continue; }
+    for (k = 0; k < n - 1 && pts[2 * (k + 1)] < t; k++) continue;
+    p0 = pts[2 * k]; c0 = (u32)pts[2 * k + 1];
+    if (k + 1 < n && t > p0) { p1 = pts[2 * k + 2]; c1 = (u32)pts[2 * k + 3]; }
+    else { p1 = p0; c1 = c0; }
+    {
+      int c;
+      for (c = 0; c < 3; c++) {
+        int a = (int)((c0 >> (16 - 8 * c)) & 255), b = (int)((c1 >> (16 - 8 * c)) & 255);
+        lut[i * 3 + c] = (u8)(p1 > p0 ? a + (b - a) * (t - p0) / (p1 - p0) : a);
+      }
+    }
+  }
+}
+/* selective colour: for each of reds, yellows, greens, cyans, blues, magentas, whites, neutrals and
+   blacks, cyan/magenta/yellow/black moved -100..100 (relative or absolute), as Photoshop does */
+static void fn_selective(u8 *px, const double *a)
+{
+  double r = px[0] / 255.0, g = px[1] / 255.0, b = px[2] / 255.0;
+  double mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+  double w[9], ch[3], kk;
+  int i, c;
+  /* each pixel's share of each colour range */
+  double reds = (r == mx) ? mx - (g > b ? g : b) : 0, greens = (g == mx) ? mx - (r > b ? r : b) : 0, blues = (b == mx) ? mx - (r > g ? r : g) : 0;
+  double cyans = (r == mn) ? (g < b ? g : b) - mn : 0, magentas = (g == mn) ? (r < b ? r : b) - mn : 0, yellows = (b == mn) ? (r < g ? r : g) - mn : 0;
+  w[0] = reds; w[1] = yellows; w[2] = greens; w[3] = cyans; w[4] = blues; w[5] = magentas;
+  w[6] = mn > 0.5 ? (mn - 0.5) * 2 : 0;
+  w[7] = 1 - fabs(mx - 0.5) - fabs(mn - 0.5); if (w[7] < 0) w[7] = 0;
+  w[8] = mx < 0.5 ? (0.5 - mx) * 2 : 0;
+  ch[0] = 1 - r; ch[1] = 1 - g; ch[2] = 1 - b;              /* as CMY */
+  kk = 0;
+  for (i = 0; i < 9; i++) {
+    if (w[i] <= 0) continue;
+    for (c = 0; c < 3; c++) {
+      double adj = a[i * 4 + c] / 100.0;
+      ch[c] += a[36] ? adj * w[i] : adj * w[i] * (adj < 0 ? ch[c] : 1 - ch[c]);
+    }
+    kk += a[i * 4 + 3] / 100.0 * w[i];
+  }
+  for (c = 0; c < 3; c++) {
+    double v = ch[c] + kk * (1 - ch[c]);
+    px[c] = (u8)clamp255((1 - (v < 0 ? 0 : v > 1 ? 1 : v)) * 255);
+  }
+}
+
+AdjProg *adj_prog_make(const AdjParams *p)
+{
+  AdjProg *g = (AdjProg *)calloc(1, sizeof *g);
+  int i, c;
+  PixFn fn = NULL;
+  double a[40];
+  if (!g) return NULL;
+  g->kind = p->kind; g->p = *p;
+  memset(a, 0, sizeof a);
+  for (i = 0; i < 768; i++) g->lut[i] = (u8)(i & 255);
+  g->haslut = 1;
+  switch (p->kind) {
+  case AK_BRIGHTNESS: {
+    int br = p->v[0], ct = p->v[1];
+    double cc = ct >= 0 ? 1 + ct / 50.0 * (ct > 0 ? 1.5 : 1) : 1 + ct / 100.0;
+    if (ct >= 100) cc = 255;
+    for (i = 0; i < 256; i++) {
+      double v = br >= 0 ? 255 * pow(i / 255.0, 1 / (1 + br / 100.0)) : 255 * pow(i / 255.0, 1 - br / 100.0);
+      v = (v - 127.5) * cc + 127.5;
+      g->lut[i] = g->lut[256 + i] = g->lut[512 + i] = (u8)clamp255(v);
+    }
+    break; }
+  case AK_LEVELS: {
+    u8 t[256];
+    levels_lut(t, p->v[0], p->v[1] ? p->v[1] : 255, p->v[2] ? p->v[2] / 100.0 : 1, p->v[3], p->v[4] ? p->v[4] : 255);
+    for (c = 0; c < 3; c++) {
+      u8 u[256];
+      if (p->npts >= 15) {
+        const int *q = p->pts + c * 5;
+        levels_lut(u, q[0], q[1] ? q[1] : 255, q[2] ? q[2] / 100.0 : 1, q[3], q[4] ? q[4] : 255);
+        for (i = 0; i < 256; i++) g->lut[256 * c + i] = t[u[i]];
+      } else memcpy(g->lut + 256 * c, t, 256);
+    }
+    break; }
+  case AK_CURVES: {
+    u8 t[256];
+    curve_lut(t, p->pts, p->npts);
+    for (c = 0; c < 3; c++) if (p->v[0] == 0 || p->v[0] == c + 1) memcpy(g->lut + 256 * c, t, 256);
+    break; }
+  case AK_EXPOSURE: {
+    double ex = p->v[0] / 100.0, off = p->v[1] / 1000.0, gm = p->v[2] ? p->v[2] / 100.0 : 1;
+    for (i = 0; i < 256; i++) {
+      double v = pow(i / 255.0, 2.2) * pow(2, ex) + off;
+      if (v < 0) v = 0;
+      v = pow(v, 1 / 2.2);
+      v = pow(v > 1 ? 1 : v, 1 / gm);
+      g->lut[i] = g->lut[256 + i] = g->lut[512 + i] = (u8)clamp255(v * 255);
+    }
+    break; }
+  case AK_INVERT: for (i = 0; i < 768; i++) g->lut[i] = (u8)(255 - (i & 255)); break;
+  case AK_POSTERIZE: {
+    int lv = p->v[0] < 2 ? 2 : p->v[0] > 255 ? 255 : p->v[0];
+    for (i = 0; i < 256; i++) g->lut[i] = g->lut[256 + i] = g->lut[512 + i] = (u8)(((i * lv) / 256) * 255 / (lv - 1));
+    break; }
+  case AK_HUESAT: fn = fn_hsl; a[0] = p->v[0]; a[1] = p->v[1]; a[2] = p->v[2]; a[3] = p->v[3]; break;
+  case AK_COLORBALANCE: fn = fn_balance; for (i = 0; i < 10; i++) a[i] = p->v[i]; break;
+  case AK_VIBRANCE: fn = fn_vibrance; a[0] = p->v[0]; a[1] = p->v[1]; break;
+  case AK_BLACKWHITE: fn = fn_bw; a[0] = p->v[0]; a[1] = p->v[1]; a[2] = p->v[2]; break;
+  case AK_PHOTOFILTER:
+    fn = fn_photo; a[0] = ((u32)p->v[0] >> 16) & 255; a[1] = ((u32)p->v[0] >> 8) & 255; a[2] = (u32)p->v[0] & 255;
+    a[3] = p->v[1] / 100.0; a[4] = p->v[2]; break;
+  case AK_CHANNELMIXER: fn = fn_mixer; for (i = 0; i < 13; i++) a[i] = p->v[i]; break;
+  case AK_THRESHOLD: fn = fn_threshold; a[0] = p->v[0]; break;
+  case AK_SELECTIVECOLOR: fn = fn_selective; for (i = 0; i < 36 && i < 2 * 32; i++) a[i] = p->pts[i]; a[36] = p->v[0]; break;
+  case AK_GRADIENTMAP: {
+    u8 t[768];
+    g->haslut = 0;
+    gradmap_lut(t, p->pts, p->npts, p->v[0]);
+    /* luminosity to colour: a cube made straight from the table */
+    if (!(g->cube = (u8 *)malloc(33 * 33 * 33 * 3))) { free(g); return NULL; }
+    {
+      int r, gg, b;
+      for (r = 0; r < 33; r++) for (gg = 0; gg < 33; gg++) for (b = 0; b < 33; b++) {
+        u8 q[3];
+        int l;
+        q[0] = (u8)(r * 255 / 32); q[1] = (u8)(gg * 255 / 32); q[2] = (u8)(b * 255 / 32);
+        l = lum8(q);
+        memcpy(g->cube + ((r * 33 + gg) * 33 + b) * 3, t + l * 3, 3);
+      }
+    }
+    return g; }
+  default: break;
+  }
+  if (fn) {
+    int r, gg, b;
+    g->haslut = 0;
+    if (!(g->cube = (u8 *)malloc(33 * 33 * 33 * 3))) { free(g); return NULL; }
+    for (r = 0; r < 33; r++) for (gg = 0; gg < 33; gg++) for (b = 0; b < 33; b++) {
+      u8 q[4];
+      q[0] = (u8)(r * 255 / 32); q[1] = (u8)(gg * 255 / 32); q[2] = (u8)(b * 255 / 32); q[3] = 255;
+      fn(q, a);
+      memcpy(g->cube + ((r * 33 + gg) * 33 + b) * 3, q, 3);
+    }
+  }
+  return g;
+}
+void adj_prog_free(AdjProg *g) { if (g) { free(g->cube); free(g); } }
+/* one pixel through the cube: trilinear between the 8 corners around it (fixed point) */
+static void cube_px(const u8 *cube, u8 *p)
+{
+  int r = p[0] * 32, gg = p[1] * 32, b = p[2] * 32;
+  int r0 = r / 255, g0 = gg / 255, b0 = b / 255, fr, fg, fb, c;
+  const u8 *q;
+  fr = (r - r0 * 255) * 256 / 255; fg = (gg - g0 * 255) * 256 / 255; fb = (b - b0 * 255) * 256 / 255;
+  if (r0 > 31) { r0 = 31; fr = 256; }
+  if (g0 > 31) { g0 = 31; fg = 256; }
+  if (b0 > 31) { b0 = 31; fb = 256; }
+  q = cube + ((r0 * 33 + g0) * 33 + b0) * 3;
+  for (c = 0; c < 3; c++) {
+    /* corners: q[o + c] with o for (dr, dg, db) */
+    long c000 = q[c], c001 = q[3 + c], c010 = q[99 + c], c011 = q[102 + c];
+    long c100 = q[3267 + c], c101 = q[3270 + c], c110 = q[3366 + c], c111 = q[3369 + c];
+    long c00 = c000 * (256 - fb) + c001 * fb, c01 = c010 * (256 - fb) + c011 * fb;
+    long c10 = c100 * (256 - fb) + c101 * fb, c11 = c110 * (256 - fb) + c111 * fb;
+    long c0 = c00 * (256 - fg) + c01 * fg, c1 = c10 * (256 - fg) + c11 * fg;
+    long v = (c0 * (256 - fr) + c1 * fr + (1L << 23)) >> 24;
+    p[c] = (u8)(v > 255 ? 255 : v);
+  }
+}
+void adj_prog_row(const AdjProg *g, u8 *px, int n)
+{
+  int i;
+  if (g->haslut) {
+    for (i = 0; i < n; i++, px += 4) if (px[3]) { px[0] = g->lut[px[0]]; px[1] = g->lut[256 + px[1]]; px[2] = g->lut[512 + px[2]]; }
+  } else if (g->cube) {
+    for (i = 0; i < n; i++, px += 4) if (px[3]) cube_px(g->cube, px);
+  }
+}
+/* any adjustment applied to the active layer (Image > Adjustments with AdjParams) */
+int adj_apply(Doc *d, const AdjParams *p, const char *name)
+{
+  AdjProg *g;
+  Op o;
+  i32 y;
+  if (!(g = adj_prog_make(p))) return 0;
+  if (!op_begin(&o, d, name, 0)) { adj_prog_free(g); return 0; }
+  for (y = o.b.y0; y < o.b.y1; y++) adj_prog_row(g, o.l->px + ((long)y * d->w + o.b.x0) * 4, o.b.x1 - o.b.x0);
+  adj_prog_free(g);
+  return op_end(&o);
+}
+int adj_channel_mixer(Doc *d, const int *rows, int mono)
+{
+  AdjParams p;
+  int i;
+  memset(&p, 0, sizeof p);
+  p.kind = AK_CHANNELMIXER;
+  for (i = 0; i < 12; i++) p.v[i] = rows[i];
+  p.v[12] = mono;
+  return adj_apply(d, &p, "Channel Mixer");
+}
+int adj_gradient_map(Doc *d, const int *stops, int n, int reverse)
+{
+  AdjParams p;
+  memset(&p, 0, sizeof p);
+  p.kind = AK_GRADIENTMAP;
+  if (n > 32) n = 32;
+  memcpy(p.pts, stops, (size_t)n * 2 * sizeof(int)); p.npts = n; p.v[0] = reverse;
+  return adj_apply(d, &p, "Gradient Map");
+}
+int adj_selective_color(Doc *d, const int *cmyk36, int absolute)
+{
+  AdjParams p;
+  memset(&p, 0, sizeof p);
+  p.kind = AK_SELECTIVECOLOR;
+  memcpy(p.pts, cmyk36, 36 * sizeof(int)); p.v[0] = absolute;
+  return adj_apply(d, &p, "Selective Color");
+}
+/* default settings for a new adjustment layer of each kind */
+void adj_defaults(int kind, AdjParams *p)
+{
+  memset(p, 0, sizeof *p);
+  p->kind = (u8)kind;
+  switch (kind) {
+  case AK_LEVELS: p->v[1] = 255; p->v[2] = 100; p->v[4] = 255; break;
+  case AK_CURVES: p->npts = 2; p->pts[0] = 0; p->pts[1] = 0; p->pts[2] = 255; p->pts[3] = 255; break;
+  case AK_EXPOSURE: p->v[2] = 100; break;
+  case AK_BLACKWHITE: p->v[0] = 40; p->v[1] = 40; p->v[2] = 20; break;
+  case AK_PHOTOFILTER: p->v[0] = 0xEC8A00; p->v[1] = 25; p->v[2] = 1; break;
+  case AK_CHANNELMIXER: p->v[0] = 100; p->v[5] = 100; p->v[10] = 100; break;
+  case AK_POSTERIZE: p->v[0] = 4; break;
+  case AK_THRESHOLD: p->v[0] = 128; break;
+  case AK_GRADIENTMAP: p->npts = 2; p->pts[0] = 0; p->pts[1] = 0x000000; p->pts[2] = 255; p->pts[3] = 0xFFFFFF; break;
+  default: break;
+  }
+}
+const char *const adj_names[AK_N] = { "Brightness/Contrast", "Levels", "Curves", "Exposure", "Vibrance", "Hue/Saturation",
+  "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Invert", "Posterize", "Threshold", "Gradient Map", "Selective Color" };
+/* adjustment layers: doc.c's compositor reaches the programs through these hooks */
+static void *hook_make(const AdjParams *p) { return adj_prog_make(p); }
+static void hook_free(void *g) { adj_prog_free((AdjProg *)g); }
+static void hook_row(const void *g, u8 *px, int n) { adj_prog_row((const AdjProg *)g, px, n); }
+void adjlayer_init(void) { adjlayer_make = hook_make; adjlayer_free = hook_free; adjlayer_row = hook_row; }

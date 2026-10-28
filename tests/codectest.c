@@ -521,14 +521,15 @@ static void ora_tests(void)
     e = ora_read(zipd, n, err, sizeof err);
     ok("ORA groups: reads", e != NULL);
     if (e) {
-      ok("ORA groups: five layers, bottom first", e->nlay == 5 && !strcmp(e->lay[0]->name, "bottom") && !strcmp(e->lay[4]->name, "top"));
-      ok("ORA groups: group opacity multiplied in", e->nlay == 5 && e->lay[3]->opacity == 64 && e->lay[3]->blend == BM_SUBTRACT);
-      ok("ORA groups: hidden group hides its layers", e->nlay == 5 && !e->lay[2]->visible && e->lay[2]->opacity == 128);
-      ok("ORA groups: unknown op is normal, missing picture is empty", e->nlay == 5 && e->lay[1]->blend == BM_NORMAL && e->lay[1]->px[3] == 0);
-      ok("ORA groups: offset layer clipped (8,0 holds the picture's 0,0)", e->nlay == 5 && !memcmp(e->lay[3]->px + 8 * 4, a.px, 4) &&
-         !memcmp(e->lay[3]->px + (1 * 10 + 9) * 4, a.px + (1 * 4 + 1) * 4, 4));
-      ok("ORA groups: negative offset clipped", e->nlay == 5 && !memcmp(e->lay[4]->px + (6 * 10 + 0) * 4, a.px + 2 * 4, 4) &&
-         !memcmp(e->lay[4]->px + (7 * 10 + 1) * 4, a.px + (1 * 4 + 3) * 4, 4) && e->lay[4]->px[(5 * 10) * 4 + 3] == 0);
+      /* bottom first: bottom, missing, deep (in the hidden group), the hidden group, inner, grp, top */
+      ok("ORA groups: groups kept, bottom first", e->nlay == 7 && !strcmp(e->lay[0]->name, "bottom") && !strcmp(e->lay[6]->name, "top") &&
+         e->lay[5]->kind == LK_GROUP && e->lay[3]->kind == LK_GROUP && e->lay[2]->depth == 2 && e->lay[4]->depth == 1 && e->lay[5]->depth == 0);
+      ok("ORA groups: the group keeps its opacity and mode", e->nlay == 7 && e->lay[5]->opacity == 128 && e->lay[5]->blend == BM_SCREEN &&
+         e->lay[4]->opacity == 128 && e->lay[4]->blend == BM_SUBTRACT);
+      ok("ORA groups: hidden group hidden, its layer as it was", e->nlay == 7 && !e->lay[3]->visible && e->lay[2]->visible);
+      ok("ORA groups: unknown op is normal, missing picture is empty", e->nlay == 7 && e->lay[1]->blend == BM_NORMAL && e->lay[1]->px[3] == 0);
+      ok("ORA groups: offset layer clipped (8,0 holds the picture's 0,0)", e->nlay == 7 && !memcmp(e->lay[4]->px + 8 * 4, a.px, 4));
+      ok("ORA groups: negative offset clipped", e->nlay == 7 && !memcmp(e->lay[6]->px + (6 * 10 + 0) * 4, a.px + 2 * 4, 4));
       ok("ORA groups: selected layer active", e->active == 0);
       ok("ORA groups: xres", e->dpi == 300);
       doc_free(e);

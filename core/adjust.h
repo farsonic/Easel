@@ -13,6 +13,19 @@ enum { AK_BRIGHTNESS, AK_LEVELS, AK_CURVES, AK_EXPOSURE, AK_VIBRANCE, AK_HUESAT,
        AK_BLACKWHITE, AK_PHOTOFILTER, AK_CHANNELMIXER, AK_INVERT, AK_POSTERIZE, AK_THRESHOLD,
        AK_GRADIENTMAP, AK_SELECTIVECOLOR, AK_N };
 
+/* any adjustment compiled for applying quickly to rows of pixels (adjustment layers, 0.3) */
+typedef struct AdjProg AdjProg;
+AdjProg *adj_prog_make(const AdjParams *p);          /* NULL if out of memory */
+void adj_prog_free(AdjProg *g);
+void adj_prog_row(const AdjProg *g, u8 *px, int n);  /* n RGBA pixels in place (transparent ones left) */
+int  adj_apply(Doc *d, const AdjParams *p, const char *name);   /* to the active layer, as an undo step */
+void adj_defaults(int kind, AdjParams *p);
+void adjlayer_init(void);                            /* call once at start: lets doc.c composite adjustment layers */
+extern const char *const adj_names[AK_N];
+int adj_channel_mixer(Doc *d, const int *rows, int mono);       /* rows: R, G, B each (r, g, b, constant) in per cent */
+int adj_gradient_map(Doc *d, const int *stops, int n, int reverse);   /* stops: (position 0-255, 0xRRGGBB) */
+int adj_selective_color(Doc *d, const int *cmyk36, int absolute);     /* 9 ranges x (c, m, y, k) -100..100 */
+
 /* adjustments */
 int adj_brightness_contrast(Doc *d, int brightness, int contrast);        /* -150..150, -50..100 */
 int adj_levels(Doc *d, int channel, int in_black, int in_white, double gamma, int out_black, int out_white);   /* channel: 0 RGB, 1 R, 2 G, 3 B */

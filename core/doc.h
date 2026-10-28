@@ -35,8 +35,9 @@ enum { LK_PIXEL, LK_GROUP, LK_ADJUST, LK_FILL };
    the order that adjustment's function takes them; curves and the gradient map keep their points */
 typedef struct {
   u8 kind;
-  int v[12];
-  int npts; int pts[2 * 32];          /* curves: (x, y) pairs; gradient map: stops as (position, 0xRRGGBB) */
+  int v[16];
+  int npts; int pts[2 * 32];          /* curves: (x, y) pairs; gradient map: stops as (position, 0xRRGGBB);
+                                         selective colour: 9 ranges x CMYK; levels: R, G, B rows of 5 */
 } AdjParams;
 
 /* a fill layer's settings (0.3): solid colour, or a gradient (paint.h's GR_ kinds) across the canvas */
@@ -58,15 +59,21 @@ typedef struct {
   u8 depth;                           /* nesting: 0 at the top level, members of a group one more than it */
   u8 collapsed;                       /* a group shown closed in the Layers panel */
   u8 lock_pos, lock_all;              /* can't be moved; can't be changed at all */
-  u8 fill;                            /* fill opacity 0-255: like opacity, but leaves layer effects alone */
+  u8 fill_cut;                        /* 255 minus the fill opacity (so a zeroed layer has full fill) */
   u8 clip;                            /* clipped to the layer below (the base of a clipping group) */
   u8 *mask;                           /* layer mask w * h, 255 shows, 0 hides; NULL for none */
   u8 mask_on, mask_linked;            /* the mask is used; moves with the layer */
-  u8 mask_density;                    /* 0-255: how strongly the mask hides */
+  u8 mask_fade;                       /* 255 minus the mask's density: 0 hides fully where the mask is black */
   u16 mask_feather;                   /* pixels, applied when compositing */
-  u8 blendif[4];                      /* Blend If on grey: this layer's black, white; the underlying black, white */
+  u8 blendif[4];                      /* Blend If on grey: this layer's black, 255 - its white; the underlying
+                                         black, 255 - its white (all 0: everything blends) */
   AdjParams adj;                      /* LK_ADJUST */
   FillParams fillp;                   /* LK_FILL */
+  u8 picked;                          /* chosen in the Layers panel along with the active layer */
+  u8 edit_mask;                       /* painting goes into the mask, not the pixels */
+  /* worked out when needed, never saved: the feathered mask, and the adjustment's tables */
+  u8 *maskfx; u8 maskfx_ok;
+  void *adjprog; u8 adjprog_ok;
   /* 0.4: indexed documents */
   u8 *idx;                            /* w * h palette indices when the document is indexed, else NULL */
 } Layer;
@@ -104,7 +111,8 @@ typedef struct {
   u8 aspect_x, aspect_y;              /* pixel aspect ratio (1:1 square); IFF BMHD's x/yAspect */
 } Doc;
 
-#define UNDO_BUDGET (40L * 1024 * 1024)
+#define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
+extern long undo_budget;                       /* bytes of undo kept (a preference) */
 
 Doc   *doc_new(i32 w, i32 h, u32 fill, int transparent);   /* one layer, "Background" */
 /* a document whose one layer, "Background", is px (w * h * 4, malloc'd), taken over; NULL (px
@@ -127,6 +135,15 @@ void   doc_set_layer_props(Doc *d, int i, const char *name, int opacity, int ble
 /* the composite of every visible layer over transparency, in rect r (clipped to the canvas), as RGBA
    into out (stride bytes a row). Transparent pixels come out with alpha 0 */
 void   doc_composite(Doc *d, Box r, u8 *out, long stride);
+/* layers lo..hi-1 at nesting depth composited in r onto out (cleared first unless onto): what
+   merging part of the stack needs (0.3) */
+void   doc_composite_range(Doc *d, int lo, int hi, int depth, Box r, u8 *out, long stride, int onto);
+/* the mask a layer's compositing uses (feathered when it asks), or NULL for none or turned off */
+const u8 *layer_mask_used(Doc *d, Layer *l);
+/* adjustment layers' tables: hooks set by adjlayer_init (adjust.c) */
+extern void *(*adjlayer_make)(const AdjParams *p);
+extern void (*adjlayer_free)(void *prog);
+extern void (*adjlayer_row)(const void *prog, u8 *px, int n);
 /* one blend: src over dst (both straight RGBA), with opacity 0-255 and mode */
 void   blend_pixel(u8 *dst, const u8 *src, int opacity, int mode);
 
@@ -135,6 +152,7 @@ void   blend_pixel(u8 *dst, const u8 *src, int opacity, int mode);
    (layers added, deleted, moved, resized). A step with nothing noted is dropped */
 void   doc_begin(Doc *d, const char *action);
 void   doc_note_layer(Doc *d, int i, Box r);
+void   doc_note_mask(Doc *d, int i, Box r);                /* layer i's mask in box r (0.3) */
 void   doc_note_sel(Doc *d);
 void   doc_note_all(Doc *d);
 void   doc_end(Doc *d);
