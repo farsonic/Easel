@@ -32,7 +32,7 @@ static int fh(void) { return theme_font()->tf_YSize; }
 typedef struct { int n; int tools[3]; } Group;
 static const Group groups[] = {
   { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 1, { TL_WAND } },
-  { 1, { TL_CROP } }, { 2, { TL_EYEDROPPER, TL_RULER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
+  { 1, { TL_CROP } }, { 3, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
   { 1, { TL_TEXT } }, { 3, { TL_RECT, TL_ELLIPSE, TL_LINE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
 };
@@ -323,7 +323,8 @@ static int fields_for(int t, Field *f)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
   if (xform_pending) {
     /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
-    TEXT(xform_info); BUTTON("Apply", ID_COMMIT); BUTTON("Cancel", ID_CANCEL);
+    if (prefs.xform_numbers) TEXT(xform_info);      /* (0.8: Preferences > Tools) */
+    BUTTON("Apply", ID_COMMIT); BUTTON("Cancel", ID_CANCEL);
     TEXT("Corners scale (Shift: in proportion), outside turns; Ctrl-corner distorts");
     return n;
   }
@@ -349,6 +350,7 @@ static int fields_for(int t, Field *f)
     BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT("Drag a box, adjust its handles, then Return"); break;
   case TL_RULER: TEXT(ruler_info[0] ? ruler_info : "Drag to measure"); BUTTON("Straighten Layer", ID_STRAIGHTEN); CHECK("Whole Picture", opt.ruler_image);
     BUTTON("Clear", ID_RULERCLEAR); break;
+  case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, 3); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
   case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, 3); CHOICE("Sample:", opt.all_layers, layersample, 2); TEXT("Alt-click picks the background colour"); break;
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); TEXT("Alt-click sets the source"); break;

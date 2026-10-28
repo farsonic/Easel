@@ -318,7 +318,7 @@ static int float_take(Doc *d, Float *f, u8 *src, int bpp, Box b, const u8 *m, in
 static void float_drop(Doc *d, const Float *f, const double *inv, Box db, u8 *dst, int n, int interp)
 {
   i32 x, y;
-  for (y = db.y0; y < db.y1; y++)
+  for (y = db.y0; y < db.y1 && !progress(y - db.y0, db.y1 - db.y0); y++)   /* (0.8: progress and Abort) */
     for (x = db.x0; x < db.x1; x++) {
       u8 s[4], *p;
       sample_px(f, inv, x, y, n, interp, s);

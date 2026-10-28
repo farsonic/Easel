@@ -34,6 +34,8 @@ if [ "$1" != "fast" ]; then
   # 0.9: type and vectors
   t typetest;     /tmp/easel_typetest | tail -2
   t pathtest;     /tmp/easel_pathtest | tail -2
+  # 0.8: workspace and safety - the undo scratch drawer, undo levels, progress and Abort
+  t safetytest;   /tmp/easel_safetytest | tail -2
 fi
 av1/build-av1.sh amiga
 # Easel itself: every amiga/*.c but convert.c, which is EaselConvert's main

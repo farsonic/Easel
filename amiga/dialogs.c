@@ -52,7 +52,8 @@ static void notify_change(Object *o, ULONG attr)
 {
   if (o) DoMethod(o, MUIM_Notify, attr, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
 }
-static void out_of_memory(void) { ask("OK", "%s", tr("There isn't enough memory for that.")); }
+/* (not after Abort was pressed: that is why the operation stopped) */
+static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
 
 /* ------------------------------------------------------------------ previews */
 /* an adjustment or filter shown on the picture: applied again at each change, the step before it
@@ -240,7 +241,9 @@ static void sd_apply(void)
   sd_read();
   pv_drop(&sd.pv);
   set(app, MUIA_Application_Sleep, TRUE);
+  job_begin(sd.pv.d, NULL);                 /* (0.8: progress and Abort; an aborted preview leaves nothing) */
   sd.fn(sd.pv.d, sd.v, sd.cyc ? (int)xget(sd.cyc, MUIA_Cycle_Active) : 0, sd.chk ? (int)xget(sd.chk, MUIA_Selected) : 0);
+  job_end();
   set(app, MUIA_Application_Sleep, FALSE);
   pv_done(&sd.pv);
 }
@@ -1222,7 +1225,7 @@ void dlg_export(int fmt)
   Object *w, *q;
   if (fmt != FMT_JPEG) return;
   w = dialog_window("JPEG Options", ColGroup(2),
-        Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, 85),
+        Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, prefs.jpeg_quality),
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Low quality makes small files; JPEG keeps no layers\nor transparency (it is laid over white)."), End,
       End, "Save");
   if (!w) return;

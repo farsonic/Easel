@@ -183,7 +183,7 @@ static int map_pixels(u8 *px, const u8 *src, i32 w, i32 h, u8 *idx, Near *c, int
     if (!(err = (long *)calloc((size_t)(w + 4) * 9, sizeof(long)))) return 0;
     rows[0] = err; rows[1] = err + (w + 4) * 3; rows[2] = err + (w + 4) * 6;
   } else if (dither != DI_NONE) spread = pal_spacing(c->pal, c->n);
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     int serp = diffuse && (y & 1), step = serp ? -1 : 1;
     x = serp ? w - 1 : 0;
     for (; serp ? x >= 0 : x < w; x += step) {
@@ -717,8 +717,11 @@ static int apply_palette(Doc *d, const char *action, const u8 *pal, int n, const
   doc_note_all(d);
   for (i = 0; i < d->nlay; i++) {
     Layer *l = d->lay[i];
+    long pp;
     if (!nidx[i]) continue;
+    pp = progress_push(1000L * i / d->nlay, 1000L * (i + 1) / d->nlay);   /* (0.8: each layer a share) */
     if (!map_pixels(l->px, l->px, d->w, d->h, nidx[i], c, dither, gray, 1)) map_pixels(l->px, l->px, d->w, d->h, nidx[i], c, DI_NONE, gray, 1);
+    progress_pop(pp);
     free(l->idx);
     l->idx = nidx[i];
   }

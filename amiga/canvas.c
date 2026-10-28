@@ -49,7 +49,7 @@ char ruler_info[96];
 static Doc *ruler_doc;                   /* the picture the Ruler's line was drawn on */
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
-       DR_XFORM, DR_RULER };
+       DR_XFORM, DR_RULER, DR_SAMPLE };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
 #define QALT (IEQUALIFIER_LALT | IEQUALIFIER_RALT)
 
@@ -94,6 +94,11 @@ struct Data {
   int ruler_end;                         /* the Ruler's end being dragged (0 the start, 1 the end) */
   int ov_ruler;                          /* the Ruler's line is in the overlay drawn */
   int ov_tool;                           /* the tool whose brush outline the overlay drawn has */
+  /* 0.8: the colour samplers in the overlay drawn (image pixels), and the one being dragged */
+  LONG ov_sx[4], ov_sy[4]; int ov_nsamp, samp_drag;
+  int ov_cursor;                         /* the painting cursor drawn: 0 outline, 1 crosshair, 2 both */
+  /* 0.8: a spring-loaded tool key: the key held, the tool before it, when it went down, used meanwhile */
+  UWORD spring_code; int spring_prev, spring_used; ULONG spring_secs, spring_micros;
 };
 
 static struct MUI_CustomClass *ccls;
@@ -227,14 +232,14 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
       for (; ; p += step) {
         LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
         if (s >= (k == 0 ? ix1 : iy1)) break;
-        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, 0x808080, 1); }
-        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, 0x808080, 1);
+        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, prefs.grid_color, 1); }
+        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, prefs.grid_color, 1);
       }
     }
   }
   if (g->show_guides) {
-    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, 0x00C0FF, 0); }
-    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, 0x00C0FF, 0); }
+    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, prefs.guide_color, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
   }
   if (g->show_rulers) {
     int minor, major = ruler_step(d->z, 50, &minor);
@@ -273,14 +278,14 @@ static void ruler_labels(struct Data *d, Object *obj)
   for (p = floor(-d->ox / d->z / major) * major; (LONG)(p * d->z) + d->ox < d->vw; p += major) {
     LONG s = (LONG)floor(p * d->z) + d->ox;
     if (s < RULER) continue;
-    sprintf(buf, "%ld", (long)p);
+    unit_text(buf, p, doc->w, doc->dpi, 0);             /* (0.8: in the preferences' units) */
     Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
   }
   for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
     LONG s = (LONG)floor(p * d->z) + d->oy;
     int c, n;
     if (s < RULER) continue;
-    sprintf(buf, "%ld", (long)p);
+    unit_text(buf, p, doc->h, doc->dpi, 0);
     /* (the digits one under another, as the ruler is narrow) */
     for (c = 0, n = (int)strlen(buf); c < n; c++) { Move(rp, _mleft(obj) + 3, _mtop(obj) + s + 2 + c * rp->TxHeight + rp->TxBaseline); Text(rp, (STRPTR)buf + c, 1); }
   }
@@ -461,11 +466,14 @@ static void ov_draw(struct Data *d, Object *obj)
   SetDrMd(rp, COMPLEMENT);
   SetDrPt(rp, 0xFFFF);
   SetAPen(rp, 1);
-  /* the brush's outline (or a cross when it is too small to see) */
+  /* the brush's outline (or a cross when it is too small to see); 0.8: or a crosshair, as the
+     preferences ask (Caps Lock for it too) */
   if (d->cur_in && brushlike(t) && d->drag != DR_LINE) {
     LONG r = brush_r(d);
-    if (r >= 3) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
-    else { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
+    int cross = d->ov_cursor != 0;
+    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
+    if (cross && (r >= 3 || d->ov_cursor == 1)) { xline(rp, d->cur_x - 6, d->cur_y, d->cur_x + 6, d->cur_y); xline(rp, d->cur_x, d->cur_y - 6, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 6); }
+    else if (r < 3) { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
   }
   switch (d->drag) {
   case DR_MARQUEE:
@@ -513,6 +521,16 @@ static void ov_draw(struct Data *d, Object *obj)
     xpath(d, obj, rp, p, n, &lx, &ly);
     if (d->mlpath && d->nmlpath) xpath(d, obj, rp, d->mlpath, d->nmlpath, &lx, &ly);
   }
+  for (i = 0; i < d->ov_nsamp; i++) {
+    /* 0.8: a colour sampler: a ring round the point with ticks outside it, and its number */
+    LONG sx = to_sx(d, obj, d->ov_sx[i] + 0.5), sy = to_sy(d, obj, d->ov_sy[i] + 0.5);
+    char num[2];
+    DrawEllipse(rp, sx, sy, 4, 4);
+    xline(rp, sx - 9, sy, sx - 6, sy); xline(rp, sx + 6, sy, sx + 9, sy); xline(rp, sx, sy - 9, sx, sy - 6); xline(rp, sx, sy + 6, sx, sy + 9);
+    num[0] = (char)('1' + i); num[1] = 0;
+    SetFont(rp, theme_small());
+    Move(rp, sx + 7, sy + 7 + rp->TxBaseline); Text(rp, (STRPTR)num, 1);
+  }
   if (d->ov_ruler) {
     /* the Ruler's line, with a small cross at each end */
     LONG a = to_sx(d, obj, ruler_xy[0]), b = to_sy(d, obj, ruler_xy[1]), c = to_sx(d, obj, ruler_xy[2]), e = to_sy(d, obj, ruler_xy[3]);
@@ -546,6 +564,13 @@ static void ov_show(struct Data *d, Object *obj)
   /* (what depends on the tool is remembered, so it is taken away later as it was put up) */
   d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();
   d->ov_tool = d->space ? TL_HAND : tool;
+  d->ov_cursor = prefs.caps_precise && (d->qual & IEQUALIFIER_CAPSLOCK) ? 1 : prefs.cursor;
+  {
+    DocView *v = cur_view();
+    int i;
+    d->ov_nsamp = v ? v->nsamp : 0;
+    for (i = 0; i < d->ov_nsamp; i++) { d->ov_sx[i] = v->samp_x[i]; d->ov_sy[i] = v->samp_y[i]; }
+  }
   ov_draw(d, obj);
   d->ov_on = 1;
 }
@@ -851,10 +876,12 @@ static void xf_finish(struct Data *d, Object *obj, int apply)
     ov_hide(d, obj);
     d->xf_on = 0; xform_pending = 0;
     set(_app(obj), MUIA_Application_Sleep, TRUE);
+    job_begin(doc, d->xf_sel ? "Transform Selection" : "Free Transform");     /* (0.8: progress and Abort) */
     ok = d->xf_sel ? xform_selection(doc, &d->xf) : !box_empty(xform_layer(doc, doc->active, &d->xf, RS_BICUBIC));
+    if (job_end()) ok = -1;
     set(_app(obj), MUIA_Application_Sleep, FALSE);
-    if (ok) changed(d, obj);
-    else ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
+    if (ok > 0) changed(d, obj);
+    else if (!ok) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
     d->edges_ok = 0;
     comp_free(d);                        /* (the composite made again throughout) */
     draw_all(d, obj);
@@ -931,6 +958,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   Box ch;
   d->secs = secs; d->micros = micros;
   d->modifiers = qual;
+  if (d->spring_code) d->spring_used = 1;               /* (0.8: the spring-loaded tool used) */
   /* 0.4: snapping (guides, grid, edges) for the tools that drag out shapes */
   if (doc && doc->guides.snap && (t == TL_MARQUEE || t == TL_EMARQUEE || t == TL_RECT || t == TL_ELLIPSE || t == TL_LINE || t == TL_GRADIENT || t == TL_CROP)) {
     doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
@@ -989,7 +1017,13 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (x > doc->w - 1) x = doc->w - 1;
     if (y > doc->h - 1) y = doc->h - 1;
     if (!d->ml) {
-      if (!(d->ml = maglasso_new(doc, opt.ml_width, opt.ml_contrast, 200 / (opt.ml_freq + 1) + 8, 0))) { ask("OK", "%s", tr("There isn't enough memory for that.")); break; }
+      int stopped;
+      set(_app(obj), MUIA_Application_Sleep, TRUE);
+      job_begin(doc, "Magnetic Lasso Tool");                     /* (0.8: the edge map, with progress and Abort) */
+      d->ml = maglasso_new(doc, opt.ml_width, opt.ml_contrast, 200 / (opt.ml_freq + 1) + 8, 0);
+      stopped = job_end();
+      set(_app(obj), MUIA_Application_Sleep, FALSE);
+      if (!d->ml) { if (!stopped) ask("OK", "%s", tr("There isn't enough memory for that.")); break; }
       d->ml_op = sel_op_of(qual);
       maglasso_anchor(d->ml, x, y);
       d->mlpath = NULL; d->nmlpath = 0;
@@ -1012,6 +1046,28 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     ruler_text();
     d->drag = DR_RULER;
     break;
+  case TL_SAMPLER: {
+    /* 0.8: a sampler under the pointer dragged (Alt: removed), else a new one placed (up to four) */
+    DocView *v = cur_view();
+    int i, hit = -1;
+    for (i = 0; i < v->nsamp; i++)
+      if (labs(to_sx(d, obj, v->samp_x[i] + 0.5) - mx) <= 6 && labs(to_sy(d, obj, v->samp_y[i] + 0.5) - my) <= 6) hit = i;
+    if (hit >= 0 && alt) {
+      for (i = hit; i < v->nsamp - 1; i++) { v->samp_x[i] = v->samp_x[i + 1]; v->samp_y[i] = v->samp_y[i + 1]; }
+      v->nsamp--;
+      set(obj, MUIA_Canvas_Pointer, TRUE);
+      break;
+    }
+    if (hit < 0) {
+      if (x < 0 || y < 0 || x >= doc->w || y >= doc->h) break;
+      if (v->nsamp >= 4) { ov_show(d, obj); ask("OK", "%s", tr("There can be four colour samplers: drag one somewhere else, or Alt-click one to remove it.")); return; }
+      hit = v->nsamp++;
+      v->samp_x[hit] = (LONG)x; v->samp_y[hit] = (LONG)y;
+    }
+    d->samp_drag = hit;
+    d->drag = DR_SAMPLE;
+    set(obj, MUIA_Canvas_Pointer, TRUE);
+    break; }
   case TL_LASSO: d->drag = DR_LASSO; d->npoly = 0; poly_add(d, x, y); break;
   case TL_PLASSO:
     if (!d->poly_on) { d->poly_on = 1; d->npoly = 0; poly_add(d, x, y); }
@@ -1132,6 +1188,15 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     ov_show(d, obj);
     DoMethod(optbar, MUIM_Opts_Refresh);
     break;
+  case DR_SAMPLE:
+    /* 0.8: the sampler follows the pointer, within the picture */
+    ov_hide(d, obj);
+    if (d->samp_drag >= 0 && d->samp_drag < v->nsamp) {
+      v->samp_x[d->samp_drag] = x < 0 ? 0 : x >= doc->w ? doc->w - 1 : (LONG)x;
+      v->samp_y[d->samp_drag] = y < 0 ? 0 : y >= doc->h ? doc->h - 1 : (LONG)y;
+    }
+    ov_show(d, obj);
+    break;
   case DR_RULER:
     ov_hide(d, obj);
     ruler_xy[2 * d->ruler_end] = x; ruler_xy[2 * d->ruler_end + 1] = y;
@@ -1213,6 +1278,7 @@ static void release(struct Data *d, Object *obj)
     tell_changed(d, obj);
     break;
   case DR_PICK: break;
+  case DR_SAMPLE: set(obj, MUIA_Canvas_Pointer, TRUE); break;
   case DR_LASSO: d->drag = DR_LASSO; poly_finish(d, obj, 1); break;
   case DR_MARQUEE:
     d->drag = DR_MARQUEE; ov_hide(d, obj); d->drag = DR_NONE;
@@ -1315,7 +1381,26 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     if (down != d->space) { ov_hide(d, obj); d->space = down; ov_show(d, obj); }
     return 1;
   }
+  if (d->spring_code && (code & ~IECODE_UP_PREFIX) == d->spring_code) {
+    /* 0.8: a tool key held: repeats change nothing; let go after half a second (or after using the
+       tool) and the tool before comes back */
+    if (!(code & IECODE_UP_PREFIX)) return 1;
+    {
+      ULONG ds = im->Seconds - d->spring_secs;
+      LONG dm = (LONG)im->Micros - (LONG)d->spring_micros;
+      long held = (long)ds * 1000 + dm / 1000;
+      int prev = d->spring_prev;
+      d->spring_code = 0;
+      if ((held >= 500 || d->spring_used) && prev != tool) set_tool(prev);
+    }
+    return 1;
+  }
   if (code & IECODE_UP_PREFIX) return 0;
+  if (!(q & IEQUALIFIER_REPEAT)) {
+    /* 0.8: a command's extra key (Edit > Keyboard Shortcuts) */
+    ULONG id = keys_extra(key_char(im), code, q);
+    if (id) { DoMethod(_app(obj), MUIM_Application_ReturnID, id); return 1; }
+  }
   if (!doc || !v) return 0;
   if (shift && (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT))) {
     /* Shift-Alt and a letter: a blend mode, as Photoshop's keys (the painting tool's, or with the
@@ -1380,6 +1465,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     case 'a': id = ID_SELALL; break;
     case 'd': id = ID_DESELECT; break;
     case 'i': id = alt ? ID_IMAGESIZE : shift ? ID_INVERSE : ID_ADJ_INVERT; break;
+    case 'k': id = ID_PREFS; break;                                      /* 0.8: Preferences */
     case 'l': id = shift ? ID_AUTOTONE : ID_ADJ_LEVELS; break;
     case 'm': id = ID_ADJ_CURVES; break;
     case 'u': id = shift ? ID_ADJ_DESAT : ID_ADJ_HUESAT; break;
@@ -1432,10 +1518,13 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   /* a tool's letter: that tool, or (pressed again, or with Shift) the next tool sharing the letter */
   c = ToUpper((ULONG)c);
   if ((i = tool_for_key(c)) < 0) return 0;
+  if (q & IEQUALIFIER_REPEAT) return 1;                 /* (a letter held: not round and round its tools) */
   if (tool_keys[tool] == c && (shift || i == tool)) {
     int k;
     for (k = 1; k < TL_N; k++) if (tool_keys[(tool + k) % TL_N] == c) { i = (tool + k) % TL_N; break; }
   }
+  /* 0.8: spring-loaded: held, the tool is only for as long as the key is down */
+  d->spring_code = code; d->spring_prev = tool; d->spring_used = 0; d->spring_secs = im->Seconds; d->spring_micros = im->Micros;
   set_tool(i);
   return 1;
 }

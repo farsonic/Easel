@@ -176,7 +176,7 @@ static u8 *tiff_write(const Src *s, int comp, int dpi, const DocInfo *info, size
       (comp == TIFFC_LZW && !(lz = (LzwEnc *)malloc(sizeof *lz)))) goto fail;
   buf_add(&b, "MM\0\052\0\0\0\0", 8);
   /* the strips */
-  for (i = 0, y = 0; i < nstrips; i++) {
+  for (i = 0, y = 0; i < nstrips && !progress(i, nstrips); i++) {
     u32 rows = (u32)s->h - (u32)y < rps ? (u32)s->h - (u32)y : rps, r;
     size_t raw = rows * rb, at = b.len;
     for (r = 0; r < rows; r++) {

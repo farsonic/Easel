@@ -742,7 +742,7 @@ int tiff_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
         (!(ref = (i32 *)malloc(sizeof(i32) * ((size_t)cw + 8))) || !(cur = (i32 *)malloc(sizeof(i32) * ((size_t)cw + 8))))) { codec_oom = 1; msg = "Out of memory"; goto done; }
   }
   L.be = !t.le;
-  for (ci = 0; ci < nchunks; ci++) {
+  for (ci = 0; ci < nchunks && !progress(ci, nchunks); ci++) {
     u32 off, cnt, plane = ci / perplane, cx = ci % perplane, rows, r, c;
     i32 x0 = (i32)((cx % across) * cw), y0 = (i32)((cx / across) * ch);
     const u8 *src;

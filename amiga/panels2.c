@@ -27,6 +27,7 @@
 #include <devices/inputevent.h>
 #include "../core/channels.h"
 #include "../core/util.h"
+#include "../core/paint.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
 static struct MUI_CustomClass *navcls, *infcls, *chancls;
@@ -222,7 +223,9 @@ static void info_draw(struct IData *d, Object *obj)
   if (!doc) return;
   if (canvas_pt.in) {
     int h, s, v;
-    sprintf(buf, "X %ld   Y %ld", (long)canvas_pt.x, (long)canvas_pt.y);
+    char ux[24], uy[24];
+    unit_text(ux, canvas_pt.x, doc->w, doc->dpi, 1); unit_text(uy, canvas_pt.y, doc->h, doc->dpi, 1);   /* (0.8: in the preferences' units) */
+    sprintf(buf, "X %s   Y %s", ux, uy);
     theme_text(rp, theme_font(), x, y, buf, tpen(T_TEXT)); y += lh;
     if (canvas_pt.has_rgb) {
       rgb_hsb(canvas_pt.rgba[0], canvas_pt.rgba[1], canvas_pt.rgba[2], &h, &s, &v);
@@ -237,10 +240,33 @@ static void info_draw(struct IData *d, Object *obj)
   theme_text(rp, theme_font(), x, y, buf, tpen(T_DIM)); y += lh;
   if (doc->sel) {
     Box b;
-    if (sel_bounds(doc, &b)) sprintf(buf, "%s: %ld x %ld at %ld, %ld", tr("Selection"), (long)(b.x1 - b.x0), (long)(b.y1 - b.y0), (long)b.x0, (long)b.y0);
-    else strcpy(buf, tr("Selection: empty"));
+    char u[4][24];
+    if (sel_bounds(doc, &b)) {
+      unit_text(u[0], b.x1 - b.x0, doc->w, doc->dpi, 0); unit_text(u[1], b.y1 - b.y0, doc->h, doc->dpi, 1);
+      unit_text(u[2], b.x0, doc->w, doc->dpi, 0); unit_text(u[3], b.y0, doc->h, doc->dpi, 0);
+      sprintf(buf, "%s: %s x %s at %s, %s", tr("Selection"), u[0], u[1], u[2], u[3]);
+    } else strcpy(buf, tr("Selection: empty"));
   } else strcpy(buf, tr("No selection"));
   theme_text(rp, theme_font(), x, y, buf, tpen(T_DIM)); y += lh + 4;
+  /* 0.8: the colour samplers, each with its colour */
+  {
+    DocView *v = cur_view();
+    int i;
+    for (i = 0; v && i < v->nsamp; i++) {
+      u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], 1, opt.sample) : 0xFFFFFFFFUL;
+      if (c == 0xFFFFFFFFUL) sprintf(buf, "#%d  %s", i + 1, tr("transparent"));
+      else {
+        draw_rgb_box(rp, _screen(obj), x + fh() * 2 + 4, y + 1, x + fh() * 3 + 2, y + fh() - 1, c);
+        theme_rect(rp, x + fh() * 2 + 3, y, x + fh() * 3 + 3, y + fh(), tpen(T_BORDER2));
+        sprintf(buf, "R %d  G %d  B %d   #%06lX", (int)(c >> 16), (int)((c >> 8) & 255), (int)(c & 255), (unsigned long)c);
+        theme_text(rp, theme_font(), x + fh() * 3 + 10, y, buf, tpen(T_TEXT));
+        sprintf(buf, "#%d", i + 1);
+      }
+      theme_text(rp, theme_font(), x, y, buf, tpen(T_TEXT));
+      y += lh;
+    }
+    if (v && v->nsamp) y += 4;
+  }
   /* the histogram */
   if (!d->hok || d->hdoc != doc) info_hist(d, doc);
   hx0 = x; hw = _mwidth(obj) - 16; hy1 = _mbottom(obj) - 6;

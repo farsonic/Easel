@@ -35,7 +35,7 @@ static int build_cost(MagLasso *ml, int contrast, int all_layers)
   if (all_layers || d->active < 0 || d->active >= d->nlay || !d->lay[d->active]->px) {
     /* what shows, a row at a time (no second copy of the picture) */
     if (!(row = (u8 *)malloc((size_t)w * 4))) { free(lum); return 0; }
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress(y, 2L * h); y++) {     /* (0.8: progress, and Abort) */
       doc_composite(d, box_make(0, y, w, y + 1), row, (long)w * 4);
       for (x = 0; x < w; x++) { const u8 *p = row + x * 4; lum[(long)y * w + x] = (u8)(((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8) * p[3] / 255); }
     }
@@ -44,7 +44,7 @@ static int build_cost(MagLasso *ml, int contrast, int all_layers)
     src = d->lay[d->active]->px;
     for (k = 0; k < n; k++) { const u8 *p = src + k * 4; lum[k] = (u8)(((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8) * p[3] / 255); }
   }
-  for (y = 0; y < h; y++)
+  for (y = 0; y < h && !progress(h + y, 2L * h); y++)
     for (x = 0; x < w; x++) {
       /* Sobel, the edge repeated */
       i32 xm = x > 0 ? x - 1 : 0, xp = x < w - 1 ? x + 1 : x, ym = y > 0 ? y - 1 : 0, yp = y < h - 1 ? y + 1 : y;
@@ -59,7 +59,7 @@ static int build_cost(MagLasso *ml, int contrast, int all_layers)
       ml->cost[(long)y * w + x] = (u8)(1 + (255 - g) * CMAX / 255);
     }
   free(lum);
-  return 1;
+  return !progress_aborted;
 }
 MagLasso *maglasso_new(Doc *d, int width, int contrast, int frequency, int all_layers)
 {

@@ -530,7 +530,7 @@ static int jpeg_stream(Jpeg *j, u32 start, Scaler *sc)
   if (!(rgb = (u8 *)malloc((size_t)j->w * 3))) { img_oom = 1; goto done; }
   j->pos = start;
   todo = j->restart;
-  for (my = 0; my < mcuy; my++) {
+  for (my = 0; my < mcuy && !progress(my, mcuy); my++) {
     u32 rows;
     for (mx = 0; mx < mcux; mx++) {
       if (j->restart && !todo) { jpeg_restart(j); todo = j->restart; }
@@ -668,7 +668,7 @@ static int jpeg_coefs(Jpeg *j, u32 start, Scaler *sc)
           if (j->restart) todo--;
         }
     } else {
-      for (my = 0; my < mcuy; my++)
+      for (my = 0; my < mcuy && !progress(my, mcuy); my++)
         for (mx = 0; mx < mcux; mx++) {
           if (j->restart && !todo) { jpeg_restart(j); todo = j->restart; }
           for (i = 0; i < j->ns; i++) {
@@ -686,7 +686,7 @@ static int jpeg_coefs(Jpeg *j, u32 start, Scaler *sc)
     while (pos + 1 < j->n && !(j->d[pos] == 0xFF && j->d[pos + 1] && !(j->d[pos + 1] >= 0xD0 && j->d[pos + 1] <= 0xD7))) pos++;
     pos = jpeg_markers(j, pos);
   }
-  for (my = 0; my < mcuy; my++) {
+  for (my = 0; my < mcuy && !progress(my, mcuy); my++) {
     u32 rows = (u32)j->vmax * 8;
     for (i = 0; i < j->nc; i++) {
       Comp *c = &j->c[i];

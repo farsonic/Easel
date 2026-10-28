@@ -38,7 +38,13 @@ typedef struct {
   int placed;                         /* zoom and scroll have been set for the window */
   Snapshot *snap;                     /* 0.5: what the History Brush paints back (taken at opening) */
   char recov[160]; ULONG asig;        /* 0.6: its autosaved copy in PROGDIR:Recovery, and the state it holds */
+  /* 0.8: the Color Sampler tool's points (image pixels), shown on the canvas and in the Info panel */
+  LONG samp_x[4], samp_y[4]; int nsamp;
+  /* 0.8: the History panel's snapshots: whole copies of the picture as it was, and their names */
+  Doc *hsnap[8]; char hsnap_name[8][24]; int nhsnap;
 } DocView;
+#define MAXHSNAP 8
+extern int hist_pick;                 /* (panels.c) the snapshot clicked last in the History panel, -1 none */
 #define MAXDOCS 12
 extern DocView docs[MAXDOCS];
 extern int ndocs, curdoc;
@@ -53,9 +59,11 @@ enum {
   /* 0.5 */
   TL_PATTERN, TL_HISTORY, TL_REPLACE, TL_BGERASE, TL_MAGICERASE,
   /* 0.7 */
-  TL_MAGLASSO, TL_RULER, TL_N
+  TL_MAGLASSO, TL_RULER,
+  /* 0.8 */
+  TL_SAMPLER, TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's) after the rest */
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest */
 #define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */
@@ -99,7 +107,7 @@ const Pattern *tool_pattern(void);    /* the pattern chosen, or NULL */
 extern Opts opt;
 extern int tool;                      /* TL_ */
 extern const char *const tool_names[TL_N];
-extern const char tool_keys[TL_N];
+extern char tool_keys[TL_N];           /* (0.8: Edit > Keyboard Shortcuts changes them) */
 void set_tool(int t);                 /* (main.c) the tool chosen: canvas, toolbox and options bar told */
 int  tool_for_key(int c);             /* the tool a letter (upper case) chooses, -1 none */
 Brush tool_brush(int t);              /* the settings as a core Brush */
@@ -215,6 +223,40 @@ void pens_free(void);
 /* the nearest pen to an 0xRRGGBB on scr (ReleasePen it) */
 LONG rgb_pen(struct Screen *scr, ULONG c);
 
+/* ------------------------------------------------------------------ 0.8: preferences (prefs.c) */
+enum { SF_ORA, SF_PNG, SF_JPEG, SF_TIFF, SF_PSD, SF_ILBM, SF_N };               /* the format new pictures save as */
+enum { UN_PIXELS, UN_INCHES, UN_CM, UN_MM, UN_PERCENT, UN_N };                   /* rulers' and Info's units */
+enum { SM_WINDOW, SM_SCREEN, SM_FULL };                                           /* View > Screen Mode */
+typedef struct {
+  int tips, large_text;               /* help bubbles; the interface's large text */
+  int cursor;                         /* painting cursor: 0 the brush's outline, 1 a crosshair, 2 both */
+  int caps_precise, xform_numbers;    /* Caps Lock gives the crosshair; Free Transform's numbers shown */
+  int save_fmt, jpeg_quality, ask_flatten, nrecent;    /* SF_, 1-100, before saving layers flat, 0-10 */
+  char recovery[256];                 /* the autosave drawer */
+  int units, dpi;                     /* UN_, a new picture's resolution */
+  ULONG guide_color, grid_color;      /* 0xRRGGBB */
+  int grid_spacing, grid_sub;         /* a new picture's grid */
+  int scratch_on, scratch_mb; char scratch[256];        /* undo steps spilled to a drawer, up to so much */
+  int undo_mb, undo_levels;           /* undo's memory and states */
+  int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
+} Prefs;
+extern Prefs prefs;
+extern int pref_autosave, pref_icons;
+extern const char *const unit_names[UN_N + 1];
+/* 0.8: Edit > Keyboard Shortcuts (keys.c): the commands gathered from the menu table (before the
+   window is made) and Easel.keys read; the command an extra key pressed on the canvas gives (0 none) */
+struct NewMenu;
+void  keys_init(struct NewMenu *menus);
+ULONG keys_extra(int c, UWORD code, UWORD qual);
+void  dlg_keys(void);
+void prefs_defaults(void);
+int  prefs_line(const char *line);    /* a line of Easel.prefs taken, if it is one of prefs' */
+void prefs_write(FILE *f);
+void prefs_apply(void);               /* the settings handed to the core and the theme */
+int  dlg_preferences(int *reopen);    /* Edit > Preferences: 1 if OK (reopen: the window must open again) */
+/* a length of px pixels in the units chosen (length: the side it is measured along, for per cent) */
+void unit_text(char *out, double px, long length, int dpi, int name);
+
 /* ------------------------------------------------------------------ main.c helpers */
 extern Object *app, *win, *canvas, *toolbox, *optbar, *colorpanel, *layerpanel, *historypanel, *statusbar, *doctabs;
 extern FontSet fonts;
@@ -257,6 +299,17 @@ void dlg_save_selection(void);       /* (0.7) Select > Save Selection */
 void dlg_load_selection(void);       /* (0.7) Select > Load Selection */
 void dlg_export(int fmt);            /* JPEG quality, ILBM colours... then saved */
 int  dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg);   /* (main.c's New) */
+
+/* ------------------------------------------------------------------ 0.8: long operations (jobs.c) */
+/* a job begun on d (or NULL): while it runs, a slow operation in the core shows a progress window
+   with an Abort button once it has taken half a second. job_end: 1 if Abort was pressed, in which
+   case the undo step the job made was taken back. Jobs nest */
+void job_begin(Doc *d, const char *name);
+int  job_end(void);
+int  job_running(void);
+void jobs_free(void);
+void job_timer_reset(void);            /* (after a dialog) the half second counted afresh */
+extern int jobs_window;                /* the progress window may open (not while starting up) */
 
 /* ------------------------------------------------------------------ shared bits */
 /* the public screen Easel's windows open on ("": the default one); QWindowObject is a window on it */

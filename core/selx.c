@@ -114,6 +114,7 @@ u8 *color_range_mask(Doc *d, const ColorRange *cr)
   for (k = 0; k < n; k++) {
     const u8 *p = src + k * 4;
     double v = 0;
+    if (!(k & 4095) && progress(k, n)) break;              /* (0.8: progress, and Abort) */
     if (cr->preset == CR_SAMPLED) {
       for (i = 0; i < cr->ncolors && i < CR_MAXCOLORS; i++) { double t = near_col(p, cr->colors[i], fuzz); if (t > v) v = t; }
     } else v = preset_value(cr, p);
@@ -122,6 +123,7 @@ u8 *color_range_mask(Doc *d, const ColorRange *cr)
     m[k] = (u8)(v * 255 + 0.5);
   }
   free(img);
+  if (k < n) { free(m); return NULL; }
   return m;
 }
 void sel_color_range_ex(Doc *d, const ColorRange *cr, int op)

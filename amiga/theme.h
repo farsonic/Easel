@@ -87,6 +87,8 @@ enum {
   IC_FOLDER, IC_ADJLAYER, IC_ADDMASK, IC_LOCKPOS, IC_LOCKALL,
   IC_T_PATTERN, IC_T_HISTORY, IC_T_REPLACE, IC_T_BGERASE, IC_T_MAGICERASE,
   IC_T_MAGLASSO, IC_T_RULER,
+  IC_T_SAMPLER,
+  IC_CAMERA,
   IC_N
 };
 void theme_icon(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, int dim);
@@ -97,4 +99,5 @@ void theme_icon_pen(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, LO
    wrapped at about 46 characters. Returns a static buffer, good until the next call (MUI copies it
    into the bubble straight away) */
 const char *theme_bubble(const char *name, const char *body);
+extern int theme_tips;                   /* 0: no help bubbles (theme_bubble gives NULL) */
 #endif

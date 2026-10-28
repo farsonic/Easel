@@ -280,7 +280,7 @@ int psd_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
 
   if (!rgba_alloc(out, (i32)w, (i32)h)) { msg = "Not enough memory for the picture"; goto done; }
   if (comp == 1) for (c = 0; c < need; c++) if (!(rows[c] = (u8 *)malloc(rb))) { codec_oom = 1; msg = "Out of memory"; goto done; }
-  for (y = 0; y < (i32)h; y++) {
+  for (y = 0; y < (i32)h && !progress(y, (i32)h); y++) {
     const u8 *r[5];
     u8 *o = out->px + (size_t)y * w * 4;
     for (c = 0; c < need; c++) {
@@ -531,7 +531,7 @@ static int psd_channel(const u8 *p, size_t len, int psb, int depth, i32 l, i32 t
       }
   } else return 0;
   if (comp == 1 && !(row = (u8 *)malloc(rb))) { codec_oom = 1; return 0; }
-  for (y = 0; y < ch; y++) {
+  for (y = 0; y < ch && !progress(y, ch); y++) {
     const u8 *r;
     i32 cy = t + y;
     if (comp == 0) r = p + 2 + (size_t)y * rb;
@@ -973,7 +973,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
   nrec = psd_list(doc, 0, doc->nlay, o, 0);
   /* bottom first, as the file has them */
   for (k = 0; k < nrec / 2; k++) { PsdOut t = o[k]; o[k] = o[nrec - 1 - k]; o[nrec - 1 - k] = t; }
-  for (k = 0; k < nrec; k++) {
+  for (k = 0; k < nrec && !progress(k, 2L * nrec); k++) {
     PsdOut *r = &o[k];
     Layer *l = doc->lay[r->i];
     r->b = box_make(0, 0, 0, 0); r->mb = box_make(0, 0, 0, 0); r->mdef = 255;
@@ -1021,7 +1021,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
   listart = b.len; w32(&b, 0);
   w16(&b, (u32)(alpha ? -nrec : nrec) & 0xFFFF);
   for (k = 0; k < nrec; k++) put_record(&b, doc, &o[k], k + 1);
-  for (k = 0; k < nrec; k++)
+  for (k = 0; k < nrec && !progress(k, nrec); k++)
     for (c = 0; c < o[k].nch; c++) {
       if (o[k].px || c == 4) out_channel(&b, doc, &o[k], c == 0 ? 3 : c == 4 ? 4 : c - 1, row);
       else w16(&b, 0);
@@ -1041,7 +1041,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
   w16(&b, 1);
   for (k = 0; k < 2; k++)
     for (c = 0; c < nch; c++)
-      for (y = 0; y < h; y++) {
+      for (y = 0; y < h && !progress(y, h); y++) {
         i32 xx;
         const u8 *p = comp + (size_t)y * w * 4 + c;
         for (xx = 0; xx < w; xx++) row[xx] = p[xx * 4];

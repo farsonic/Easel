@@ -169,6 +169,14 @@ typedef struct {
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
 extern long undo_budget;                       /* bytes of undo kept (a preference) */
+/* 0.8: at most undo_levels steps are kept (a preference, 100 at first). With undo_scratch naming a
+   drawer ("" for none), the oldest steps past undo_budget have their buffers written there (as
+   EaselUndo-... files, up to undo_scratch_max bytes in all) instead of being forgotten, and read back
+   when they are undone; undo_scratch_bytes is how much is there now */
+extern int undo_levels;
+extern char undo_scratch[256];
+extern long undo_scratch_max, undo_scratch_bytes;
+int    doc_spilled_steps(Doc *d);                  /* how many of d's steps are in the scratch drawer */
 
 Doc   *doc_new(i32 w, i32 h, u32 fill, int transparent);   /* one layer, "Background" */
 /* a document whose one layer, "Background", is px (w * h * 4, malloc'd), taken over; NULL (px

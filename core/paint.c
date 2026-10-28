@@ -455,7 +455,7 @@ static void mask_blur(u8 *m, i32 w, i32 h, int r)
   if (r < 1) return;
   if (!(t = (u8 *)malloc((size_t)(w > h ? w : h)))) return;
   for (pass = 0; pass < 3; pass++) {
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress((long)pass * (w + h) + y, 3L * (w + h)); y++) {   /* (0.8: progress, and Abort) */
       u8 *row = m + (long)y * w;
       long sum = 0;
       memcpy(t, row, (size_t)w);
@@ -465,7 +465,7 @@ static void mask_blur(u8 *m, i32 w, i32 h, int r)
         sum += t[x + r + 1 >= w ? w - 1 : x + r + 1] - t[x - r < 0 ? 0 : x - r];
       }
     }
-    for (x = 0; x < w; x++) {
+    for (x = 0; x < w && !progress((long)pass * (w + h) + h + x, 3L * (w + h)); x++) {
       long sum = 0;
       for (y = 0; y < h; y++) t[y] = m[(long)y * w + x];
       for (y = -r; y <= r; y++) sum += t[y < 0 ? 0 : y >= h ? h - 1 : y];
@@ -567,6 +567,7 @@ static void sel_modify(Doc *d, const char *name, void (*fn)(Doc *, u8 *, int), i
   if (!d->sel || !(m = (u8 *)malloc((size_t)d->w * d->h))) return;
   memcpy(m, d->sel, (size_t)d->w * d->h);
   fn(d, m, arg);
+  if (progress_aborted) { free(m); return; }             /* (0.8: Abort pressed: the selection as it was) */
   sel_combine(d, m, SEL_REPLACE, name);
 }
 static void do_feather(Doc *d, u8 *m, int r) { mask_blur(m, d->w, d->h, r); }
@@ -578,7 +579,7 @@ static void do_grow(Doc *d, u8 *m, int by)
   int r = by < 0 ? -by : by, grow = by > 0;
   u8 *t = (u8 *)malloc((size_t)(w > h ? w : h));
   if (!t || !r) { free(t); return; }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, (long)w + h); y++) {          /* (0.8: progress, and Abort) */
     u8 *row = m + (long)y * w;
     memcpy(t, row, (size_t)w);
     for (x = 0; x < w; x++) {
@@ -590,7 +591,7 @@ static void do_grow(Doc *d, u8 *m, int by)
       row[x] = (u8)v;
     }
   }
-  for (x = 0; x < w; x++) {
+  for (x = 0; x < w && !progress((long)h + x, (long)w + h); x++) {
     for (y = 0; y < h; y++) t[y] = m[(long)y * w + x];
     for (y = 0; y < h; y++) {
       int v = t[y];
@@ -896,6 +897,9 @@ void flip_layer(Doc *d, int vertical)
 }
 /* every layer (and the selection) remade at w x h by fn(old pixels, new pixels, arg) */
 typedef void (*Remap)(Doc *d, const u8 *src, u8 *dst, i32 nw, i32 nh, int bpp, const void *arg);
+/* 0.8: the rows remade so far of all the planes remap_all remakes, for progress (and Abort) */
+static long rm_done, rm_total;
+static int rm_row(i32 y) { return progress(rm_done + y, rm_total); }
 static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const char *name, const double *fwd)
 {
   u8 *np[MAXLAYERS], *ns = NULL, *nc[MAXCHANNELS], *nq = NULL, **nm, **ni;
@@ -904,6 +908,8 @@ static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const ch
   /* 0.7: the layers' new masks and indices (off the stack) */
   if (!(nm = (u8 **)calloc(2 * MAXLAYERS, sizeof(u8 *)))) return 0;
   ni = nm + MAXLAYERS;
+  rm_done = 0; rm_total = (long)nh * ((d->sel != NULL) + d->nchan + (d->qmask != NULL));
+  for (i = 0; i < d->nlay; i++) rm_total += (long)nh * ((d->lay[i]->px != NULL) + (d->lay[i]->mask != NULL) + (d->lay[i]->idx != NULL));
   for (i = 0; i < d->nlay; i++) {
     /* 0.7: a group or adjustment layer has no pixels to remake; a layer mask is remade too (white
        where the canvas grows) */
@@ -916,14 +922,21 @@ static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const ch
       free(nm);
       return 0;
     }
-    if (np[i]) fn(d, d->lay[i]->px, np[i], nw, nh, 4, arg);
-    if (ni[i]) fn(d, d->lay[i]->idx, ni[i], nw, nh, 1, arg);
-    if (nm[i]) { memset(nm[i], 255, (size_t)nw * nh); fn(d, d->lay[i]->mask, nm[i], nw, nh, 1, arg); }
+    if (np[i]) { fn(d, d->lay[i]->px, np[i], nw, nh, 4, arg); rm_done += nh; }
+    if (ni[i]) { fn(d, d->lay[i]->idx, ni[i], nw, nh, 1, arg); rm_done += nh; }
+    if (nm[i]) { memset(nm[i], 255, (size_t)nw * nh); fn(d, d->lay[i]->mask, nm[i], nw, nh, 1, arg); rm_done += nh; }
   }
-  if (d->sel && (ns = (u8 *)calloc((size_t)nw * nh, 1))) fn(d, d->sel, ns, nw, nh, 1, arg);
+  if (d->sel && (ns = (u8 *)calloc((size_t)nw * nh, 1))) { fn(d, d->sel, ns, nw, nh, 1, arg); rm_done += nh; }
   /* 0.7: the alpha channels and the Quick Mask plane go with the picture (one dropped if out of memory) */
-  for (i = 0; i < d->nchan; i++) if ((nc[i] = (u8 *)calloc((size_t)nw * nh, 1)) != NULL) fn(d, d->chan[i], nc[i], nw, nh, 1, arg);
+  for (i = 0; i < d->nchan; i++) if ((nc[i] = (u8 *)calloc((size_t)nw * nh, 1)) != NULL) { fn(d, d->chan[i], nc[i], nw, nh, 1, arg); rm_done += nh; }
   if (d->qmask && (nq = (u8 *)calloc((size_t)nw * nh, 1)) != NULL) fn(d, d->qmask, nq, nw, nh, 1, arg);
+  if (progress_aborted) {
+    /* 0.8: Abort pressed: the new planes dropped, the picture left as it was */
+    for (i = 0; i < d->nlay; i++) { free(np[i]); free(nm[i]); free(ni[i]); }
+    for (i = 0; i < d->nchan; i++) free(nc[i]);
+    free(ns); free(nq); free(nm);
+    return 0;
+  }
   doc_begin(d, name);
   doc_note_all(d);
   for (i = 0; i < d->nlay; i++) {
@@ -956,7 +969,7 @@ static void remap_flip(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, cons
 {
   int v = *(const int *)arg;
   i32 x, y;
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++)
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++)
     memcpy(o + ((long)y * nw + x) * bpp, s + ((long)(v ? d->h - 1 - y : y) * d->w + (v ? x : d->w - 1 - x)) * bpp, (size_t)bpp);
 }
 void image_flip(Doc *d, int vertical)
@@ -969,7 +982,7 @@ static void remap_rot(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const
 {
   int q = *(const int *)arg;
   i32 x, y;
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
     i32 sx, sy;
     if (q == 1) { sx = y; sy = d->h - 1 - x; }
     else if (q == 2) { sx = d->w - 1 - x; sy = d->h - 1 - y; }
@@ -995,7 +1008,7 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
   double sx = (double)d->w / nw, sy = (double)d->h / nh;
   i32 x, y;
   if (bpp == 1) {
-    for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+    for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
       i32 xx = (i32)((x + 0.5) * sx), yy = (i32)((y + 0.5) * sy);
       o[(long)y * nw + x] = s[(long)(yy < d->h ? yy : d->h - 1) * d->w + (xx < d->w ? xx : d->w - 1)];
     }
@@ -1003,7 +1016,7 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
   }
   if ((sx > 1.5 || sy > 1.5) && method != RS_NEAREST) {
     /* shrinking: the average of each new pixel's area of old ones (premultiplied) */
-    for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+    for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
       i32 x0 = (i32)(x * sx), x1 = (i32)((x + 1) * sx), y0 = (i32)(y * sy), y1 = (i32)((y + 1) * sy), i, j;
       double acc[4] = { 0, 0, 0, 0 };
       long cnt = 0;
@@ -1018,7 +1031,7 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
     }
     return;
   }
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
     double fx = (x + 0.5) * sx, fy = (y + 0.5) * sy;
     u8 *q = o + ((long)y * nw + x) * 4;
     if (method == RS_NEAREST) { i32 xx = (i32)fx, yy = (i32)fy; memcpy(q, s + ((long)(yy < d->h ? yy : d->h - 1) * d->w + (xx < d->w ? xx : d->w - 1)) * 4, 4); }
@@ -1044,7 +1057,7 @@ static void remap_canvas(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
   const CanvasArg *c = (const CanvasArg *)arg;
   i32 x, y;
   int fillbg = bpp == 4 && s == d->lay[0]->px && c->fill != 0xFFFFFFFFUL;
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
     i32 sx = x - c->ox, sy = y - c->oy;
     u8 *q = o + ((long)y * nw + x) * bpp;
     if (sx >= 0 && sy >= 0 && sx < d->w && sy < d->h) memcpy(q, s + ((long)sy * d->w + sx) * bpp, (size_t)bpp);
@@ -1098,7 +1111,7 @@ static void remap_angle(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, con
 {
   const RotArg *r = (const RotArg *)arg;
   i32 x, y;
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
     double dx = x + 0.5 - r->ncx, dy = y + 0.5 - r->ncy, sx = r->c * dx + r->s * dy + r->cx, sy = -r->s * dx + r->c * dy + r->cy;
     if (bpp == 1) {
       i32 xx = (i32)floor(sx), yy = (i32)floor(sy);
@@ -1114,7 +1127,7 @@ static void remap_hom(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const
   const HomArg *a = (const HomArg *)arg;
   const double *m = a->h;
   i32 x, y;
-  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+  for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
     double X = x + 0.5, Y = y + 0.5, wq = m[6] * X + m[7] * Y + m[8], sx, sy;
     if (wq == 0) continue;
     sx = (m[0] * X + m[1] * Y + m[2]) / wq; sy = (m[3] * X + m[4] * Y + m[5]) / wq;

@@ -305,7 +305,7 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
       if (o->kind == LK_FILL) { l->fillp = o->fillp; free(l->px); l->px = NULL; }
       /* a layer whose picture is missing or damaged stays empty rather than losing the rest */
       if (l->px && read_picture(&z, o->src, &im)) {
-        for (y = 0; y < im.h; y++) {
+        for (y = 0; y < im.h && !progress(y, im.h); y++) {
           i32 cy = o->y + y, x0 = o->x < 0 ? -o->x : 0, x1 = o->x + im.w > w ? w - o->x : im.w;
           if (cy < 0 || cy >= h || x1 <= x0) continue;
           memcpy(l->px + ((size_t)cy * w + o->x + x0) * 4, im.px + ((size_t)y * im.w + x0) * 4, (size_t)(x1 - x0) * 4);
@@ -386,6 +386,8 @@ static Box opaque_box(const Layer *l, i32 w, i32 h)
 }
 
 /* a canvas-size picture (pixels, or a mask as grey) cropped to box b, encoded and stored as name */
+/* 0.8: the pictures written so far and how many in all, for progress (each PNG a share) */
+static int ora_k, ora_n;
 static int store_png(ZipWriter *zw, const char *name, const u8 *px, const u8 *mask, i32 w, Box b)
 {
   Rgba part;
@@ -393,7 +395,10 @@ static int store_png(ZipWriter *zw, const char *name, const u8 *px, const u8 *ma
   size_t plen;
   i32 y, x;
   int ok;
+  long pp;
   if (!rgba_alloc(&part, b.x1 - b.x0, b.y1 - b.y0)) return 0;
+  pp = progress_push(ora_n ? 1000L * ora_k / ora_n : 0, ora_n ? 1000L * (ora_k + 1) / ora_n : 1000);
+  if (ora_k < ora_n) ora_k++;
   for (y = b.y0; y < b.y1; y++) {
     if (px) memcpy(part.px + (size_t)(y - b.y0) * part.w * 4, px + ((size_t)y * w + b.x0) * 4, (size_t)part.w * 4);
     else for (x = b.x0; x < b.x1; x++) {
@@ -402,6 +407,7 @@ static int store_png(ZipWriter *zw, const char *name, const u8 *px, const u8 *ma
     }
   }
   png = png_encode(&part, 0, &plen);
+  progress_pop(pp);
   rgba_free(&part);
   ok = png && zip_add_stored(zw, name, png, plen);
   free(png);
@@ -529,6 +535,7 @@ u8 *ora_write(Doc *doc, size_t *len)
   zip_begin(&zw);
   buf_init(&xml);
   merged.px = thumb.px = NULL;
+  ora_k = 0; ora_n = doc->nlay + doc->nchan + 2;            /* (0.8: the layers, channels, merged picture and thumbnail) */
   ok = zip_add_stored(&zw, "mimetype", "image/openraster", 16);
   buf_printf(&xml, "<?xml version='1.0' encoding='UTF-8'?>\n<image version=\"0.0.5\" w=\"%ld\" h=\"%ld\" xres=\"%d\" yres=\"%d\" xmlns:easel=\"http://easel.amiga/ora/1\"",
              (long)doc->w, (long)doc->h, dpi, dpi);
@@ -571,14 +578,19 @@ u8 *ora_write(Doc *doc, size_t *len)
   /* the merged picture and its thumbnail (at most 256 pixels each way) */
   if (ok) ok = rgba_alloc(&merged, doc->w, doc->h);
   if (ok) {
+    long pp = progress_push(1000L * ora_k / ora_n, 1000L * (ora_k + 1) / ora_n);
     doc_composite(doc, doc_box(doc), merged.px, (long)doc->w * 4);
-    png = png_encode(&merged, dpi, &plen);
+    png = progress_aborted ? NULL : png_encode(&merged, dpi, &plen);
+    progress_pop(pp);
+    ora_k++;
     ok = png && zip_add_stored(&zw, "mergedimage.png", png, plen);
     free(png);
   }
   if (ok) ok = rgba_thumbnail(&merged, 256, &thumb);
   if (ok) {
-    png = png_encode(&thumb, 0, &plen);
+    long pp = progress_push(1000L * ora_k / ora_n, 1000);
+    png = progress_aborted ? NULL : png_encode(&thumb, 0, &plen);
+    progress_pop(pp);
     ok = png && zip_add_stored(&zw, "Thumbnails/thumbnail.png", png, plen);
     free(png);
   }

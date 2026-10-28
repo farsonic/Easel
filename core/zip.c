@@ -85,8 +85,11 @@ static const u8 dextra[30] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7
    before the start of out, or output past cap. */
 static int codes(BitIn *b, const Huff *lit, const Huff *dist, u8 *out, size_t cap, size_t *op)
 {
+  u32 tick = 0;
   for (;;) {
-    int s = decode(b, lit);
+    int s;
+    if (!(++tick & 4095) && progress((long)*op, (long)cap)) return 0;   /* (0.8: progress, and Abort) */
+    s = decode(b, lit);
     if (s < 0) return 0;
     if (s < 256) { if (*op >= cap) return 0; out[(*op)++] = (u8)s; }
     else if (s == 256) return 1;
@@ -214,6 +217,7 @@ u8 *zdeflate(const u8 *in, size_t n, size_t *outlen)
   BitOut b;
   i32 *head = (i32 *)malloc(sizeof(i32) << HBITS), *prev = (i32 *)malloc(sizeof(i32) * 32768);
   size_t i = 0;
+  u32 tick = 0;
   if (!head || !prev) { free(head); free(prev); return NULL; }
   memset(head, 0xFF, sizeof(i32) << HBITS);
   buf_init(&o);
@@ -221,6 +225,7 @@ u8 *zdeflate(const u8 *in, size_t n, size_t *outlen)
   putbits(&b, 1, 1); putbits(&b, 1, 2);          /* one final block, fixed codes */
   while (i < n) {
     u32 bestlen = 0, bestd = 0;
+    if (!(++tick & 4095) && progress((long)i, (long)n)) { buf_free(&o); free(head); free(prev); return NULL; }   /* (0.8) */
     if (i + 3 <= n) {
       u32 h = ((u32)in[i] << 10 ^ (u32)in[i + 1] << 5 ^ in[i + 2]) & ((1 << HBITS) - 1);
       i32 c = head[h];

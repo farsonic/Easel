@@ -116,7 +116,7 @@ int gif_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
     static const u8 pstart[4] = { 0, 4, 2, 1 }, pstep[4] = { 8, 8, 4, 2 };
     int pass = 0;
     i32 ry = 0;
-    for (y = 0; y < ih; y++) {
+    for (y = 0; y < ih && !progress(y, ih); y++) {
       const u8 *s = idx + (size_t)y * iw;
       u8 *row;
       if (inter) {

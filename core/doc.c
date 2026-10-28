@@ -5,9 +5,13 @@
  * first touched them, so a brush stroke costs only the tiles it crossed. Undoing swaps those tiles
  * with the layer's, so the same data serves to redo. Changes to the stack itself (layers added,
  * deleted, moved, the canvas resized) keep a copy of the whole document instead.
+ *
+ * 0.8: past the memory budget the oldest steps' buffers can go to files in a scratch drawer
+ * (undo_scratch) instead of being forgotten, and come back when they are undone.
  */
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 #include "doc.h"
 #include "palette.h"
@@ -642,8 +646,11 @@ void doc_composite(Doc *d, Box r, u8 *out, long stride)
 
 /* ------------------------------------------------------------------ undo */
 long undo_budget = 40L * 1024 * 1024;
+int undo_levels = 100;
+char undo_scratch[256];
+long undo_scratch_max = 256L * 1024 * 1024, undo_scratch_bytes;
 #define TS 64
-typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; u8 *ix; } Tile;   /* plane 0: pixels (TS*TS*4, or the edge
+typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; u8 *ix; u16 tw, th; } Tile;   /* plane 0: pixels (TS*TS*4, or the edge
                                                                        part's size); 1: the mask (1 byte a pixel);
                                                                        ix (0.4): an indexed layer's indices, or NULL */
 /* 0.4: the palette state an undo step can keep (doc_note_pal, doc_note_all) */
@@ -671,11 +678,17 @@ struct UndoStep {
   long bytes;
   UndoStep *next;
   int open;
+  /* 0.8: the canvas's size when the step began, and the step's buffers in the scratch drawer (spilled:
+     which of its parts were written, in step_parts' order; the file's number) */
+  i32 sw, sh;
+  int spilled; u8 *sflags; unsigned long sid;
 };
+static void spill_drop(UndoStep *u);
 static UndoStep *open_step(Doc *d) { return d->undo && d->undo->open ? d->undo : NULL; }
 static void step_free(UndoStep *u)
 {
   int i;
+  if (u->spilled) spill_drop(u);                           /* 0.8: its file deleted (its buffers are NULL) */
   for (i = 0; i < u->ntiles; i++) { free(u->tiles[i].px); free(u->tiles[i].ix); }
   free(u->tiles);
   free(u->sel);
@@ -723,6 +736,7 @@ void doc_begin(Doc *d, const char *action)
   if (u) { u->open++; return; }
   if (!(u = (UndoStep *)calloc(1, sizeof *u))) return;
   strncpy(u->name, action ? action : "", sizeof u->name - 1);
+  u->sw = d->w; u->sh = d->h;
   save_props(d, u);
   u->open = 1;
   u->next = d->undo;
@@ -762,7 +776,7 @@ static void note_plane(Doc *d, int li, Box r, int plane)
       }
       t = &u->tiles[u->ntiles];
       if (!(t->px = (u8 *)malloc((size_t)tw * th * bpp))) return;
-      t->layer = li; t->tx = tx; t->ty = ty; t->plane = (u8)plane; t->ix = NULL;
+      t->layer = li; t->tx = tx; t->ty = ty; t->plane = (u8)plane; t->ix = NULL; t->tw = (u16)tw; t->th = (u16)th;
       for (row = 0; row < th; row++) memcpy(t->px + (long)row * tw * bpp, buf + ((long)(y0 + row) * d->w + x0) * bpp, (size_t)tw * bpp);
       /* 0.4: an indexed layer's indices kept with the pixels */
       if (!plane && d->lay[li]->idx && (t->ix = (u8 *)malloc((size_t)tw * th)) != NULL) {
@@ -902,6 +916,118 @@ void doc_note_all(Doc *d)
   for (i = 0; i < u->nlives; i++) free(u->lives[i].live);  /* (0.9: live settings are in the copy) */
   free(u->lives); u->lives = NULL; u->nlives = 0;
 }
+/* ------------------------------------------------------------------ 0.8: the scratch drawer */
+/* a buffer of a step: where its pointer is kept and how many bytes it holds */
+typedef struct { u8 **p; size_t n; } Part;
+/* every buffer of step u, always in the same order, into parts (room for step_nparts of them);
+   how many there are. The step's planes are the canvas's size when it began, or for a copy of the
+   whole document the size of the copy */
+static int step_nparts(const UndoStep *u) { return 2 * u->ntiles + 1 + 3 * (u->whole ? u->nlay : 0) + MAXCHANNELS + 1; }
+static int step_parts(UndoStep *u, Part *parts)
+{
+  size_t pl = u->whole ? (size_t)u->w * u->h : (size_t)u->sw * u->sh;
+  int n = 0, i;
+  for (i = 0; i < u->ntiles; i++) {
+    Tile *t = &u->tiles[i];
+    size_t a = (size_t)t->tw * t->th;
+    parts[n].p = &t->px; parts[n++].n = a * (t->plane ? 1 : 4);
+    parts[n].p = &t->ix; parts[n++].n = a;
+  }
+  parts[n].p = &u->sel; parts[n++].n = pl;
+  if (u->whole)
+    for (i = 0; i < u->nlay; i++) {
+      parts[n].p = &u->lay[i]->px; parts[n++].n = pl * 4;
+      parts[n].p = &u->lay[i]->mask; parts[n++].n = pl;
+      parts[n].p = &u->lay[i]->idx; parts[n++].n = pl;
+    }
+  if (u->chan) {
+    for (i = 0; i < u->chan->n; i++) { parts[n].p = &u->chan->chan[i]; parts[n++].n = pl; }
+    parts[n].p = &u->chan->qmask; parts[n++].n = pl;
+  }
+  return n;
+}
+/* the file a spilled step is kept in */
+static void spill_name(const UndoStep *u, char *out, size_t cap)
+{
+  size_t l = strlen(undo_scratch);
+  int sep = l && undo_scratch[l - 1] != ':' && undo_scratch[l - 1] != '/';
+  snprintf(out, cap, "%s%sEaselUndo-%lx-%lu", undo_scratch, sep ? "/" : "", (unsigned long)(size_t)u, u->sid);
+}
+/* step u's buffers written to the scratch drawer and freed; 0 (nothing changed) if there is no
+   drawer, it is full or the writing fails */
+static int step_spill(Doc *d, UndoStep *u)
+{
+  static unsigned long seq;
+  char name[300];
+  Part *parts;
+  FILE *f;
+  int n, i, ok = 1;
+  (void)d;
+  if (!undo_scratch[0] || u->spilled || u->open || undo_scratch_bytes + u->bytes > undo_scratch_max) return 0;
+  if (!(parts = (Part *)malloc((size_t)step_nparts(u) * sizeof *parts))) return 0;
+  n = step_parts(u, parts);
+  if (!(u->sflags = (u8 *)malloc((size_t)n + 1))) { free(parts); return 0; }
+  u->sid = ++seq;
+  spill_name(u, name, sizeof name);
+  if (!(f = fopen(name, "wb"))) { free(parts); free(u->sflags); u->sflags = NULL; return 0; }
+  for (i = 0; i < n && ok; i++) {
+    u->sflags[i] = *parts[i].p != NULL;
+    if (u->sflags[i] && parts[i].n) ok = fwrite(*parts[i].p, 1, parts[i].n, f) == parts[i].n;
+  }
+  if (fclose(f)) ok = 0;
+  if (!ok) { remove(name); free(parts); free(u->sflags); u->sflags = NULL; return 0; }
+  for (i = 0; i < n; i++) { free(*parts[i].p); *parts[i].p = NULL; }
+  if (u->whole)
+    for (i = 0; i < u->nlay; i++) { free(u->lay[i]->maskfx); u->lay[i]->maskfx = NULL; u->lay[i]->maskfx_ok = 0; }
+  free(parts);
+  u->spilled = 1;
+  undo_scratch_bytes += u->bytes;
+  return 1;
+}
+/* step u's buffers read back from the scratch drawer (its file deleted); 0 if they can't be */
+static int step_unspill(Doc *d, UndoStep *u)
+{
+  char name[300];
+  Part *parts;
+  FILE *f;
+  int n, i, ok = 1;
+  (void)d;
+  if (!u->spilled) return 1;
+  if (!(parts = (Part *)malloc((size_t)step_nparts(u) * sizeof *parts))) return 0;
+  n = step_parts(u, parts);
+  /* all the memory first, so a shortage leaves the step as it was */
+  for (i = 0; i < n && ok; i++) if (u->sflags[i] && !(*parts[i].p = (u8 *)malloc(parts[i].n ? parts[i].n : 1))) ok = 0;
+  spill_name(u, name, sizeof name);
+  if (ok && !(f = fopen(name, "rb"))) ok = 0;
+  else if (ok) {
+    for (i = 0; i < n && ok; i++) if (u->sflags[i] && parts[i].n) ok = fread(*parts[i].p, 1, parts[i].n, f) == parts[i].n;
+    fclose(f);
+  }
+  if (!ok) { for (i = 0; i < n; i++) if (u->sflags[i]) { free(*parts[i].p); *parts[i].p = NULL; } free(parts); return 0; }
+  free(parts);
+  spill_drop(u);
+  return 1;
+}
+/* a spilled step's file deleted and its record of what was written dropped */
+static void spill_drop(UndoStep *u)
+{
+  char name[300];
+  spill_name(u, name, sizeof name);
+  remove(name);
+  free(u->sflags); u->sflags = NULL;
+  u->spilled = 0;
+  undo_scratch_bytes -= u->bytes;
+  if (undo_scratch_bytes < 0) undo_scratch_bytes = 0;
+}
+/* how many of d's undo steps are in the scratch drawer */
+int doc_spilled_steps(Doc *d)
+{
+  int n = 0;
+  UndoStep *u;
+  for (u = d->undo; u; u = u->next) n += u->spilled;
+  for (u = d->redo; u; u = u->next) n += u->spilled;
+  return n;
+}
 void doc_end(Doc *d)
 {
   UndoStep *u = open_step(d), *p;
@@ -932,10 +1058,15 @@ void doc_end(Doc *d)
   d->dirty = 1;
   d->undo_depth++;
   strncpy(d->last_action, u->name, sizeof d->last_action - 1);
-  /* the oldest steps forgotten past the memory budget (the newest is always kept) */
+  /* the oldest steps forgotten past the memory budget (the newest is always kept); 0.8: or written to
+     the scratch drawer, when there is one, and forgotten only past undo_levels steps */
   for (total = 0, k = 0, p = d->undo; p; p = p->next, k++) {
-    total += p->bytes;
-    if (p->next && (total + p->next->bytes > undo_budget || k >= 99)) { list_free(p->next); p->next = NULL; d->undo_depth = k + 1; break; }
+    if (!p->spilled) total += p->bytes;
+    if (!p->next) break;
+    if (k + 1 >= (undo_levels > 1 ? undo_levels : 1) ||
+        (!p->next->spilled && total + p->next->bytes > undo_budget && !step_spill(d, p->next))) {
+      list_free(p->next); p->next = NULL; d->undo_depth = k + 1; break;
+    }
   }
   d->undo_bytes = total;
 }
@@ -1069,6 +1200,7 @@ int doc_undo(Doc *d)
 {
   UndoStep *u = d->undo;
   if (!u || u->open) return 0;
+  if (u->spilled && !step_unspill(d, u)) return 0;          /* 0.8: back from the scratch drawer first */
   swap_step(d, u);
   d->undo = u->next; u->next = d->redo; d->redo = u;
   if (d->undo_depth) d->undo_depth--;
@@ -1079,6 +1211,7 @@ int doc_redo(Doc *d)
 {
   UndoStep *u = d->redo;
   if (!u) return 0;
+  if (u->spilled && !step_unspill(d, u)) return 0;
   swap_step(d, u);
   d->redo = u->next; u->next = d->undo; d->undo = u;
   d->undo_depth++;
@@ -1193,12 +1326,25 @@ int doc_duplicate_layer(Doc *d, int i)
   return 1;
 }
 /* layers s..e (whole blocks at one level) replaced by one pixel layer of their composite */
+/* 0.8: layers lo..hi-1 at depth (or with lo < 0 the whole picture) composited into out (the canvas's
+   size) in bands of rows, telling progress; 0 if Abort stopped it */
+static int comp_bands(Doc *d, int lo, int hi, int depth, u8 *out)
+{
+  i32 y;
+  for (y = 0; y < d->h; y += 32) {
+    Box b = box_make(0, y, d->w, y + 32 < d->h ? y + 32 : d->h);
+    if (progress(y, d->h)) return 0;
+    if (lo < 0) doc_composite(d, b, out + (long)y * d->w * 4, (long)d->w * 4);
+    else doc_composite_range(d, lo, hi, depth, b, out + (long)y * d->w * 4, (long)d->w * 4, 0);
+  }
+  return 1;
+}
 static int merge_blocks(Doc *d, int s, int e, const char *name)
 {
   Layer *m;
   int depth = d->lay[e]->depth, k;
   if (!(m = layer_new(d, d->lay[s]->kind == LK_PIXEL ? d->lay[s]->name : d->lay[e]->name))) return 0;
-  doc_composite_range(d, s, e + 1, depth, doc_box(d), m->px, (long)d->w * 4, 0);
+  if (!comp_bands(d, s, e + 1, depth, m->px)) { layer_free(m); return 0; }
   doc_begin(d, name);
   doc_note_all(d);
   for (k = s; k <= e; k++) layer_free(d->lay[k]);
@@ -1232,7 +1378,7 @@ int doc_merge_visible(Doc *d)
   for (i = 0; i < d->nlay; i++) if (shown[i] && d->lay[i]->kind != LK_GROUP) { first = i; break; }
   if (first < 0) return 0;
   if (!(m = layer_new(d, d->lay[first]->name))) return 0;
-  doc_composite(d, doc_box(d), m->px, (long)d->w * 4);
+  if (!comp_bands(d, -1, 0, 0, m->px)) { layer_free(m); return 0; }
   doc_begin(d, "Merge Visible");
   doc_note_all(d);
   for (i = k = 0; i < d->nlay; i++) {
@@ -1251,7 +1397,7 @@ int doc_flatten(Doc *d)
   long k, n = (long)d->w * d->h;
   int i;
   if (!(m = layer_new(d, "Background"))) return 0;
-  doc_composite(d, doc_box(d), m->px, (long)d->w * 4);
+  if (!comp_bands(d, -1, 0, 0, m->px)) { layer_free(m); return 0; }
   /* flattened onto the background colour: no transparency left */
   for (k = 0; k < n; k++) {
     u8 bgp[4], *p = m->px + k * 4;

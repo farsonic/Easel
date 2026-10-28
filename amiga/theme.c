@@ -1050,6 +1050,8 @@ static const char *const icons[IC_N] = {
   /* T_MAGICERASE: magic eraser: an eraser and a sparkle */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 13 0 13 6 L 10 3 16 3 L 11 1 15 5 L 15 1 11 5",
   /* T_MAGLASSO: magnetic lasso: a loop with its tail and a magnet */ "ci P 8 7 1 11 2 13 5 11 8 7 9 3 8 1 5 3 2 7 1 P 3 4 8 3 11 5 13 cr F 9 10 10 14 F 13 10 14 14 F 9 14 14 15 cw F 9 10 10 11 F 13 10 14 11",
   /* T_RULER: ruler: a slanted rule with its marks */ "ci P 5 1 11 11 1 15 5 5 15 1 11 L 3 9 5 11 L 5 7 6 8 L 7 5 9 7 L 9 3 10 4",
+  /* T_SAMPLER: color sampler: a small pipette and the target it leaves */ "ci L 1 10 2 9 L 2 9 6 5 L 3 9 7 5 E 8 3 2 ca O 11 11 3 L 11 6 11 7 L 11 15 11 16 L 6 11 7 11 L 15 11 16 11 F 11 11 11 11",
+  /* CAMERA: a history snapshot: a camera */ "ci R 1 4 14 13 F 5 2 10 4 O 8 8 3 ca E 8 8 1 ci F 12 6 13 6",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)
@@ -1139,12 +1141,14 @@ void theme_icon(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, int di
 
 /* (see theme.h) the panes and rulers' bubbles; the ribbon builds its own the same way, with the
    shortcut on the title line */
+int theme_tips = 1;
 const char *theme_bubble(const char *name, const char *body)
 {
   static char out[500];
   char *o;
   size_t room;
   int col = 0;
+  if (!theme_tips) return NULL;                   /* (0.8: Preferences > General > Help bubbles off) */
   snprintf(out, sizeof out, "\33b%s\33n", name);
   if (!body || !body[0]) return out;
   o = out + strlen(out);

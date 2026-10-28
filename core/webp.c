@@ -882,7 +882,7 @@ static const char *vp8_decode(const u8 *d, size_t n, Rgba *out)
   v->pv = (u8 *)malloc((size_t)v->uvs * v->mbh * 8);
   if (!v->intra_t || !v->nz_t || !v->nzdc_t || !v->mbf || !v->py || !v->pu || !v->pv) { vp8_free(v); codec_oom = 1; return "Out of memory"; }
   memset(v->intra_t, B_DC, (size_t)v->mbw * 4);
-  for (mby = 0; mby < v->mbh; mby++) {
+  for (mby = 0; mby < v->mbh && !progress(mby, v->mbh); mby++) {
     BoolDec *tb = &v->part[mby & v->partmask];
     memset(v->intra_l, B_DC, 4);
     v->nz_l = v->nzdc_l = 0;
@@ -903,7 +903,7 @@ static const char *vp8_decode(const u8 *d, size_t n, Rgba *out)
   }
   if (v->ftype) vp8_filter(v);
   if (!rgba_alloc(out, v->w, v->h)) { vp8_free(v); return "Out of memory"; }
-  for (y = 0; y < v->h; y++) {
+  for (y = 0; y < v->h && !progress(y, v->h); y++) {
     int ch = (v->h + 1) >> 1, nr = y >> 1, fr = (y & 1) ? nr + 1 : nr - 1;
     if (fr < 0) fr = 0;
     if (fr > ch - 1) fr = ch - 1;
@@ -1137,7 +1137,7 @@ static void inv_transform(const LTrans *t, u32 *px, int h)
         row[x] = addpx(row[x], predict_px((int)((m[x >> t->bits] >> 8) & 15), row[x - 1], top[x], top[x - 1], top[x + 1]));
     }
   } else if (t->type == 1) {                         /* cross colour */
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress(y, h); y++) {
       u32 *row = px + (long)y * xs;
       const u32 *m = t->data + (long)(y >> t->bits) * bw;
       for (x = 0; x < xs; x++) {
