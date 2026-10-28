@@ -277,7 +277,8 @@ static void build_huff(Huff *t, const u8 *bits, const u8 *vals, int nv)
     t->valptr[l] = k; t->mincode[l] = code;
     code += bits[l - 1]; k += bits[l - 1];
     t->maxcode[l] = bits[l - 1] ? code - 1 : -1;
-    if (l <= 8) for (i = t->mincode[l]; i <= t->maxcode[l]; i++) {
+    /* a damaged table's codes can run past l bits: those get no lookup entries */
+    if (l <= 8) for (i = t->mincode[l]; i <= t->maxcode[l] && i < (1 << l); i++) {
       int lo = (i << (8 - l)), j;
       for (j = 0; j < (1 << (8 - l)); j++) t->look[lo + j] = (u16)((l << 8) | vals[t->valptr[l] + i - t->mincode[l]]);
     }

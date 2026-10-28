@@ -102,6 +102,18 @@ typedef struct {
   u16 snap_tol;                       /* how close snaps, in 1/16 image pixels (0: 8 px); the UI sets it per zoom */
 } GuideSet;
 
+/* 0.6: File Info, the picture's descriptive metadata (UTF-8, NUL-terminated; an empty string is
+   unset). Written to and read from PNG text chunks, JPEG (COM and XMP), TIFF tags and XMP, the ORA
+   stack and PSD's XMP; keywords are one string, separated by commas */
+typedef struct {
+  char title[128];
+  char author[128];
+  char description[512];
+  char keywords[256];
+  char copyright[256];
+  char url[256];
+} DocInfo;
+
 typedef struct {
   i32 w, h;
   Layer *lay[MAXLAYERS]; int nlay;
@@ -127,6 +139,8 @@ typedef struct {
   u8 *lastsel;
   /* 0.4: guides and grid (not part of undo) */
   GuideSet guides;
+  /* 0.6: File Info (not part of undo) */
+  DocInfo info;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */

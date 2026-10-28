@@ -231,9 +231,16 @@ static Doc *doc_of(Rgba *im, const u8 *d, size_t n, char *err, size_t errcap);
 Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
 {
   Rgba im;
-  if (codec_detect(d, n) == FMT_ORA) return ora_read(d, n, err, errcap);
-  if (!codec_decode(d, n, &im, err, errcap)) return NULL;
-  return doc_of(&im, d, n, err, errcap);
+  Doc *doc;
+  int fmt = codec_detect(d, n);
+  if (fmt == FMT_ORA) doc = ora_read(d, n, err, errcap);
+  else if (fmt == FMT_PSD) { codec_oom = 0; doc = psd_read_doc(d, n, err, errcap); }   /* 0.6: with its layers */
+  else {
+    if (!codec_decode(d, n, &im, err, errcap)) return NULL;
+    doc = doc_of(&im, d, n, err, errcap);
+  }
+  if (doc) codec_read_info(d, n, &doc->info);           /* 0.6: File Info */
+  return doc;
 }
 /* a decoded picture made the one layer of a new document (its pixels taken over, not copied) */
 static Doc *doc_of(Rgba *im, const u8 *d, size_t n, char *err, size_t errcap)
@@ -252,8 +259,10 @@ static Doc *doc_of(Rgba *im, const u8 *d, size_t n, char *err, size_t errcap)
 Doc *codec_load_doc_scaled(const u8 *d, size_t n, i32 w, i32 h, char *err, size_t errcap)
 {
   Rgba im;
+  Doc *doc;
   codec_oom = 0;
   if (codec_detect(d, n) != FMT_JPEG) { codec_err(err, errcap, "Only JPEG pictures can be opened smaller"); return NULL; }
   if (!jpeg_read_scaled(d, n, w, h, &im, err, errcap)) return NULL;
-  return doc_of(&im, d, n, err, errcap);
+  if ((doc = doc_of(&im, d, n, err, errcap)) != NULL) codec_read_info(d, n, &doc->info);
+  return doc;
 }

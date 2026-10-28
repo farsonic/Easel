@@ -13,7 +13,72 @@
 #include "image.h"
 
 /* ------------------------------------------------------------------ reading */
-/* image.c decodes straight to RGBA (one buffer, at the size wanted) */
+/* 0.6: the EXIF orientation applied. Mirrors and the half turn are done in place; the quarter turns
+   are a transposition (done in place by following its cycles, with a bit per pixel to mark those
+   already moved) and then a mirror */
+static void flip_h(Rgba *im)
+{
+  i32 x, y;
+  for (y = 0; y < im->h; y++) {
+    u8 *row = im->px + (size_t)y * im->w * 4, t[4];
+    for (x = 0; x < im->w / 2; x++) {
+      u8 *a = row + (size_t)x * 4, *b = row + (size_t)(im->w - 1 - x) * 4;
+      memcpy(t, a, 4); memcpy(a, b, 4); memcpy(b, t, 4);
+    }
+  }
+}
+static void flip_v(Rgba *im)
+{
+  i32 x, y;
+  size_t rb = (size_t)im->w * 4;
+  for (y = 0; y < im->h / 2; y++) {
+    u8 *a = im->px + (size_t)y * rb, *b = im->px + (size_t)(im->h - 1 - y) * rb, t;
+    for (x = 0; x < (i32)rb; x++) { t = a[x]; a[x] = b[x]; b[x] = t; }
+  }
+}
+/* w x h becomes h x w with out(x, y) = in(y, x); 0 if out of memory (nothing changed) */
+static int transpose(Rgba *im)
+{
+  size_t n = (size_t)im->w * im->h, i;
+  u8 *done = (u8 *)calloc((n + 7) / 8, 1);
+  if (!done) return 0;
+  /* the pixel at position p of the result (row-major, h wide) comes from position
+     (p % h) * w + p / h of the original; follow each cycle of that permutation once */
+  for (i = 0; i < n; i++) {
+    size_t p, q;
+    u8 t[4];
+    if (done[i >> 3] & (1 << (i & 7))) continue;
+    memcpy(t, im->px + i * 4, 4);
+    p = i;
+    for (;;) {
+      done[p >> 3] |= (u8)(1 << (p & 7));
+      q = (p % (size_t)im->h) * (size_t)im->w + p / (size_t)im->h;
+      if (q == i) break;
+      memcpy(im->px + p * 4, im->px + q * 4, 4);
+      p = q;
+    }
+    memcpy(im->px + p * 4, t, 4);
+  }
+  free(done);
+  { i32 w = im->w; im->w = im->h; im->h = w; }
+  return 1;
+}
+/* EXIF orientation o (1-8) made upright; a quarter turn that can't get its memory is left undone */
+void rgba_orient(Rgba *im, int o)
+{
+  switch (o) {
+  case 2: flip_h(im); break;
+  case 3: flip_h(im); flip_v(im); break;
+  case 4: flip_v(im); break;
+  case 5: transpose(im); break;
+  case 6: if (transpose(im)) flip_h(im); break;
+  case 7: if (transpose(im)) { flip_h(im); flip_v(im); } break;
+  case 8: if (transpose(im)) flip_v(im); break;
+  }
+}
+
+/* image.c decodes straight to RGBA (one buffer, at the size wanted); then the EXIF orientation
+   (0.6), so w x h are the picture's stored size and come back swapped for a quarter turn */
 int jpeg_read_scaled(const u8 *d, size_t n, i32 tw, i32 th, Rgba *out, char *err, size_t errcap)
 {
   u32 w, h;
@@ -28,6 +93,7 @@ int jpeg_read_scaled(const u8 *d, size_t n, i32 tw, i32 th, Rgba *out, char *err
     return 0;
   }
   out->w = tw; out->h = th; out->px = px;
+  rgba_orient(out, jpeg_orientation(d, n));
   return 1;
 }
 int jpeg_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap) { return jpeg_read_scaled(d, n, 0, 0, out, err, errcap); }
