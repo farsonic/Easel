@@ -103,6 +103,7 @@ void doc_free(Doc *d)
   doc_forget_undo(d);
   for (i = 0; i < d->nlay; i++) layer_free(d->lay[i]);
   free(d->sel);
+  free(d->lastsel);
   free(d);
 }
 
@@ -178,9 +179,67 @@ static void blend_nonsep(int mode, const u8 *b8, const u8 *s8, int *out)
   }
   for (i = 0; i < 3; i++) { int v = (int)(r[i] * 255 + 0.5); out[i] = v < 0 ? 0 : v > 255 ? 255 : v; }
 }
+/* 0.2.1: the rest of the separable modes (W3C and Photoshop definitions), cb backdrop, cs source */
+static int blend_ch2(int mode, int cb, int cs)
+{
+  int v;
+  switch (mode) {
+  case BM_LINEARBURN: v = cb + cs - 255; return v < 0 ? 0 : v;
+  case BM_VIVIDLIGHT:
+    /* Color Burn with 2 cs below the middle, Color Dodge with 2 cs - 255 above it */
+    if (cs < 128) {
+      if (cb >= 255) return 255;
+      if (cs == 0) return 0;
+      v = 255 - ((255 - cb) * 255 + cs) / (2 * cs);
+      return v < 0 ? 0 : v;
+    }
+    if (cb == 0) return 0;
+    if (cs >= 255) return 255;
+    v = (cb * 255 + (255 - cs)) / (2 * (255 - cs));
+    return v > 255 ? 255 : v;
+  case BM_LINEARLIGHT: v = cb + 2 * cs - 255; return v < 0 ? 0 : v > 255 ? 255 : v;
+  case BM_PINLIGHT:
+    if (cs < 128) return cb < 2 * cs ? cb : 2 * cs;
+    return cb > 2 * cs - 255 ? cb : 2 * cs - 255;
+  case BM_HARDMIX: return cb + cs >= 255 ? 255 : 0;
+  case BM_DIVIDE:
+    if (cs == 0) return cb == 0 ? 0 : 255;
+    v = (cb * 255 + cs / 2) / cs;
+    return v > 255 ? 255 : v;
+  default: return cs;
+  }
+}
+/* Darker Color and Lighter Color: whichever whole colour has the lower (higher) luminosity */
+static void blend_pick(int mode, const u8 *b, const u8 *s, int *out)
+{
+  int lb = 30 * b[0] + 59 * b[1] + 11 * b[2], ls = 30 * s[0] + 59 * s[1] + 11 * s[2], i;
+  const u8 *c = (mode == BM_DARKERCOLOR ? ls < lb : ls > lb) ? s : b;
+  for (i = 0; i < 3; i++) out[i] = c[i];
+}
+/* Dissolve: a pixel is either all there or not at all, at random (a hash of the position, so the
+   pattern holds still while painting and only fills in as the opacity rises) */
+static int dissolve_noise(i32 x, i32 y)
+{
+  u32 h = (u32)x * 0x8DA6B343UL ^ (u32)y * 0xD8163841UL ^ 0x9E3779B9UL;
+  h ^= h >> 15; h *= 0x2C1B3C6DUL; h ^= h >> 12; h *= 0x297A2D39UL; h ^= h >> 15;
+  return (int)(h & 255);
+}
+void blend_pixel_at(u8 *dst, const u8 *src, int opacity, int mode, i32 x, i32 y)
+{
+  if (mode == BM_DISSOLVE) {
+    u8 s[4];
+    int as = mul255(src[3], opacity);
+    if (as == 0 || dissolve_noise(x, y) >= as) return;
+    s[0] = src[0]; s[1] = src[1]; s[2] = src[2]; s[3] = 255;
+    blend_pixel(dst, s, 255, BM_NORMAL);
+    return;
+  }
+  blend_pixel(dst, src, opacity, mode);
+}
 void blend_pixel(u8 *dst, const u8 *src, int opacity, int mode)
 {
   int as = mul255(src[3], opacity), ab = dst[3], ao, i;
+  if (mode == BM_DISSOLVE || mode < 0 || mode >= BM_N) mode = BM_NORMAL;    /* (no position: see blend_pixel_at) */
   if (as == 0) return;
   if (ab == 0) { dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = (u8)as; return; }
   if (mode == BM_NORMAL && as == 255) { dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = 255; return; }
@@ -189,7 +248,9 @@ void blend_pixel(u8 *dst, const u8 *src, int opacity, int mode)
     for (i = 0; i < 3; i++) dst[i] = (u8)((src[i] * as + dst[i] * (ab - mul255(as, ab)) + ao / 2) / ao);
   } else {
     int bl[3];
-    if (mode >= BM_HUE) blend_nonsep(mode, dst, src, bl);
+    if (mode >= BM_HUE && mode <= BM_LUMINOSITY) blend_nonsep(mode, dst, src, bl);
+    else if (mode == BM_DARKERCOLOR || mode == BM_LIGHTERCOLOR) blend_pick(mode, dst, src, bl);
+    else if (mode >= BM_LINEARBURN) for (i = 0; i < 3; i++) bl[i] = blend_ch2(mode, dst[i], src[i]);
     else for (i = 0; i < 3; i++) bl[i] = blend_ch(mode, dst[i], src[i]);
     /* the blend where both are opaque, the source alone where the backdrop isn't, the backdrop alone where the source isn't */
     for (i = 0; i < 3; i++) {
