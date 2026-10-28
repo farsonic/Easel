@@ -12,6 +12,7 @@
 #include <string.h>
 #include "layers.h"
 #include "paint.h"
+#include "live.h"                     /* 0.9 */
 
 /* ------------------------------------------------------------------ the stack's shape */
 int layer_paintable(const Doc *d, int i)
@@ -396,7 +397,7 @@ int doc_rasterize(Doc *d, int i)
   if (i < 0 || i >= d->nlay) return 0;
   l = d->lay[i];
   if (l->kind == LK_GROUP) return doc_merge_group(d, i);
-  if (l->kind != LK_FILL) return 0;
+  if (l->kind != LK_FILL && l->kind != LK_TEXT && l->kind != LK_SHAPE) return 0;   /* (0.9: type and shape layers too) */
   {
     u8 *px = (u8 *)malloc((size_t)d->w * d->h * 4);
     u8 op = l->opacity, bl = l->blend, fc = l->fill_cut, vis = l->visible, mon = l->mask_on, clip = l->clip;
@@ -407,9 +408,11 @@ int doc_rasterize(Doc *d, int i)
     l->opacity = 255; l->blend = BM_NORMAL; l->fill_cut = 0; l->visible = 1; l->mask_on = 0; l->clip = 0; memset(l->blendif, 0, 4);
     doc_composite_range(d, i, i + 1, l->depth, doc_box(d), px, (long)d->w * 4, 0);
     l->opacity = op; l->blend = bl; l->fill_cut = fc; l->visible = vis; l->mask_on = mon; l->clip = clip; memcpy(l->blendif, bi, 4);
-    doc_begin(d, "Rasterize Layer");
+    doc_begin(d, l->kind == LK_TEXT ? "Rasterize Type" : l->kind == LK_SHAPE ? "Rasterize Shape" : "Rasterize Layer");
     doc_note_all(d);
     l->px = px; l->kind = LK_PIXEL;
+    free(l->live); l->live = NULL; l->livelen = 0;           /* 0.9 */
+    free(l->livepx); l->livepx = NULL; l->live_ok = 0;
     doc_end(d);
   }
   return 1;
@@ -480,6 +483,24 @@ int layer_content_box(const Doc *d, int i, Box *b)
 {
   const Layer *l;
   i32 x, y, x0 = d->w, y0 = d->h, x1 = 0, y1 = 0;
+  if (i >= 0 && i < d->nlay && !d->lay[i]->px && d->lay[i]->live) {
+    /* 0.9: a type or shape layer: what its rendering covers */
+    Layer *lv = d->lay[i];
+    Box r;
+    if (!lv->live_ok) live_render((Doc *)d, lv);
+    r = lv->livebox;
+    if (!lv->livepx) return 0;
+    for (y = r.y0; y < r.y1; y++) for (x = r.x0; x < r.x1; x++)
+      if (lv->livepx[((size_t)(y - r.y0) * (r.x1 - r.x0) + (x - r.x0)) * 4 + 3]) {
+        if (x < x0) x0 = x;
+        if (x >= x1) x1 = x + 1;
+        if (y < y0) y0 = y;
+        y1 = y + 1;
+      }
+    if (x1 <= x0) return 0;
+    *b = box_make(x0, y0, x1, y1);
+    return 1;
+  }
   if (i < 0 || i >= d->nlay || !(l = d->lay[i])->px) return 0;
   for (y = 0; y < d->h; y++) {
     const u8 *p = l->px + (long)y * d->w * 4 + 3;
@@ -500,7 +521,9 @@ static void shift_layer(Doc *d, int i, i32 dx, i32 dy)
   Layer *l = d->lay[i];
   u8 *n;
   i32 x, y;
-  if (!l->px || (!dx && !dy) || l->lock_pos || l->lock_all) return;
+  if ((!dx && !dy) || l->lock_pos || l->lock_all) return;
+  if (!l->px && l->live) { double m[6] = { 1, 0, 0, 0, 1, 0 }; m[2] = dx; m[5] = dy; live_transform(l, m); return; }   /* 0.9 */
+  if (!l->px) return;
   if ((n = (u8 *)calloc((size_t)d->w * d->h, 4)) == NULL) return;
   for (y = 0; y < d->h; y++) for (x = 0; x < d->w; x++) {
     i32 sx = x - dx, sy = y - dy;

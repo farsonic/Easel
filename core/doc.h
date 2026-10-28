@@ -15,6 +15,7 @@
 #define MAXLAYERS 100
 #define MAXDIM 16384                  /* the largest width or height */
 #define MAXCHANNELS 24                /* 0.7: alpha channels (saved selections) a document can keep */
+#define MAXPATHS 64                   /* 0.9: saved paths a document can keep */
 
 enum { BM_NORMAL, BM_MULTIPLY, BM_SCREEN, BM_OVERLAY, BM_DARKEN, BM_LIGHTEN, BM_DIFFERENCE, BM_ADD,
        BM_SUBTRACT, BM_DODGE, BM_BURN, BM_SOFTLIGHT, BM_HARDLIGHT, BM_EXCLUSION, BM_HUE, BM_SATURATION,
@@ -30,7 +31,8 @@ typedef struct { i32 x0, y0, x1, y1; } Box;      /* x1, y1 exclusive; empty when
 
 /* what a layer is (0.3): pixels; a group, whose members are the layers just below it with a greater
    depth; an adjustment applied to what is below it; or a fill (solid colour or gradient) */
-enum { LK_PIXEL, LK_GROUP, LK_ADJUST, LK_FILL };
+enum { LK_PIXEL, LK_GROUP, LK_ADJUST, LK_FILL,
+       LK_TEXT, LK_SHAPE };           /* 0.9: live type and shape layers (live.h, type.h, shape.h) */
 
 /* an adjustment layer's settings (0.3): kind is one of AK_ (adjust.h), the numbers its settings in
    the order that adjustment's function takes them; curves and the gradient map keep their points */
@@ -77,6 +79,12 @@ typedef struct {
   void *adjprog; u8 adjprog_ok;
   /* 0.4: indexed documents */
   u8 *idx;                            /* w * h palette indices when the document is indexed, else NULL */
+  /* ---- 0.9: type and shape layers (px is NULL for them) ---- */
+  void *live; u32 livelen;            /* LK_TEXT: a TextParams (type.h); LK_SHAPE: a ShapeParams with its path
+                                         after it (shape.h). One flat malloc'd block, copied and freed whole */
+  u8 *livepx; Box livebox;            /* the rendering (RGBA, livebox's size, in canvas pixels), worked out */
+  u8 live_ok;                         /*   when needed: live_ok is cleared when the settings change */
+  /* ---- end of 0.9 ---- */
 } Layer;
 
 typedef struct UndoStep UndoStep;
@@ -150,6 +158,13 @@ typedef struct {
   double xf_again[9];                 /* the last transform about its box's centre (xform.h), for Transform Again */
   u8 xf_again_ok;
   /* ---- end of 0.7 ---- */
+  /* ---- 0.9: vector paths (path.h): the saved paths and the work path ---- */
+  struct Path *path[MAXPATHS];        /* path[0..npaths) */
+  char path_name[MAXPATHS][32];       /* UTF-8 */
+  int npaths;
+  struct Path *workpath;              /* NULL when there is none */
+  int path_active;                    /* the path the Paths panel has chosen: k + 1 for path[k], -1 the work path, 0 none */
+  /* ---- end of 0.9 ---- */
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
@@ -207,6 +222,10 @@ void   doc_note_pal(Doc *d);
 void   doc_note_channels(Doc *d);
 void   doc_note_chan(Doc *d, int k, Box r);
 void   doc_note_qmask(Doc *d, Box r);
+/* 0.9: a live (type or shape) layer's settings as they are, before they change; and every path
+   (the saved ones, their names and the work path). doc_note_all does both */
+void   doc_note_live(Doc *d, int i);
+void   doc_note_paths(Doc *d);
 void   doc_end(Doc *d);
 int    doc_fade(Doc *d, int opacity, int blend);   /* Edit > Fade (0.6): the last change mixed back */
 int    doc_undo(Doc *d);
