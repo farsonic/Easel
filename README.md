@@ -1,4 +1,4 @@
-# Easel 0.7
+# Easel 1.0
 
 Easel is a picture editor for the Amiga, laid out the way PhotoCraft is. The options bar runs
 along the top, the tools down the left, and open pictures are tabs over the canvas. The Color,
@@ -41,6 +41,26 @@ interface and icons. None of the icons are copied from any other program.
   Color to Alpha and HSB/HSL; and the gallery effects Cutout, Film Grain, Poster Edges, Spatter,
   Halftone Pattern, Photocopy, Mosaic Tiles, Patchwork, Stained Glass and Texturizer.
 - Replace Color and the new Hue/Saturation, Black & White and Curves are adjustment layers too.
+
+## New in 0.9: type and vectors
+
+- Type stays editable: the Horizontal and Vertical Type tools (T) make type layers. Click to type
+  a line, or drag a box for a paragraph that wraps; click the text again to edit it (Shift and the
+  arrows select, Ctrl-A selects all, Esc finishes). Size, font, colour and alignment in the options
+  bar apply to the selected letters. The Type Mask tool makes a selection in the shape of the text.
+- Layer > Type: Edit Type, Character (font, size, leading, tracking, colour, underline,
+  strikethrough), Paragraph (alignment, indents, spacing), Warp Text (Arc, Arch, Bulge, Flag, Wave
+  and more), Horizontal/Vertical, Create Work Path and Rasterize Type.
+- Amiga bitmap fonts from FONTS: can be used as well as TrueType ones; they are listed as
+  "name (Amiga)".
+- Paths: the Pen tool (P) with Add Anchor, Delete Anchor and Convert Point, and the Path and Direct
+  Selection tools (A). A Paths tab beside Layers and Channels lists the work path and saved paths;
+  fill or stroke a path, make a selection from it, or a path from the selection.
+- Shape layers: Rectangle, Rounded Rectangle, Ellipse, Polygon (or star), Line (with arrowheads) and
+  Custom Shape (U) draw shapes that stay editable, with fill and stroke. Double-click a shape's
+  thumbnail for Shape Properties. Each tool can also draw a path or plain pixels instead.
+- Type and shape layers move, turn, flip and transform without losing quality, and keep all of
+  that in OpenRaster files.
 
 ## New in 0.8: workspace and safety
 
@@ -251,8 +271,10 @@ next to itself.
 | Gradient / Paint Bucket | G | gradient presets and the Gradient Editor; linear, radial, angle, reflected, diamond; the bucket fills with the foreground or a pattern |
 | Blur / Sharpen / Smudge | R | strength |
 | Dodge / Burn / Sponge | O | exposure |
-| Text | T | click where the text goes, then type it (a bar, \|, starts a new line); font, size, alignment; the text becomes a layer of its own |
-| Rectangle / Ellipse / Line | U | corner radius, line weight, opacity |
+| Horizontal Type / Vertical Type / Type Mask | T | click and type, or drag a box for a paragraph; click a type layer's text to edit it; the type mask makes a selection |
+| Pen / Add Anchor / Delete Anchor / Convert Point | P | click for corners, drag for curves; click the first point to close the path |
+| Path Selection / Direct Selection | A | move a whole path, or its points and handles |
+| Rectangle / Rounded Rectangle / Ellipse / Polygon / Line / Custom Shape | U | a shape layer, a path or pixels; fill, stroke, sides (or a star), corner radius, arrowheads |
 | Hand | H | drag to scroll (or hold the space bar with any tool) |
 | Zoom | Z | click to zoom in, Alt-click to zoom out |
 

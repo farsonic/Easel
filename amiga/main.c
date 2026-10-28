@@ -70,7 +70,7 @@
 #define MUIKEYF_WINDOW_CLOSE (1UL << MUIKEY_WINDOW_CLOSE)
 #endif
 
-const char verstag[] = "$VER: Easel 0.7 (28.10.2026) a picture editor for the Amiga (MUI)";
+const char verstag[] = "$VER: Easel 1.0 (28.10.2026) a picture editor for the Amiga (MUI)";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1743,7 +1743,7 @@ static void command(ULONG id)
     }
     return; }
   case ID_ABOUT:
-    ask("OK", "%s", "\33cEasel 0.7\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
+    ask("OK", "%s", "\33cEasel 1.0\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
         "Live layers (groups, masks, adjustment and fill layers), palettes,\nindexed pictures and colour cycling, the Amiga's screen modes,\n"
         "brushes, gradients and patterns, selections, adjustments and filters.\n"
         "Reads and writes PNG, JPEG, BMP, GIF, TIFF, Targa, Photoshop PSD,\nIFF ILBM and OpenRaster (.ora), and reads many more.\n\n"
@@ -2454,7 +2454,7 @@ int main(int argc, char **argv)
   lang_set(LANG_EN);
   theme_set_dark(pref_dark);
   opts_defaults();
-  splash_open(pub_screen, "Easel 0.7");
+  splash_open(pub_screen, "Easel 1.0");
   splash_step(3, tr("Adding Easel's fonts drawer"));
   DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
   add_fonts();

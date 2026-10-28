@@ -35,7 +35,7 @@
 #include "../core/adjust.h"
 #include "dtload.h"
 
-const char verstag[] = "$VER: EaselConvert 0.6 (28.10.2026) converts pictures (Easel's codecs)";
+const char verstag[] = "$VER: EaselConvert 1.0 (28.10.2026) converts pictures (Easel's codecs)";
 
 struct GfxBase *GfxBase;                 /* for dtload.c's older-datatype path */
 size_t __stack = 16384;                  /* vbcc's startup gives main this much when the Shell gives less */
