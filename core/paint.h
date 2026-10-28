@@ -7,9 +7,24 @@
 #define EASEL_PAINT_H
 
 #include "doc.h"
+#include "brush.h"
 
 /* ------------------------------------------------------------------ brush strokes */
-enum { PT_BRUSH, PT_PENCIL, PT_ERASER, PT_CLONE, PT_BLUR, PT_SHARPEN, PT_SMUDGE, PT_DODGE, PT_BURN, PT_SPONGE };
+/* (0.5: the stroke engine is in stroke.c, the brushes' pieces in brush.h) */
+enum { PT_BRUSH, PT_PENCIL, PT_ERASER, PT_CLONE, PT_BLUR, PT_SHARPEN, PT_SMUDGE, PT_DODGE, PT_BURN, PT_SPONGE,
+       /* 0.5 */
+       PT_PATTERN,                    /* Pattern Stamp: paints b.pattern */
+       PT_HISTORY,                    /* History Brush: paints b.snapshot back */
+       PT_REPLACE,                    /* Color Replacement */
+       PT_BGERASE,                    /* Background Eraser */
+       PT_N };
+enum { ER_BRUSH, ER_PENCIL, ER_BLOCK };                    /* the Eraser's modes */
+enum { SMP_CONTINUOUS, SMP_ONCE, SMP_SWATCH };             /* Color Replacement and Background Eraser: what they sample */
+enum { LIM_CONTIGUOUS, LIM_DISCONTIGUOUS, LIM_FINDEDGES }; /* and where they act */
+enum { RPL_HUE, RPL_SATURATION, RPL_COLOR, RPL_LUMINOSITY };
+struct Pattern;
+/* a brush's settings. Everything after strength is 0.5's, and zero there is always "off" or
+   "as before", so a Brush cleared with memset paints as Easel 0.4 did */
 typedef struct {
   int tool;                           /* PT_ */
   int size;                           /* diameter in pixels, 1-2500 */
@@ -20,6 +35,26 @@ typedef struct {
   int blend;                          /* BM_ for the brush and pencil */
   i32 clone_dx, clone_dy;             /* PT_CLONE: where it copies from, relative to where it paints */
   int strength;                       /* PT_BLUR..PT_SPONGE: 0-100 */
+  /* 0.5: the tip */
+  int angle;                          /* degrees, anticlockwise, -180..180 */
+  int roundness;                      /* 1-100 per cent (0: 100, round) */
+  int flip_x, flip_y;
+  int square;                         /* an aliased square tip (what the Eraser's Block mode paints) */
+  const Tip *tip;                     /* a sampled tip instead of the round one (kept by the caller) */
+  const CustomBrush *custom;          /* a DPaint brush, painted in custom_mode (kept by the caller) */
+  int custom_mode;                    /* CB_ */
+  u32 bg;                             /* the background colour 0xRRGGBB (Color Dynamics, Auto Erase, swatch sampling) */
+  /* 0.5: tool options */
+  int eraser_mode;                    /* PT_ERASER: ER_ */
+  int auto_erase;                     /* PT_PENCIL: starting on the foreground colour paints the background colour */
+  int sample_all;                     /* PT_CLONE: copies from everything visible, not the active layer */
+  const struct Pattern *pattern;      /* PT_PATTERN (kept by the caller) */
+  int pattern_aligned;                /* PT_PATTERN: the tiles stay put from stroke to stroke (else start at each stroke) */
+  const Snapshot *snapshot;           /* PT_HISTORY (kept by the caller) */
+  int sampling, limits, tolerance;    /* PT_REPLACE, PT_BGERASE: SMP_, LIM_, 0-255 */
+  int protect_fg;                     /* PT_BGERASE: keeps the foreground colour */
+  int replace_mode;                   /* PT_REPLACE: RPL_ */
+  BrushDynamics dyn;                  /* Brush Settings' sections */
 } Brush;
 typedef struct Stroke Stroke;
 /* a stroke on the active layer, begun at x, y (an undo step "name" while it lasts); then
@@ -28,6 +63,34 @@ typedef struct Stroke Stroke;
 Stroke *stroke_begin(Doc *d, const Brush *b, u32 color, double x, double y, Box *changed);
 void    stroke_to(Stroke *s, double x, double y, Box *changed);
 void    stroke_end(Stroke *s);
+/* 0.5: the same with tablet pressure 0-1 (stroke_to is pressure 1); stroke_begin_p starts with it */
+Stroke *stroke_begin_p(Doc *d, const Brush *b, u32 color, double x, double y, double pressure, Box *changed);
+void    stroke_to_p(Stroke *s, double x, double y, double pressure, Box *changed);
+/* airbrush build-up and smoothing's catch-up while the pointer holds still: call every
+   stroke_tick_ms(b) milliseconds from a timer while the button is down. *changed as for stroke_to */
+void    stroke_tick(Stroke *s, Box *changed);
+int     stroke_tick_ms(const Brush *b);     /* 0: this brush needs no timer */
+int     stroke_wants_tick(const Brush *b);
+/* the dabs laid so far (tests and the status bar) */
+long    stroke_dabs(const Stroke *s);
+/* where smoothing holds the brush back from the pointer: the brush's place (for drawing the
+   string), 0 if it isn't held back */
+int     stroke_string(const Stroke *s, double *bx, double *by);
+
+/* what a stroke paints into: straight RGBA (bpp 4) or an 8-bit mask (bpp 1, e.g. a layer mask:
+   paint lays its colour's grey, the eraser the background's), w x h like the canvas. note is called
+   once for each part before it first changes (undo); ctx is passed back to it */
+typedef struct {
+  u8 *px; i32 w, h; int bpp;
+  int alpha_lock;                     /* RGBA: the transparency is kept */
+  void (*note)(void *ctx, Box r);
+  void *ctx;
+} PaintTarget;
+Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 color, double x, double y, double pressure, Box *changed);
+
+/* a dab's coverage as the brush tip would lay it (size, angle, roundness, hardness, sampled tip,
+   custom brush shape), *w x *h malloc'd, for previews in the Brushes panel. NULL if out of memory */
+u8     *brush_dab_preview(const Brush *b, int *w, int *h);
 
 /* ------------------------------------------------------------------ fills */
 /* Paint Bucket at x, y: the area like the pixel there (tolerance 0-255; contiguous or every such
@@ -41,6 +104,14 @@ Box clear_selection(Doc *d);
    (c1 transparent if fade), reversed or not, dithered */
 enum { GR_LINEAR, GR_RADIAL, GR_ANGLE, GR_REFLECTED, GR_DIAMOND };
 Box fill_gradient(Doc *d, double x0, double y0, double x1, double y1, int kind, u32 c0, u32 c1, int fade, int reverse, int opacity, int blend);
+/* 0.5: a multi-stop gradient (gradient.h) from x0, y0 to x1, y1 in style kind (GR_), reversed or
+   not, dithered or not. The gradient's foreground and background stops take d->fg and d->bg */
+struct Gradient;
+Box fill_gradient_ex(Doc *d, double x0, double y0, double x1, double y1, int kind, const struct Gradient *g, int reverse, int dither, int opacity, int blend);
+/* 0.5: the selection (or everything) filled with a pattern (pattern.h) tiled from ox, oy
+   (Edit > Fill > Pattern), and the Paint Bucket filling with one */
+Box fill_pattern(Doc *d, const struct Pattern *p, i32 ox, i32 oy, int opacity, int blend);
+Box fill_bucket_pattern(Doc *d, i32 x, i32 y, const struct Pattern *p, int tolerance, int contiguous, int all_layers, int opacity, int antialias);
 /* shapes drawn on the active layer: a rectangle (corner radius r), ellipse, or a line w wide */
 Box shape_rect(Doc *d, double x0, double y0, double x1, double y1, double radius, u32 color, int opacity);
 Box shape_ellipse(Doc *d, double x0, double y0, double x1, double y1, u32 color, int opacity);
