@@ -56,6 +56,12 @@
 #include "../core/crop.h"
 #include "../core/matte.h"
 #include "../core/util.h"
+#include "../core/type.h"
+#include "../core/amifont.h"
+#include "../core/path.h"
+#include "../core/pathops.h"
+#include "../core/shape.h"
+#include "../core/live.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -95,14 +101,17 @@ static LONG win_box[4];
 const char *const tool_names[TL_N] = {
   "Move Tool", "Rectangular Marquee Tool", "Elliptical Marquee Tool", "Lasso Tool", "Polygonal Lasso Tool", "Magic Wand Tool",
   "Crop Tool", "Eyedropper Tool", "Clone Stamp Tool", "Brush Tool", "Pencil Tool", "Eraser Tool", "Paint Bucket Tool",
-  "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Text Tool",
+  "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Horizontal Type Tool",
   "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool",
   "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool",
   "Magnetic Lasso Tool", "Ruler Tool",
-  "Color Sampler Tool"
+  "Color Sampler Tool",
+  "Horizontal Type Mask Tool", "Vertical Type Tool", "Pen Tool", "Add Anchor Point Tool", "Delete Anchor Point Tool", "Convert Point Tool",
+  "Path Selection Tool", "Direct Selection Tool", "Rounded Rectangle Tool", "Polygon Tool", "Custom Shape Tool"
 };
 char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
-  'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I' };
+  'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I',
+  'T', 'T', 'P', 'P', 'P', 'P', 'A', 'A', 'U', 'U', 'U' };
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -378,14 +387,87 @@ LONG pick_color(const char *t, ULONG start)
 }
 
 /* ------------------------------------------------------------------ fonts for the Text tool */
-static const char *famlist[MAXFACES];
-static int nfam = -1;
+/* the TrueType families, then (0.9) the Amiga bitmap fonts found in FONTS: */
+#define MAXBM 48
+static const char *famlist[MAXFACES + MAXBM];
+static char bmnames[MAXBM][32], bmlabels[MAXBM][44];
+static int nfam = -1, ntt, nbm;
 int font_count(void)
 {
-  if (nfam < 0) nfam = fonts_families(&fonts, famlist, MAXFACES);
+  int i;
+  if (nfam < 0) {
+    ntt = nfam = fonts_families(&fonts, famlist, MAXFACES);
+    for (i = 0; i < nbm; i++) famlist[nfam++] = bmnames[i];
+  }
   return nfam;
 }
 const char *font_name(int i) { return i >= 0 && i < font_count() ? famlist[i] : "Liberation Sans"; }
+const char *font_label(int i) { return i >= ntt && i < font_count() ? bmlabels[i - ntt] : font_name(i); }
+int font_find(const char *family)
+{
+  int i;
+  for (i = 0; i < font_count(); i++) if (!Stricmp((STRPTR)famlist[i], (STRPTR)family)) return i;
+  return -1;
+}
+/* 0.9: the bitmap fonts in FONTS: (a .font without an .otag beside it), for type layers */
+static void bitmap_fonts_scan(void)
+{
+  struct FileInfoBlock *fib;
+  struct Process *me = (struct Process *)FindTask(NULL);
+  APTR pw = me->pr_WindowPtr;
+  BPTR l, old;
+  me->pr_WindowPtr = (APTR)-1;
+  l = Lock((STRPTR)"FONTS:", ACCESS_READ);
+  me->pr_WindowPtr = pw;
+  if (!l) return;
+  if ((fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) {
+    old = CurrentDir(l);
+    if (Examine(l, fib))
+      while (ExNext(l, fib) && nbm < MAXBM) {
+        char name[110], otag[120];
+        int n = (int)strlen(fib->fib_FileName), k, dup = 0;
+        BPTR o;
+        if (fib->fib_DirEntryType >= 0 || n <= 5 || n - 5 >= 32 || Stricmp((STRPTR)fib->fib_FileName + n - 5, (STRPTR)".font")) continue;
+        memcpy(name, fib->fib_FileName, n - 5); name[n - 5] = 0;
+        sprintf(otag, "%s.otag", name);
+        if ((o = Lock((STRPTR)otag, ACCESS_READ))) { UnLock(o); continue; }
+        for (k = 0; k < nbm; k++) if (!Stricmp((STRPTR)bmnames[k], (STRPTR)name)) dup = 1;
+        if (dup) continue;
+        strcpy(bmnames[nbm], name);
+        snprintf(bmlabels[nbm], sizeof bmlabels[0], "%s (Amiga)", name);
+        nbm++;
+      }
+    CurrentDir(old);
+    FreeDosObject(DOS_FIB, fib);
+  }
+  UnLock(l);
+  nfam = -1;
+}
+/* the core's lookup of an Amiga bitmap font for a run: only for the families found in FONTS:, each
+   size loaded once and kept until the end */
+#define NAMICACHE 24
+static struct { char fam[32]; int size; AmiFont *f; } amicache[NAMICACHE];
+static int amicache_next;
+static AmiFont *ami_lookup(const char *family, int size)
+{
+  int i;
+  char path[64];
+  for (i = 0; i < nbm; i++) if (!Stricmp((STRPTR)bmnames[i], (STRPTR)family)) break;
+  if (i >= nbm) return NULL;
+  for (i = 0; i < NAMICACHE; i++) if (amicache[i].fam[0] && amicache[i].size == size && !Stricmp((STRPTR)amicache[i].fam, (STRPTR)family)) return amicache[i].f;
+  snprintf(path, sizeof path, "FONTS:%s.font", family);
+  i = amicache_next; amicache_next = (amicache_next + 1) % NAMICACHE;
+  if (amicache[i].f) amifont_free(amicache[i].f);
+  strncpy(amicache[i].fam, family, sizeof amicache[i].fam - 1); amicache[i].fam[sizeof amicache[i].fam - 1] = 0;
+  amicache[i].size = size;
+  amicache[i].f = amifont_load(path, size);         /* (NULL remembered too: not tried again) */
+  return amicache[i].f;
+}
+static void ami_free(void)
+{
+  int i;
+  for (i = 0; i < NAMICACHE; i++) { if (amicache[i].f) amifont_free(amicache[i].f); amicache[i].f = NULL; amicache[i].fam[0] = 0; }
+}
 
 /* ------------------------------------------------------------------ tools */
 Brush tool_brush(int t)
@@ -439,13 +521,16 @@ static void opts_defaults(void)
   /* 0.7 */
   opt.sel_antialias = 1; opt.mq_w = 4; opt.mq_h = 3;
   opt.ml_width = 10; opt.ml_contrast = 10; opt.ml_freq = 57;
+  /* 0.9 */
+  opt.text_aa = 2; opt.shape_fill = 1; opt.stroke_width = 3; opt.stroke_color = 0x000000;
+  opt.poly_sides = 5; opt.poly_indent = 50; opt.round_radius = 10; opt.arrow_end = 1;
 }
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
 static signed char key_tool[26];
 int tool_for_key(int c)
 {
   static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
-    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM, TL_HISTORY };
+    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM, TL_HISTORY, TL_PEN, TL_PATHSEL };
   int i;
   if (c < 'A' || c > 'Z') return -1;
   if (key_tool[c - 'A']) return key_tool[c - 'A'] - 1;
@@ -2192,6 +2277,10 @@ int main(int argc, char **argv)
   fonts_init(&fonts, "PROGDIR:TrueType");
   splash_step(10, tr("Looking for installed fonts"));
   sysfonts_scan(&fonts, scan_step);
+  /* 0.9: type layers find their faces among these, and Amiga bitmap fonts in FONTS: */
+  text_fonts = &fonts;
+  bitmap_fonts_scan();
+  text_amifont_lookup = ami_lookup;
   splash_step(45, tr("Preparing"));
   if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
       !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class() || !channels_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
@@ -2292,6 +2381,9 @@ done:
   jobs_free();
   popup_free();
   qbutton_class_free();
+  text_cache_flush();                    /* 0.9: the type layers' open font files */
+  text_amifont_lookup = NULL; ami_free();
+  text_fonts = NULL;
   fonts_free(&fonts);
   theme_free_fonts();
   remove_fonts();

@@ -61,10 +61,20 @@ enum {
   /* 0.7 */
   TL_MAGLASSO, TL_RULER,
   /* 0.8 */
-  TL_SAMPLER, TL_N
+  TL_SAMPLER,
+  /* 0.9: type, pens and paths, shapes (TL_TEXT is the Horizontal Type tool; TL_RECT, TL_ELLIPSE
+     and TL_LINE make shape layers too) */
+  TL_TYPEMASK, TL_VTEXT, TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT, TL_PATHSEL, TL_DIRECTSEL,
+  TL_ROUNDRECT, TL_POLYGON, TL_CUSTOMSHAPE,
+  TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest */
-#define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest,
+   0.9's after those */
+#define TOOL_ICON(t) ((t) >= TL_TYPEMASK ? IC_T_TYPEMASK + (t) - TL_TYPEMASK : (t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
+/* 0.9: the tools that make shapes (as shape layers or pixels), and those that work on paths */
+#define SHAPE_TOOL(t) ((t) == TL_RECT || (t) == TL_ELLIPSE || (t) == TL_LINE || (t) == TL_ROUNDRECT || (t) == TL_POLYGON || (t) == TL_CUSTOMSHAPE)
+#define PATH_TOOL(t) ((t) >= TL_PEN && (t) <= TL_DIRECTSEL)
+#define TYPE_TOOL(t) ((t) == TL_TEXT || (t) == TL_VTEXT || (t) == TL_TYPEMASK)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */
   int size[TL_N], hardness[TL_N], opacity[TL_N], flow[TL_N], mode[TL_N], strength[TL_N];
@@ -92,6 +102,15 @@ typedef struct {
   int ml_width, ml_contrast, ml_freq; /* magnetic lasso: pixels, per cent, 0-100 */
   int crop_preset, crop_swap;         /* crop: crop_presets[], width and height swapped */
   int ruler_image;                    /* ruler: Straighten turns the whole picture (and crops) */
+  /* 0.9 */
+  int text_style, text_aa;            /* type: 0 regular, 1 bold, 2 italic, 3 bold italic; TAA_ (text_align: TA_ with justify) */
+  int shape_mode;                     /* shapes: 0 a shape layer, 1 pixels */
+  int shape_fill, shape_stroke;       /* filled with the foreground colour; stroked */
+  int stroke_width, stroke_align;     /* pixels; SA_ */
+  int stroke_color;                   /* 0xRRGGBB */
+  int poly_sides, poly_star, poly_indent;   /* polygon: 3-100 sides, a star, its indent per cent */
+  int arrow_start, arrow_end;         /* line: arrowheads */
+  int round_radius;                   /* rounded rectangle: corner radius */
 } Opts;
 /* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
 enum { MQS_NORMAL, MQS_RATIO, MQS_SIZE, MQS_ROW, MQS_COL };
@@ -137,6 +156,13 @@ struct MUIP_Canvas_ScrollTo { ULONG MethodID; LONG x, y; };
 #define MUIM_Canvas_Transform (QTAG + 0x109) /* (0.7) struct MUIP_Canvas_Transform: Free Transform's handles put up */
 struct MUIP_Canvas_Transform { ULONG MethodID; LONG mode; LONG selection; };   /* mode: XM_; selection: Transform Selection */
 enum { XM_FREE, XM_SCALE, XM_ROTATE, XM_SKEW, XM_DISTORT, XM_PERSPECTIVE };
+/* 0.9: the Type tool's work, from the options bar, menus and panels: struct MUIP_Canvas_TypeCmd */
+#define MUIM_Canvas_TypeCmd (QTAG + 0x10A)
+struct MUIP_Canvas_TypeCmd { ULONG MethodID; LONG code; LONG arg; };
+enum { TC_OPTS, TC_CHARACTER, TC_PARAGRAPH, TC_WARP, TC_EDIT, TC_COMMIT, TC_ORIENT, TC_COLOR };
+extern int type_editing;               /* text is being typed on the canvas */
+/* 0.9: the paths changed from outside the canvas (the Paths panel): drawn again */
+#define MUIM_Canvas_Paths   (QTAG + 0x10B)
 /* 0.6: where the pointer is over the picture, and the colour there (for the Info panel) */
 typedef struct { LONG x, y; int in, has_rgb; int rgba[4]; } CanvasPoint;
 extern CanvasPoint canvas_pt;
@@ -166,6 +192,14 @@ extern char ruler_info[96];
 #define MUIM_Channels_Refresh (QTAG + 0x342)
 struct MUI_CustomClass *channels_class(void);
 extern int chan_pick, chan_op;
+/* 0.9: the Paths panel (paths.c): the Work Path and the saved paths, each with a thumbnail; the
+   buttons along the bottom. What it asks for comes to main.c as the ID_PATH... commands about
+   path_pick (-1 the work path, k saved path k) */
+#define MUIM_Paths_Refresh (QTAG + 0x343)
+struct MUI_CustomClass *paths_class(void);
+extern int path_pick;
+struct Path *active_path(Doc *d);      /* the path the Paths panel has chosen, NULL for none */
+void paths_free(void);
 
 /* ------------------------------------------------------------------ toolbox, options bar (toolbox.c) */
 #define MUIM_Tools_Refresh  (QTAG + 0x200) /* the tool or the colours changed */
@@ -274,9 +308,20 @@ void   redraw_window(void);              /* (main.c) the main window drawn again
 int    ask_number(const char *title, const char *label, LONG *v, LONG min, LONG max);
 /* the colour picker: 0xRRGGBB, or -1 if cancelled */
 LONG   pick_color(const char *title, ULONG start);
-/* the family names of the fonts the Text tool can use, and one by number */
+/* the family names of the fonts the Text tool can use, and one by number; 0.9: as the font list
+   shows it (Amiga bitmap fonts marked), and the number of a family (-1 none) */
 int    font_count(void);
 const char *font_name(int i);
+const char *font_label(int i);
+int    font_find(const char *family);
+
+/* 0.9: type and shape dialogs (typedlg.c), each changing the settings given; 1 if OK. Character:
+   the style of the text from..to (all of it when from == to) and the leading */
+struct TextParams; struct ShapeParams;
+int dlg_character(struct TextParams *tp, int from, int to);
+int dlg_paragraph(struct TextParams *tp);
+int dlg_warp(struct TextParams *tp);
+int dlg_shape(struct ShapeParams *sp);
 
 /* dialogs.c */
 void dlg_new(void);
