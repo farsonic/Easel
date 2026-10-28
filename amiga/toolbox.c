@@ -24,14 +24,15 @@
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
+#include "../core/crop.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
 
 /* ------------------------------------------------------------------ the groups */
 typedef struct { int n; int tools[3]; } Group;
 static const Group groups[] = {
-  { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 2, { TL_LASSO, TL_PLASSO } }, { 1, { TL_WAND } },
-  { 1, { TL_CROP } }, { 1, { TL_EYEDROPPER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
+  { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 1, { TL_WAND } },
+  { 1, { TL_CROP } }, { 2, { TL_EYEDROPPER, TL_RULER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
   { 1, { TL_TEXT } }, { 3, { TL_RECT, TL_ELLIPSE, TL_LINE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
 };
@@ -132,7 +133,9 @@ static const char *const tool_help[TL_N] = {
   "Paints back the picture as it was when it was opened (or at the last snapshot).",
   "Paints the foreground colour over the colours you brush, keeping their light and shade.",
   "Rubs out the colour under the brush's centre, wherever it reaches, leaving the rest.",
-  "Rubs out the area of similar colour where you click, at once."
+  "Rubs out the area of similar colour where you click, at once.",
+  "Selects along edges as you go: click to start, move round the edge (clicking to pin it down), then double-click or press Return. Backspace takes the last point back.",
+  "Measures a distance and an angle: drag between two points. Straighten Layer then turns the layer so the line is level."
 };
 
 static int tb_hit(Object *obj, LONG mx, LONG my, int *corner)
@@ -306,6 +309,8 @@ static const char *const rplmodes[] = { "Hue", "Saturation", "Color", "Luminosit
 static const char *const samplings[] = { "Continuous", "Once", "Background Swatch" };
 static const char *const limitlist[] = { "Contiguous", "Discontiguous", "Find Edges" };
 static const char *fontlist[64];
+static const char *const mqstyles[] = { "Normal", "Fixed Ratio", "Fixed Size", "Single Row", "Single Column" };
+static const char *croplist[32];
 
 static int fields_for(int t, Field *f)
 {
@@ -316,14 +321,34 @@ static int fields_for(int t, Field *f)
 #define BUTTON(l, id) (f[n].kind = F_BUTTON, f[n].label = l, f[n].min = id, n++)
 #define TEXT(l) (f[n].kind = F_TEXT, f[n].label = l, n++)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
+  if (xform_pending) {
+    /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
+    TEXT(xform_info); BUTTON("Apply", ID_COMMIT); BUTTON("Cancel", ID_CANCEL);
+    TEXT("Corners scale (Shift: in proportion), outside turns; Ctrl-corner distorts");
+    return n;
+  }
   switch (t) {
-  case TL_MOVE: CHECK("Auto-Select Layer", opt.auto_select); TEXT("Drag to move the layer or the selection; the arrow keys nudge"); break;
-  case TL_MARQUEE: case TL_EMARQUEE: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px"); TEXT("Shift adds, Alt subtracts"); break;
-  case TL_LASSO: case TL_PLASSO: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px");
+  case TL_MOVE: CHECK("Auto-Select Layer", opt.auto_select); TEXT("Drag to move the layer or the selection; Alt-drag moves a copy"); break;
+  case TL_MARQUEE: case TL_EMARQUEE: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px");
+    if (t == TL_EMARQUEE) { if (opt.mq_style > MQS_SIZE) opt.mq_style = MQS_NORMAL; CHECK("Anti-alias", opt.sel_antialias); }
+    CHOICE("Style:", opt.mq_style, mqstyles, t == TL_EMARQUEE ? 3 : 5);
+    if (opt.mq_style == MQS_RATIO || opt.mq_style == MQS_SIZE) { SCRUB("Width:", opt.mq_w, 1, 10000, opt.mq_style == MQS_SIZE ? "px" : ""); SCRUB("Height:", opt.mq_h, 1, 10000, opt.mq_style == MQS_SIZE ? "px" : ""); }
+    else TEXT("Shift adds, Alt subtracts");
+    break;
+  case TL_LASSO: case TL_PLASSO: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px"); CHECK("Anti-alias", opt.sel_antialias);
     if (t == TL_PLASSO) TEXT("Click the corners; double-click or Return closes it");
     break;
-  case TL_WAND: SELOPS(); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Contiguous", opt.contiguous); CHECK("Sample All Layers", opt.all_layers); break;
-  case TL_CROP: BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT("Drag a box, adjust its handles, then Return"); break;
+  case TL_MAGLASSO: SELOPS(); SCRUB("Width:", opt.ml_width, 1, 256, "px"); SCRUB("Contrast:", opt.ml_contrast, 1, 100, "%"); SCRUB("Frequency:", opt.ml_freq, 0, 100, "");
+    CHECK("Anti-alias", opt.sel_antialias); SCRUB("Feather:", opt.feather, 0, 250, "px");
+    break;
+  case TL_WAND: SELOPS(); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.sel_antialias); CHECK("Contiguous", opt.contiguous); CHECK("Sample All Layers", opt.all_layers); break;
+  case TL_CROP:
+    for (i = 0; i < ncrop_presets && i < 32; i++) croplist[i] = crop_presets[i].name;
+    if (opt.crop_preset >= i) opt.crop_preset = 0;
+    CHOICE("", opt.crop_preset, croplist, i); BUTTON(opt.crop_swap ? "Swap (H:W)" : "Swap (W:H)", ID_CROPSWAP);
+    BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT("Drag a box, adjust its handles, then Return"); break;
+  case TL_RULER: TEXT(ruler_info[0] ? ruler_info : "Drag to measure"); BUTTON("Straighten Layer", ID_STRAIGHTEN); CHECK("Whole Picture", opt.ruler_image);
+    BUTTON("Clear", ID_RULERCLEAR); break;
   case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, 3); CHOICE("Sample:", opt.all_layers, layersample, 2); TEXT("Alt-click picks the background colour"); break;
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); TEXT("Alt-click sets the source"); break;
@@ -416,6 +441,15 @@ static const char *field_help(const Field *f)
     { "Auto-Select Layer", "Clicking chooses the topmost layer with something under the pointer." },
     { "Reverse", "Runs the gradient the other way." },
     { "Crop", "Crops to the box (Return)." },
+    { "Apply", "Applies the transform (Return, or double-click inside it)." },
+    { "Style:", "Normal follows the pointer; Fixed Ratio keeps the width and height in proportion; Fixed Size makes a box exactly that big; Single Row and Single Column select one pixel's line where you click." },
+    { "Width:", "The width: of the box (Fixed Size), its share of the proportion (Fixed Ratio), or how far from the pointer the Magnetic Lasso looks for an edge." },
+    { "Height:", "The height of the box (Fixed Size), or its share of the proportion (Fixed Ratio)." },
+    { "Contrast:", "How strong an edge must be for the Magnetic Lasso to cling to it." },
+    { "Frequency:", "How often the Magnetic Lasso pins its path down by itself: higher pins it more often." },
+    { "Straighten Layer", "Turns the layer so the Ruler's line is level (or upright). With Whole Picture, every layer is turned and the canvas cropped." },
+    { "Whole Picture", "Straighten turns every layer and crops away the empty corners." },
+    { "Clear", "Takes the Ruler's line away." },
     { "Cancel", "Forgets the box (Esc)." },
     { "100%", "Shows the picture at its own size, a pixel a pixel." },
     { "Fit Screen", "Zooms so the whole picture fits the window." },
@@ -426,6 +460,8 @@ static const char *field_help(const Field *f)
   for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!strcmp(h[i].label, f->label)) return h[i].help;
   if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in.";
   if (f->kind == F_CHOICE && f->choices == gradcols) return "The gradient's colours: foreground to background, or the foreground fading out.";
+  if (f->kind == F_CHOICE && f->choices == croplist) return "The crop's proportions or size: free, the picture's own, a ratio, or a size it is resampled to.";
+  if (f->kind == F_BUTTON && f->min == ID_CROPSWAP) return "Swaps the preset's width and height (portrait or landscape).";
   return NULL;
 }
 static void ob_layout(struct OData *d, Object *obj)

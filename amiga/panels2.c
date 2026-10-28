@@ -5,6 +5,9 @@
  *              in it to look somewhere else
  *   Info       the pointer's place and the colour under it (RGB, HSB, hex), the picture's size and
  *              mode, the selection's size, and a histogram of the picture's brightness
+ *   Channels   (0.7) the picture's alpha channels (saved selections), each with a thumbnail and its
+ *              name: a click loads one as the selection, a double-click renames it, and the buttons
+ *              load, save the selection as a new channel and delete
  */
 #include <string.h>
 #include <stdio.h>
@@ -21,9 +24,12 @@
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
+#include <devices/inputevent.h>
+#include "../core/channels.h"
+#include "../core/util.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
-static struct MUI_CustomClass *navcls, *infcls;
+static struct MUI_CustomClass *navcls, *infcls, *chancls;
 
 /* a picture's composite at reduced size: tw x th RGB (over the checkerboard), malloc'd */
 static UBYTE *small_composite(Doc *doc, LONG tw, LONG th)
@@ -287,8 +293,170 @@ struct MUI_CustomClass *info_class(void)
   if (!infcls) infcls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, sizeof(struct IData), (APTR)infdispatch);
   return infcls;
 }
+/* ================================================================== the Channels panel */
+int chan_pick = -1, chan_op;             /* the channel clicked last, and how it is to be loaded (SEL_) */
+struct ChData { struct MUI_EventHandlerNode ehn; int shown, lastrow; ULONG secs, micros; };
+#define CH_TW 32                         /* the thumbnails' size */
+#define CH_TH 24
+static LONG ch_rowh(void) { return CH_TH + 6 > fh() + 8 ? CH_TH + 6 : fh() + 8; }
+static LONG ch_bottom(Object *obj) { return _mbottom(obj) - 26; }
+/* the buttons along the bottom: load the channel as the selection, save the selection as a channel, delete */
+static const int ch_buttons[] = { IC_T_EMARQUEE, IC_ADDMASK, IC_TRASH };
+#define NCB 3
+/* the first row is the Quick Mask while it is being edited; the channels follow */
+static int ch_first(Doc *doc) { return doc && doc->qmask ? 1 : 0; }
+/* a plane (w x h, 0-255) drawn as a grey thumbnail at x, y, fitted into CH_TW x CH_TH */
+static void ch_thumb(Object *obj, Doc *doc, const u8 *plane, LONG x, LONG y)
+{
+  UBYTE buf[CH_TW * CH_TH * 3];
+  LONG tw, th, i, j;
+  struct RastPort *rp = _rp(obj);
+  if ((long)doc->w * CH_TH > (long)doc->h * CH_TW) { tw = CH_TW; th = (LONG)((long)doc->h * CH_TW / doc->w); }
+  else { th = CH_TH; tw = (LONG)((long)doc->w * CH_TH / doc->h); }
+  if (tw < 1) tw = 1;
+  if (th < 1) th = 1;
+  for (j = 0; j < th; j++)
+    for (i = 0; i < tw; i++) {
+      UBYTE v = plane[(long)(j * doc->h / th) * doc->w + (long)(i * doc->w / tw)];
+      buf[(j * tw + i) * 3] = buf[(j * tw + i) * 3 + 1] = buf[(j * tw + i) * 3 + 2] = v;
+    }
+  x += (CH_TW - tw) / 2; y += (CH_TH - th) / 2;
+  draw_rgb(rp, _screen(obj), buf, tw * 3, x, y, tw, th);
+  theme_rect(rp, x - 1, y - 1, x + tw, y + th, tpen(T_BORDER2));
+}
+static void ch_draw(struct ChData *d, Object *obj)
+{
+  struct RastPort *rp = _rp(obj);
+  Doc *doc = cur_doc();
+  LONG l = _mleft(obj), r = _mright(obj), y = _mtop(obj) + 2, rh = ch_rowh();
+  int i, first;
+  char name[40];
+  theme_fill(rp, l, _mtop(obj), r, _mbottom(obj), tpen(T_PANEL));
+  if (!doc) return;
+  first = ch_first(doc);
+  for (i = 0; i < doc->nchan + first && y + rh <= ch_bottom(obj); i++, y += rh) {
+    int k = i - first;
+    if (k >= 0 && k == chan_pick) theme_fill(rp, l, y, r, y + rh - 1, tpen(T_PRESSED));
+    ch_thumb(obj, doc, k < 0 ? doc->qmask : doc->chan[k], l + 8, y + (rh - CH_TH) / 2);
+    if (k < 0) strcpy(name, tr("Quick Mask"));
+    else utf8_to_latin1(doc->chan_name[k], strlen(doc->chan_name[k]), name, sizeof name);
+    theme_text(rp, theme_font(), l + 8 + CH_TW + 10, y + (rh - fh()) / 2, name, tpen(k < 0 ? T_DIM : T_TEXT));
+    SetAPen(rp, tpen(T_BORDER)); Move(rp, l, y + rh - 1); Draw(rp, r, y + rh - 1);
+  }
+  if (!doc->nchan && !first)
+    theme_text(rp, theme_font(), l + 8, y + 4, tr("No channels: save a selection here"), tpen(T_DIM));
+  SetAPen(rp, tpen(T_BORDER)); Move(rp, l, ch_bottom(obj)); Draw(rp, r, ch_bottom(obj));
+  for (i = 0; i < NCB; i++) theme_icon(rp, ch_buttons[i], r - (NCB - i) * 24, ch_bottom(obj) + 5, 16, i != 1 && (chan_pick < 0 || chan_pick >= doc->nchan));
+}
+/* the channel row at window y (-1 none; the Quick Mask row is -2) */
+static int ch_row_at(Object *obj, Doc *doc, LONG my)
+{
+  LONG k;
+  if (!doc || my < _mtop(obj) + 2 || my >= ch_bottom(obj)) return -1;
+  k = (my - _mtop(obj) - 2) / ch_rowh() - ch_first(doc);
+  if (k < -1 || k >= doc->nchan) return -1;
+  return k < 0 ? -2 : (int)k;
+}
+/* the button at window x, y along the bottom (-1 none) */
+static int ch_button_at(Object *obj, LONG mx, LONG my)
+{
+  int i;
+  if (my < ch_bottom(obj) || my > _mbottom(obj)) return -1;
+  for (i = 0; i < NCB; i++) { LONG bx = _mright(obj) - (NCB - i) * 24; if (mx >= bx - 4 && mx < bx + 20) return i; }
+  return -1;
+}
+static ULONG chandispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
+{
+  struct ChData *d;
+  switch (msg->MethodID) {
+  case OM_NEW:
+    if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
+    memset(INST_DATA(cl, obj), 0, sizeof(struct ChData));
+    ((struct ChData *)INST_DATA(cl, obj))->lastrow = -1;
+    return (ULONG)obj;
+  case MUIM_AskMinMax: {
+    struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
+    DoSuperMethodA(cl, obj, msg);
+    m->MinMaxInfo->MinWidth += 100; m->MinMaxInfo->DefWidth += 200; m->MinMaxInfo->MaxWidth += MUI_MAXMAX;
+    m->MinMaxInfo->MinHeight += 60; m->MinMaxInfo->DefHeight += 160; m->MinMaxInfo->MaxHeight += MUI_MAXMAX;
+    return 0;
+  }
+  case MUIM_Setup:
+    if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
+    theme_setup(obj);
+    d = INST_DATA(cl, obj);
+    d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = IDCMP_MOUSEBUTTONS;
+    DoMethod(_win(obj), MUIM_Window_AddEventHandler, (ULONG)&d->ehn);
+    return TRUE;
+  case MUIM_Cleanup:
+    d = INST_DATA(cl, obj);
+    DoMethod(_win(obj), MUIM_Window_RemEventHandler, (ULONG)&d->ehn);
+    theme_cleanup(obj);
+    break;
+  case MUIM_Show: ((struct ChData *)INST_DATA(cl, obj))->shown = 1; break;
+  case MUIM_Hide: ((struct ChData *)INST_DATA(cl, obj))->shown = 0; break;
+  case MUIM_Draw:
+    DoSuperMethodA(cl, obj, msg);
+    if (((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)) ch_draw(INST_DATA(cl, obj), obj);
+    return 0;
+  case MUIM_Channels_Refresh: {
+    Doc *doc = cur_doc();
+    d = INST_DATA(cl, obj);
+    if (!doc || chan_pick >= doc->nchan) chan_pick = doc && doc->nchan ? doc->nchan - 1 : -1;
+    if (d->shown) MUI_Redraw(obj, MADF_DRAWOBJECT);
+    return 0; }
+  case MUIM_CreateShortHelp: {
+    struct MUIP_CreateShortHelp *m = (struct MUIP_CreateShortHelp *)msg;
+    static const char *const n[] = { "Load Channel as Selection", "Save Selection as Channel", "Delete Channel" };
+    static const char *const b[] = { "Makes the channel picked the selection.", "Keeps the selection (or everything) as a new alpha channel.", "Deletes the channel picked." };
+    int k = ch_button_at(obj, m->mx, m->my);
+    if (k >= 0) return (ULONG)theme_bubble(tr(n[k]), tr(b[k]));
+    if (ch_row_at(obj, cur_doc(), m->my) >= 0)
+      return (ULONG)theme_bubble(tr("Channel"), tr("Click: load it as the selection (Shift adds to it, Alt takes away). Double-click: rename it."));
+    return 0; }
+  case MUIM_DeleteShortHelp: return 0;
+  case MUIM_HandleEvent: {
+    struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
+    Doc *doc = cur_doc();
+    LONG mx, my;
+    int k, shift, alt;
+    d = INST_DATA(cl, obj);
+    if (!im || !d->shown || !doc || im->Class != IDCMP_MOUSEBUTTONS || im->Code != SELECTDOWN) return 0;
+    mx = im->MouseX; my = im->MouseY;
+    if (mx < _mleft(obj) || mx > _mright(obj) || my < _mtop(obj) || my > _mbottom(obj)) return 0;
+    shift = (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0; alt = (im->Qualifier & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
+    if ((k = ch_button_at(obj, mx, my)) >= 0) {
+      if (k == 0 && chan_pick >= 0 && chan_pick < doc->nchan) { chan_op = SEL_REPLACE; DoMethod(_app(obj), MUIM_Application_ReturnID, ID_CHANLOAD); }
+      else if (k == 1 && !quickmask_active(doc)) {
+        if (chan_save_selection(doc, -1, SEL_REPLACE, NULL) >= 0) chan_pick = doc->nchan - 1;
+        DoMethod(_app(obj), MUIM_Application_ReturnID, ID_CHANSCHG);
+      }
+      else if (k == 2 && chan_pick >= 0 && chan_pick < doc->nchan) DoMethod(_app(obj), MUIM_Application_ReturnID, ID_CHANDEL);
+      return MUI_EventHandlerRC_Eat;
+    }
+    k = ch_row_at(obj, doc, my);
+    if (k < 0) return MUI_EventHandlerRC_Eat;
+    if (k == d->lastrow && DoubleClick(d->secs, d->micros, im->Seconds, im->Micros)) {
+      d->lastrow = -1; chan_pick = k;
+      DoMethod(_app(obj), MUIM_Application_ReturnID, ID_CHANRENAME);
+      return MUI_EventHandlerRC_Eat;
+    }
+    d->lastrow = k; d->secs = im->Seconds; d->micros = im->Micros;
+    chan_pick = k;
+    chan_op = shift && alt ? SEL_INTERSECT : shift ? SEL_ADD : alt ? SEL_SUBTRACT : SEL_REPLACE;
+    DoMethod(_app(obj), MUIM_Application_ReturnID, ID_CHANLOAD);
+    return MUI_EventHandlerRC_Eat; }
+  }
+  return DoSuperMethodA(cl, obj, msg);
+}
+struct MUI_CustomClass *channels_class(void)
+{
+  if (!chancls) chancls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, sizeof(struct ChData), (APTR)chandispatch);
+  return chancls;
+}
 void panels2_free(void)
 {
+  if (chancls) { MUI_DeleteCustomClass(chancls); chancls = NULL; }
   if (navcls) { MUI_DeleteCustomClass(navcls); navcls = NULL; }
   if (infcls) { MUI_DeleteCustomClass(infcls); infcls = NULL; }
 }
