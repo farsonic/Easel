@@ -171,4 +171,15 @@ void  clip_free(Clip *c);
 u32  doc_pick(Doc *d, i32 x, i32 y, int all_layers, int radius);   /* the eyedropper */
 void rgb_to_hsv(int r, int g, int b, double *h, double *s, double *v);
 void hsv_to_rgb(double h, double s, double v, int *r, int *g, int *b);
+
+/* ------------------------------------------------------------------ 0.7 */
+/* the lassos, the elliptical marquee and the magic wand with the Anti-alias option (sel_polygon and
+   sel_wand are these with it on); off, an edge pixel is in when it is half covered or more */
+void sel_polygon_ex(Doc *d, const double *xy, int n, int op, int feather, int antialias);
+void sel_ellipse_ex(Doc *d, i32 x0, i32 y0, i32 x1, i32 y1, int op, int feather, int antialias);
+void sel_wand_ex(Doc *d, i32 x, i32 y, int tolerance, int contiguous, int all_layers, int op, int antialias);
+/* the whole picture (every layer, the selection, the alpha channels) remade at nw x nh through a
+   projective map inv (3 x 3, row major) from new pixel-centre positions to old ones; RS_ interp.
+   One undo step called name; 0 if out of memory */
+int  image_remap(Doc *d, i32 nw, i32 nh, const double *inv, int interp, const char *name);
 #endif

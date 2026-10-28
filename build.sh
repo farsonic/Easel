@@ -7,7 +7,7 @@ export PATH=$VBCC/bin:$PATH
 NDK=${NDK:-/opt/amiga/ndk/Include_H}
 MUI=${MUI:-/opt/amiga/mui/include}
 cd "$(dirname "$0")"
-CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c"
+CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/channels.c core/xform.c core/selx.c core/maglasso.c core/crop.c core/matte.c"
 if [ "$1" != "fast" ]; then
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
@@ -23,6 +23,8 @@ if [ "$1" != "fast" ]; then
   python3 tests/check_palette.py | tail -2
   # 0.5: brushes, strokes, gradients, patterns, presets
   t brushtest;    /tmp/easel_brushtest | tail -2
+  # 0.7: selections and transforms
+  t selxtest;     /tmp/easel_selxtest | tail -2
 fi
 av1/build-av1.sh amiga
 vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$MUI" -I"$NDK" amiga/*.c amiga/bigstack.s $CORE av1/obj/*.o -o Easel -lamiga -lm040

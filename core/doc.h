@@ -14,6 +14,7 @@
 
 #define MAXLAYERS 100
 #define MAXDIM 16384                  /* the largest width or height */
+#define MAXCHANNELS 24                /* 0.7: alpha channels (saved selections) a document can keep */
 
 enum { BM_NORMAL, BM_MULTIPLY, BM_SCREEN, BM_OVERLAY, BM_DARKEN, BM_LIGHTEN, BM_DIFFERENCE, BM_ADD,
        BM_SUBTRACT, BM_DODGE, BM_BURN, BM_SOFTLIGHT, BM_HARDLIGHT, BM_EXCLUSION, BM_HUE, BM_SATURATION,
@@ -127,6 +128,14 @@ typedef struct {
   u8 *lastsel;
   /* 0.4: guides and grid (not part of undo) */
   GuideSet guides;
+  /* ---- 0.7: alpha channels (saved selections, channels.h), Quick Mask and Transform Again ---- */
+  u8 *chan[MAXCHANNELS];              /* w * h each, 255 selected; chan[0..nchan) */
+  char chan_name[MAXCHANNELS][32];    /* UTF-8 */
+  int nchan;
+  u8 *qmask;                          /* the Quick Mask plane (w * h) while in Quick Mask mode, else NULL */
+  double xf_again[9];                 /* the last transform about its box's centre (xform.h), for Transform Again */
+  u8 xf_again_ok;
+  /* ---- end of 0.7 ---- */
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
@@ -178,6 +187,12 @@ void   doc_note_all(Doc *d);
 /* 0.4: the palette, mode, cycle ranges, ModeID and aspect saved in the step (doc_note_all saves them
    too). Undoing a step that saved only these re-derives indexed layers' RGBA from their indices */
 void   doc_note_pal(Doc *d);
+/* 0.7: the alpha channels and the Quick Mask plane: the whole set copied (channels added, deleted,
+   renamed, Quick Mask entered or left; doc_note_all does it too), or a box of one plane before it is
+   painted (channel k, or the Quick Mask plane) */
+void   doc_note_channels(Doc *d);
+void   doc_note_chan(Doc *d, int k, Box r);
+void   doc_note_qmask(Doc *d, Box r);
 void   doc_end(Doc *d);
 int    doc_undo(Doc *d);
 int    doc_redo(Doc *d);

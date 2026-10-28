@@ -12,6 +12,9 @@
  * Writing crops each layer to the pixels it really has, so mostly empty layers stay small.
  * Easel's layer lock goes in the spec's edit-locked attribute, its alpha lock in alpha-preserve
  * (as Krita does), and the active layer is marked selected.
+ *
+ * 0.7: Easel's alpha channels are kept as grey PNGs (data/channelN.png), each listed in an
+ * <easel:channel src="..." name="..."/> element after the root stack, which other programs ignore.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -200,6 +203,30 @@ static int parse_stack(const char *s, size_t n, i32 *w, i32 *h, int *dpi, OraLay
   return cnt;
 }
 
+/* 0.7: the alpha channels listed in stack.xml (easel:channel elements), read into the document */
+static void read_channels(ZipReader *z, const char *s, size_t n, Doc *doc)
+{
+  Xml x;
+  Rgba im;
+  xml_init(&x, s, n);
+  while (xml_next(&x) != XT_EOF && doc->nchan < MAXCHANNELS) {
+    const char *src, *nm;
+    u8 *p;
+    i32 y, xx;
+    if (x.type != XT_START || strcmp(x.name, "channel") || !(src = xml_attr(&x, "src"))) continue;
+    if (!(p = (u8 *)calloc((size_t)doc->w * doc->h, 1))) break;
+    if (read_picture(z, src, &im)) {
+      for (y = 0; y < im.h && y < doc->h; y++)
+        for (xx = 0; xx < im.w && xx < doc->w; xx++) p[(size_t)y * doc->w + xx] = im.px[((size_t)y * im.w + xx) * 4];
+      rgba_free(&im);
+    }
+    nm = xml_attr(&x, "name");
+    copy_name(doc->chan_name[doc->nchan], sizeof doc->chan_name[0], nm ? nm : "Alpha");
+    doc->chan[doc->nchan++] = p;
+  }
+  xml_free(&x);
+}
+
 /* the zip, stack.xml, then each layer's PNG placed on a canvas-size layer, bottom first */
 Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
 {
@@ -213,10 +240,9 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
   size_t xlen;
   if (!zip_open(&z, d, n)) { codec_err(err, errcap, "Not an OpenRaster file (not a zip)"); return NULL; }
   if (!(ls = (OraLayer *)malloc(sizeof(OraLayer) * MAXLAYERS))) { zip_close(&z); codec_err(err, errcap, "Out of memory"); return NULL; }
-  if ((i = zip_find(&z, "stack.xml")) >= 0 && (xml = zip_read(&z, i, &xlen))) {
+  xml = NULL; xlen = 0;
+  if ((i = zip_find(&z, "stack.xml")) >= 0 && (xml = zip_read(&z, i, &xlen)))
     cnt = parse_stack((const char *)xml, xlen, &w, &h, &dpi, ls, MAXLAYERS);
-    free(xml);
-  }
   if (cnt == 0 || w < 1 || h < 1 || w > MAXDIM || h > MAXDIM || (long)w * h > CODEC_MAXPIXELS) {
     /* no usable layer list: the merged image as the one layer */
     if (!read_picture(&z, "mergedimage.png", &im)) {
@@ -283,9 +309,11 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
     }
   }
   if (dpi > 0 && dpi < 65536) doc->dpi = (u16)dpi;
+  if (xml) read_channels(&z, (const char *)xml, xlen, doc);          /* 0.7 */
   doc_forget_undo(doc);
   doc->dirty = 0;
 fail:
+  free(xml);
   free(ls);
   zip_close(&z);
   return doc;
@@ -436,7 +464,20 @@ u8 *ora_write(Doc *doc, size_t *len)
   buf_printf(&xml, "<?xml version='1.0' encoding='UTF-8'?>\n<image version=\"0.0.5\" w=\"%ld\" h=\"%ld\" xres=\"%d\" yres=\"%d\" xmlns:easel=\"http://easel.amiga/ora/1\">\n<stack>\n",
              (long)doc->w, (long)doc->h, dpi, dpi);
   put_range(&xml, &zw, doc, 0, doc->nlay, &ok);
-  buf_adds(&xml, "</stack>\n</image>\n");
+  buf_adds(&xml, "</stack>\n");
+  {
+    /* 0.7: the alpha channels */
+    int k;
+    char name[40];
+    for (k = 0; ok && k < doc->nchan; k++) {
+      sprintf(name, "data/channel%d.png", k);
+      if (!store_png(&zw, name, NULL, doc->chan[k], doc->w, doc_box(doc))) { ok = 0; break; }
+      buf_printf(&xml, "<easel:channel src=\"%s\" name=\"", name);
+      xml_escape(&xml, doc->chan_name[k], strlen(doc->chan_name[k]));
+      buf_adds(&xml, "\"/>\n");
+    }
+  }
+  buf_adds(&xml, "</image>\n");
   if (ok) ok = !xml.oom && zip_add(&zw, "stack.xml", xml.data, xml.len);
   /* the merged picture and its thumbnail (at most 256 pixels each way) */
   if (ok) ok = rgba_alloc(&merged, doc->w, doc->h);

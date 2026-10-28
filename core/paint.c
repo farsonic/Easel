@@ -9,6 +9,7 @@
 #include "paint.h"
 #include "gradient.h"
 #include "pattern.h"
+#include "palette.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -501,21 +502,38 @@ void sel_ellipse(Doc *d, i32 x0, i32 y0, i32 x1, i32 y1, int op, int feather)
   if (feather > 0) mask_blur(m, d->w, d->h, (feather + 1) / 2);
   sel_combine(d, m, op, "Elliptical Marquee");
 }
-void sel_polygon(Doc *d, const double *xy, int n, int op, int feather)
+void sel_polygon(Doc *d, const double *xy, int n, int op, int feather) { sel_polygon_ex(d, xy, n, op, feather, 1); }
+void sel_wand(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers, int op) { sel_wand_ex(d, x, y, tol, contiguous, all_layers, op, 1); }
+/* 0.7: the same with the Anti-alias option: off, edges are hard (half covered or more is in) */
+static void harden(u8 *m, long n) { long k; for (k = 0; k < n; k++) m[k] = m[k] >= 128 ? 255 : 0; }
+void sel_polygon_ex(Doc *d, const double *xy, int n, int op, int feather, int antialias)
 {
   u8 *m;
   if (n < 3) { if (op == SEL_REPLACE) sel_none(d); return; }
   if (!(m = new_mask(d))) return;
   poly_mask(xy, n, m, d->w, d->h);
+  if (!antialias) harden(m, (long)d->w * d->h);
   if (feather > 0) mask_blur(m, d->w, d->h, (feather + 1) / 2);
   sel_combine(d, m, op, "Lasso");
 }
-void sel_wand(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers, int op)
+void sel_ellipse_ex(Doc *d, i32 x0, i32 y0, i32 x1, i32 y1, int op, int feather, int antialias)
+{
+  u8 *m;
+  int n;
+  double *p;
+  if ((x1 == x0 || y1 == y0) && op == SEL_REPLACE) { sel_none(d); return; }
+  if (!(m = new_mask(d))) return;
+  if ((p = ellipse_poly(x0, y0, x1, y1, &n))) { poly_mask(p, n, m, d->w, d->h); free(p); }
+  if (!antialias) harden(m, (long)d->w * d->h);
+  if (feather > 0) mask_blur(m, d->w, d->h, (feather + 1) / 2);
+  sel_combine(d, m, op, "Elliptical Marquee");
+}
+void sel_wand_ex(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers, int op, int antialias)
 {
   u8 *m;
   if (x < 0 || y < 0 || x >= d->w || y >= d->h) return;
   if (!(m = similar(d, x, y, tol, contiguous, all_layers))) return;
-  soften(m, d->w, d->h);
+  if (antialias) soften(m, d->w, d->h);
   sel_combine(d, m, op, "Magic Wand");
 }
 void sel_all(Doc *d)
@@ -868,18 +886,54 @@ void flip_layer(Doc *d, int vertical)
 typedef void (*Remap)(Doc *d, const u8 *src, u8 *dst, i32 nw, i32 nh, int bpp, const void *arg);
 static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const char *name)
 {
-  u8 *np[MAXLAYERS], *ns = NULL;
+  u8 *np[MAXLAYERS], *ns = NULL, *nc[MAXCHANNELS], *nq = NULL, **nm, **ni;
   int i;
   if (nw < 1 || nh < 1 || nw > MAXDIM || nh > MAXDIM) return 0;
+  /* 0.7: the layers' new masks and indices (off the stack) */
+  if (!(nm = (u8 **)calloc(2 * MAXLAYERS, sizeof(u8 *)))) return 0;
+  ni = nm + MAXLAYERS;
   for (i = 0; i < d->nlay; i++) {
-    if (!(np[i] = (u8 *)calloc((size_t)nw * nh, 4))) { while (i--) free(np[i]); return 0; }
-    fn(d, d->lay[i]->px, np[i], nw, nh, 4, arg);
+    /* 0.7: a group or adjustment layer has no pixels to remake; a layer mask is remade too (white
+       where the canvas grows) */
+    np[i] = nm[i] = ni[i] = NULL;
+    if ((d->lay[i]->px && !(np[i] = (u8 *)calloc((size_t)nw * nh, 4))) ||
+        (d->lay[i]->mask && !(nm[i] = (u8 *)malloc((size_t)nw * nh))) ||
+        (d->lay[i]->idx && !(ni[i] = (u8 *)calloc((size_t)nw * nh, 1)))) {
+      free(np[i]); free(nm[i]); free(ni[i]);
+      while (i--) { free(np[i]); free(nm[i]); free(ni[i]); }
+      free(nm);
+      return 0;
+    }
+    if (np[i]) fn(d, d->lay[i]->px, np[i], nw, nh, 4, arg);
+    if (ni[i]) fn(d, d->lay[i]->idx, ni[i], nw, nh, 1, arg);
+    if (nm[i]) { memset(nm[i], 255, (size_t)nw * nh); fn(d, d->lay[i]->mask, nm[i], nw, nh, 1, arg); }
   }
   if (d->sel && (ns = (u8 *)calloc((size_t)nw * nh, 1))) fn(d, d->sel, ns, nw, nh, 1, arg);
+  /* 0.7: the alpha channels and the Quick Mask plane go with the picture (one dropped if out of memory) */
+  for (i = 0; i < d->nchan; i++) if ((nc[i] = (u8 *)calloc((size_t)nw * nh, 1)) != NULL) fn(d, d->chan[i], nc[i], nw, nh, 1, arg);
+  if (d->qmask && (nq = (u8 *)calloc((size_t)nw * nh, 1)) != NULL) fn(d, d->qmask, nq, nw, nh, 1, arg);
   doc_begin(d, name);
   doc_note_all(d);
-  for (i = 0; i < d->nlay; i++) { free(d->lay[i]->px); d->lay[i]->px = np[i]; }
+  for (i = 0; i < d->nlay; i++) {
+    Layer *l = d->lay[i];
+    free(l->px); l->px = np[i];
+    /* 0.7: the mask and an indexed layer's indices remade, the mask's feathered copy dropped */
+    if (nm[i]) { free(l->mask); l->mask = nm[i]; }
+    if (ni[i]) { free(l->idx); l->idx = ni[i]; }
+    free(l->maskfx); l->maskfx = NULL; l->maskfx_ok = 0;
+  }
   free(d->sel); d->sel = ns;
+  {
+    int k = 0, n = d->nchan;
+    for (i = 0; i < n; i++) {
+      free(d->chan[i]);
+      if (nc[i]) { if (k != i) memcpy(d->chan_name[k], d->chan_name[i], sizeof d->chan_name[k]); d->chan[k++] = nc[i]; }
+    }
+    for (i = k; i < n; i++) d->chan[i] = NULL;
+    d->nchan = k;
+    if (d->qmask) { free(d->qmask); d->qmask = nq; }
+  }
+  free(nm);
   d->w = nw; d->h = nh;
   sel_update_box(d);
   doc_end(d);
@@ -1019,6 +1073,43 @@ static void remap_angle(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, con
       o[(long)y * nw + x] = xx >= 0 && yy >= 0 && xx < d->w && yy < d->h ? s[(long)yy * d->w + xx] : 0;
     } else sample_bilinear(s, d->w, d->h, sx, sy, o + ((long)y * nw + x) * 4);
   }
+}
+/* 0.7: the whole picture remade at nw x nh through a projective map from new to old pixel
+   positions (inv: 3 x 3, row major, on pixel-centre coordinates); empty outside the old canvas */
+typedef struct { const double *h; int interp; } HomArg;
+static void remap_hom(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const void *arg)
+{
+  const HomArg *a = (const HomArg *)arg;
+  const double *m = a->h;
+  i32 x, y;
+  for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+    double X = x + 0.5, Y = y + 0.5, wq = m[6] * X + m[7] * Y + m[8], sx, sy;
+    if (wq == 0) continue;
+    sx = (m[0] * X + m[1] * Y + m[2]) / wq; sy = (m[3] * X + m[4] * Y + m[5]) / wq;
+    if (!(sx > -2 && sy > -2 && sx < d->w + 2 && sy < d->h + 2)) continue;
+    if (bpp == 1) {
+      /* bilinear on the mask, nothing past the edge */
+      i32 x0 = (i32)floor(sx - 0.5), y0 = (i32)floor(sy - 0.5), i, j;
+      double fx = sx - 0.5 - x0, fy = sy - 0.5 - y0, acc = 0;
+      for (j = 0; j < 2; j++) for (i = 0; i < 2; i++) {
+        i32 xx = x0 + i, yy = y0 + j;
+        if (xx >= 0 && yy >= 0 && xx < d->w && yy < d->h) acc += s[(long)yy * d->w + xx] * (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+      }
+      o[(long)y * nw + x] = (u8)clamp255(acc);
+    } else if (a->interp == RS_NEAREST) {
+      i32 xx = (i32)floor(sx), yy = (i32)floor(sy);
+      if (xx >= 0 && yy >= 0 && xx < d->w && yy < d->h) memcpy(o + ((long)y * nw + x) * 4, s + ((long)yy * d->w + xx) * 4, 4);
+    } else if (a->interp == RS_BICUBIC && sx >= 0 && sy >= 0 && sx <= d->w && sy <= d->h) sample_bicubic(s, d->w, d->h, sx, sy, o + ((long)y * nw + x) * 4);
+    else sample_bilinear(s, d->w, d->h, sx, sy, o + ((long)y * nw + x) * 4);
+  }
+}
+int image_remap(Doc *d, i32 nw, i32 nh, const double *inv, int interp, const char *name)
+{
+  HomArg a;
+  a.h = inv; a.interp = interp;
+  if (!remap_all(d, nw, nh, remap_hom, &a, name)) return 0;
+  if (d->mode != MODE_RGB) doc_index_sync_all(d);          /* (resampled colours brought back to the palette) */
+  return 1;
 }
 int image_rotate_angle(Doc *d, double deg)
 {
