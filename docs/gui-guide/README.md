@@ -31,11 +31,53 @@ Contents:
 16. [Workbench icons and packaging](#16-workbench-icons-and-packaging)
 17. [Testing in the emulator](#17-testing-in-the-emulator)
 18. [Pitfalls we have hit](#18-pitfalls-we-have-hit)
-19. [Checklist for a new program](#19-checklist-for-a-new-program)
+19. [Worked example: one toolbar button, end to end](#19-worked-example-one-toolbar-button-end-to-end)
+20. [Where to look: the best real example of each technique](#20-where-to-look-the-best-real-example-of-each-technique)
+21. [Checklist for a new program](#21-checklist-for-a-new-program)
 
 Throughout, file names refer to Easel's `amiga/` directory. Quill, Ledger and Folio have the same
 files under the same names (`theme.c`, `qbutton.c`, `widgets.c`, `splash.c`, `lang.c`), so look
 at whichever is closest to the new program.
+
+## The four programs at a glance
+
+Four quite different programs, one way of building them. Each screenshot is the program's main
+window on a 640 × 480 screen in the emulator, first as it looks, then with every part outlined and
+labelled with the custom class that draws it. Everything outlined is our own drawing unless its
+label says otherwise. The only standard MUI gadgets in a main window are the few text fields (Ledger's name box and formula
+bar, Folio's page number), and they sit among the custom classes without looking out of place.
+
+| | |
+|---|---|
+| **Easel** (pictures, after PhotoCraft): dark theme, toolbox, options bar, tabbed panels. | **Quill** (words, after WordCraft): light theme, ribbon, navigation pane, rulers. |
+| <img src="img/easel.png" width="400"> | <img src="img/quill.png" width="400"> |
+| **Ledger** (spreadsheets, after GridCraft): Quill's ribbon with other items, a grid. | **Folio** (PDF, after PDFCraft): tabs, tool strips, a tools pane. |
+| <img src="img/ledger.png" width="400"> | <img src="img/folio.png" width="400"> |
+
+Labelled:
+
+<img src="img/easel-classes.png" width="640">
+
+Easel. Two `head_class` tab strips each switch a `MUIA_Group_PageMode` group below them through
+one notification. The canvas and its two `flatscroll_class` bars talk only through `MUIA_Prop_*`
+notifications.
+
+<img src="img/quill-classes.png" width="640">
+
+Quill. The ribbon is a single class drawing a table of tabs, groups and items (section 12). The view
+tells the rulers about the caret paragraph with a method (`MUIM_Ruler_Set`). The File page
+(`backstage_class`, not shown) is another class that covers the whole window while it is open.
+
+<img src="img/ledger-classes.png" width="640">
+
+Ledger. The same ribbon class as Quill's, fed different tables. The name box and formula bar are
+plain MUI string gadgets in an `HGroup`, which is fine: not everything has to be custom.
+
+<img src="img/folio-classes.png" width="640">
+
+Folio. One `strip_class` serves as the main toolbar, the comment and organize toolbars, the find
+bar's buttons and the thin vertical strip on the left (`MUIA_Strip_Vertical`), each fed a different
+item table. Section 19 follows one of its buttons through the code.
 
 ---
 
@@ -887,7 +929,122 @@ drawing, input and the feel of it.
 | Code right natively and at -O1, wrong on the Amiga at -O2 (Easel's text: every line on the first baseline, the line step computed as 0) | A vbcc optimiser bug | Make the variable `volatile`, with a comment saying why. Test new core code in the emulator, not only natively. |
 | Fonts don't load from the program's drawer on some systems | diskfont.library versions | Own hunk loader for our fonts (`theme.c`), plus an `AssignAdd` of `PROGDIR:Fonts` to `FONTS:` for other programs' benefit |
 
-## 19. Checklist for a new program
+## 19. Worked example: one toolbar button, end to end
+
+Here is Folio's **Fit Page** button followed through every file it touches. Adding any button to
+any of the programs is the same seven steps. Folio's tool strip is used because it is the
+plainest toolbar in the family; a ribbon item or an options-bar button differs only in step 4.
+
+**1. The command ID** (`ids.h`), at the end of the View block:
+
+```c
+ID_ZOOMIN = 300, ID_ZOOMOUT, ID_ZOOM100, ID_FITWIDTH, ID_FITPAGE, ID_ZOOMMENU, ...
+```
+
+**2. The menu item** (`main.c`'s `menus[]`), with its shortcut. The command exists in the menu
+first; the button is a second way in:
+
+```c
+I("Fit Width", "2", ID_FITWIDTH), I("Fit Page", "0", ID_FITPAGE), BAR,
+```
+
+**3. The icon** (`theme.h` enum and `theme.c` `icons[]`, same position): a page outline with lines
+of text. The Quill icon `IC_ONEPAGE` is reused because it already says "one whole page":
+
+```c
+/* ONEPAGE */ "ci R 3 1 12 15 cd L 5 4 10 4 L 5 6 10 6 L 5 8 10 8 L 5 10 9 10",
+```
+
+**4. The button** (`main.c`, a line in a strip's item table): kind, command, icon, name, help.
+The name and help become the bubble (section 10), so they are written here, once:
+
+```c
+static const StripItem bar2[] = {
+  ...
+  { SI_ICON, ID_FITPAGE, IC_ONEPAGE, "Fit Page", "A whole page in the window." },
+  ...
+};
+```
+
+The strip class lays the items out, draws them in the theme, lights the one under the pointer and
+reports a click by setting `MUIA_Strip_Pick` to the item's ID. One notification per strip turns
+that straight into a return ID for the main loop:
+
+```c
+DoMethod(o, MUIM_Notify, MUIA_Strip_Pick, MUIV_EveryTime,
+         (ULONG)app, 2, MUIM_Application_ReturnID, MUIV_TriggerValue);
+```
+
+So a click on the button and the menu item arrive in the loop as the same number.
+
+**5. The command** (`main.c`'s `command()`): one `case`, whatever started it:
+
+```c
+case ID_FITPAGE: DoMethod(view, MUIM_View_Zoom, 0, 3); refresh_bars(); return;
+```
+
+The work is done by the view class (a method), and the bars are refreshed afterwards so the button
+shows its new state.
+
+**6. Its state** (`main.c`'s `strip_state()`): whether it is lit (checked) or dimmed, in one
+function that **both** the strips and `update_menus()` ask, so the button and the menu item can
+never disagree:
+
+```c
+case ID_FITPAGE: if (v->fit == FIT_PAGE) s = SS_CHECKED; break;
+```
+
+`strip_state()` also dims every command that needs a document when none is open, so most buttons
+need no case at all.
+
+**7. Words and testing.** Add `"Fit Page"` and its help text to the translation list
+(section 14). Then build, start the program with `CMD=` set to the new ID to check the command,
+and take a screenshot to check the icon at its real size, in both themes and dimmed (section 17).
+
+What you didn't have to write: any drawing, hit-testing, hover, bubble or keyboard code for the
+button. That is the point of describing bars as data: the class is written once, and each button
+after that is a line in a table, a `case` and an icon string.
+
+## 20. Where to look: the best real example of each technique
+
+When you need one of these, read the file named before writing your own. Paths are relative to each
+program's directory (`easel/`, `quill/`, `ledger/`, `folio/`).
+
+| Technique | Best example | What to look at |
+|---|---|---|
+| A toolbar described as data | `folio/amiga/bars.c` (strip) | `StripItem` tables in `main.c`; `strip_state()` and `strip_text()` |
+| A ribbon (tabs → groups → items, large and small buttons, drop-downs) | `quill/amiga/ribbon.c`, `ledger/amiga/ribbon.c` | the `Item`/`Group`/`Tab` tables; the layout pass that turns them into boxes |
+| A tool palette with grouped tools and pop-out lists | `easel/amiga/toolbox.c` | `groups[]`, `tb_hit()`, the group pop-up through `popup_list()` |
+| An options bar with drag-to-change number fields | `easel/amiga/toolbox.c` (options bar) | `fields_for()` with the `SCRUB`/`CHOICE`/`CHECK`/`BUTTON` macros |
+| Tabbed side panels | `easel/amiga/panels.c` | `head_class()` notifying a `MUIA_Group_PageMode` group; `PANEL_COMMON` |
+| A navigation pane (headings, thumbnails, bookmarks) | `quill/amiga/panes.c`, `folio/amiga/panes.c` | `nav_class` in each |
+| A document view: zoom, scroll, overlays, tools | `easel/amiga/canvas.c` | the composite and view buffers; `COMPLEMENT` overlays; the timers |
+| A text view with a caret, back buffer and blitter scrolling | `quill/amiga/view.c` | the back buffer and `ScrollRaster` scrolling |
+| A spreadsheet grid with in-place editing | `ledger/amiga/grid.c` | headings, selection, fill handle, typing into cells |
+| A page view with a thumbnail grid that can be dragged into order | `folio/amiga/view.c` | the organize mode |
+| A ruler with draggable markers that talks to the view | `quill/amiga/ruler.c` | `MUIM_Ruler_Set` from the view; dragging indents and tab stops |
+| A full-window page (File / backstage) | `quill/amiga/backstage.c` | covering the window, the command column, Esc to go back |
+| A "sheet" of foldable sections of settings | `easel/amiga/brushwin.c` | sections, scrub fields and lists inside one class |
+| A themed list with tick boxes | `ledger/amiga/ticklist.c` | a small, complete class: a good first one to read |
+| A drop-down list in its own borderless window | `easel/amiga/widgets.c` | `popup_list()`, pushing the close and the result |
+| A flat scroll bar compatible with `PropObject` | `easel/amiga/widgets.c` | `flatscroll_class()` |
+| Dialog buttons and labels in the theme | `easel/amiga/qbutton.c` | `QButton()`, `QLabel()`, `QTitleObject()` |
+| A dialog with live preview, Reset and Cancel | `easel/amiga/dialogs.c` | `slider_dialog()`, the `Preview` helpers |
+| A colour picker | `easel/amiga/colorpick.c` | HSB, RGB, Lab and hex kept in step |
+| A floating tool window with its own timer | `easel/amiga/palwin.c` | a class that takes the window's commands and an `MUIIHNF_TIMER` |
+| A preferences window with a page list | `easel/amiga/prefs.c` | pages, applying on OK, writing the prefs lines |
+| A keyboard shortcut editor built from the menu table | `easel/amiga/keys.c` | reading `NewMenu`, saving a keys file |
+| Progress window with Abort | `easel/amiga/jobs.c` | the hook, nested jobs, Esc from the keyboard matrix |
+| The start-up splash | `easel/amiga/splash.c` | a plain Intuition window before MUI starts |
+| Workbench drops and iconifying | `easel/amiga/appdrop.c` | `MUIA_Window_AppWindow`, `MUIA_AppMessage` |
+| The Amiga clipboard (IFF) | `easel/amiga/clipboard.c` (pictures, ILBM), `quill/amiga/clip.c` (text, FTXT) | writing and reading clipboard units |
+| Installed fonts (scanning FONTS:, TrueType, previews) | `quill/amiga/sysfonts.c`, `quill/amiga/theme.c` | the font cache; `theme_open_face()`, `theme_preview()` |
+| Theme, own fonts, icon interpreter | `easel/amiga/theme.c` | `theme_setup()`, the font loader, `theme_icon()` |
+| Translation table | `quill/tools/mklang.py`, `amiga/lang.c` | the word list; `tr()` |
+| Workbench icons for the package | `easel/tools/mkicons.py` | drawing at 4× and writing GlowIcon `.info` files |
+| Amiga bitmap fonts made from TrueType | `quill/tools/mkamigafonts.py` | the font and hunk file format, renaming OFL fonts |
+
+## 21. Checklist for a new program
 
 1. Copy from the closest existing program: `theme.c/h`, `qbutton.c`, `widgets.c`, `splash.c/h`,
    `lang.c/h`, `jobs.c`, the skeleton of `main.c` (start-up, loop, `run_modal`, `dialog_window`,
