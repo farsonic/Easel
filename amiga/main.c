@@ -97,10 +97,14 @@ const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B',
 #define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
 static struct NewMenu menus[] = {
   M("File"),
-  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN), I("Place as Layer...", 0, ID_PLACE), BAR,
+  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN),
+  H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
+  S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
+  S("Clear Recent List", 0, ID_CLEARRECENT),
+  I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), BAR,
-  I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Revert", 0, ID_REVERT),
-  H("Export"), S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), SBAR,
+  I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
+  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), SBAR,
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
@@ -413,6 +417,9 @@ static void set_title(void)
   else strcpy(t, "Easel");
   if (win) set(win, MUIA_Window_Title, (ULONG)t);
 }
+/* 0.6: File > Open Recent (kept in the prefs) */
+#define NRECENT 10
+static char recent[NRECENT][512];
 static void update_menus(void)
 {
   Doc *d = cur_doc();
@@ -427,7 +434,7 @@ static void update_menus(void)
     ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V, ID_RESELECT, ID_GROWSIM, ID_SIMILAR,
     ID_F_AGAIN, ID_MODE_RGB, ID_MODE_GRAY, ID_MODE_INDEXED, ID_MODE_BITMAP, ID_COLORTABLE, ID_SCREENMODE, ID_EXPGIF, ID_EXPILBMOPT,
     ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_DEFBRUSH, ID_PICKUPBRUSH, ID_DEFPATTERN,
-    ID_FILLPATTERN, ID_SNAPSHOT, 0 };
+    ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, 0 };
   static const ULONG needmask[] = { ID_MASK_DELETE, ID_MASK_APPLY, ID_MASK_ENABLE, ID_MASK_LINK, ID_MASK_INVERT, ID_MASK_EDIT, ID_SELFROMMASK, 0 };
   Layer *al = has ? d->lay[d->active] : NULL;
   int i;
@@ -451,6 +458,15 @@ static void update_menus(void)
   menu_set(ID_UNDO, MUIA_Menuitem_Title, (ULONG)undo);
   menu_set(ID_REDO, MUIA_Menuitem_Title, (ULONG)redo);
   menu_set(ID_DARKUI, MUIA_Menuitem_Checked, pref_dark);
+  {
+    static char labels[NRECENT][64];
+    for (i = 0; i < NRECENT; i++) {
+      if (recent[i][0]) { const char *f = (const char *)FilePart((STRPTR)recent[i]); snprintf(labels[i], sizeof labels[i], "%d  %s", i + 1, f); }
+      else snprintf(labels[i], sizeof labels[i], "%d", i + 1);
+      menu_set(ID_RECENT0 + i, MUIA_Menuitem_Title, (ULONG)labels[i]);
+      menu_set(ID_RECENT0 + i, MUIA_Menuitem_Enabled, recent[i][0] != 0);
+    }
+  }
   menu_set(ID_RULERS, MUIA_Menuitem_Checked, has && d->guides.show_rulers);
   menu_set(ID_SHOWGRID, MUIA_Menuitem_Checked, has && d->guides.show_grid);
   menu_set(ID_SHOWGUIDES, MUIA_Menuitem_Checked, has && d->guides.show_guides);
@@ -643,12 +659,20 @@ static Doc *load(const char *path, int *fmt)
 /* the pictures Easel opens, for the file requester (any file can still be typed in) */
 #define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
 static char lastdir[512];
+static void recent_add(const char *path)
+{
+  int i, k = NRECENT - 1;
+  if (!path || !path[0]) return;
+  for (i = 0; i < NRECENT; i++) if (!Stricmp((STRPTR)recent[i], (STRPTR)path)) { k = i; break; }
+  for (i = k; i > 0; i--) strcpy(recent[i], recent[i - 1]);
+  strncpy(recent[0], path, sizeof recent[0] - 1); recent[0][sizeof recent[0] - 1] = 0;
+}
 static void open_path(const char *path)
 {
   int fmt = 0, i;
   Doc *d;
   for (i = 0; i < ndocs; i++) if (docs[i].path[0] && !Stricmp((STRPTR)docs[i].path, (STRPTR)path)) { doc_switch(i); return; }
-  if ((d = load(path, &fmt))) doc_show(d, path, fmt);
+  if ((d = load(path, &fmt))) { doc_show(d, path, fmt); recent_add(path); }
   strncpy(lastdir, path, sizeof lastdir - 1);
 }
 static void open_file(void)
@@ -752,6 +776,7 @@ static int save_as(void)
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
   if (!write_doc(v->doc, path, fmt)) return 0;
   strcpy(v->path, path); v->fmt = fmt;
+  recent_add(path);
   base_name(path, v->name, sizeof v->name);
   v->doc->dirty = 0;
   strcpy(lastdir, path);
@@ -797,6 +822,155 @@ static void export_ilbm_options(void)
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!data) { snprintf(msg, sizeof msg, tr("%s couldn't be saved:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not enough memory")); ask("OK", "%s", msg); }
+}
+/* the format a path's extension asks for, PNG when it names none Easel writes (and the extension added) */
+static int out_fmt(char *path, size_t cap)
+{
+  int fmt = ext_fmt(path);
+  if (fmt == FMT_UNKNOWN) { fmt = FMT_PNG; strncat(path, ".png", cap - 1 - strlen(path)); }
+  return fmt;
+}
+/* the requester's starting name: the picture's own, or its tab's name in the last drawer */
+static void start_path(DocView *v, char *path, size_t cap)
+{
+  strncpy(path, v->path[0] ? v->path : lastdir, cap - 1); path[cap - 1] = 0;
+  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, cap); }
+}
+/* File > Save a Copy: written in the format its name asks for; the picture's own file and name stay */
+static void save_copy(void)
+{
+  DocView *v = cur_view();
+  char path[512];
+  int fmt;
+  if (!v) return;
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, v->doc->nlay > 1 ? "-copy.ora" : "-copy.png");
+  if (!file_request(1, "Save a copy as (the extension picks the format)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff|gif)")) return;
+  fmt = out_fmt(path, sizeof path);
+  if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
+  write_doc(v->doc, path, fmt);
+}
+/* File > Export > Export As: a flat copy, scaled by a percentage, in the format its name asks for */
+static void export_scaled(void)
+{
+  DocView *v = cur_view();
+  char path[512], buf[16] = "100";
+  int fmt, pct;
+  Rgba im;
+  Doc *t;
+  if (!v) return;
+  if (!ask_string("Export As", "Scale (per cent of the picture's size):", buf, sizeof buf)) return;
+  pct = atoi(buf);
+  if (pct < 1 || pct > 1000) { ask("OK", "%s", tr("The scale goes from 1 to 1000 per cent.")); return; }
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, ".png");
+  if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, "#?.(png|jpg|bmp|iff|gif)")) return;
+  fmt = out_fmt(path, sizeof path);
+  if (fmt == FMT_ORA) fmt = FMT_PNG;
+  if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
+  set(app, MUIA_Application_Sleep, TRUE);
+  t = flat_image(v->doc, &im) ? doc_adopt(im.w, im.h, im.px) : NULL;
+  if (t && pct != 100) {
+    i32 w = (i32)((long)t->w * pct / 100), h = (i32)((long)t->h * pct / 100);
+    if (!image_resize(t, w < 1 ? 1 : w, h < 1 ? 1 : h, RS_BICUBIC)) { doc_free(t); t = NULL; }
+  }
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+  t->dpi = v->doc->dpi;
+  write_doc(t, path, fmt);
+  doc_free(t);
+}
+/* File > Export > Layers to Files: each layer with pixels as a file of its own, named after it */
+static void layers_to_files(void)
+{
+  DocView *v = cur_view();
+  char path[512], base[512], name[640], ext[8];
+  int fmt, i, n = 0;
+  static char msg[200];
+  if (!v) return;
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, ".png");
+  if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, "#?.(png|jpg|bmp|iff|gif)")) return;
+  fmt = out_fmt(path, sizeof path);
+  if (fmt == FMT_ORA) fmt = FMT_PNG;
+  if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
+  strcpy(base, path);
+  { char *dot = strrchr((char *)FilePart((STRPTR)base), '.'); strncpy(ext, dot ? dot : ".png", sizeof ext - 1); ext[sizeof ext - 1] = 0; if (dot) *dot = 0; }
+  for (i = 0; i < v->doc->nlay; i++) {
+    Layer *l = v->doc->lay[i];
+    Doc *t;
+    char clean[64];
+    int k;
+    if (!l->px) continue;
+    for (k = 0; l->name[k] && k < (int)sizeof clean - 1; k++) clean[k] = strchr("/:*?#\"", l->name[k]) ? '_' : l->name[k];
+    clean[k] = 0;
+    snprintf(name, sizeof name, "%s_%02d_%s%s", base, i + 1, clean, ext);
+    if (!(t = doc_new(v->doc->w, v->doc->h, 0, 1))) break;
+    memcpy(t->lay[0]->px, l->px, (size_t)v->doc->w * v->doc->h * 4);
+    t->dpi = v->doc->dpi;
+    if (write_doc(t, name, fmt)) n++;
+    doc_free(t);
+  }
+  snprintf(msg, sizeof msg, tr("%d layers were written."), n);
+  ask("OK", "%s", msg);
+}
+/* the ASL requester picking several files; how many went into paths */
+static int file_request_multi(const char *titletext, char paths[][512], int max)
+{
+  struct FileRequester *fr;
+  int n = 0, i;
+  char dir[400];
+  strncpy(dir, lastdir, sizeof dir - 1); dir[sizeof dir - 1] = 0;
+  *PathPart((STRPTR)dir) = 0;
+  if (!(fr = (struct FileRequester *)MUI_AllocAslRequestTags(ASL_FileRequest, ASLFR_TitleText, (ULONG)tr(titletext),
+        ASLFR_DoMultiSelect, TRUE, ASLFR_InitialDrawer, (ULONG)dir, ASLFR_InitialPattern, (ULONG)OPEN_PATTERN, ASLFR_DoPatterns, TRUE, TAG_DONE))) return 0;
+  if (MUI_AslRequestTags(fr, ASLFR_Window, (ULONG)xget(win, MUIA_Window_Window), TAG_DONE)) {
+    if (fr->fr_NumArgs > 0)
+      for (i = 0; i < fr->fr_NumArgs && n < max; i++) {
+        strncpy(paths[n], (const char *)fr->fr_Drawer, 511); paths[n][511] = 0;
+        if (AddPart((STRPTR)paths[n], fr->fr_ArgList[i].wa_Name, 512)) n++;
+      }
+    else if (fr->fr_File[0]) { strncpy(paths[0], (const char *)fr->fr_Drawer, 511); paths[0][511] = 0; if (AddPart((STRPTR)paths[0], fr->fr_File, 512)) n = 1; }
+  }
+  MUI_FreeAslRequest(fr);
+  if (n) strcpy(lastdir, paths[0]);
+  return n;
+}
+/* File > Load Files into Stack: several pictures as the layers of one new picture, each named
+   after its file and centred (the canvas is the first one's size) */
+static void load_stack(void)
+{
+  static char paths[32][512];
+  int n = file_request_multi("Load Files into Stack", paths, 32), i, fmt;
+  Doc *d = NULL;
+  char name[108];
+  if (!n) return;
+  for (i = 0; i < n; i++) {
+    Doc *o = load(paths[i], &fmt);
+    Rgba im;
+    if (!o) continue;
+    base_name(paths[i], name, sizeof name);
+    if (!d) {
+      /* the first: flattened, it is the picture */
+      if (!flat_image(o, &im)) { doc_free(o); continue; }
+      d = doc_adopt(im.w, im.h, im.px);
+      doc_free(o);
+      if (!d) break;
+      strncpy(d->lay[0]->name, name, sizeof d->lay[0]->name - 1);
+      continue;
+    }
+    if (flat_image(o, &im)) {
+      Clip c;
+      c.w = im.w; c.h = im.h; c.px = im.px; c.x = (d->w - im.w) / 2; c.y = (d->h - im.h) / 2;
+      if (clip_paste(d, &c, 1)) strncpy(d->lay[d->active]->name, name, sizeof d->lay[0]->name - 1);
+      rgba_free(&im);
+    }
+    doc_free(o);
+  }
+  if (!d) return;
+  doc_forget_undo(d);
+  d->dirty = 1;
+  doc_show(d, "", FMT_ORA);
 }
 /* the Brushes panel and DPaint window ask for a brush made from the picture: the selection (or all of it) */
 static void brushui_request(int what)
@@ -855,7 +1029,8 @@ static void new_doc(void)
   if (c) { d->fg = c->fg; d->bg = c->bg; } else { d->fg = 0; d->bg = 0xFFFFFF; }
   doc_show(d, "", FMT_ORA);
 }
-/* File > Place: another picture as a new layer, centred */
+static void transform_dialog(void);
+/* File > Place: another picture as a new layer, centred, then scaled and turned as asked */
 static void place_file(void)
 {
   Doc *d = cur_doc(), *o;
@@ -881,6 +1056,8 @@ static void place_file(void)
     doc_set_layer_props(d, d->active, name, -1, -1, -1);
   }
   refresh_all();
+  /* 0.6: then its size and angle, as Place goes into Free Transform */
+  transform_dialog();
 }
 
 /* ------------------------------------------------------------------ commands */
@@ -926,6 +1103,12 @@ static void command(ULONG id)
   if (id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
+  if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
+    char p[512];
+    strcpy(p, recent[id - ID_RECENT0]);
+    if (p[0]) open_path(p);
+    return;
+  }
   if (id >= ID_NEWADJ0 && id < ID_NEWADJ0 + AK_N) {
     /* a new adjustment layer above the active one, then its settings */
     AdjParams p;
@@ -953,6 +1136,11 @@ static void command(ULONG id)
   case ID_EXPILBM8: export_as(FMT_ILBM, 1); return;
   case ID_EXPGIF: export_as(FMT_GIF, 0); return;
   case ID_EXPILBMOPT: export_ilbm_options(); return;
+  case ID_SAVECOPY: save_copy(); return;
+  case ID_EXPORTAS: export_scaled(); return;
+  case ID_LAYERSTOFILES: layers_to_files(); return;
+  case ID_STACK: load_stack(); return;
+  case ID_CLEARRECENT: memset(recent, 0, sizeof recent); update_menus(); return;
   case ID_WIN_PALETTE: case ID_COLORTABLE: palwin_open(1); return;
   case ID_WIN_BRUSHSET: { Object *w = brushwin_settings_window(); if (w) set(w, MUIA_Window_Open, TRUE); return; }
   case ID_WIN_DPAINT: { Object *w = brushwin_dpaint_window(); if (w) set(w, MUIA_Window_Open, TRUE); return; }
@@ -1409,13 +1597,15 @@ static void remove_fonts(void)
 static void load_prefs(void)
 {
   FILE *f = fopen("PROGDIR:Easel.prefs", "r");
-  char line[200];
+  char line[600];
+  int nr = 0;
   if (!f) return;
   while (fgets(line, sizeof line, f)) {
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "dark=", 5)) pref_dark = atoi(line + 5);
     else if (!strncmp(line, "screen=", 7)) { strncpy(pub_screen, line + 7, sizeof pub_screen - 1); }
     else if (!strncmp(line, "dir=", 4)) { strncpy(lastdir, line + 4, sizeof lastdir - 1); }
+    else if (!strncmp(line, "recent=", 7) && nr < NRECENT) { strncpy(recent[nr], line + 7, sizeof recent[0] - 1); nr++; }
   }
   fclose(f);
 }
@@ -1426,6 +1616,7 @@ static void save_prefs(void)
   fprintf(f, "dark=%d\n", pref_dark);
   if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
   if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
+  { int i; for (i = 0; i < NRECENT; i++) if (recent[i][0]) fprintf(f, "recent=%s\n", recent[i]); }
   fclose(f);
 }
 
