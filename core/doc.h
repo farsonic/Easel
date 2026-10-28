@@ -179,6 +179,7 @@ void   doc_note_all(Doc *d);
    too). Undoing a step that saved only these re-derives indexed layers' RGBA from their indices */
 void   doc_note_pal(Doc *d);
 void   doc_end(Doc *d);
+int    doc_fade(Doc *d, int opacity, int blend);   /* Edit > Fade (0.6): the last change mixed back */
 int    doc_undo(Doc *d);
 int    doc_redo(Doc *d);
 int    doc_discard_last(Doc *d);                           /* the last step undone and forgotten (a preview cancelled) */

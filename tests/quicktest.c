@@ -624,8 +624,26 @@ static void selections(void)
   }
 }
 
+/* Edit > Fade: half of a red-to-blue change taken back gives purple; undo gives the blue back */
+static void fade(void)
+{
+  Doc *d = doc_new(70, 70, 0xffff0000, 0);
+  u8 *p;
+  long k;
+  int all = 1;
+  doc_begin(d, "Paint");
+  doc_note_layer(d, 0, doc_box(d));
+  for (k = 0; k < 70L * 70; k++) { p = d->lay[0]->px + k * 4; p[0] = 0; p[2] = 255; }
+  doc_end(d);
+  ok("fade runs", doc_fade(d, 128, BM_NORMAL));
+  for (k = 0; k < 70L * 70; k++) { p = d->lay[0]->px + k * 4; if (abs(p[0] - 127) > 2 || abs(p[2] - 128) > 2) all = 0; }
+  ok("fade: half way", all);
+  ok("fade: undo", doc_undo(d) && d->lay[0]->px[0] == 0 && d->lay[0]->px[2] == 255);
+  doc_free(d);
+}
 int main(void)
 {
+  fade();
   blend_modes();
   filters_particular();
   filters_generic();

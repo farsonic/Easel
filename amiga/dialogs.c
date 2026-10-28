@@ -929,6 +929,27 @@ void dlg_fill(void)
   if (k == 5) { LONG p = pick_color("Fill Colour", d->fg); if (p < 0) return; c = (u32)p; }
   fill_selection(d, c, op, mode);
 }
+/* Edit > Fade: the last change mixed back by an opacity and blend mode */
+void dlg_fade(void)
+{
+  Doc *d = cur_doc();
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  Object *w, *os, *bc;
+  int ok, op, mode;
+  if (!d) return;
+  if (!doc_can_undo(d)) return;
+  w = dialog_window("Fade", ColGroup(2),
+        Child, QLabel(tr("Opacity (%):"), MUIO_Label_Centered), Child, os = slider(0, 100, 100),
+        Child, QLabel(tr("Mode:"), MUIO_Label_Centered), Child, bc = cycle(blends, 0),
+        Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Mixes the last change back with how it was before"), End,
+      End, NULL);
+  if (!w) return;
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  op = (int)xget(os, MUIA_Numeric_Value); mode = (int)xget(bc, MUIA_Cycle_Active);
+  MUI_DisposeObject(w);
+  if (!ok) return;
+  if (!doc_fade(d, (op * 255 + 50) / 100, mode)) ask("OK", "%s", tr("The last step can't be faded: it didn't change pixels, or it changed the whole picture."));
+}
 void dlg_stroke(void)
 {
   Doc *d = cur_doc();

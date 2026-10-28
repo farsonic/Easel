@@ -76,6 +76,7 @@ int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
 static Object *navpanel, *infopanel;     /* (0.6) the Navigator and Info panels */
 static Object *rightcol;                 /* the panels' column (Tab hides it) */
+static Doc *toggled;                     /* Toggle Last State: the picture just stepped back */
 static int fonts_assigned;
 static int untitled;
 static LONG win_box[4];
@@ -111,7 +112,8 @@ static struct NewMenu menus[] = {
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
-  I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
+  I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Toggle Last State", 0, ID_TOGGLELAST), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
+  I("Fade...", 0, ID_FADE), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
   I("Paste Into", 0, ID_PASTEINTO), I("Clear", 0, ID_CLEAR), BAR,
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
@@ -451,7 +453,7 @@ static void update_menus(void)
     ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V, ID_RESELECT, ID_GROWSIM, ID_SIMILAR,
     ID_F_AGAIN, ID_MODE_RGB, ID_MODE_GRAY, ID_MODE_INDEXED, ID_MODE_BITMAP, ID_COLORTABLE, ID_SCREENMODE, ID_EXPGIF, ID_EXPILBMOPT,
     ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_DEFBRUSH, ID_PICKUPBRUSH, ID_DEFPATTERN,
-    ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, 0 };
+    ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, ID_FADE, ID_TOGGLELAST, 0 };
   static const ULONG needmask[] = { ID_MASK_DELETE, ID_MASK_APPLY, ID_MASK_ENABLE, ID_MASK_LINK, ID_MASK_INVERT, ID_MASK_EDIT, ID_SELFROMMASK, 0 };
   Layer *al = has ? d->lay[d->active] : NULL;
   int i;
@@ -1311,6 +1313,11 @@ static void command(ULONG id)
   if (!d) return;
   switch (id) {
   case ID_UNDO: case ID_STEPBACK: doc_undo(d); break;
+  case ID_FADE: dlg_fade(); break;
+  case ID_TOGGLELAST:
+    /* back one step, or forward again if that's what was done last */
+    if (d->redo && toggled == d) { doc_redo(d); toggled = NULL; } else if (doc_undo(d)) toggled = d;
+    break;
   case ID_REDO: case ID_STEPFWD: doc_redo(d); break;
   case ID_PURGE: doc_forget_undo(d); break;
   /* 0.4: modes, the palette, the Amiga screen mode */

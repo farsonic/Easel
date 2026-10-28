@@ -875,6 +875,43 @@ static void swap_step(Doc *d, UndoStep *u)
   if (d->active >= d->nlay) d->active = d->nlay - 1;
   if (d->active < 0) d->active = 0;
 }
+/* Edit > Fade (0.6): the last step's change to pixels mixed back over how they were before it, at
+   opacity (0-255) in blend mode blend, as a step of its own. 0 if the last step can't be faded
+   (it changed the whole document, or no pixels) */
+int doc_fade(Doc *d, int opacity, int blend)
+{
+  UndoStep *u = d->undo;
+  u8 **res;
+  int k, n;
+  if (!u || u->open || u->whole || !u->ntiles) return 0;
+  n = u->ntiles;
+  if (!(res = (u8 **)calloc((size_t)n, sizeof *res))) return 0;
+  /* the results first (the step's saved pixels are what was there before) */
+  for (k = 0; k < n; k++) {
+    Tile *t = &u->tiles[k];
+    i32 x0 = t->tx * TS, y0 = t->ty * TS, tw = d->w - x0 < TS ? d->w - x0 : TS, th = d->h - y0 < TS ? d->h - y0 : TS, x, y;
+    Layer *l;
+    if (t->plane || t->layer >= d->nlay || !(l = d->lay[t->layer])->px) continue;
+    if (!(res[k] = (u8 *)malloc((size_t)tw * th * 4))) break;
+    memcpy(res[k], t->px, (size_t)tw * th * 4);
+    for (y = 0; y < th; y++)
+      for (x = 0; x < tw; x++) blend_pixel(res[k] + ((long)y * tw + x) * 4, l->px + ((long)(y0 + y) * d->w + x0 + x) * 4, opacity, blend);
+  }
+  if (k == n) {
+    doc_begin(d, "Fade");
+    for (k = 0; k < n; k++) {
+      Tile *t = &u->tiles[k];
+      i32 x0 = t->tx * TS, y0 = t->ty * TS, tw = d->w - x0 < TS ? d->w - x0 : TS, th = d->h - y0 < TS ? d->h - y0 : TS, y;
+      if (!res[k]) continue;
+      doc_note_layer(d, t->layer, box_make(x0, y0, x0 + tw, y0 + th));
+      for (y = 0; y < th; y++) memcpy(d->lay[t->layer]->px + ((long)(y0 + y) * d->w + x0) * 4, res[k] + (long)y * tw * 4, (size_t)tw * 4);
+    }
+    doc_end(d);
+  }
+  for (k = 0; k < n; k++) free(res[k]);
+  free(res);
+  return 1;
+}
 int doc_undo(Doc *d)
 {
   UndoStep *u = d->undo;
