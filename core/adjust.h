@@ -11,7 +11,9 @@
    settings in the order its adj_ function below takes them */
 enum { AK_BRIGHTNESS, AK_LEVELS, AK_CURVES, AK_EXPOSURE, AK_VIBRANCE, AK_HUESAT, AK_COLORBALANCE,
        AK_BLACKWHITE, AK_PHOTOFILTER, AK_CHANNELMIXER, AK_INVERT, AK_POSTERIZE, AK_THRESHOLD,
-       AK_GRADIENTMAP, AK_SELECTIVECOLOR, AK_N };
+       AK_GRADIENTMAP, AK_SELECTIVECOLOR,
+       AK_REPLACECOLOR,                     /* 1.0 (adjust10.h has its settings and the new layouts) */
+       AK_N };
 
 /* any adjustment compiled for applying quickly to rows of pixels (adjustment layers, 0.3) */
 typedef struct AdjProg AdjProg;

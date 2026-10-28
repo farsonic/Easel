@@ -30,6 +30,7 @@
 #include "../core/guides.h"
 #include "theme.h"
 #include "lang.h"
+#include "../core/retouch.h"
 #include "ids.h"
 #include "../core/text.h"
 #include "../core/channels.h"
@@ -124,7 +125,8 @@ static struct MUI_CustomClass *ccls;
 static const double zooms[] = { 1.0 / 32, 1.0 / 24, 1.0 / 16, 1.0 / 12, 1.0 / 8, 1.0 / 6, 1.0 / 4, 1.0 / 3, 1.0 / 2, 2.0 / 3, 1, 1.5, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32 };
 #define NZOOMS (int)(sizeof zooms / sizeof zooms[0])
 
-static int brushlike(int t) { return t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE); }
+static int brushlike(int t) { return t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE) ||
+                                     t == TL_HEAL || t == TL_SPOTHEAL; }
 /* 0.3: painting a layer mask: its feathered copy made again so the composite shows it */
 static void mask_painted(Doc *doc)
 {
@@ -137,6 +139,7 @@ static int pt_of(int t)
   case TL_PENCIL: return PT_PENCIL; case TL_ERASER: return PT_ERASER; case TL_CLONE: return PT_CLONE;
   case TL_BLUR: return PT_BLUR; case TL_SHARPEN: return PT_SHARPEN; case TL_SMUDGE: return PT_SMUDGE;
   case TL_DODGE: return PT_DODGE; case TL_BURN: return PT_BURN; case TL_SPONGE: return PT_SPONGE;
+  case TL_HEAL: return PT_HEAL; case TL_SPOTHEAL: return PT_SPOTHEAL;     /* 1.0 */
   }
   return PT_BRUSH;
 }
@@ -1815,7 +1818,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     ov_show(d, obj);
     return;
   }
-  if (brushlike(t) && alt && t != TL_CLONE && t != TL_ERASER) t = TL_EYEDROPPER;    /* (Alt: the eyedropper for a moment) */
+  if (brushlike(t) && alt && t != TL_CLONE && t != TL_HEAL && t != TL_ERASER) t = TL_EYEDROPPER;    /* (Alt: the eyedropper for a moment) */
   switch (t) {
   case TL_HAND: d->drag = DR_PAN; d->pmx = mx; d->pmy = my; break;
   case TL_ZOOM:
@@ -1945,6 +1948,13 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   case TL_PEN: case TL_ADDANCHOR: case TL_DELANCHOR: case TL_CONVERT: case TL_PATHSEL: case TL_DIRECTSEL:
     path_press(d, obj, doc, mx, my, x, y, shift, alt);
     break;
+  /* 1.0: the Red Eye tool drags a box (or clicks); the Patch tool draws round the area like the
+     Lasso, then drags it to where the patch comes from */
+  case TL_REDEYE: d->drag = DR_SHAPE; d->prev_on = 0; break;
+  case TL_PATCH:
+    if (doc->sel && x >= 0 && y >= 0 && x < doc->w && y < doc->h && sel_at(doc, (i32)x, (i32)y) > 0) d->drag = DR_MOVE;
+    else { d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); }
+    break;
   case TL_CROP:
     if (d->crop_on) {
       int h = crop_hit(d, obj, mx, my);
@@ -1959,9 +1969,9 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (brushlike(t)) {
       Brush b = tool_brush(t);
       u32 color = doc->fg;
-      if (t == TL_CLONE) {
+      if (t == TL_CLONE || t == TL_HEAL) {
         if (alt) { d->clone_x = x; d->clone_y = y; d->clone_set = 1; d->clone_aligned_set = 0; break; }
-        if (!d->clone_set) { ask("OK", "%s", tr("Alt-click where the Clone Stamp should copy from first.")); break; }
+        if (!d->clone_set) { ask("OK", "%s", tr(t == TL_HEAL ? "Alt-click where the Healing Brush should take its texture from first." : "Alt-click where the Clone Stamp should copy from first.")); break; }
         if (!d->clone_aligned_set) { d->clone_dx = (i32)floor(d->clone_x - x + 0.5); d->clone_dy = (i32)floor(d->clone_y - y + 0.5); d->clone_aligned_set = 1; }
         b.clone_dx = d->clone_dx; b.clone_dy = d->clone_dy;
       }
@@ -2133,7 +2143,7 @@ static void release(struct Data *d, Object *obj)
     if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; mask_painted(doc);
       /* (smoothing finishes the stroke at the pointer; an indexed or grey picture was brought back to its colours) */
       if (brushui.b.dyn.smoothing || brushui.b.dyn.pulled_string) DoMethod(obj, MUIM_Canvas_Update, 0, 0, doc->w, doc->h);
-      else if (doc->mode != MODE_RGB) update_box(d, obj, d->sbox);
+      else if (doc->mode != MODE_RGB || tool == TL_HEAL || tool == TL_SPOTHEAL) update_box(d, obj, d->sbox);   /* (1.0: healed as it ends) */
     }
     d->lastx = d->bx; d->lasty = d->by; d->has_last = 1;
     tell_changed(d, obj);
@@ -2157,6 +2167,16 @@ static void release(struct Data *d, Object *obj)
   case DR_MOVE: {
     LONG dx = (LONG)floor(d->bx - d->ax + 0.5), dy = (LONG)floor(d->by - d->ay + 0.5);
     d->drag = DR_MOVE; ov_hide(d, obj); d->drag = DR_NONE;
+    if (tool == TL_PATCH) {
+      /* 1.0: the selection healed from where it was dragged to */
+      if (dx || dy) {
+        ch = patch_heal(doc, dx, dy);
+        if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
+        else if (doc->lay[doc->active]->locked || doc->lay[doc->active]->kind != LK_PIXEL) ask("OK", "%s", tr("This layer can't be patched (it is locked or has no pixels)."));
+      }
+      tell_changed(d, obj);
+      break;
+    }
     if ((dx || dy) && doc->lay[doc->active]->live && !(d->modifiers & QALT)) {
       /* 0.9: a type or shape layer: its settings moved (it stays sharp) */
       double m[6];
@@ -2192,6 +2212,18 @@ static void release(struct Data *d, Object *obj)
     break;
   case DR_SHAPE:
     d->drag = DR_SHAPE; ov_hide(d, obj); d->drag = DR_NONE;
+    if (tool == TL_REDEYE) {
+      /* 1.0: in the box dragged, or round the click */
+      Box b;
+      if (fabs(d->bx - d->ax) >= 3 && fabs(d->by - d->ay) >= 3) b = box_make((i32)floor(d->ax < d->bx ? d->ax : d->bx), (i32)floor(d->ay < d->by ? d->ay : d->by),
+                                                                         (i32)ceil(d->ax < d->bx ? d->bx : d->ax), (i32)ceil(d->ay < d->by ? d->by : d->ay));
+      else { i32 r = 40; b = box_make((i32)d->ax - r, (i32)d->ay - r, (i32)d->ax + r + 1, (i32)d->ay + r + 1); }
+      ch = redeye_fix(doc, b, opt.redeye_pupil, opt.redeye_darken);
+      if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
+      else if (doc->lay[doc->active]->kind == LK_PIXEL && !doc->lay[doc->active]->locked) ask("OK", "%s", tr("No red pupil was found there: click on it, or drag a box round the eye."));
+      tell_changed(d, obj);
+      break;
+    }
     if (fabs(d->bx - d->ax) >= 1 && fabs(d->by - d->ay) >= 1) shape_make(d, obj, doc);
     d->prev_on = 0;
     tell_changed(d, obj);

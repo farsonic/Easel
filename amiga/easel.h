@@ -62,14 +62,16 @@ enum {
   TL_MAGLASSO, TL_RULER,
   /* 0.8 */
   TL_SAMPLER,
+  /* 1.0: retouching (core/retouch.h) */
+  TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REDEYE,
   /* 0.9: type, pens and paths, shapes (TL_TEXT is the Horizontal Type tool; TL_RECT, TL_ELLIPSE
      and TL_LINE make shape layers too) */
   TL_TYPEMASK, TL_VTEXT, TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT, TL_PATHSEL, TL_DIRECTSEL,
   TL_ROUNDRECT, TL_POLYGON, TL_CUSTOMSHAPE,
   TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest,
-   0.9's after those */
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's and 1.0's) after the
+   rest, 0.9's after those */
 #define TOOL_ICON(t) ((t) >= TL_TYPEMASK ? IC_T_TYPEMASK + (t) - TL_TYPEMASK : (t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 /* 0.9: the tools that make shapes (as shape layers or pixels), and those that work on paths */
 #define SHAPE_TOOL(t) ((t) == TL_RECT || (t) == TL_ELLIPSE || (t) == TL_LINE || (t) == TL_ROUNDRECT || (t) == TL_POLYGON || (t) == TL_CUSTOMSHAPE)
@@ -102,6 +104,8 @@ typedef struct {
   int ml_width, ml_contrast, ml_freq; /* magnetic lasso: pixels, per cent, 0-100 */
   int crop_preset, crop_swap;         /* crop: crop_presets[], width and height swapped */
   int ruler_image;                    /* ruler: Straighten turns the whole picture (and crops) */
+  /* 1.0 */
+  int redeye_pupil, redeye_darken;    /* red eye: per cent */
   /* 0.9 */
   int text_style, text_aa;            /* type: 0 regular, 1 bold, 2 italic, 3 bold italic; TAA_ (text_align: TA_ with justify) */
   int shape_mode;                     /* shapes: 0 a shape layer, 1 pixels */

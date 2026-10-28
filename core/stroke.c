@@ -30,6 +30,7 @@
 #include "paint.h"
 #include "pattern.h"
 #include "layers.h"
+#include "retouch.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -428,7 +429,7 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
     if (bpp == 1) { u8 bgc[3]; rgb_of(s->b.bg, bgc); put_px(0, p, bgc, cov, BM_NORMAL); }
     else if (!lock) p[3] = (u8)mul255(o[3], 255 - cov);
     break;
-  case PT_CLONE: {
+  case PT_CLONE: case PT_HEAL: {
     const u8 *c = s->b.sample_all && bpp == 4 ? merged_px(s, i + s->b.clone_dx, j + s->b.clone_dy) : orig_px(s, i + s->b.clone_dx, j + s->b.clone_dy, c4);
     memcpy(p, o, 4);
     if (c) put_px(lock, p, c, mul255(cov, c[3]), BM_NORMAL);
@@ -473,6 +474,12 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
         int v = tool == PT_DODGE ? p[k] + ((255 - p[k]) * f) / 400 : p[k] - (p[k] * f) / 400;
         p[k] = (u8)(v < 0 ? 0 : v > 255 ? 255 : v);
       }
+    break; }
+  case PT_SPOTHEAL: {
+    /* 1.0: the area marked in a dark wash until the stroke ends */
+    static const u8 dark[3] = { 0, 0, 0 };
+    memcpy(p, o, 4);
+    put_px(1, p, dark, cov / 2, BM_NORMAL);
     break; }
   case PT_BGERASE:
     memcpy(p, o, 4);
@@ -915,7 +922,8 @@ static void smooth_to(Stroke *s, double x, double y, double p, Box *changed)
 Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 color, double x, double y, double pressure, Box *changed)
 {
   static const char *const names[PT_N] = { "Brush Tool", "Pencil", "Eraser", "Clone Stamp", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool",
-                                           "Pattern Stamp", "History Brush", "Color Replacement Tool", "Background Eraser Tool" };
+                                           "Pattern Stamp", "History Brush", "Color Replacement Tool", "Background Eraser Tool",
+                                           "Healing Brush", "Spot Healing Brush" };
   Stroke *s;
   long nt;
   if (changed) *changed = box_make(0, 0, 0, 0);
@@ -950,8 +958,8 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
   nt = (long)s->ntx * s->nty;
   s->mask = (u8 **)calloc((size_t)nt, sizeof(u8 *));
   s->orig = (u8 **)calloc((size_t)nt, sizeof(u8 *));
-  if (s->b.tool == PT_CLONE && s->b.sample_all) s->merged = (u8 **)calloc((size_t)nt, sizeof(u8 *));
-  if (!s->mask || !s->orig || (s->b.tool == PT_CLONE && s->b.sample_all && !s->merged) || !get_dab(s, base_diam(s, pressure), s->b.angle, 1, 0, 0)) {
+  if ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all) s->merged = (u8 **)calloc((size_t)nt, sizeof(u8 *));
+  if (!s->mask || !s->orig || ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all && !s->merged) || !get_dab(s, base_diam(s, pressure), s->b.angle, 1, 0, 0)) {
     free(s->mask); free(s->orig); free(s->merged); dab_free(&s->cache[0]); free(s);
     return NULL;
   }
@@ -1014,12 +1022,65 @@ int stroke_string(const Stroke *s, double *bx, double *by)
   *bx = s->x; *by = s->y;
   return 1;
 }
+/* 1.0: the Healing Brushes: when the stroke ends, the area it covered is healed (retouch.c) from
+   the source (Healing Brush) or from round it (Spot Healing Brush) */
+static void stroke_heal(Stroke *s)
+{
+  Doc *d = s->d;
+  i32 t, x, y, bx0 = s->t.w, by0 = s->t.h, bx1 = -1, by1 = -1, bw, bh, margin, row;
+  Box b;
+  u8 *base, *src, *mask, *out;
+  int spot = s->b.tool == PT_SPOTHEAL, ok;
+  for (t = 0; t < s->ntx * s->nty; t++) {
+    i32 x0 = (t % s->ntx) * TS, y0 = (t / s->ntx) * TS;
+    if (!s->mask[t]) continue;
+    for (y = 0; y < TS && y0 + y < s->t.h; y++) for (x = 0; x < TS && x0 + x < s->t.w; x++) if (s->mask[t][y * TS + x]) {
+      if (x0 + x < bx0) bx0 = x0 + x;
+      if (x0 + x > bx1) bx1 = x0 + x;
+      if (y0 + y < by0) by0 = y0 + y;
+      if (y0 + y > by1) by1 = y0 + y;
+    }
+  }
+  if (bx1 < 0) return;
+  /* the tiles put back as they were, so the healing starts from the picture before the stroke */
+  for (t = 0; t < s->ntx * s->nty; t++) {
+    i32 x0 = (t % s->ntx) * TS, y0 = (t / s->ntx) * TS, n = s->t.w - x0 < TS ? s->t.w - x0 : TS;
+    if (!s->orig[t]) continue;
+    for (row = 0; row < TS && y0 + row < s->t.h; row++) memcpy(s->t.px + ((long)(y0 + row) * s->t.w + x0) * 4, s->orig[t] + (long)row * TS * 4, (size_t)n * 4);
+  }
+  margin = spot ? ((bx1 - bx0 > by1 - by0 ? bx1 - bx0 : by1 - by0) + 1) / 3 + 3 : 2;
+  b = box_clip(box_make(bx0 - margin, by0 - margin, bx1 + 1 + margin, by1 + 1 + margin), box_make(0, 0, s->t.w, s->t.h));
+  bw = b.x1 - b.x0; bh = b.y1 - b.y0;
+  base = (u8 *)malloc((size_t)bw * bh * 4); src = (u8 *)malloc((size_t)bw * bh * 4); out = (u8 *)malloc((size_t)bw * bh * 4); mask = (u8 *)malloc((size_t)bw * bh);
+  if (base && src && out && mask) {
+    for (y = 0; y < bh; y++)
+      for (x = 0; x < bw; x++) {
+        i32 cx = x + b.x0, cy = y + b.y0;
+        long k = (long)y * bw + x;
+        u8 *mt = s->mask[(cy / TS) * s->ntx + cx / TS];
+        int m = mt ? mt[(cy % TS) * TS + cx % TS] : 0;
+        m = mul255(s->cmode ? m : m * s->b.opacity / 100, sel_at(d, cx, cy));
+        mask[k] = (u8)m;
+        memcpy(base + k * 4, s->t.px + ((long)cy * s->t.w + cx) * 4, 4);
+        if (!spot) {
+          u8 tmp[4];
+          const u8 *c = s->b.sample_all ? merged_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy) : NULL;
+          if (!c) c = orig_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy, tmp);
+          memcpy(src + k * 4, c, 4);
+        }
+      }
+    ok = spot ? spot_heal_fill(s->t.px, s->t.w, s->t.h, b, mask, out) : heal_blend(out, base, src, mask, bw, bh);
+    if (ok) for (y = 0; y < bh; y++) memcpy(s->t.px + ((long)(y + b.y0) * s->t.w + b.x0) * 4, out + (long)y * bw * 4, (size_t)bw * 4);
+  }
+  free(base); free(src); free(out); free(mask);
+}
 void stroke_end(Stroke *s)
 {
   i32 i;
   if (!s) return;
   /* (smoothing: the brush finishes where the pointer did) */
   if (s->b.dyn.smoothing > 0 && (s->x != s->ix || s->y != s->iy)) walk(s, s->ix, s->iy, s->ip, NULL);
+  if ((s->b.tool == PT_HEAL || s->b.tool == PT_SPOTHEAL) && s->t.bpp == 4) stroke_heal(s);
   for (i = 0; i < s->ntx * s->nty; i++) { free(s->mask[i]); free(s->orig[i]); if (s->merged) free(s->merged[i]); }
   for (i = 0; i < NCACHE; i++) if (s->cache[i].used) dab_free(&s->cache[i]);
   for (i = 1; i < s->nmip; i++) tip_free(s->mip[i]);

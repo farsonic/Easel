@@ -19,6 +19,46 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.0: filters, adjustments and retouching
+
+- Retouching tools (J): the Spot Healing Brush (paint over a blemish; Easel finds a patch nearby
+  whose surroundings match and heals it in), the Healing Brush (Alt-click a source, paint as with
+  the Clone Stamp; on release the texture comes from the source and the colour from around it),
+  the Patch tool (draw round the area, then drag it to the source) and Red Eye (click or drag a box
+  over the eye; pupil size and darken amount).
+- Hue/Saturation works on the Master or any of the six colour ranges (with range and fuzziness).
+  Black & White has six colour sliders and a tint. New: Replace Color, Shadows/Highlights and Match
+  Color (from another open picture).
+- Curves has separate RGB, Red, Green and Blue curves. Levels and Curves have Black, Grey and White
+  Point buttons (they take the foreground colour) and Auto. Levels, Curves, Hue/Saturation and Black
+  & White come with presets and can load and save your own (in PROGDIR:Presets). Photo Filter has
+  the usual 20 named filters; Brightness/Contrast has Use Legacy. Channel Mixer, Selective Color and
+  Color Balance remember each channel or range as you switch between them.
+- New filters, each with a live preview: Average, Blur More, Radial Blur with a movable centre,
+  Iris Blur, Tilt-Shift, Smart Sharpen, Sharpen Edges, Displace, Wave, Lens Correction, Diffuse
+  Glow, Extrude, Glowing Edges, Detect Edges, Plastic Wrap, Lighting Effects (point, spot or
+  infinite light, texture and gloss), PAL Colors, Maximum/Minimum with roundness, more Offset modes,
+  Color to Alpha and HSB/HSL; and the gallery effects Cutout, Film Grain, Poster Edges, Spatter,
+  Halftone Pattern, Photocopy, Mosaic Tiles, Patchwork, Stained Glass and Texturizer.
+- Replace Color and the new Hue/Saturation, Black & White and Curves are adjustment layers too.
+
+## New in 0.8: workspace and safety
+
+- A progress bar: anything that takes more than about half a second shows a Working window with how
+  far it has got and an Abort button (Esc works too). Abort puts the picture back as it was.
+- Edit > Preferences: General, Interface, Tools, File Handling, Units & Rulers, Guides & Grid and
+  Scratch Drawer pages, applied as you change them and saved.
+- Edit > Keyboard Shortcuts: change the Amiga keys of the menu commands, extra keys on the canvas and
+  the tools' letters (saved in PROGDIR:Easel.keys).
+- Undo keeps as many steps as you set; older steps can go to a scratch drawer on disk instead of
+  memory.
+- History snapshots: keep the picture as it is now, go back to a snapshot as a new step, or make a
+  new document from any step.
+- The Color Sampler tool (with the Eyedropper) leaves up to four marks whose colours show in the
+  Info panel.
+- View > Screen Mode: in a window, on Easel's own public screen, or full screen in any mode.
+- Hold a tool's key to use that tool only until you let go.
+
 ## New in 0.7: selections and transforms
 
 - Free Transform on the canvas (Edit > Free Transform, Amiga-T): drag a corner to scale (Shift keeps
@@ -199,10 +239,11 @@ next to itself.
 |---|---|---|
 | Move | V | drag the layer, or what is selected; arrow keys nudge by 1 (Shift: 10); Auto-Select picks the layer under the pointer |
 | Rectangular / Elliptical Marquee | M | Shift adds, Alt subtracts, both intersect; Shift while dragging makes a square or circle; feather |
-| Lasso / Polygonal Lasso | L | freehand; or click the corners, then double-click or press Return to close (Esc drops it) |
+| Lasso / Polygonal Lasso / Magnetic Lasso | L | freehand; or click the corners, then double-click or press Return to close (Esc drops it); the magnetic lasso follows edges |
 | Magic Wand | W | tolerance, contiguous, sample all layers |
 | Crop | C | drag a box and adjust its handles; Return or a double-click inside crops, Esc cancels |
-| Eyedropper | I | point, 3 × 3 or 5 × 5 sample, current or all layers; Alt-click sets the background colour |
+| Eyedropper / Color Sampler / Ruler | I | point, 3 × 3 or 5 × 5 sample, current or all layers; Alt-click sets the background colour; the sampler leaves up to four marks; the ruler measures and straightens |
+| Spot Healing Brush / Healing Brush / Patch / Red Eye | J | paint over a spot; Alt-click a source, then paint; draw round an area and drag it to the source; click a red eye |
 | Clone Stamp / Pattern Stamp | S | Alt-click sets the clone source, then paint; the pattern stamp paints the chosen pattern |
 | History Brush | Y | paints back the snapshot |
 | Brush / Pencil / Color Replacement | B | size, hardness, blend mode, opacity, flow; Shift-click paints a straight line from the last stroke; Alt picks a colour; Brush Settings for tips and dynamics |

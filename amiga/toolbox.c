@@ -32,14 +32,14 @@ static int fh(void) { return theme_font()->tf_YSize; }
 typedef struct { int n; int tools[6]; } Group;
 static const Group groups[] = {
   { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 1, { TL_WAND } },
-  { 1, { TL_CROP } }, { 3, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER } }, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
+  { 1, { TL_CROP } }, { 3, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER } }, { 4, { TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REDEYE } } /* 1.0 */, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
   /* 0.9: the pens, type, path selection and the shapes */
   { 4, { TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT } }, { 3, { TL_TEXT, TL_VTEXT, TL_TYPEMASK } }, { 2, { TL_PATHSEL, TL_DIRECTSEL } },
   { 6, { TL_RECT, TL_ROUNDRECT, TL_ELLIPSE, TL_POLYGON, TL_LINE, TL_CUSTOMSHAPE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
 };
 #define NGROUPS (int)(sizeof groups / sizeof groups[0])
-#define HANDG (NGROUPS - 2)              /* the Hand's group, set apart from the tools above it */
+#define G_HAND (NGROUPS - 2)             /* the Hand's group, set apart with the Zoom's at the bottom */
 static int group_of(int t)
 {
   int g, k;
@@ -55,14 +55,16 @@ struct TData { struct MUI_EventHandlerNode ehn; int shown, hot, popgroup; char l
 static struct MUI_CustomClass *tcls, *ocls;
 
 static int tbcols = 1;                   /* two columns on a short screen (set up in MUIM_Setup) */
+/* in two columns the Hand and Zoom start a row of their own */
+static int tb_slot(int g) { return tbcols == 2 && g >= G_HAND && (G_HAND & 1) ? g + 1 : g; }
 static LONG tb_y(Object *obj, int g)
 {
-  if (tbcols == 2) return _mtop(obj) + 6 + (g / 2) * TB_H + (g >= HANDG ? 4 : 0);
-  return _mtop(obj) + 6 + g * TB_H + (g >= HANDG ? 6 : 0);
+  if (tbcols == 2) return _mtop(obj) + 6 + (tb_slot(g) / 2) * TB_H + (g >= G_HAND ? 4 : 0);
+  return _mtop(obj) + 6 + g * TB_H + (g > G_HAND ? 6 : 0);
 }
 static LONG tb_x(Object *obj, int g)
 {
-  if (tbcols == 2) return _mleft(obj) + 4 + (g & 1) * 29;
+  if (tbcols == 2) return _mleft(obj) + 4 + (tb_slot(g) & 1) * 29;
   return _mleft(obj) + (_mwidth(obj) - 24) / 2;
 }
 static LONG swatch_y(Object *obj) { return tb_y(obj, tbcols == 2 ? NGROUPS - 1 : NGROUPS) + (tbcols == 2 ? TB_H + 8 : 10); }
@@ -89,7 +91,7 @@ static void tb_draw(struct TData *d, Object *obj)
       Move(rp, tx - 4, ty); Draw(rp, tx, ty); Draw(rp, tx, ty - 4); Draw(rp, tx - 4, ty);
       Move(rp, tx - 2, ty - 1); Draw(rp, tx - 1, ty - 1); Draw(rp, tx - 1, ty - 2);
     }
-    if (g == HANDG && tbcols == 1) { SetAPen(rp, tpen(T_BORDER)); Move(rp, x, y - 3); Draw(rp, x + 23, y - 3); }
+    if (g == G_HAND && tbcols == 1) { SetAPen(rp, tpen(T_BORDER)); Move(rp, x, y - 3); Draw(rp, x + 23, y - 3); }
   }
   x = l + (_mwidth(obj) - 24) / 2;
   /* the colours: background behind and below right, foreground in front */
@@ -140,6 +142,12 @@ static const char *const tool_help[TL_N] = {
   "Selects along edges as you go: click to start, move round the edge (clicking to pin it down), then double-click or press Return. Backspace takes the last point back.",
   "Measures a distance and an angle: drag between two points. Straighten Layer then turns the layer so the line is level.",
   "Marks up to four points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.",
+  /* 1.0 */
+  "Paints out spots and blemishes: brush over them, and when you let go they are filled from the picture round them.",
+  "Paints with texture from another part of the picture (Alt-click the source first), blended into the colour and light of where you paint when you let go.",
+  "Mends an area from another: draw round it, then drag the selection to the part that should replace it.",
+  "Takes the red out of eyes in flash photographs: click on the pupil, or drag a box round the eye.",
+  /* 0.9 */
   "Makes a selection in the shape of text: click and type, then press Esc.",
   "Writes text in columns, top to bottom: click and type, or drag a box.",
   "Draws paths: click for corners, drag for curves, click the first point to close, Return to finish. Click on the path to add or delete a point.",
@@ -203,7 +211,7 @@ static ULONG tdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
   }
   case MUIM_AskMinMax: {
     struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
-    LONG h = tbcols == 2 ? 6 + (NGROUPS / 2) * TB_H + 4 + 8 + 36 : 6 + NGROUPS * TB_H + 6 + 10 + 36, w = tbcols == 2 ? 64 : TB_W;
+    LONG h = tbcols == 2 ? 6 + (tb_slot(NGROUPS - 1) / 2 + 1) * TB_H + 4 + 8 + 36 : 6 + NGROUPS * TB_H + 6 + 10 + 36, w = tbcols == 2 ? 64 : TB_W;
     DoSuperMethodA(cl, obj, msg);
     m->MinMaxInfo->MinWidth += w; m->MinMaxInfo->DefWidth += w; m->MinMaxInfo->MaxWidth += w;
     m->MinMaxInfo->MinHeight += h; m->MinMaxInfo->DefHeight += h; m->MinMaxInfo->MaxHeight += MUI_MAXMAX;
@@ -211,7 +219,7 @@ static ULONG tdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
   }
   case MUIM_Setup:
     if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
-    tbcols = _screen(obj)->Height < 600 ? 2 : 1;
+    tbcols = _screen(obj)->Height < 700 ? 2 : 1;          /* (0.9: nineteen groups need 700 lines in one column) */
     theme_setup(obj);
     theme_handler(obj, &((struct TData *)INST_DATA(cl, obj))->ehn);
     return TRUE;
@@ -378,6 +386,11 @@ static int fields_for(int t, Field *f)
     BUTTON("Clear", ID_RULERCLEAR); break;
   case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, 3); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
   case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, 3); CHOICE("Sample:", opt.all_layers, layersample, 2); TEXT("Alt-click picks the background colour"); break;
+  /* 1.0 */
+  case TL_SPOTHEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Type: Proximity Match"); break;
+  case TL_HEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
+  case TL_PATCH: SELOPS(); TEXT("Draw round the area, then drag it to the patch"); break;
+  case TL_REDEYE: SCRUB("Pupil Size:", opt.redeye_pupil, 1, 100, "%"); SCRUB("Darken Amount:", opt.redeye_darken, 1, 100, "%"); break;
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); TEXT("Alt-click sets the source"); break;
   case TL_BRUSH: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
