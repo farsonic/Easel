@@ -57,4 +57,13 @@ int    iatan2(i32 y, i32 x);
 u8    *file_read(const char *path, size_t *len);
 int    file_write(const char *path, const void *data, size_t len);
 
+/* 0.8: the progress of a long operation, for the UI's progress bar and its Abort button. The slow
+   loops call progress(done, total) as they go; it calls progress_hook (when one is set) whenever the
+   share done has moved on by a thousandth. Once the hook has returned nonzero (Abort pressed)
+   progress_aborted stays set and every call returns nonzero, so the loops stop, until progress_reset */
+extern int (*progress_hook)(long done, long total);
+extern int progress_aborted;
+int    progress(long done, long total);
+void   progress_reset(void);
+
 #endif

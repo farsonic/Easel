@@ -19,6 +19,8 @@ static void rgb_of(u32 c, u8 *p) { p[0] = (u8)(c >> 16); p[1] = (u8)(c >> 8); p[
 
 /* ------------------------------------------------------------------ the frame every filter shares */
 typedef struct { Doc *d; Layer *l; Box b; u8 *orig; } Op;
+/* 0.8: row y of the box reached (progress, and an Abort asked for: the loop stops) */
+static int op_tick(const Op *o, i32 y) { return progress(y - o->b.y0, o->b.y1 - o->b.y0); }
 /* begun: the layer, its working box, an undo step and a copy of the layer as it was (always kept
    when copy is asked, or there's a selection or the alpha is locked) */
 static int op_begin(Op *o, Doc *d, const char *name, int copy)
@@ -100,7 +102,7 @@ static int remap(Doc *d, const char *name, MapFn fn, const double *a, int inbox,
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, name, 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double sx, sy;
       fn(&o, a, x + 0.5, y + 0.5, &sx, &sy);
@@ -169,7 +171,7 @@ int flt_difference_clouds(Doc *d, u32 c0, u32 c1, unsigned seed)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Difference Clouds", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double v = 0, amp = 0.5, f = 1 / 128.0, t;
       int k, c;
@@ -193,7 +195,7 @@ int flt_fibers(Doc *d, int variance, int strength, unsigned seed)
   fy = variance / (strength * 96.0);
   rgb_of(d->fg, a); rgb_of(d->bg, b);
   if (!op_begin(&o, d, "Fibers", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double v = 0.5 * vnoise(x * 0.7, y * fy, seed) + 0.3 * vnoise(x * 1.4, y * fy * 2, seed + 101) + 0.2 * vnoise(x * 0.15, y * fy * 0.5, seed + 202);
       u8 *p = DEST(&o, x, y);
@@ -247,7 +249,7 @@ int flt_lens_flare(Doc *d, i32 fx, i32 fy, int brightness, int lens)
     gr[g] = S * ghosts[lens][g][1];
   }
   if (!op_begin(&o, d, "Lens Flare", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double dx = x + 0.5 - fx, dy = y + 0.5 - fy, r2 = dx * dx + dy * dy, r = sqrt(r2), glow, ring, L[3];
       int c;
@@ -280,7 +282,7 @@ int flt_lighting_basic(Doc *d, i32 lx, i32 ly, int radius, int intensity, u32 co
   rr = (double)radius * radius;
   rgb_of(color, lc);
   if (!op_begin(&o, d, "Lighting Effects", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double dx = x + 0.5 - lx, dy = y + 0.5 - ly, f = 1 - (dx * dx + dy * dy) / rr;
       u8 *p = DEST(&o, x, y);
@@ -324,7 +326,7 @@ int flt_shear(Doc *d, const int *pts, int npts, int wrap)
   curve_lut(lut, pts, npts);
   if (!op_begin(&o, d, "Shear", 1)) return 0;
   c = o.b;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     i32 bh = o.b.y1 - o.b.y0, k = bh > 1 ? (y - o.b.y0) * 255 / (bh - 1) : 0;
     double off = (lut[k] - 128) / 128.0 * (o.b.x1 - o.b.x0) / 2.0;
     for (x = o.b.x0; x < o.b.x1; x++) sample_bl(&o, c, wrap, x - off, y, DEST(&o, x, y));
@@ -397,7 +399,7 @@ int flt_dust_scratches(Doc *d, int r, int threshold)
   r = clampi(r, 1, 16);
   if (!(hist = (int *)malloc(3 * 256 * sizeof(int)))) return 0;
   if (!op_begin(&o, d, "Dust & Scratches", 1)) { free(hist); return 0; }
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     int c, i, j, cnt = 0;
     for (x = o.b.x0; x < o.b.x1; x++) {
       if (x == o.b.x0) {
@@ -443,7 +445,7 @@ int flt_reduce_noise(Doc *d, int strength, int preserve, int color)
       short *t = yc + ((long)y * ew + x) * 3;
       t[0] = (short)lum8(q); t[1] = (short)(q[2] - t[0]); t[2] = (short)(q[0] - t[0]);
     }
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       const short *t = yc + ((long)(y - e.y0) * ew + x - e.x0) * 3;
       long sy = 0, n = 0, scb = 0, scr = 0, nc = 0;
@@ -479,7 +481,7 @@ int flt_smart_blur(Doc *d, int r, int threshold, int mode)
   i32 x, y;
   r = clampi(r, 1, 20); threshold = clampi(threshold, 0, 255);
   if (!op_begin(&o, d, "Smart Blur", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       const u8 *q0 = ORIG(&o, x, y);
       u8 *p = DEST(&o, x, y);
@@ -512,7 +514,7 @@ int flt_surface_blur(Doc *d, int r, int threshold)
   r = clampi(r, 1, 32); threshold = clampi(threshold, 1, 255);
   t5 = 5 * threshold;                                    /* twice 2.5 threshold, in integers */
   if (!op_begin(&o, d, "Surface Blur", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       const u8 *q0 = ORIG(&o, x, y);
       u8 *p = DEST(&o, x, y);
@@ -546,7 +548,7 @@ static int span_blur(Doc *d, const char *name, int r, const int *lo, const int *
   tag = (long *)malloc((size_t)nr * sizeof(long));
   if (!rows || !tag) { free(rows); free(tag); op_end(&o); return 0; }
   for (k = 0; k < nr; k++) tag[k] = -0x7FFFFFFL;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     /* the running totals of the rows the shape covers (kept in a ring as y moves down) */
     for (k = -r; k <= r; k++) {
       long ry = (long)y + k;
@@ -626,7 +628,7 @@ int flt_spin_blur(Doc *d, i32 cx, i32 cy, int angle)
   i32 x, y;
   double turns = clampi(angle, 1, 360) / 360.0;
   if (!op_begin(&o, d, "Spin Blur", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double dx = x + 0.5 - cx, dy = y + 0.5 - cy, rad = sqrt(dx * dx + dy * dy), cs, sn, step_c, step_s, vx, vy;
       long acc[4] = { 0, 0, 0, 0 };
@@ -679,7 +681,7 @@ int flt_crystallize(Doc *d, int cell, unsigned seed)
   i32 x, y;
   cell = clampi(cell, 3, 300);
   if (!op_begin(&o, d, "Crystallize", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       i32 px = 0, py = 0;
       nearest_point(x, y, cell, seed, &px, &py);
@@ -697,7 +699,7 @@ int flt_pointillize(Doc *d, int cell, unsigned seed)
   rr = (long)cell * cell * 30 / 100;                     /* dots about 0.55 of a cell across in radius */
   rgb_of(d->bg, bg); bg[3] = 255;
   if (!op_begin(&o, d, "Pointillize", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       i32 px = 0, py = 0;
       long dd = nearest_point(x, y, cell, seed, &px, &py);
@@ -716,7 +718,7 @@ int flt_color_halftone(Doc *d, int max_radius, int angle_r, int angle_g, int ang
   ang[0] = angle_r; ang[1] = angle_g; ang[2] = angle_b;
   for (c = 0; c < 3; c++) { cs[c] = tcos(ang[c] / 360.0); sn[c] = tsin(ang[c] / 360.0); }
   if (!op_begin(&o, d, "Color Halftone", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       u8 *p = DEST(&o, x, y);
       double X = x + 0.5, Y = y + 0.5;
@@ -748,7 +750,7 @@ int flt_fragment(Doc *d)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Fragment", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       long acc[4] = { 0, 0, 0, 0 };
       int k, c;
@@ -770,7 +772,7 @@ int flt_mezzotint(Doc *d, int type, unsigned seed)
   i32 x, y;
   type = clampi(type, 0, 9);
   if (!op_begin(&o, d, "Mezzotint", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       u8 *p = DEST(&o, x, y);
       int c;
@@ -804,7 +806,7 @@ int flt_facet(Doc *d)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Facet", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       long bestv = -1, best[4] = { 0, 0, 0, 0 };
       int qd, c;
@@ -833,7 +835,7 @@ int flt_trace_contour(Doc *d, int level, int upper)
   i32 x, y;
   level = clampi(level, 0, 255);
   if (!op_begin(&o, d, "Trace Contour", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       const u8 *q = ORIG(&o, x, y), *rt = x + 1 < d->w ? ORIG(&o, x + 1, y) : q, *dn = y + 1 < d->h ? ORIG(&o, x, y + 1) : q;
       u8 *p = DEST(&o, x, y);
@@ -851,7 +853,7 @@ int flt_diffuse(Doc *d, int mode, unsigned seed)
   i32 x, y;
   mode = clampi(mode, 0, 3);
   if (!op_begin(&o, d, "Diffuse", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       const u8 *q0 = ORIG(&o, x, y), *q;
       u8 *p = DEST(&o, x, y);
@@ -887,7 +889,7 @@ int flt_tiles(Doc *d, int ntiles, int max_offset, int fill, unsigned seed)
   mo = ts * max_offset / 100;
   rgb_of(fill == 1 ? d->fg : d->bg, col); col[3] = 255;
   /* the gaps first */
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       u8 *p = DEST(&o, x, y);
       if (fill <= 1) memcpy(p, col, 4);
@@ -915,7 +917,7 @@ int flt_wind(Doc *d, int method, int from_left, unsigned seed)
   method = clampi(method, 0, 2);
   if (!op_begin(&o, d, method == 1 ? "Wind (Blast)" : method == 2 ? "Wind (Stagger)" : "Wind", 1)) return 0;
   n = o.b.x1 - o.b.x0;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     i32 k;
     int left = 0, L = 1, sc[3] = { 0, 0, 0 }, sl = 0;
     /* along the row the way the wind blows, carrying a streak: a pixel at least as bright as the
@@ -950,7 +952,7 @@ int flt_de_interlace(Doc *d, int eliminate_even, int interpolate)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "De-Interlace", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     int up = y > 0, dn = y + 1 < d->h;
     if ((y & 1) == (eliminate_even ? 1 : 0) || (!up && !dn)) continue;
     for (x = o.b.x0; x < o.b.x1; x++) {
@@ -972,7 +974,7 @@ int flt_ntsc_colors(Doc *d, int pal)
   i32 x, y;
   double hi = pal ? 4.0 / 3 : 1.2, lo = pal ? -1.0 / 3 : -0.2;
   if (!op_begin(&o, d, pal ? "PAL Colors" : "NTSC Colors", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       u8 *p = DEST(&o, x, y);
       double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0, Y = 0.299 * r + 0.587 * g + 0.114 * b, u, v, C, k = 1;
@@ -1004,7 +1006,7 @@ int flt_custom(Doc *d, const int kernel[25], int scale, int offset)
   if (!kernel) return 0;
   if (scale == 0) scale = 1;
   if (!op_begin(&o, d, "Custom", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       long s[3] = { 0, 0, 0 };
       int i, j, c;

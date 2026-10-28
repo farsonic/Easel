@@ -31,6 +31,8 @@ if [ "$1" != "fast" ]; then
   python3 tests/check_exchange.py | tail -2
   # 0.7: selections and transforms
   t selxtest;     /tmp/easel_selxtest | tail -2
+  # 0.8: workspace and safety - the undo scratch drawer, undo levels, progress and Abort
+  t safetytest;   /tmp/easel_safetytest | tail -2
 fi
 av1/build-av1.sh amiga
 # Easel itself: every amiga/*.c but convert.c, which is EaselConvert's main

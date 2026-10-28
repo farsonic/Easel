@@ -270,3 +270,21 @@ int file_write(const char *path, const void *data, size_t len)
   if (fclose(fp)) ok = 0;
   return ok;
 }
+
+/* ------------------------------------------------------------------ 0.8: progress and Abort */
+int (*progress_hook)(long done, long total);
+int progress_aborted;
+static long prog_last = -1, prog_total = -1;
+/* (see util.h) the hook told, at most once a thousandth of the way */
+int progress(long done, long total)
+{
+  long pm;
+  if (progress_aborted) return 1;
+  if (!progress_hook || total <= 0) return 0;
+  pm = (long)((double)done * 1000.0 / (double)total);
+  if (pm == prog_last && total == prog_total) return 0;
+  prog_last = pm; prog_total = total;
+  if (progress_hook(done, total)) progress_aborted = 1;
+  return progress_aborted;
+}
+void progress_reset(void) { progress_aborted = 0; prog_last = prog_total = -1; }

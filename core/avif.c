@@ -543,6 +543,7 @@ static int decode_colour(const Avif *a, const Item *it, Rgba *out, char *err, si
     if (!rgba_alloc(out, (i32)ow, (i32)oh)) { codec_err(err, errcap, "Not enough memory for a picture this size"); return 0; }
     for (t = 0; t < it->ntiles; t++) {
       Item *ti = item_get((Avif *)a, it->tiles[t]);
+      if (progress(t, it->ntiles)) { if (t) conv_free(&cv); rgba_free(out); codec_err(err, errcap, "Opening the picture was stopped"); return 0; }   /* (0.8: Abort) */
       if (!ti || !decode_item(a, ti, &pic, err, errcap)) { if (!ti) codec_err(err, errcap, "Damaged AVIF file (grid tile missing)"); rgba_free(out); return 0; }
       if (t == 0) {
         colour_of(a, ti, &pic, &mc, &full);

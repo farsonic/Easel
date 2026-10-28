@@ -17,6 +17,8 @@ static int lum8(const u8 *p) { return (p[0] * 77 + p[1] * 150 + p[2] * 29 + 128)
 
 /* ------------------------------------------------------------------ the frame every operation shares */
 typedef struct { Doc *d; Layer *l; Box b; u8 *orig; } Op;
+/* 0.8: row y of the box reached (progress, and an Abort asked for: the loop stops) */
+static int op_tick(const Op *o, i32 y) { return progress(y - o->b.y0, o->b.y1 - o->b.y0); }
 /* an operation begun: the layer, its working box, an undo step, and (copy) the layer as it was */
 static int op_begin(Op *o, Doc *d, const char *name, int copy)
 {
@@ -61,7 +63,7 @@ static int apply_luts(Doc *d, const char *name, const u8 *lut)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, name, 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     u8 *p = o.l->px + ((long)y * d->w + o.b.x0) * 4;
     for (x = o.b.x0; x < o.b.x1; x++, p += 4) { p[0] = lut[p[0]]; p[1] = lut[256 + p[1]]; p[2] = lut[512 + p[2]]; }
   }
@@ -74,7 +76,7 @@ static int apply_fn(Doc *d, const char *name, PixFn fn, const double *arg)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, name, 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     u8 *p = o.l->px + ((long)y * d->w + o.b.x0) * 4;
     for (x = o.b.x0; x < o.b.x1; x++, p += 4) if (p[3]) fn(p, arg);
   }
@@ -411,7 +413,7 @@ static void box_passes(const u8 *src, u8 *dst, i32 w, i32 h, Box r, const int *r
     int rr = rad[p];
     long div = 2 * rr + 1;
     if (rr < 1) continue;
-    for (y = 0; y < eh; y++) {
+    for (y = 0; y < eh && !progress((long)p * (ew + eh) + y, (long)npass * (ew + eh)); y++) {
       u16 *row = buf + (long)y * ew * 4;
       memcpy(line, row, (size_t)ew * 4 * sizeof(u16));
       for (c = 0; c < 4; c++) {
@@ -423,7 +425,7 @@ static void box_passes(const u8 *src, u8 *dst, i32 w, i32 h, Box r, const int *r
         }
       }
     }
-    for (x = 0; x < ew; x++) {
+    for (x = 0; x < ew && !progress((long)p * (ew + eh) + eh + x, (long)npass * (ew + eh)); x++) {
       for (y = 0; y < eh; y++) memcpy(line + y * 4, buf + ((long)y * ew + x) * 4, 4 * sizeof(u16));
       for (c = 0; c < 4; c++) {
         long sum = 0;
@@ -485,7 +487,7 @@ static void sample_average(Op *o, SampleFn fn, int n, const double *arg)
 {
   Doc *d = o->d;
   i32 x, y;
-  for (y = o->b.y0; y < o->b.y1; y++)
+  for (y = o->b.y0; y < o->b.y1 && !op_tick(o, y); y++)
     for (x = o->b.x0; x < o->b.x1; x++) {
       double acc[4] = { 0, 0, 0, 0 };
       int i, c;
@@ -552,7 +554,7 @@ int flt_unsharp_mask(Doc *d, int amount, double radius, int threshold)
     gauss_boxes(radius < 0.3 ? 0.3 : radius, rad);
     box_passes(o.orig, blur, d->w, d->h, o.b, rad, 3);
   }
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       long k = ((long)y * d->w + x) * 4;
       int c;
@@ -571,7 +573,7 @@ static int convolve3(Doc *d, const char *name, const int *kern, int div, int bia
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, name, 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       int c, i, j;
       for (c = 0; c < 3; c++) {
@@ -592,7 +594,7 @@ int flt_find_edges(Doc *d)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Find Edges", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       int c;
       for (c = 0; c < 3; c++) {
@@ -615,7 +617,7 @@ int flt_emboss(Doc *d, double angle, int height, int amount)
   i32 x, y;
   double dx = cos(angle * M_PI / 180) * height, dy = -sin(angle * M_PI / 180) * height;
   if (!op_begin(&o, d, "Emboss", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       i32 ax = (i32)floor(x + dx + 0.5), ay = (i32)floor(y + dy + 0.5), bx = (i32)floor(x - dx + 0.5), by = (i32)floor(y - dy + 0.5);
       int v;
@@ -640,7 +642,7 @@ int flt_high_pass(Doc *d, double radius)
   if (!op_begin(&o, d, "High Pass", 1)) return 0;
   if (!(blur = (u8 *)malloc((size_t)d->w * d->h * 4))) { op_end(&o); return 0; }
   { int rad[3]; gauss_boxes(radius < 0.3 ? 0.3 : radius, rad); box_passes(o.orig, blur, d->w, d->h, o.b, rad, 3); }
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       long k = ((long)y * d->w + x) * 4;
       int c;
@@ -660,7 +662,7 @@ int flt_add_noise(Doc *d, double amount, int gaussian, int mono)
   i32 x, y;
   double amp = amount * 2.55;
   if (!op_begin(&o, d, "Add Noise", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       u8 *p = o.l->px + ((long)y * d->w + x) * 4;
       double n = gaussian ? grand() * amp / 2 : (frand() - 0.5) * amp;
@@ -680,7 +682,7 @@ static int rank_filter(Doc *d, const char *name, int r, int which)
   if (r < 1) r = 1;
   if (r > 16) r = 16;
   if (!op_begin(&o, d, name, 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++) {
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) {
     int hist[3][256], c, i, j, cnt = 0;
     memset(hist, 0, sizeof hist);
     for (x = o.b.x0; x < o.b.x1; x++) {
@@ -746,7 +748,7 @@ static int distort(Doc *d, const char *name, MapFn fn, const double *a)
   double cx, cy, rx, ry;
   if (!op_begin(&o, d, name, 1)) return 0;
   cx = (o.b.x0 + o.b.x1) / 2.0; cy = (o.b.y0 + o.b.y1) / 2.0; rx = (o.b.x1 - o.b.x0) / 2.0; ry = (o.b.y1 - o.b.y0) / 2.0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double sx, sy, fx, fy, acc[4] = { 0, 0, 0, 0 };
       i32 ix, iy;
@@ -841,7 +843,7 @@ int flt_clouds(Doc *d, u32 c0, u32 c1, unsigned seed)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Clouds", 0)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double v = 0, amp = 0.5, f = 1 / 128.0, t;
       int k, c;
@@ -858,7 +860,7 @@ int flt_offset(Doc *d, i32 dx, i32 dy, int wrap)
   Op o;
   i32 x, y;
   if (!op_begin(&o, d, "Offset", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       i32 sx = x - dx, sy = y - dy, bw = o.b.x1 - o.b.x0, bh = o.b.y1 - o.b.y0;
       u8 *p = o.l->px + ((long)y * d->w + x) * 4;
@@ -884,7 +886,7 @@ int flt_oil_paint(Doc *d, int r, int levels)
   if (levels < 4) levels = 4;
   if (levels > 64) levels = 64;
   if (!op_begin(&o, d, "Oil Paint", 1)) return 0;
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       int cnt[64], i, j, best = 0;
       long sum[64][3];
@@ -912,7 +914,7 @@ int flt_vignette(Doc *d, int amount)
   if (!op_begin(&o, d, "Vignette", 0)) return 0;
   cx = (o.b.x0 + o.b.x1) / 2.0; cy = (o.b.y0 + o.b.y1) / 2.0;
   rr = sqrt(((o.b.x1 - o.b.x0) / 2.0) * ((o.b.x1 - o.b.x0) / 2.0) + ((o.b.y1 - o.b.y0) / 2.0) * ((o.b.y1 - o.b.y0) / 2.0));
-  for (y = o.b.y0; y < o.b.y1; y++)
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++)
     for (x = o.b.x0; x < o.b.x1; x++) {
       double r = sqrt((x + 0.5 - cx) * (x + 0.5 - cx) + (y + 0.5 - cy) * (y + 0.5 - cy)) / rr, f = 1 - amount / 100.0 * r * r;
       u8 *p = o.l->px + ((long)y * d->w + x) * 4;
@@ -1137,7 +1139,7 @@ int adj_apply(Doc *d, const AdjParams *p, const char *name)
   i32 y;
   if (!(g = adj_prog_make(p))) return 0;
   if (!op_begin(&o, d, name, 0)) { adj_prog_free(g); return 0; }
-  for (y = o.b.y0; y < o.b.y1; y++) adj_prog_row(g, o.l->px + ((long)y * d->w + o.b.x0) * 4, o.b.x1 - o.b.x0);
+  for (y = o.b.y0; y < o.b.y1 && !op_tick(&o, y); y++) adj_prog_row(g, o.l->px + ((long)y * d->w + o.b.x0) * 4, o.b.x1 - o.b.x0);
   adj_prog_free(g);
   return op_end(&o);
 }
