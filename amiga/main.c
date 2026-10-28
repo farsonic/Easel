@@ -47,6 +47,10 @@
 #include "gradwin.h"
 #include "swatchwin.h"
 #include "colorpick.h"
+#include "clipboard.h"
+#include "dtload.h"
+#include "appdrop.h"
+#include "../core/iconwrite.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -69,6 +73,7 @@ static Object *vscroll, *hscroll;
 FontSet fonts;
 int pref_dark = 1;
 int pref_autosave = 5;                   /* minutes between autosaves (0: none) */
+int pref_icons = 1;                      /* a Workbench icon written beside a saved picture that has none */
 DocView docs[MAXDOCS];
 int ndocs, curdoc = -1;
 Opts opt;
@@ -115,14 +120,14 @@ static struct NewMenu menus[] = {
   I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Toggle Last State", 0, ID_TOGGLELAST), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
   I("Fade...", 0, ID_FADE), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
-  I("Paste Into", 0, ID_PASTEINTO), I("Clear", 0, ID_CLEAR), BAR,
+  I("Paste Into", 0, ID_PASTEINTO), I("Paste from Amiga Clipboard", 0, ID_PASTEAMIGA), I("Clear", 0, ID_CLEAR), BAR,
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
   I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN), BAR,
   I("Free Transform...", "T", ID_FREETRANSFORM),
   H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE), BAR,
-  I("Autosave...", 0, ID_AUTOSAVESET),
+  I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF),
   M("Image"),
   H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
   S("Color Table...", 0, ID_COLORTABLE), S("Amiga Screen Mode...", 0, ID_SCREENMODE),
@@ -477,6 +482,7 @@ static void update_menus(void)
   menu_set(ID_UNDO, MUIA_Menuitem_Title, (ULONG)undo);
   menu_set(ID_REDO, MUIA_Menuitem_Title, (ULONG)redo);
   menu_set(ID_DARKUI, MUIA_Menuitem_Checked, pref_dark);
+  menu_set(ID_ICONPREF, MUIA_Menuitem_Checked, pref_icons);
   {
     static char labels[NRECENT][64];
     for (i = 0; i < NRECENT; i++) {
@@ -670,6 +676,13 @@ static Doc *load(const char *path, int *fmt)
   if (!d) d = load_doc_big_stack(data, len, err, sizeof err);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
+  if (!d && !codec_oom) {
+    /* the last resort: whatever datatypes the system has */
+    char err2[160];
+    set(app, MUIA_Application_Sleep, TRUE);
+    d = dt_load(path, err2, sizeof err2);
+    set(app, MUIA_Application_Sleep, FALSE);
+  }
   if (!d && codec_oom) d = load_smaller(path, err);
   else if (!d) {
     snprintf(msg, sizeof msg, tr("%s couldn't be opened:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not a picture Easel knows"));
@@ -838,6 +851,8 @@ static void recovery_offer(void)
   refresh_all();
 }
 static int save_as(void);
+static void icon_for(Doc *d, const char *path);
+static void paste_amiga(Doc *d);
 static int save(void)
 {
   DocView *v = cur_view();
@@ -849,6 +864,7 @@ static int save(void)
   }
   if (v->fmt == FMT_JPEG) export_quality = 90;
   if (!write_doc(v->doc, v->path, v->fmt)) return 0;
+  icon_for(v->doc, v->path);
   v->doc->dirty = 0;
   recovery_drop(v);
   refresh_panels();
@@ -874,6 +890,7 @@ static int save_as(void)
   if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
   if (!write_doc(v->doc, path, fmt)) return 0;
+  icon_for(v->doc, path);
   strcpy(v->path, path); v->fmt = fmt;
   recent_add(path);
   base_name(path, v->name, sizeof v->name);
@@ -1072,6 +1089,41 @@ static void load_stack(void)
   d->dirty = 1;
   doc_show(d, "", FMT_ORA);
 }
+/* Edit > Paste from Amiga Clipboard: the picture another program copied, as a new layer (or, with no
+   picture open, a new picture) */
+static void paste_amiga(Doc *d)
+{
+  char err[120];
+  Doc *o;
+  Rgba im;
+  set(app, MUIA_Application_Sleep, TRUE);
+  o = clipboard_get_doc(err, sizeof err);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!o) { ask("OK", "%s", err[0] ? err : tr("There is no picture on the clipboard.")); return; }
+  if (!d) { doc_show(o, "", FMT_ORA); return; }
+  if (flat_image(o, &im)) {
+    Clip c;
+    c.w = im.w; c.h = im.h; c.px = im.px; c.x = (d->w - im.w) / 2; c.y = (d->h - im.h) / 2;
+    clip_paste(d, &c, 1);
+    rgba_free(&im);
+  }
+  doc_free(o);
+}
+/* a Workbench icon for a picture just saved, if it has none and the preference is on */
+static void icon_for(Doc *d, const char *path)
+{
+  char ip[520];
+  BPTR l;
+  Rgba im;
+  u8 *data;
+  size_t len;
+  if (!pref_icons) return;
+  snprintf(ip, sizeof ip, "%s.info", path);
+  if ((l = Lock((STRPTR)ip, ACCESS_READ))) { UnLock(l); return; }
+  if (!flat_image(d, &im)) return;
+  if ((data = icon_write(&im, ICON_GLOW, ICON_TOOL_EASEL, &len))) { write_file(ip, data, len); free(data); }
+  rgba_free(&im);
+}
 /* the Brushes panel and DPaint window ask for a brush made from the picture: the selection (or all of it) */
 static void brushui_request(int what)
 {
@@ -1224,6 +1276,8 @@ static void command(ULONG id)
   }
   switch (id) {
   case ID_NEW: new_doc(); return;
+  case ID_ICONPREF: pref_icons = !pref_icons; update_menus(); return;
+  case ID_PASTEAMIGA: paste_amiga(d); refresh_all(); return;
   case ID_OPEN: open_file(); return;
   case ID_PLACE: place_file(); return;
   case ID_CLOSE: doc_close(curdoc); return;
@@ -1394,8 +1448,17 @@ static void command(ULONG id)
     if (!c) { ask("OK", "%s", tr("There is nothing to copy: the selection is empty.")); return; }
     clip_free(clip); clip = c;
     if (id == ID_CUT) clip_cut(d);
+    {
+      /* and on the Amiga clipboard, for other programs */
+      Rgba r;
+      r.w = c->w; r.h = c->h; r.px = c->px;
+      clipboard_put_ilbm(&r);
+    }
     break; }
-  case ID_PASTE: case ID_PASTEINPLACE: if (clip) clip_paste(d, clip, id == ID_PASTEINPLACE); break;
+  case ID_PASTE: case ID_PASTEINPLACE:
+    if (clip) clip_paste(d, clip, id == ID_PASTEINPLACE);
+    else paste_amiga(d);
+    break;
   case ID_CLEAR: ch = clear_selection(d); if (box_empty(ch) && d->lay[d->active]->locked) ask("OK", "%s", tr("The layer is locked.")); break;
   case ID_FILL: dlg_fill(); break;
   case ID_FILLFG: fill_selection(d, d->fg, 100, BM_NORMAL); break;
@@ -1572,6 +1635,7 @@ static int win_make(void)
     MUIA_Window_Title, (ULONG)"Easel",
     MUIA_Window_ID, MAKE_ID('E','A','S','L'),
     MUIA_Window_DisableKeys, MUIKEYF_WINDOW_CLOSE,
+    MUIA_Window_AppWindow, TRUE,
     MUIA_Window_Menustrip, (ULONG)strip,
     MUIA_Window_Width, sw,
     MUIA_Window_Height, sh,
@@ -1732,6 +1796,7 @@ static void load_prefs(void)
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "dark=", 5)) pref_dark = atoi(line + 5);
     else if (!strncmp(line, "autosave=", 9)) pref_autosave = atoi(line + 9);
+    else if (!strncmp(line, "icons=", 6)) pref_icons = atoi(line + 6);
     else if (!strncmp(line, "screen=", 7)) { strncpy(pub_screen, line + 7, sizeof pub_screen - 1); }
     else if (!strncmp(line, "dir=", 4)) { strncpy(lastdir, line + 4, sizeof lastdir - 1); }
     else if (!strncmp(line, "recent=", 7) && nr < NRECENT) { strncpy(recent[nr], line + 7, sizeof recent[0] - 1); nr++; }
@@ -1744,6 +1809,7 @@ static void save_prefs(void)
   if (!f) return;
   fprintf(f, "dark=%d\n", pref_dark);
   fprintf(f, "autosave=%d\n", pref_autosave);
+  fprintf(f, "icons=%d\n", pref_icons);
   if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
   if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
   { int i; for (i = 0; i < NRECENT; i++) if (recent[i][0]) fprintf(f, "recent=%s\n", recent[i]); }
@@ -1821,6 +1887,7 @@ int main(int argc, char **argv)
   splash_step(75, tr("Opening the window"));
   if (!win_make()) { printf("Easel: the window could not be made\n"); goto done; }
   palwin_create(app);
+  appdrop_attach(win, app, open_path);
   palwin_redraw = pal_redraw; palwin_picked = pal_picked;
   for (i = 0; i < nstart; i++) {
     static char what[300];
@@ -1873,6 +1940,7 @@ done:
   palwin_dispose();
   clip_free(clip); clip = NULL;
   if (app) MUI_DisposeObject(app);
+  appdrop_free();
   brushwin_free(); brushwin_classes_free();
   swatchwin_free(); swatchwin_class_free();
   gradwin_free();
