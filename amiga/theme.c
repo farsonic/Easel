@@ -1050,6 +1050,11 @@ static const char *const icons[IC_N] = {
   /* T_MAGICERASE: magic eraser: an eraser and a sparkle */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 13 0 13 6 L 10 3 16 3 L 11 1 15 5 L 15 1 11 5",
   /* T_MAGLASSO: magnetic lasso: a loop with its tail and a magnet */ "ci P 8 7 1 11 2 13 5 11 8 7 9 3 8 1 5 3 2 7 1 P 3 4 8 3 11 5 13 cr F 9 10 10 14 F 13 10 14 14 F 9 14 14 15 cw F 9 10 10 11 F 13 10 14 11",
   /* T_RULER: ruler: a slanted rule with its marks */ "ci P 5 1 11 11 1 15 5 5 15 1 11 L 3 9 5 11 L 5 7 6 8 L 7 5 9 7 L 9 3 10 4",
+  /* 1.0 */
+  /* T_SPOTHEAL: spot healing brush: a plaster across, and a sparkle where the spot was */ "ci P 5 1 9 9 1 12 4 4 12 1 9 ca F 5 5 8 8 cd L 3 9 3 9 L 9 3 9 3 cy L 13 10 13 15 L 11 12 15 12 L 12 11 14 13 L 14 11 12 13",
+  /* T_HEAL: healing brush: a plaster across, its pad and holes */ "ci P 5 1 11 11 1 15 5 5 15 1 11 ca F 6 6 10 10 cd L 3 11 3 11 L 5 13 5 13 L 11 3 11 3 L 13 5 13 5",
+  /* T_PATCH: patch: a dashed area and the patch stitched over it */ "cd L 1 1 3 1 L 5 1 7 1 L 1 1 1 3 L 1 5 1 7 ca F 5 5 14 14 ci R 4 4 15 15 cw L 6 7 7 7 L 9 7 10 7 L 12 7 13 7 L 6 12 7 12 L 9 12 10 12 L 12 12 13 12",
+  /* T_REDEYE: red eye: an eye with a red pupil */ "ci P 9 1 8 4 4 8 3 12 4 15 8 12 12 8 13 4 12 1 8 cr E 8 8 2 cw F 9 7 9 7",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)
