@@ -940,6 +940,19 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   }
   if (code & IECODE_UP_PREFIX) return 0;
   if (!doc || !v) return 0;
+  if (shift && (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT))) {
+    /* Shift-Alt and a letter: a blend mode, as Photoshop's keys (the painting tool's, or with the
+       Move tool the active layer's) */
+    static const UBYTE raw[] = { 0x36, 0x17, 0x27, 0x37, 0x35, 0x20, 0x24, 0x21, 0x22, 0x11, 0x18, 0x23, 0x25, 0x34, 0x26, 0x31, 0x28, 0x12, 0x32, 0x16, 0x14, 0x33, 0x15 };
+    static const UBYTE mode[] = { BM_NORMAL, BM_DISSOLVE, BM_DARKEN, BM_MULTIPLY, BM_BURN, BM_LINEARBURN, BM_LIGHTEN, BM_SCREEN, BM_DODGE, BM_ADD,
+      BM_OVERLAY, BM_SOFTLIGHT, BM_HARDLIGHT, BM_VIVIDLIGHT, BM_LINEARLIGHT, BM_PINLIGHT, BM_HARDMIX, BM_DIFFERENCE, BM_EXCLUSION, BM_HUE,
+      BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
+    for (i = 0; i < (int)sizeof raw; i++) if (raw[i] == code) {
+      if (tool == TL_MOVE) { if (doc->lay[doc->active]->kind != LK_GROUP || mode[i]) doc_set_layer_props(doc, doc->active, NULL, -1, mode[i], -1); changed(d, obj); tell_changed(d, obj); draw_all(d, obj); }
+      else if (brushlike(tool) || tool == TL_GRADIENT) { opt.mode[tool] = mode[i]; DoMethod(optbar, MUIM_Opts_Refresh); }
+      return 1;
+    }
+  }
   switch (code) {
   case 0x44: case 0x43:                         /* Return, Enter */
     if (d->poly_on) { poly_finish(d, obj, 1); return 1; }
