@@ -10,7 +10,7 @@ V=$1; W=$2
 E=$(cd "$(dirname "$0")/.." && pwd)
 P=$W/Easel
 mkdir -p "$P/Source"
-cp "$E/Easel" "$E/README.md" "$E/Licenses.txt" "$E/tools/Install-Easel" "$E/Example.jpg" "$P/"
+cp "$E/Easel" "$E/EaselConvert" "$E/README.md" "$E/Licenses.txt" "$E/tools/Install-Easel" "$E/Example.jpg" "$P/"
 [ -d "$P/Fonts" ] || cp -r "$W/../epkg/Easel/Fonts" "$W/../epkg/Easel/TrueType" "$P/"
 sed -i "s/are not part of Quill's own code/are not part of Easel's own code/" "$P/TrueType/LICENSE-fonts.txt"
 cd "$E"

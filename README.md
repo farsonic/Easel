@@ -1,4 +1,4 @@
-# Easel 0.5
+# Easel 0.6
 
 Easel is a picture editor for the Amiga, laid out the way PhotoCraft is. The options bar runs
 along the top, the tools down the left, and open pictures are tabs over the canvas. The Color,
@@ -18,6 +18,34 @@ interface and icons. None of the icons are copied from any other program.
   exactly. On an AGA or ECS screen with 256 colours or fewer they are dithered to a colour cube.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
+
+## New in 0.6: exchange
+
+- More formats saved: TIFF (LZW), Targa and Photoshop PSD. A PSD opens and saves with its layers,
+  names, opacity, blend modes, masks, clipping, fill opacity and groups.
+- JPEGs from cameras are turned upright from their EXIF orientation.
+- File > File Info: title, author, description, keywords, copyright and web address, kept in PNG,
+  JPEG, TIFF, PSD and ORA files.
+- The Amiga clipboard: Copy and Cut also put the picture on the clipboard as an IFF ILBM for other
+  programs (exact up to 256 colours, 24-bit beyond), and Edit > Paste from Amiga Clipboard takes
+  one in (Paste does too, when Easel has copied nothing itself).
+- Pictures no format of Easel's reads are opened through the system's datatypes.
+- Drop pictures onto Easel's window (or its icon while iconified) to open them.
+- Saving writes a Workbench icon (a GlowIcon showing the picture) beside a picture that has none;
+  Edit > Save Icons with Pictures turns this off.
+- File: Open Recent (the last ten), Save a Copy, Export As (scaled by a percentage), Layers to
+  Files, Load Files into Stack, and Place now goes on into Free Transform.
+- Autosave: changed pictures are saved every five minutes (Edit > Autosave sets how often) to the
+  Recovery drawer; if Easel or the Amiga stops unexpectedly, Easel offers them back next time.
+- Edit > Fade (the last change mixed back by an opacity and mode) and Toggle Last State.
+- Navigator and Info panels beside Layers: the whole picture with the part shown, and the pointer's
+  place, its colour in RGB, HSB and hex, the selection's size and a brightness histogram.
+- Tab hides the toolbox, options bar and panels; Shift-Tab just the panels.
+- Shift-Alt and a letter sets the blend mode, as in Photoshop: the painting tool's, or with the Move
+  tool the active layer's.
+- **EaselConvert**, a Shell command for converting pictures in batches:
+  `EaselConvert FROM/M/A,TO/K,FORMAT/K,WIDTH/N,HEIGHT/N,SCALE/N,QUALITY/N,COLORS/N,DITHER/S,ICON/S,ICONTYPE/K,DEFTOOL/K,QUIET/S`,
+  for example `EaselConvert Work:Photos/#?.jpg TO RAM: FORMAT ILBM COLORS 32 DITHER WIDTH 320 ICON`.
 
 ## New in 0.5: brushes and painting
 
@@ -252,11 +280,14 @@ Mode; Edit has the brush and pattern commands).
 | BMP | 1, 4, 8, 16, 24 and 32-bit, RLE | 24-bit, or 32-bit with transparency |
 | IFF ILBM | 1 to 8 planes, EHB, HAM6, HAM8, 24 and 32-bit deep, PBM; a palette picture opens indexed, with its colour cycling | 24-bit, 256 colours, or with the Amiga options: 1 to 8 planes, EHB, HAM6/HAM8, SHAM, mask, cycling, ModeID |
 | GIF | the first frame, with transparency | 256 colours or the picture's palette |
+| TIFF (saving) | see the full list below | LZW: RGB(A), grey, palette, 1-bit |
+| Targa (saving) | see the full list below | run-length: 24/32-bit, grey, colour-mapped |
+| Photoshop PSD | layers (8 and 16-bit RGB and grey), else the flattened picture | layers, masks, groups, blend modes, and the merged picture |
 | AVIF | 8, 10 and 12-bit, 4:2:0, 4:2:2, 4:4:4 and grey, transparency, tiled (grid) pictures, rotation and mirroring | — |
 | WebP | lossy, lossless, with transparency; the first frame of an animation | — |
 | TIFF | the first page: uncompressed, PackBits, LZW, Deflate, CCITT fax, JPEG; 1 to 32-bit and float; grey, palette, RGB, CMYK, Lab; strips or tiles | — |
-| Photoshop PSD/PSB | the flattened picture (not its layers), 1 to 32-bit, RGB, CMYK, Lab, grey, indexed | — |
-| Targa, PCX, QOI | every common kind | — |
+| Photoshop PSD/PSB (other kinds) | the flattened picture: 1 to 32-bit, RGB, CMYK, Lab, grey, indexed | — |
+| Targa, PCX, QOI | every common kind | Targa (above) |
 | PBM/PGM/PPM/PAM/PFM, XPM | every kind | — |
 | DDS | uncompressed and BC1 to BC5, BC7 (the top level of a 2D texture) | — |
 | Windows ICO/CUR | the biggest picture in the file | — |

@@ -59,7 +59,7 @@
 #define MUIKEYF_WINDOW_CLOSE (1UL << MUIKEY_WINDOW_CLOSE)
 #endif
 
-const char verstag[] = "$VER: Easel 0.5 (28.10.2026) a picture editor for the Amiga (MUI)";
+const char verstag[] = "$VER: Easel 0.6 (28.10.2026) a picture editor for the Amiga (MUI)";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1333,10 +1333,10 @@ static void command(ULONG id)
     }
     return; }
   case ID_ABOUT:
-    ask("OK", "%s", "\33cEasel 0.5\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
+    ask("OK", "%s", "\33cEasel 0.6\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
         "Live layers (groups, masks, adjustment and fill layers), palettes,\nindexed pictures and colour cycling, the Amiga's screen modes,\n"
         "brushes, gradients and patterns, selections, adjustments and filters.\n"
-        "Reads and writes PNG, JPEG, BMP, GIF, IFF ILBM and OpenRaster (.ora),\nand reads many more.\n\n"
+        "Reads and writes PNG, JPEG, BMP, GIF, TIFF, Targa, Photoshop PSD,\nIFF ILBM and OpenRaster (.ora), and reads many more.\n\n"
         "Written in C for MUI; drawn with its own icons.\n\n"
         "AVIF decoding: dav1d, by VideoLAN and the dav1d authors.\n"
         "Picture readers and brush code ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
@@ -1869,7 +1869,7 @@ int main(int argc, char **argv)
   lang_set(LANG_EN);
   theme_set_dark(pref_dark);
   opts_defaults();
-  splash_open(pub_screen, "Easel 0.5");
+  splash_open(pub_screen, "Easel 0.6");
   splash_step(3, tr("Adding Easel's fonts drawer"));
   DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
   add_fonts();

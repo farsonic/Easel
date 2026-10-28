@@ -1,4 +1,4 @@
-; $VER: Install-Easel 0.5 (28.10.2026)
+; $VER: Install-Easel 0.6 (28.10.2026)
 ;
 ; Installer script for Easel, the picture editor (Commodore's Installer 43 or later, or AROS's).
 ; Started from its icon (default tool Installer). It installs or updates Easel in a drawer of your
@@ -16,7 +16,7 @@
 ; in lower case (AROS's Installer doesn't know "IN", only "in").
 
 (set @app-name "Easel")
-(set #version "0.5")
+(set #version "0.6")
 
 ; ------------------------------------------------------------------ install or remove
 
@@ -156,6 +156,9 @@
     (source "Easel")
     (dest #dest)
     (infos))
+  ; 0.6: the Shell command for converting pictures in batches
+  (if (exists "EaselConvert" (noreq))
+    (copyfiles (source "EaselConvert") (dest #dest) (nogauge)))
   (copyfiles
     (source "README.md")
     (dest #dest)
