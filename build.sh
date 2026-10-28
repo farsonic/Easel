@@ -7,17 +7,21 @@ export PATH=$VBCC/bin:$PATH
 NDK=${NDK:-/opt/amiga/ndk/Include_H}
 MUI=${MUI:-/opt/amiga/mui/include}
 cd "$(dirname "$0")"
-CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/adjust.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c"
+CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/adjust.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c"
 if [ "$1" != "fast" ]; then
   av1/build-av1.sh native /tmp/easel_dav1d
   cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/doc.c core/paint.c core/adjust.c core/text.c core/fonts.c core/ttraster.c tests/coretest.c -o /tmp/easel_coretest -lm
   /tmp/easel_coretest | tail -2
-  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c tests/codectest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_codectest -lm
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c tests/codectest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_codectest -lm
   (cd . && /tmp/easel_codectest | tail -2)
-  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c tests/rasterstest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_rasterstest -lm
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c tests/rasterstest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_rasterstest -lm
   /tmp/easel_rasterstest 20 | tail -2
-  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c tests/amigafmttest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_amigafmttest -lm
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c tests/amigafmttest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_amigafmttest -lm
   /tmp/easel_amigafmttest | tail -2
+  # 0.4: palettes, indexed documents and the Amiga writers, then their independent checks (Pillow)
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c tests/palettetest.c /tmp/easel_dav1d/libdav1d.a -Iav1/include -o /tmp/easel_palettetest -lm -lpthread
+  /tmp/easel_palettetest | tail -2
+  python3 tests/check_palette.py | tail -2
 fi
 av1/build-av1.sh amiga
 vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$MUI" -I"$NDK" amiga/*.c amiga/bigstack.s $CORE av1/obj/*.o -o Easel -lamiga -lm040
