@@ -111,6 +111,7 @@ struct MUI_CustomClass *color_class(void);
 #define MUIM_Layers_Refresh (QTAG + 0x310)
 #define MUIA_Layers_Changed (QTAG + 0x311) /* (notify) the panel changed the document (props, order, active) */
 #define MUIA_Layers_Command (QTAG + 0x312) /* (get) the button pressed (ID_), after ID_LAYERCMD */
+#define MUIA_Layers_AdjPick (QTAG + 0x313) /* (set by its list) the adjustment chosen for a new adjustment layer */
 struct MUI_CustomClass *layers_class(void);
 /* the History panel: the undo steps, the one in effect lit; a click goes back to it */
 #define MUIM_History_Refresh (QTAG + 0x320)
@@ -176,6 +177,9 @@ void dlg_rotate(void);
 void dlg_adjust(ULONG id);           /* an Image > Adjustments item */
 void dlg_filter(ULONG id);           /* a Filter item */
 void dlg_layer_props(void);
+int  dlg_fill_layer(int make_kind);   /* make_kind: 0 solid, 1 gradient (a new fill layer); -1 the active one's settings */
+void dlg_filter_again(void);         /* Filter > Last Filter */
+ULONG adj_menu_id(int kind);         /* the Image > Adjustments item for an AK_ kind */
 void dlg_fill(void);
 void dlg_stroke(void);
 void dlg_select(ULONG id);           /* Select > Modify ..., Color Range */

@@ -1038,6 +1038,11 @@ static const char *const icons[IC_N] = {
   /* DUPLAYER: duplicate layer: two boxes */ "ci R 1 5 10 14 R 5 1 14 10",
   /* TRASH: delete: a bin */ "ci L 2 3 13 3 R 3 3 12 14 L 6 1 9 1 L 6 6 6 12 L 9 6 9 12",
   /* HISTSTEP: a history step */ "ci R 3 2 12 13 L 5 5 10 5 L 5 8 10 8 L 5 11 8 11",
+  /* FOLDER: a layer group */ "ca F 2 5 13 13 ci P 6 1 13 1 4 6 4 7 5 14 5 14 13 L 1 13 14 13 L 1 4 1 13",
+  /* ADJLAYER: a circle half dark, half light */ "ci O 8 8 6 E 8 8 1 ca F 8 3 12 13 P 3 8 2 12 5 14 8",
+  /* ADDMASK: a frame with a round hole */ "ci R 1 2 14 13 ca F 2 3 13 12 cw E 7 7 3",
+  /* LOCKPOS: a cross of arrows */ "ci L 8 1 8 15 L 1 8 15 8 L 6 3 8 1 L 10 3 8 1 L 6 13 8 15 L 10 13 8 15 L 3 6 1 8 L 3 10 1 8 L 13 6 15 8 L 13 10 15 8",
+  /* LOCKALL: a padlock, filled */ "ci R 4 2 11 8 R 5 3 10 8 F 2 7 13 14 cw F 7 9 8 12",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

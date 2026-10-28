@@ -35,6 +35,8 @@
 #include "sysfonts.h"
 #include "../core/codec.h"
 #include "../core/image.h"
+#include "../core/layers.h"
+#include "../core/selmore.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -75,10 +77,10 @@ const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B',
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
-#define I(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)id }
+#define I(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)(id) }
 #define H(label) { NM_ITEM, (STRPTR)label, 0, 0, 0, 0 }
-#define S(label, key, id) { NM_SUB, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)id }
-#define T(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, CHECKIT | MENUTOGGLE, 0, (APTR)id }
+#define S(label, key, id) { NM_SUB, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)(id) }
+#define T(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }
 #define BAR { NM_ITEM, NM_BARLABEL, 0, 0, 0, 0 }
 #define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
 static struct NewMenu menus[] = {
@@ -90,7 +92,8 @@ static struct NewMenu menus[] = {
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
   I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
-  I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE), I("Clear", 0, ID_CLEAR), BAR,
+  I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
+  I("Paste Into", 0, ID_PASTEINTO), I("Clear", 0, ID_CLEAR), BAR,
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
   I("Free Transform...", "T", ID_FREETRANSFORM),
   H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
@@ -100,7 +103,7 @@ static struct NewMenu menus[] = {
   H("Adjustments"),
   S("Brightness/Contrast...", 0, ID_ADJ_BC), S("Levels...", "L", ID_ADJ_LEVELS), S("Curves...", "M", ID_ADJ_CURVES), S("Exposure...", 0, ID_ADJ_EXPOSURE), SBAR,
   S("Vibrance...", 0, ID_ADJ_VIBRANCE), S("Hue/Saturation...", "U", ID_ADJ_HUESAT), S("Color Balance...", "B", ID_ADJ_BALANCE), S("Black & White...", 0, ID_ADJ_BW),
-  S("Photo Filter...", 0, ID_ADJ_PHOTO), SBAR,
+  S("Photo Filter...", 0, ID_ADJ_PHOTO), S("Channel Mixer...", 0, ID_ADJ_MIXER), S("Gradient Map...", 0, ID_ADJ_GRADMAP), S("Selective Color...", 0, ID_ADJ_SELCOLOR), SBAR,
   S("Invert", "I", ID_ADJ_INVERT), S("Posterize...", 0, ID_ADJ_POSTERIZE), S("Threshold...", 0, ID_ADJ_THRESHOLD), SBAR,
   S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE),
   I("Auto Tone", 0, ID_AUTOTONE), I("Auto Contrast", 0, ID_AUTOCONTRAST), I("Auto Color", 0, ID_AUTOCOLOR), BAR,
@@ -109,23 +112,51 @@ static struct NewMenu menus[] = {
   S("Flip Canvas Horizontal", 0, ID_IMG_FLIPH), S("Flip Canvas Vertical", 0, ID_IMG_FLIPV),
   I("Crop", 0, ID_CROP), I("Trim", 0, ID_TRIM), BAR, I("Duplicate", 0, ID_DUPIMAGE),
   M("Layer"),
-  I("New Layer", 0, ID_NEWLAYER), I("Duplicate Layer", "J", ID_DUPLAYER), I("Delete Layer", 0, ID_DELLAYER), I("Layer Properties...", 0, ID_LAYERPROPS), BAR,
-  I("New Layer via Copy", 0, ID_LAYERFROMSEL), I("New Layer via Cut", 0, ID_LAYERCUTSEL), BAR,
-  H("Arrange"), S("Bring to Front", 0, ID_TOFRONT), S("Bring Forward", 0, ID_RAISE), S("Send Backward", 0, ID_LOWER), S("Send to Back", 0, ID_TOBACK),
-  I("Lock Layer", 0, ID_LOCKLAYER), I("Lock Transparency", 0, ID_ALPHALOCK), I("Hide/Show Layer", 0, ID_HIDELAYER), BAR,
-  I("Merge Down", "E", ID_MERGEDOWN), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
+  H("New"), S("Layer", 0, ID_NEWLAYER), S("Group", 0, ID_NEWGROUP), SBAR, S("Layer via Copy", 0, ID_LAYERFROMSEL), S("Layer via Cut", 0, ID_LAYERCUTSEL),
+  I("Duplicate Layer", "J", ID_DUPLAYER), I("Delete Layer", 0, ID_DELLAYER), I("Layer Properties...", 0, ID_LAYERPROPS), BAR,
+  H("New Adjustment Layer"),
+  S("Brightness/Contrast...", 0, ID_NEWADJ0 + AK_BRIGHTNESS), S("Levels...", 0, ID_NEWADJ0 + AK_LEVELS), S("Curves...", 0, ID_NEWADJ0 + AK_CURVES),
+  S("Exposure...", 0, ID_NEWADJ0 + AK_EXPOSURE), SBAR, S("Vibrance...", 0, ID_NEWADJ0 + AK_VIBRANCE), S("Hue/Saturation...", 0, ID_NEWADJ0 + AK_HUESAT),
+  S("Color Balance...", 0, ID_NEWADJ0 + AK_COLORBALANCE), S("Black & White...", 0, ID_NEWADJ0 + AK_BLACKWHITE), S("Photo Filter...", 0, ID_NEWADJ0 + AK_PHOTOFILTER),
+  S("Channel Mixer...", 0, ID_NEWADJ0 + AK_CHANNELMIXER), SBAR, S("Invert", 0, ID_NEWADJ0 + AK_INVERT), S("Posterize...", 0, ID_NEWADJ0 + AK_POSTERIZE),
+  S("Threshold...", 0, ID_NEWADJ0 + AK_THRESHOLD), S("Gradient Map...", 0, ID_NEWADJ0 + AK_GRADIENTMAP), S("Selective Color...", 0, ID_NEWADJ0 + AK_SELECTIVECOLOR),
+  H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
+  I("Layer Content Options...", 0, ID_FILLSETTINGS), BAR,
+  H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
+  S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
+  S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
+  I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
+  I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP), I("Rasterize Layer", 0, ID_RASTERIZE), BAR,
+  H("Arrange"), S("Bring to Front", "}", ID_TOFRONT), S("Bring Forward", "]", ID_RAISE), S("Send Backward", "[", ID_LOWER), S("Send to Back", "{", ID_TOBACK),
+  H("Align"), S("Left Edges", 0, ID_AL_LEFT), S("Horizontal Centers", 0, ID_AL_HCENTER), S("Right Edges", 0, ID_AL_RIGHT), SBAR,
+  S("Top Edges", 0, ID_AL_TOP), S("Vertical Centers", 0, ID_AL_VCENTER), S("Bottom Edges", 0, ID_AL_BOTTOM), SBAR,
+  S("Distribute Horizontally", 0, ID_DIST_H), S("Distribute Vertically", 0, ID_DIST_V),
+  H("Lock"), S("Pixels", 0, ID_LOCKLAYER), S("Transparency", 0, ID_ALPHALOCK), S("Position", 0, ID_LOCKPOS), S("All", 0, ID_LOCKALL),
+  I("Hide/Show Layer", 0, ID_HIDELAYER), BAR,
+  I("Merge Down", "E", ID_MERGEDOWN), I("Merge Group", 0, ID_MERGEGROUP), I("Merge Layers", 0, ID_MERGELAYERS), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
   M("Select"),
-  I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Inverse", 0, ID_INVERSE), BAR,
-  I("Color Range...", 0, ID_COLORRANGE), I("Layer Transparency", 0, ID_SELALPHA), BAR,
+  I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
+  I("Color Range...", 0, ID_COLORRANGE), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
+  I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR),
   M("Filter"),
-  H("Blur"), S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL), S("Blur", 0, ID_F_BLUR),
+  I("Last Filter", "F", ID_F_AGAIN), BAR,
+  H("Blur"), S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
+  S("Spin Blur...", 0, ID_F_SPINBLUR), S("Lens Blur...", 0, ID_F_LENSBLUR), S("Shape Blur...", 0, ID_F_SHAPEBLUR), S("Smart Blur...", 0, ID_F_SMARTBLUR),
+  S("Surface Blur...", 0, ID_F_SURFACEBLUR), S("Blur", 0, ID_F_BLUR),
   H("Sharpen"), S("Unsharp Mask...", 0, ID_F_UNSHARP), S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen More", 0, ID_F_SHARPENMORE),
-  H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Median...", 0, ID_F_MEDIAN), S("Despeckle", 0, ID_F_DESPECKLE),
+  H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Dust & Scratches...", 0, ID_F_DUST), S("Median...", 0, ID_F_MEDIAN), S("Reduce Noise...", 0, ID_F_REDUCENOISE),
+  S("Despeckle", 0, ID_F_DESPECKLE),
   H("Distort"), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
-  H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Solarize", 0, ID_F_SOLARIZE), S("Oil Paint...", 0, ID_F_OIL), S("Mosaic...", 0, ID_F_MOSAIC),
-  H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Vignette...", 0, ID_F_VIGNETTE),
-  H("Other"), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
+  S("Polar Coordinates...", 0, ID_F_POLAR), S("Shear...", 0, ID_F_SHEAR), S("ZigZag...", 0, ID_F_ZIGZAG), S("Glass...", 0, ID_F_GLASS), S("Ocean Ripple...", 0, ID_F_OCEAN),
+  H("Pixelate"), S("Mosaic...", 0, ID_F_MOSAIC), S("Crystallize...", 0, ID_F_CRYSTALLIZE), S("Pointillize...", 0, ID_F_POINTILLIZE), S("Color Halftone...", 0, ID_F_HALFTONE),
+  S("Mezzotint...", 0, ID_F_MEZZOTINT), S("Facet", 0, ID_F_FACET), S("Fragment", 0, ID_F_FRAGMENT),
+  H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Trace Contour...", 0, ID_F_CONTOUR), S("Solarize", 0, ID_F_SOLARIZE),
+  S("Oil Paint...", 0, ID_F_OIL), S("Diffuse...", 0, ID_F_DIFFUSE), S("Tiles...", 0, ID_F_TILES), S("Wind...", 0, ID_F_WIND),
+  H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
+  S("Lighting Effects...", 0, ID_F_LIGHTING), S("Vignette...", 0, ID_F_VIGNETTE),
+  H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC),
+  H("Other"), S("Custom...", 0, ID_F_CUSTOM), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
   M("View"),
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
   T("Dark Interface", 0, ID_DARKUI),
@@ -344,10 +375,21 @@ static void update_menus(void)
     ID_CUT, ID_COPY, ID_COPYMERGED, ID_CLEAR, ID_FILL, ID_FILLFG, ID_FILLBG, ID_STROKE, ID_FREETRANSFORM, ID_IMAGESIZE, ID_CANVASSIZE, ID_CROP, ID_TRIM,
     ID_DUPIMAGE, ID_NEWLAYER, ID_DUPLAYER, ID_DELLAYER, ID_LAYERPROPS, ID_MERGEVISIBLE, ID_FLATTEN, ID_SELALL, ID_DESELECT, ID_INVERSE,
     ID_COLORRANGE, ID_SELALPHA, ID_AUTOTONE, ID_AUTOCONTRAST, ID_AUTOCOLOR, ID_ZOOMIN, ID_ZOOMOUT, ID_FIT, ID_ACTUAL, ID_ZOOM200, ID_ZOOM50,
-    ID_PURGE, ID_LOCKLAYER, ID_ALPHALOCK, ID_HIDELAYER, 0 };
+    ID_PURGE, ID_LOCKLAYER, ID_ALPHALOCK, ID_HIDELAYER, ID_NEWGROUP, ID_GROUPLAYERS, ID_MERGELAYERS, ID_NEWFILLSOLID, ID_NEWFILLGRAD,
+    ID_MASK_REVEALALL, ID_MASK_HIDEALL, ID_MASK_REVEALSEL, ID_MASK_HIDESEL, ID_MASK_ALPHA, ID_CLIP, ID_LOCKPOS, ID_LOCKALL,
+    ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V, ID_RESELECT, ID_GROWSIM, ID_SIMILAR,
+    ID_F_AGAIN, 0 };
+  static const ULONG needmask[] = { ID_MASK_DELETE, ID_MASK_APPLY, ID_MASK_ENABLE, ID_MASK_LINK, ID_MASK_INVERT, ID_MASK_EDIT, ID_SELFROMMASK, 0 };
+  Layer *al = has ? d->lay[d->active] : NULL;
   int i;
   if (!win) return;
   for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, has);
+  for (i = 0; needmask[i]; i++) menu_set(needmask[i], MUIA_Menuitem_Enabled, al && al->mask);
+  menu_set(ID_UNGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
+  menu_set(ID_MERGEGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
+  menu_set(ID_FILLSETTINGS, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_ADJUST));
+  menu_set(ID_RASTERIZE, MUIA_Menuitem_Enabled, al && al->kind == LK_FILL);
+  menu_set(ID_PASTEINTO, MUIA_Menuitem_Enabled, has && clip != NULL && d->sel != NULL);
   menu_set(ID_PASTE, MUIA_Menuitem_Enabled, has && clip != NULL);
   menu_set(ID_PASTEINPLACE, MUIA_Menuitem_Enabled, has && clip != NULL);
   menu_set(ID_MERGEDOWN, MUIA_Menuitem_Enabled, has && d->active > 0);
@@ -776,6 +818,19 @@ static void command(ULONG id)
   Box ch;
   if (id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
+  if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
+  if (id >= ID_NEWADJ0 && id < ID_NEWADJ0 + AK_N) {
+    /* a new adjustment layer above the active one, then its settings */
+    AdjParams p;
+    int kind = (int)(id - ID_NEWADJ0);
+    char nm[64];
+    if (!d) return;
+    adj_defaults(kind, &p);
+    sprintf(nm, "%s 1", adj_names[kind]);
+    if (doc_new_adjust(d, &p, nm) >= 0 && kind != AK_INVERT) { refresh_all(); dlg_adjust(adj_menu_id(kind)); }
+    refresh_all();
+    return;
+  }
   switch (id) {
   case ID_NEW: new_doc(); return;
   case ID_OPEN: open_file(); return;
@@ -892,7 +947,12 @@ static void command(ULONG id)
     if (d->nlay < 2) { ask("OK", "%s", tr("A picture needs at least one layer.")); return; }
     doc_delete_layer(d, d->active);
     break;
-  case ID_LAYERPROPS: dlg_layer_props(); break;
+  case ID_LAYERPROPS:
+    /* an adjustment or fill layer's own settings; otherwise its name, opacity, mode and the rest */
+    if (d->lay[d->active]->kind == LK_ADJUST) dlg_adjust(adj_menu_id(d->lay[d->active]->adj.kind));
+    else if (d->lay[d->active]->kind == LK_FILL) dlg_fill_layer(-1);
+    else dlg_layer_props();
+    break;
   case ID_LAYERFROMSEL: case ID_LAYERCUTSEL: {
     Clip *c = clip_copy(d, 0);
     if (!c) return;
@@ -900,18 +960,65 @@ static void command(ULONG id)
     clip_paste(d, c, 1);
     clip_free(c);
     break; }
-  case ID_RAISE: if (d->active < d->nlay - 1) doc_move_layer(d, d->active, d->active + 1); break;
-  case ID_LOWER: if (d->active > 0) doc_move_layer(d, d->active, d->active - 1); break;
-  case ID_TOFRONT: if (d->active < d->nlay - 1) doc_move_layer(d, d->active, d->nlay - 1); break;
-  case ID_TOBACK: if (d->active > 0) doc_move_layer(d, d->active, 0); break;
+  case ID_RAISE: doc_arrange(d, d->active, 1); break;
+  case ID_LOWER: doc_arrange(d, d->active, 2); break;
+  case ID_TOFRONT: doc_arrange(d, d->active, 0); break;
+  case ID_TOBACK: doc_arrange(d, d->active, 3); break;
   case ID_LOCKLAYER: d->lay[d->active]->locked = !d->lay[d->active]->locked; break;
   case ID_ALPHALOCK: d->lay[d->active]->alpha_lock = !d->lay[d->active]->alpha_lock; break;
+  case ID_LOCKPOS: d->lay[d->active]->lock_pos = !d->lay[d->active]->lock_pos; break;
+  case ID_LOCKALL: d->lay[d->active]->lock_all = !d->lay[d->active]->lock_all; break;
   case ID_HIDELAYER: doc_set_layer_props(d, d->active, NULL, -1, -1, !d->lay[d->active]->visible); break;
-  case ID_MERGEDOWN: if (d->active > 0) doc_merge_down(d, d->active); break;
+  case ID_MERGEDOWN: doc_merge_down(d, d->active); break;
+  case ID_MERGEGROUP: doc_merge_group(d, d->active); break;
+  case ID_MERGELAYERS: if (!doc_merge_picked(d)) ask("OK", "%s", tr("Pick two or more layers in the Layers panel first (Shift- or Ctrl-click).")); break;
   case ID_MERGEVISIBLE: doc_merge_visible(d); break;
   case ID_FLATTEN: doc_flatten(d); break;
+  /* 0.3: live layers */
+  case ID_NEWGROUP: doc_new_group(d, "Group 1"); break;
+  case ID_GROUPLAYERS: doc_group_layers(d); break;
+  case ID_UNGROUP: doc_ungroup(d, d->active); break;
+  case ID_NEWFILLSOLID: dlg_fill_layer(0); break;
+  case ID_NEWFILLGRAD: dlg_fill_layer(1); break;
+  case ID_FILLSETTINGS:
+    if (d->lay[d->active]->kind == LK_FILL) dlg_fill_layer(-1);
+    else if (d->lay[d->active]->kind == LK_ADJUST) dlg_adjust(adj_menu_id(d->lay[d->active]->adj.kind));
+    break;
+  case ID_MASK_REVEALALL: doc_mask_add(d, d->active, MK_REVEAL_ALL); break;
+  case ID_MASK_HIDEALL: doc_mask_add(d, d->active, MK_HIDE_ALL); break;
+  case ID_MASK_REVEALSEL: doc_mask_add(d, d->active, MK_REVEAL_SEL); break;
+  case ID_MASK_HIDESEL: doc_mask_add(d, d->active, MK_HIDE_SEL); break;
+  case ID_MASK_ALPHA: doc_mask_add(d, d->active, MK_FROM_ALPHA); break;
+  case ID_MASK_DELETE: doc_mask_delete(d, d->active, 0); break;
+  case ID_MASK_APPLY: doc_mask_delete(d, d->active, 1); break;
+  case ID_MASK_ENABLE: doc_mask_set(d, d->active, !d->lay[d->active]->mask_on, -1, -1, -1); break;
+  case ID_MASK_LINK: doc_mask_set(d, d->active, -1, !d->lay[d->active]->mask_linked, -1, -1); break;
+  case ID_MASK_INVERT: doc_mask_invert(d, d->active); break;
+  case ID_MASK_EDIT: if (d->lay[d->active]->mask) d->lay[d->active]->edit_mask = !d->lay[d->active]->edit_mask; break;
+  case ID_CLIP: doc_set_clip(d, d->active, !d->lay[d->active]->clip); break;
+  case ID_RASTERIZE: doc_rasterize(d, d->active); break;
+  case ID_AL_LEFT: doc_align(d, AL_LEFT); break;
+  case ID_AL_HCENTER: doc_align(d, AL_HCENTER); break;
+  case ID_AL_RIGHT: doc_align(d, AL_RIGHT); break;
+  case ID_AL_TOP: doc_align(d, AL_TOP); break;
+  case ID_AL_VCENTER: doc_align(d, AL_VCENTER); break;
+  case ID_AL_BOTTOM: doc_align(d, AL_BOTTOM); break;
+  case ID_DIST_H: doc_align(d, AL_DIST_H); break;
+  case ID_DIST_V: doc_align(d, AL_DIST_V); break;
+  case ID_PASTEINTO:
+    /* the clipboard as a new layer, masked to the selection (the mask not linked, as in Photoshop) */
+    if (!clip) return;
+    if (!d->sel) { clip_paste(d, clip, 0); break; }
+    doc_begin(d, "Paste Into");
+    if (clip_paste(d, clip, 0) && doc_mask_add(d, d->active, MK_REVEAL_SEL)) d->lay[d->active]->mask_linked = 0;
+    doc_end(d);
+    break;
+  case ID_SELFROMMASK: doc_sel_from_mask(d, d->active, SEL_REPLACE); break;
+  case ID_RESELECT: sel_reselect(d); break;
+  case ID_GROWSIM: sel_grow_similar(d, opt.tolerance); break;
+  case ID_SIMILAR: sel_similar(d, opt.tolerance); break;
   case ID_SELALL: sel_all(d); break;
-  case ID_DESELECT: sel_none(d); break;
+  case ID_DESELECT: sel_deselect(d); break;
   case ID_INVERSE: sel_invert(d); break;
   case ID_SELALPHA: sel_from_alpha(d, d->active); break;
   case ID_COLORRANGE: case ID_FEATHER: case ID_EXPAND: case ID_CONTRACT: case ID_BORDER: case ID_SMOOTH: dlg_select(id); break;
@@ -1115,6 +1222,7 @@ int main(int argc, char **argv)
       !(KeymapBase = OpenLibrary((STRPTR)"keymap.library", 37))) goto done;
   if (!(MUIMasterBase = OpenLibrary((STRPTR)MUIMASTER_NAME, 19))) { printf("Easel needs MUI (muimaster.library 19 or later).\n"); goto done; }
   CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 40);
+  adjlayer_init();                       /* adjustment layers composite through adjust.c */
   find_home(argc > 0 ? argv[0] : NULL);
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");

@@ -25,6 +25,7 @@
 #include <proto/keymap.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/layers.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -728,7 +729,7 @@ static void release(struct Data *d, Object *obj)
     LONG dx = (LONG)floor(d->bx - d->ax + 0.5), dy = (LONG)floor(d->by - d->ay + 0.5);
     d->drag = DR_MOVE; ov_hide(d, obj); d->drag = DR_NONE;
     if (dx || dy) {
-      ch = move_layer(doc, dx, dy);
+      ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx, dy) : move_layer(doc, dx, dy);
       if (!box_empty(ch)) {
         changed(d, obj);
         if (doc->sel) edges_make(d);
@@ -817,7 +818,8 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   case 0x4C: case 0x4D: case 0x4E: case 0x4F: {  /* the arrows: nudge (move tool) or scroll */
     LONG dx = code == 0x4E ? 1 : code == 0x4F ? -1 : 0, dy = code == 0x4D ? 1 : code == 0x4C ? -1 : 0;
     if (tool == TL_MOVE) {
-      Box ch = move_layer(doc, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1));
+      Box ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1))
+                                                      : move_layer(doc, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1));
       if (!box_empty(ch)) { changed(d, obj); if (doc->sel) edges_make(d); update_box(d, obj, ch); if (doc->sel) selection_changed(d, obj); tell_changed(d, obj); }
     } else { v->sx += dx * (shift ? 200 : 40); v->sy += dy * (shift ? 200 : 40); draw_all(d, obj); }
     return 1; }

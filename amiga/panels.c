@@ -21,6 +21,7 @@
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/layers.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -307,24 +308,92 @@ struct MUI_CustomClass *color_class(void)
 }
 
 /* ================================================================== the Layers panel */
-#define THUMB 28
-static const char *const blendnames[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
-  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
+/* (0.3) Groups indent their members and can be closed with the triangle; a mask shows as a second
+   thumbnail, the one painting goes into framed; a clipped layer has an arrow down to its base.
+   Shift-click picks a run of layers, Ctrl-click one more; dragging moves a layer (or a whole
+   group), into a group when dropped on its row */
+/* the thumbnails' size: smaller when the panel has room for fewer than four rows (a 480-line screen) */
+static int thumb_sz = 28;
+#define THUMB thumb_sz
+static const char *const blendnames[BM_N + 1] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
+  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn",
+  "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", "Pass Through" };
+static const char *blend_label(const Layer *l) { return tr(blendnames[l->blend == BM_PASS ? BM_N : l->blend < BM_N ? l->blend : 0]); }
 struct LData {
   struct MUI_EventHandlerNode ehn;
   int shown, first, drag, dragfrom, dragto, scrub, moved; LONG grabx; int grabv, grabv2;
   ULONG secs, micros; int lastrow;
   UBYTE *buf; LONG bufcap;
   ULONG cmd;
+  int list[MAXLAYERS], nlist;          /* the rows: layer indices, top first, closed groups' members left out */
 };
 static LONG rowh(void) { return THUMB + 6; }
-/* the parts: the mode list and opacity on top, the lock ticks, the rows, the buttons at the bottom */
+/* the parts: the mode list and opacity on top, the locks and fill, the rows, the buttons at the bottom */
 static LONG lay_top(Object *obj) { return _mtop(obj) + 2 * (fh() + 10) + 2; }
 static LONG lay_bottom(Object *obj) { return _mbottom(obj) - 26; }
 static int lay_rows(Object *obj) { LONG h = lay_bottom(obj) - lay_top(obj); return h > 0 ? (int)(h / rowh()) : 0; }
-static const int lay_buttons[] = { IC_LOCKL, IC_FXMERGE, IC_NEWLAYER, IC_DUPLAYER, IC_TRASH };
-static const ULONG lay_ids[] = { ID_LOCKLAYER, ID_MERGEDOWN, ID_NEWLAYER, ID_DUPLAYER, ID_DELLAYER };
-#define NLB 5
+static void lay_fit(Object *obj) { thumb_sz = lay_bottom(obj) - lay_top(obj) < 4 * (28 + 6) ? 18 : 28; }
+static const int lay_buttons[] = { IC_ADDMASK, IC_ADJLAYER, IC_FOLDER, IC_NEWLAYER, IC_DUPLAYER, IC_TRASH };
+static const ULONG lay_ids[] = { ID_MASK_REVEALALL, ID_NEWADJ, ID_NEWGROUP, ID_NEWLAYER, ID_DUPLAYER, ID_DELLAYER };
+#define NLB 6
+#define NLOCK 4
+static const int lock_icons[NLOCK] = { IC_ALPHALOCK, IC_LOCKL, IC_LOCKPOS, IC_LOCKALL };
+static void lay_list(struct LData *d, Doc *doc)
+{
+  int i;
+  d->nlist = 0;
+  for (i = doc->nlay - 1; i >= 0; i--) if (!layer_hidden_by_collapse(doc, i)) d->list[d->nlist++] = i;
+}
+static int lock_on(const Layer *a, int k) { return k == 0 ? a->alpha_lock : k == 1 ? a->locked : k == 2 ? a->lock_pos : a->lock_all; }
+/* where a row's parts are: the indent, the triangle (groups), the thumbnail and the mask's */
+static LONG row_indent(const Layer *ly) { return (LONG)(ly->depth > 6 ? 6 : ly->depth) * 10; }
+static LONG thumb_x(Object *obj, const Layer *ly) { return _mleft(obj) + 30 + row_indent(ly) + (ly->clip ? 8 : 0) + (ly->kind == LK_GROUP ? 10 : 0); }
+static LONG mask_x(Object *obj, const Layer *ly) { return thumb_x(obj, ly) + THUMB + 4; }
+static LONG name_x(Object *obj, const Layer *ly) { return (ly->mask ? mask_x(obj, ly) : thumb_x(obj, ly)) + THUMB + 8; }
+/* a picture (pixels, or a mask as grey) fitted in a THUMB square over the checkerboard */
+static void thumb_draw(struct LData *d, struct RastPort *rp, struct Screen *scr, Doc *doc, const u8 *px, const u8 *mask, LONG x, LONG y, int lit)
+{
+  double sc;
+  LONG tw, th, xx, yy;
+  if (!d->buf && !(d->buf = (UBYTE *)AllocVec(THUMB * THUMB * 3, MEMF_ANY))) return;
+  sc = (double)(doc->w > doc->h ? doc->w : doc->h) / THUMB;
+  tw = (LONG)(doc->w / sc); th = (LONG)(doc->h / sc);
+  if (tw < 1) tw = 1;
+  if (th < 1) th = 1;
+  for (yy = 0; yy < th; yy++) for (xx = 0; xx < tw; xx++) {
+    LONG ix = (LONG)((xx + 0.5) * sc), iy = (LONG)((yy + 0.5) * sc);
+    UBYTE *o = d->buf + (yy * tw + xx) * 3;
+    int c = (((xx >> 2) + (yy >> 2)) & 1) ? 0xCC : 0xFF, a;
+    if (ix >= doc->w) ix = doc->w - 1;
+    if (iy >= doc->h) iy = doc->h - 1;
+    if (mask) { o[0] = o[1] = o[2] = mask[(long)iy * doc->w + ix]; continue; }
+    {
+      const u8 *p = px + ((long)iy * doc->w + ix) * 4;
+      a = p[3];
+      o[0] = (UBYTE)((p[0] * a + c * (255 - a)) / 255); o[1] = (UBYTE)((p[1] * a + c * (255 - a)) / 255); o[2] = (UBYTE)((p[2] * a + c * (255 - a)) / 255);
+    }
+  }
+  x += (THUMB - tw) / 2; y += (THUMB - th) / 2;
+  draw_rgb(rp, scr, d->buf, tw * 3, x, y, tw, th);
+  theme_rect(rp, x - 1, y - 1, x + tw, y + th, tpen(lit ? T_ACCENT : T_BORDER2));
+  if (lit) theme_rect(rp, x - 2, y - 2, x + tw + 1, y + th + 1, tpen(T_ACCENT));
+}
+/* a fill layer's thumbnail: its colour, or its two colours side by side as a ramp */
+static void fill_thumb(struct LData *d, struct RastPort *rp, struct Screen *scr, const Layer *ly, LONG x, LONG y)
+{
+  LONG xx, yy;
+  if (!d->buf && !(d->buf = (UBYTE *)AllocVec(THUMB * THUMB * 3, MEMF_ANY))) return;
+  for (yy = 0; yy < THUMB; yy++) for (xx = 0; xx < THUMB; xx++) {
+    UBYTE *o = d->buf + (yy * THUMB + xx) * 3;
+    int t = ly->fillp.kind ? (int)(xx * 255 / (THUMB - 1)) : 0, k;
+    for (k = 0; k < 3; k++) {
+      int a = (int)((ly->fillp.c0 >> (16 - 8 * k)) & 255), b = (int)((ly->fillp.c1 >> (16 - 8 * k)) & 255);
+      o[k] = (UBYTE)(a + (b - a) * t / 255);
+    }
+  }
+  draw_rgb(rp, scr, d->buf, THUMB * 3, x, y, THUMB, THUMB);
+  theme_rect(rp, x - 1, y - 1, x + THUMB, y + THUMB, tpen(T_BORDER2));
+}
 static void lay_draw(struct LData *d, Object *obj)
 {
   struct RastPort *rp = _rp(obj);
@@ -335,13 +404,14 @@ static void lay_draw(struct LData *d, Object *obj)
   char buf[80];
   theme_fill(rp, l, _mtop(obj), r, _mbottom(obj), tpen(T_PANEL));
   if (!doc) return;
+  lay_list(d, doc);
   {
     Layer *a = doc->lay[doc->active];
     /* the blend mode (a list) and the opacity (dragged or typed) */
     LONG bx1 = r - 54 - theme_textlen(rp, theme_font(), "Opacity:") - 8;
     theme_fill(rp, l + 6, y, bx1, y + fh() + 4, tpen(T_WHITE));
     theme_rect(rp, l + 6, y, bx1, y + fh() + 4, tpen(T_BORDER2));
-    text_fit(rp, theme_font(), l + 10, y + 2, tr(blendnames[a->blend < BM_N ? a->blend : 0]), bx1 - l - 28, tpen(T_TEXT));
+    text_fit(rp, theme_font(), l + 10, y + 2, blend_label(a), bx1 - l - 28, tpen(T_TEXT));
     SetAPen(rp, tpen(T_DIM));
     my = y + (fh() + 4) / 2;
     Move(rp, bx1 - 10, my - 1); Draw(rp, bx1 - 4, my - 1); Move(rp, bx1 - 9, my); Draw(rp, bx1 - 5, my); Move(rp, bx1 - 8, my + 1); Draw(rp, bx1 - 6, my + 1);
@@ -350,72 +420,88 @@ static void lay_draw(struct LData *d, Object *obj)
     theme_fill(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_WHITE));
     theme_rect(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_BORDER2));
     theme_text(rp, theme_font(), r - 44, y + 2, buf, tpen(T_TEXT));
-    /* the locks */
+    /* the locks (transparency, pixels, position, all) and the fill opacity */
     y += fh() + 10;
     theme_text(rp, theme_font(), l + 6, y + 2, tr("Lock:"), tpen(T_DIM));
-    for (k = 0; k < 2; k++) {
-      LONG bx = l + 46 + k * 26;
-      int on = k == 0 ? a->locked : a->alpha_lock;
-      if (on) theme_fill(rp, bx - 2, y - 1, bx + 19, y + fh() + 4, tpen(T_PRESSED));
-      theme_icon(rp, k == 0 ? IC_LOCKL : IC_ALPHALOCK, bx + 1, y + (fh() + 4 - 16) / 2, 16, 0);
+    for (k = 0; k < NLOCK; k++) {
+      LONG bx = l + 46 + k * 22;
+      if (lock_on(a, k)) theme_fill(rp, bx - 2, y - 1, bx + 17, y + fh() + 4, tpen(T_PRESSED));
+      theme_icon(rp, lock_icons[k], bx + 1, y + (fh() + 4 - 14) / 2, 14, 0);
     }
+    theme_text(rp, theme_font(), r - 54 - theme_textlen(rp, theme_font(), "Fill:"), y + 2, tr("Fill:"), tpen(T_DIM));
+    sprintf(buf, "%d%%", ((255 - a->fill_cut) * 100 + 127) / 255);
+    theme_fill(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_WHITE));
+    theme_rect(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_BORDER2));
+    theme_text(rp, theme_font(), r - 44, y + 2, buf, tpen(T_TEXT));
   }
   SetAPen(rp, tpen(T_BORDER)); Move(rp, l, lay_top(obj) - 2); Draw(rp, r, lay_top(obj) - 2);
   /* the rows, the top layer first */
   rows = lay_rows(obj);
-  if (d->first > doc->nlay - rows) d->first = doc->nlay - rows;
+  if (d->first > d->nlist - rows) d->first = d->nlist - rows;
   if (d->first < 0) d->first = 0;
-  for (k = 0; k < rows && d->first + k < doc->nlay; k++) {
-    int li = doc->nlay - 1 - (d->first + k);
+  for (k = 0; k < rows && d->first + k < d->nlist; k++) {
+    int li = d->list[d->first + k];
     Layer *ly = doc->lay[li];
-    LONG ry = lay_top(obj) + k * rowh(), tx = l + 30, ty = ry + 3;
+    LONG ry = lay_top(obj) + k * rowh(), tx = thumb_x(obj, ly), ty = ry + 3, nx = name_x(obj, ly);
     if (li == doc->active) theme_fill(rp, l, ry, r, ry + rowh() - 2, tpen(T_SELECTION));
-    if (d->drag && d->moved && d->dragto == li) theme_fill(rp, l, ry, r, ry + 1, tpen(T_ACCENT));
+    else if (ly->picked) theme_fill(rp, l, ry, r, ry + rowh() - 2, tpen(T_PRESSED));
+    if (d->drag && d->moved && d->dragto == li) {
+      if (doc->lay[li]->kind == LK_GROUP) theme_rect(rp, l + 1, ry, r - 1, ry + rowh() - 2, tpen(T_ACCENT));
+      else theme_fill(rp, l, d->dragto < d->dragfrom ? ry + rowh() - 3 : ry, r, d->dragto < d->dragfrom ? ry + rowh() - 2 : ry + 1, tpen(T_ACCENT));
+    }
     /* the eye */
-    if (ly->visible) theme_icon(rp, IC_UNHIDE, l + 6, ry + (rowh() - 16) / 2, 16, 0);
+    if (ly->visible) theme_icon(rp, IC_UNHIDE, l + 6, ry + (rowh() - 16) / 2, 16, !layer_shown(doc, li));
     SetAPen(rp, tpen(T_BORDER)); Move(rp, l + 26, ry); Draw(rp, l + 26, ry + rowh() - 2);
-    /* the thumbnail: the layer fitted in a square over the checkerboard */
-    if (d->buf || (d->buf = (UBYTE *)AllocVec(THUMB * THUMB * 3, MEMF_ANY)) != NULL) {
-      double sc = (double)(doc->w > doc->h ? doc->w : doc->h) / THUMB;
-      LONG tw = (LONG)(doc->w / sc), th = (LONG)(doc->h / sc), xx, yy;
-      if (tw < 1) tw = 1;
-      if (th < 1) th = 1;
-      for (yy = 0; yy < th; yy++) for (xx = 0; xx < tw; xx++) {
-        LONG ix = (LONG)((xx + 0.5) * sc), iy = (LONG)((yy + 0.5) * sc);
-        const u8 *p;
-        UBYTE *o = d->buf + (yy * tw + xx) * 3;
-        int c = (((xx >> 2) + (yy >> 2)) & 1) ? 0xCC : 0xFF, a;
-        if (ix >= doc->w) ix = doc->w - 1;
-        if (iy >= doc->h) iy = doc->h - 1;
-        p = ly->px + ((long)iy * doc->w + ix) * 4;
-        a = p[3];
-        o[0] = (UBYTE)((p[0] * a + c * (255 - a)) / 255); o[1] = (UBYTE)((p[1] * a + c * (255 - a)) / 255); o[2] = (UBYTE)((p[2] * a + c * (255 - a)) / 255);
+    /* a clipped layer's arrow down to its base */
+    if (ly->clip) {
+      LONG ax = tx - 7, my2 = ry + rowh() / 2;
+      SetAPen(rp, tpen(T_DIM));
+      Move(rp, ax, my2 - 6); Draw(rp, ax, my2 + 6); Move(rp, ax - 2, my2 + 4); Draw(rp, ax, my2 + 6); Draw(rp, ax + 2, my2 + 4);
+    }
+    /* a group's triangle: pointing right when closed, down when open */
+    if (ly->kind == LK_GROUP) {
+      LONG gx = tx - 9, gy = ry + rowh() / 2, t;
+      SetAPen(rp, tpen(T_TEXT));
+      for (t = 0; t < 4; t++) {
+        if (ly->collapsed) { Move(rp, gx + t, gy - 3 + t); Draw(rp, gx + t, gy + 3 - t); }
+        else { Move(rp, gx - 3 + t, gy - 1 + t); Draw(rp, gx + 3 - t, gy - 1 + t); }
       }
-      tx += (THUMB - tw) / 2; ty += (THUMB - th) / 2;
-      draw_rgb(rp, scr, d->buf, tw * 3, tx, ty, tw, th);
-      theme_rect(rp, tx - 1, ty - 1, tx + tw, ty + th, tpen(li == doc->active ? T_TEXT : T_BORDER2));
+    }
+    /* the thumbnail (and the mask's beside it) */
+    if (ly->kind == LK_GROUP) theme_icon(rp, IC_FOLDER, tx + (THUMB - 20) / 2, ty + (THUMB - 20) / 2, 20, 0);
+    else if (ly->kind == LK_ADJUST) theme_icon(rp, IC_ADJLAYER, tx + (THUMB - 20) / 2, ty + (THUMB - 20) / 2, 20, 0);
+    else if (ly->kind == LK_FILL) fill_thumb(d, rp, scr, ly, tx, ty);
+    else if (ly->px) thumb_draw(d, rp, scr, doc, ly->px, NULL, tx, ty, li == doc->active && ly->mask && !ly->edit_mask);
+    if (ly->mask) {
+      thumb_draw(d, rp, scr, doc, NULL, ly->mask, mask_x(obj, ly), ty, li == doc->active && ly->edit_mask);
+      if (!ly->mask_on) {                                  /* turned off: a red cross over it */
+        LONG mx0 = mask_x(obj, ly);
+        SetAPen(rp, tpen(T_RED));
+        Move(rp, mx0, ty); Draw(rp, mx0 + THUMB - 1, ty + THUMB - 1); Move(rp, mx0 + THUMB - 1, ty); Draw(rp, mx0, ty + THUMB - 1);
+      }
     }
     to_latin1(ly->name, buf, sizeof buf);
-    text_fit(rp, theme_font(), l + 30 + THUMB + 8, ry + (rowh() - fh()) / 2 - 1, buf, r - (l + 30 + THUMB + 8) - 22, tpen(T_TEXT));
-    if (ly->locked) theme_icon(rp, IC_LOCKL, r - 18, ry + (rowh() - 12) / 2, 12, 0);
+    text_fit(rp, theme_font(), nx, ry + (rowh() - fh()) / 2 - 1, buf, r - nx - 22, tpen(T_TEXT));
+    if (ly->lock_all || ly->locked) theme_icon(rp, IC_LOCKL, r - 18, ry + (rowh() - 12) / 2, 12, 0);
+    else if (ly->lock_pos) theme_icon(rp, IC_LOCKPOS, r - 18, ry + (rowh() - 12) / 2, 12, 0);
     else if (ly->alpha_lock) theme_icon(rp, IC_ALPHALOCK, r - 18, ry + (rowh() - 12) / 2, 12, 0);
-    if (ly->opacity < 255 || ly->blend) {
-      sprintf(buf, "%s %d%%", ly->blend ? tr(blendnames[ly->blend < BM_N ? ly->blend : 0]) : "", (ly->opacity * 100 + 127) / 255);
-      text_fit(rp, theme_small(), l + 30 + THUMB + 8, ry + rowh() / 2 + 3, buf, r - (l + 30 + THUMB + 8) - 22, tpen(T_DIM));
+    if (THUMB >= 28 && (ly->opacity < 255 || (ly->blend && ly->blend != BM_PASS) || ly->fill_cut)) {
+      sprintf(buf, "%s %d%%", ly->blend && ly->blend != BM_PASS ? blend_label(ly) : "", (ly->opacity * 100 + 127) / 255);
+      text_fit(rp, theme_small(), nx, ry + rowh() / 2 + 3, buf, r - nx - 22, tpen(T_DIM));
     }
     SetAPen(rp, tpen(T_BORDER)); Move(rp, l, ry + rowh() - 1); Draw(rp, r, ry + rowh() - 1);
   }
   /* more layers than fit: a thin bar at the right */
-  if (doc->nlay > rows && rows > 0) {
-    LONG t = lay_top(obj), b = t + rows * rowh(), a0 = t + (b - t) * d->first / doc->nlay, a1 = t + (b - t) * (d->first + rows) / doc->nlay;
-    theme_fill(rp, r - 4, t, r, b, tpen(T_CANVAS));
-    theme_fill(rp, r - 4, a0, r, a1, tpen(T_BORDER2));
+  if (d->nlist > rows && rows > 0) {
+    LONG t = lay_top(obj), b = t + rows * rowh(), a0 = t + (b - t) * d->first / d->nlist, a1 = t + (b - t) * (d->first + rows) / d->nlist;
+    theme_fill(rp, r - 7, t, r, b, tpen(T_CANVAS));
+    theme_fill(rp, r - 6, a0 + 1, r - 1, a1 - 1, tpen(T_BORDER2));
   }
   /* the buttons */
   SetAPen(rp, tpen(T_BORDER)); Move(rp, l, lay_bottom(obj)); Draw(rp, r, lay_bottom(obj));
   for (i = 0; i < NLB; i++) {
-    LONG bx = r - (NLB - i) * 26 - 4;
-    theme_icon(rp, lay_buttons[i], bx + 4, lay_bottom(obj) + 5, 16, i == 1 && doc->active == 0);
+    LONG bx = r - (NLB - i) * 24 - 4;
+    theme_icon(rp, lay_buttons[i], bx + 4, lay_bottom(obj) + 5, 16, i == 0 && doc->lay[doc->active]->mask != NULL);
   }
 }
 static int lay_row_at(Object *obj, struct LData *d, LONG my)
@@ -423,9 +509,10 @@ static int lay_row_at(Object *obj, struct LData *d, LONG my)
   Doc *doc = cur_doc();
   LONG k;
   if (!doc || my < lay_top(obj)) return -1;
+  lay_list(d, doc);
   k = (my - lay_top(obj)) / rowh();
-  if (k >= lay_rows(obj) || d->first + k >= doc->nlay) return -1;
-  return doc->nlay - 1 - (d->first + (int)k);
+  if (k >= lay_rows(obj) || d->first + k >= d->nlist) return -1;
+  return d->list[d->first + (int)k];
 }
 static void lay_changed(Object *obj) { SetAttrs(obj, MUIA_Layers_Changed, TRUE, TAG_DONE); }
 static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
@@ -437,7 +524,7 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
     d->lastrow = -1; d->scrub = -1;
-    d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE;
+    d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_RAWKEY;
     return (ULONG)obj;
   case OM_DISPOSE:
     d = INST_DATA(cl, obj);
@@ -445,11 +532,15 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     break;
   case OM_SET: {
     struct TagItem *t = FindTagItem(MUIA_Popup_Chosen, ((struct opSet *)msg)->ops_AttrList);
+    struct TagItem *ta = FindTagItem(MUIA_Layers_AdjPick, ((struct opSet *)msg)->ops_AttrList);
     Doc *doc = cur_doc();
-    if (t && doc && (int)t->ti_Data < BM_N) {
-      doc_set_layer_props(doc, doc->active, NULL, -1, (int)t->ti_Data, -1);
+    if (t && doc && (int)t->ti_Data <= BM_N) {
+      int b = (int)t->ti_Data;
+      if (b == BM_N) b = doc->lay[doc->active]->kind == LK_GROUP ? BM_PASS : BM_NORMAL;
+      doc_set_layer_props(doc, doc->active, NULL, -1, b, -1);
       lay_changed(obj);
     }
+    if (ta && doc && (int)ta->ti_Data < AK_N) DoMethod(_app(obj), MUIM_Application_ReturnID, ID_NEWADJ0 + ta->ti_Data);
     break;
   }
   case OM_GET: {
@@ -469,7 +560,7 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
   PANEL_COMMON(struct LData)
   case MUIM_Draw:
     DoSuperMethodA(cl, obj, msg);
-    if (((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)) lay_draw(INST_DATA(cl, obj), obj);
+    if (((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)) { lay_fit(obj); lay_draw(INST_DATA(cl, obj), obj); }
     return 0;
   case MUIM_Layers_Refresh:
     if (((struct LData *)INST_DATA(cl, obj))->shown) MUI_Redraw(obj, MADF_DRAWOBJECT);
@@ -478,33 +569,43 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     struct MUIP_CreateShortHelp *m = (struct MUIP_CreateShortHelp *)msg;
     Doc *doc = cur_doc();
     LONG mx = m->mx, my = m->my, l = _mleft(obj), r = _mright(obj), y0 = _mtop(obj) + 5;
-    int i;
-    static const char *const bn[] = { "Lock Layer", "Merge Down", "New Layer", "Duplicate Layer", "Delete Layer" };
-    static const char *const bb[] = { "Stops the layer in use from being changed (click again to unlock).",
-      "Merges the layer in use into the one below it (Amiga-E).", "Adds an empty layer above the one in use.",
-      "Adds a copy of the layer in use above it (Amiga-J).", "Deletes the layer in use." };
+    int i, li;
+    static const char *const bn[] = { "Add Layer Mask", "New Adjustment Layer", "New Group", "New Layer", "Duplicate Layer", "Delete Layer" };
+    static const char *const bb[] = { "Adds a mask to the layer in use: it shows the layer where the mask is white and hides it where it is black (the selection, if there is one).",
+      "Adds a layer that adjusts the layers below it (Levels, Curves, Hue/Saturation and the rest) without changing their pixels. Click for the list.",
+      "Adds an empty group above the layer in use. Drag layers onto its row to put them in it.",
+      "Adds an empty layer above the one in use.", "Adds a copy of the layer in use (or the whole group) above it (Amiga-J).",
+      "Deletes the layer in use (a group with everything in it)." };
+    static const char *const ln[] = { "Lock Transparency", "Lock Pixels", "Lock Position", "Lock All" };
+    static const char *const lb[] = { "Painting changes only the layer's existing pixels; its clear parts stay clear.",
+      "The layer's pixels can't be painted on or changed.", "The layer can't be moved.", "Nothing can change the layer in use." };
     d = INST_DATA(cl, obj);
     if (!doc) return 0;
     if (my >= y0 && my <= y0 + fh() + 4) {
-      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), "Opacity:") - 8) return (ULONG)theme_bubble(tr("Blend Mode"), tr("How the layer in use mixes with the layers below it. Click for the list."));
+      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), "Opacity:") - 8) return (ULONG)theme_bubble(tr("Blend Mode"), tr("How the layer in use mixes with the layers below it. Click for the list. A group's Pass Through lets its layers mix with everything below."));
       return (ULONG)theme_bubble(tr("Opacity"), tr("How solid the layer in use is. Drag left or right to change it, or click to type it."));
     }
     if (my >= y0 + fh() + 9 && my < lay_top(obj) - 2) {
-      int k = (int)((mx - l - 44) / 26);
-      if (mx >= l + 44 && k == 0) return (ULONG)theme_bubble(tr("Lock All"), tr("Nothing can change the layer in use while it is locked."));
-      if (mx >= l + 44 && k == 1) return (ULONG)theme_bubble(tr("Lock Transparency"), tr("Painting changes only the layer's existing pixels; its clear parts stay clear."));
+      int k = (int)((mx - l - 44) / 22);
+      if (mx >= l + 44 && k >= 0 && k < NLOCK) return (ULONG)theme_bubble(tr(ln[k]), tr(lb[k]));
+      if (mx >= r - 48) return (ULONG)theme_bubble(tr("Fill Opacity"), tr("Like opacity, but for the layer's own pixels only. Drag left or right, or click to type it."));
       return 0;
     }
     if (my >= lay_bottom(obj)) {
       for (i = 0; i < NLB; i++) {
-        LONG bx = r - (NLB - i) * 26 - 4;
-        if (mx >= bx && mx < bx + 24) return (ULONG)theme_bubble(tr(bn[i]), tr(bb[i]));
+        LONG bx = r - (NLB - i) * 24 - 4;
+        if (mx >= bx && mx < bx + 22) return (ULONG)theme_bubble(tr(bn[i]), tr(bb[i]));
       }
       return 0;
     }
-    if (lay_row_at(obj, d, my) < 0) return 0;
+    if ((li = lay_row_at(obj, d, my)) < 0) return 0;
     if (mx < l + 26) return (ULONG)theme_bubble(tr("Show or Hide"), tr("Click the eye to hide the layer, and again to show it."));
-    return (ULONG)theme_bubble(tr("Layer"), tr("Click to work on this layer, drag it up or down to change the order, or double-click for its name, opacity and blend mode."));
+    if (doc->lay[li]->mask && mx >= mask_x(obj, doc->lay[li]) && mx < mask_x(obj, doc->lay[li]) + THUMB)
+      return (ULONG)theme_bubble(tr("Layer Mask"), tr("Click to paint the mask instead of the layer: black hides, white shows. Shift-click turns the mask off and on."));
+    if (doc->lay[li]->kind == LK_GROUP) return (ULONG)theme_bubble(tr("Group"), tr("Click the triangle to open or close the group. Drag layers onto it to put them in; double-click for its settings."));
+    if (doc->lay[li]->kind == LK_ADJUST) return (ULONG)theme_bubble(tr("Adjustment Layer"), tr("Adjusts what is below it. Double-click to change its settings."));
+    if (doc->lay[li]->kind == LK_FILL) return (ULONG)theme_bubble(tr("Fill Layer"), tr("A colour or gradient filling the canvas. Double-click to change it."));
+    return (ULONG)theme_bubble(tr("Layer"), tr("Click to work on this layer (Shift-click for several in a row, Ctrl-click to add one), drag it to change the order (onto a group to put it in), or double-click for its settings."));
   }
   case MUIM_DeleteShortHelp: return 0;
   case MUIM_HandleEvent: {
@@ -515,15 +616,20 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     d = INST_DATA(cl, obj);
     if (!im || !d->shown || !doc) return 0;
     mx = im->MouseX; my = im->MouseY; l = _mleft(obj); r = _mright(obj); y0 = _mtop(obj) + 5;
+    lay_fit(obj);
     if (im->Class == IDCMP_MOUSEMOVE) {
       if (d->scrub >= 0) {
         int v = d->grabv + (int)(mx - d->grabx);
+        Layer *a = doc->lay[doc->active];
         if (v < 0) v = 0;
         if (v > 100) v = 100;
         if (mx != d->grabx) d->moved = 1;
-        if (d->moved && (v * 255 + 50) / 100 != doc->lay[doc->active]->opacity) {
+        if (d->moved) {
           /* (the change shown as it is dragged; one undo step once it is let go) */
-          doc->lay[doc->active]->opacity = (u8)((v * 255 + 50) / 100);
+          u8 nv = (u8)((v * 255 + 50) / 100);
+          if (d->scrub == 1 && nv != a->opacity) a->opacity = nv;
+          else if (d->scrub == 2 && 255 - nv != a->fill_cut) a->fill_cut = (u8)(255 - nv);
+          else return MUI_EventHandlerRC_Eat;
           MUI_Redraw(obj, MADF_DRAWOBJECT);
           DoMethod(canvas, MUIM_Canvas_Update, 0, 0, doc->w, doc->h);
         }
@@ -536,25 +642,42 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
       }
       return 0;
     }
+    if (im->Class == IDCMP_RAWKEY && (im->Code == 0x7a || im->Code == 0x7b)) {
+      /* the mouse wheel over the rows */
+      if (mx < l || mx > r || my < lay_top(obj) || my > lay_bottom(obj)) return 0;
+      d->first += im->Code == 0x7a ? -1 : 1;
+      MUI_Redraw(obj, MADF_DRAWOBJECT);
+      return MUI_EventHandlerRC_Eat;
+    }
     if (im->Class != IDCMP_MOUSEBUTTONS) return 0;
     if (im->Code == SELECTUP) {
       if (d->scrub >= 0) {
-        int v = (doc->lay[doc->active]->opacity * 100 + 127) / 255;
+        Layer *a = doc->lay[doc->active];
+        int fill = d->scrub == 2, v = fill ? ((255 - a->fill_cut) * 100 + 127) / 255 : (a->opacity * 100 + 127) / 255;
         d->scrub = -1;
-        doc->lay[doc->active]->opacity = (u8)d->grabv2;
+        if (fill) a->fill_cut = (u8)d->grabv2; else a->opacity = (u8)d->grabv2;
         if (!d->moved) {
           LONG n = v;
-          if (!ask_number("Layer Opacity", "Opacity (%):", &n, 0, 100)) return MUI_EventHandlerRC_Eat;
+          if (!ask_number(fill ? "Fill Opacity" : "Layer Opacity", fill ? "Fill (%):" : "Opacity (%):", &n, 0, 100)) return MUI_EventHandlerRC_Eat;
           v = (int)n;
         }
-        doc_set_layer_props(doc, doc->active, NULL, (v * 255 + 50) / 100, -1, -1);
+        if (fill) { doc_begin(doc, "Fill Opacity"); a->fill_cut = (u8)(255 - (v * 255 + 50) / 100); doc_end(doc); }
+        else doc_set_layer_props(doc, doc->active, NULL, (v * 255 + 50) / 100, -1, -1);
         lay_changed(obj);
         return MUI_EventHandlerRC_Eat;
       }
       if (d->drag) {
         d->drag = 0;
-        if (d->moved && d->dragto >= 0 && d->dragto != d->dragfrom) { doc_move_layer(doc, d->dragfrom, d->dragto); lay_changed(obj); }
-        else MUI_Redraw(obj, MADF_DRAWOBJECT);
+        if (d->moved && d->dragto >= 0 && d->dragto != d->dragfrom) {
+          int to = d->dragto, from = d->dragfrom, s = block_start(doc, from);
+          Layer *t = doc->lay[to];
+          if (to >= s && to <= from) { /* onto itself or its own members: nothing */ }
+          else if (t->kind == LK_GROUP && !t->collapsed) doc_move_block(doc, from, to - 1, t->depth + 1);    /* into the group, at its top */
+          else if (t->kind == LK_GROUP && t->collapsed && to > from) doc_move_block(doc, from, to, t->depth);
+          else if (to > from) doc_move_block(doc, from, to, t->depth);                            /* dragged up: above it */
+          else doc_move_block(doc, from, block_start(doc, to) - 1, t->depth);                     /* dragged down: below it */
+          lay_changed(obj);
+        } else MUI_Redraw(obj, MADF_DRAWOBJECT);
         d->moved = 0;
         return MUI_EventHandlerRC_Eat;
       }
@@ -564,7 +687,9 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     if (my >= y0 && my <= y0 + fh() + 4) {
       if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), "Opacity:") - 8) {
         struct Window *w = _window(obj);
-        popup_list(obj, w->LeftEdge + l + 6, w->TopEdge + y0 + fh() + 5, 115, blendnames, BM_N, doc->lay[doc->active]->blend, MUIA_Popup_Chosen);
+        Layer *a = doc->lay[doc->active];
+        popup_list(obj, w->LeftEdge + l + 6, w->TopEdge + y0 + fh() + 5, 115, blendnames, a->kind == LK_GROUP ? BM_N + 1 : BM_N,
+                   a->blend == BM_PASS ? BM_N : a->blend, MUIA_Popup_Chosen);
       } else if (mx >= r - 48) {
         d->scrub = 1; d->grabx = mx; d->moved = 0;
         d->grabv2 = doc->lay[doc->active]->opacity;
@@ -573,45 +698,80 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
       return MUI_EventHandlerRC_Eat;
     }
     if (my >= y0 + fh() + 9 && my < lay_top(obj) - 2) {
-      int k = (int)((mx - l - 44) / 26);
+      int k = (int)((mx - l - 44) / 22);
       Layer *a = doc->lay[doc->active];
-      if (mx >= l + 44 && k >= 0 && k < 2) {
+      if (mx >= l + 44 && k >= 0 && k < NLOCK) {
         /* (the locks aren't undo steps: PhotoCraft's aren't either) */
-        if (k == 0) a->locked = !a->locked; else a->alpha_lock = !a->alpha_lock;
+        if (k == 0) a->alpha_lock = !a->alpha_lock;
+        else if (k == 1) a->locked = !a->locked;
+        else if (k == 2) a->lock_pos = !a->lock_pos;
+        else a->lock_all = !a->lock_all;
         lay_changed(obj);
+      } else if (mx >= r - 48) {
+        d->scrub = 2; d->grabx = mx; d->moved = 0;
+        d->grabv2 = a->fill_cut;
+        d->grabv = ((255 - a->fill_cut) * 100 + 127) / 255;
       }
       return MUI_EventHandlerRC_Eat;
     }
     if (my >= lay_bottom(obj)) {
       for (i = 0; i < NLB; i++) {
-        LONG bx = r - (NLB - i) * 26 - 4;
-        if (mx >= bx && mx < bx + 24) { d->cmd = lay_ids[i]; DoMethod(_app(obj), MUIM_Application_ReturnID, lay_ids[i]); break; }
+        LONG bx = r - (NLB - i) * 24 - 4;
+        if (mx >= bx && mx < bx + 22) {
+          if (lay_ids[i] == ID_NEWADJ) {
+            struct Window *w = _window(obj);
+            popup_list(obj, w->LeftEdge + bx - 100, w->TopEdge + lay_bottom(obj) - AK_N * (fh() + 4) - 8, 130, adj_names, AK_N, -1, MUIA_Layers_AdjPick);
+            break;
+          }
+          d->cmd = lay_ids[i] == ID_MASK_REVEALALL && doc->sel ? ID_MASK_REVEALSEL : lay_ids[i];
+          DoMethod(_app(obj), MUIM_Application_ReturnID, d->cmd);
+          break;
+        }
       }
       return MUI_EventHandlerRC_Eat;
     }
-    if (doc->nlay > lay_rows(obj) && mx >= r - 5) {
+    lay_list(d, doc);
+    if (d->nlist > lay_rows(obj) && mx >= r - 8) {
       /* the bar: a page up or down */
       int rows = lay_rows(obj);
-      LONG t = lay_top(obj), a0 = t + rows * rowh() * d->first / doc->nlay;
+      LONG t = lay_top(obj), a0 = t + rows * rowh() * d->first / d->nlist;
       d->first += my < a0 ? -rows : rows;
       MUI_Redraw(obj, MADF_DRAWOBJECT);
       return MUI_EventHandlerRC_Eat;
     }
     li = lay_row_at(obj, d, my);
     if (li < 0) return MUI_EventHandlerRC_Eat;
-    if (mx < l + 26) {
-      doc_set_layer_props(doc, li, NULL, -1, -1, !doc->lay[li]->visible);
+    {
+      Layer *ly = doc->lay[li];
+      LONG tx = thumb_x(obj, ly);
+      int shift = (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0, ctrl = (im->Qualifier & IEQUALIFIER_CONTROL) != 0;
+      if (mx < l + 26) {
+        doc_set_layer_props(doc, li, NULL, -1, -1, !ly->visible);
+        lay_changed(obj);
+        return MUI_EventHandlerRC_Eat;
+      }
+      if (ly->kind == LK_GROUP && mx >= tx - 13 && mx < tx) {
+        ly->collapsed = !ly->collapsed;                  /* (open or closed isn't an undo step) */
+        MUI_Redraw(obj, MADF_DRAWOBJECT);
+        return MUI_EventHandlerRC_Eat;
+      }
+      if (ly->mask && mx >= mask_x(obj, ly) && mx < mask_x(obj, ly) + THUMB) {
+        if (shift) doc_mask_set(doc, li, !ly->mask_on, -1, -1, -1);
+        else { doc_pick_layer(doc, li, 0); ly->edit_mask = 1; }
+        lay_changed(obj);
+        return MUI_EventHandlerRC_Eat;
+      }
+      if (mx >= tx && mx < tx + THUMB && ly->edit_mask) ly->edit_mask = 0;
+      if (li == d->lastrow && !shift && !ctrl && DoubleClick(d->secs, d->micros, im->Seconds, im->Micros)) {
+        d->lastrow = -1;
+        DoMethod(_app(obj), MUIM_Application_ReturnID, ID_LAYERPROPS);
+        return MUI_EventHandlerRC_Eat;
+      }
+      d->lastrow = li; d->secs = im->Seconds; d->micros = im->Micros;
+      doc_pick_layer(doc, li, shift ? 2 : ctrl ? 1 : 0);
       lay_changed(obj);
-      return MUI_EventHandlerRC_Eat;
+      if (!shift && !ctrl) { d->drag = 1; d->dragfrom = d->dragto = li; d->moved = 0; }
     }
-    if (li == d->lastrow && DoubleClick(d->secs, d->micros, im->Seconds, im->Micros)) {
-      d->lastrow = -1;
-      DoMethod(_app(obj), MUIM_Application_ReturnID, ID_LAYERPROPS);
-      return MUI_EventHandlerRC_Eat;
-    }
-    d->lastrow = li; d->secs = im->Seconds; d->micros = im->Micros;
-    if (li != doc->active) { doc->active = li; lay_changed(obj); }
-    d->drag = 1; d->dragfrom = d->dragto = li; d->moved = 0;
     return MUI_EventHandlerRC_Eat;
   }
   }

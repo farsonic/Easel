@@ -112,6 +112,19 @@ struct PData { Object *owner; ULONG attr; const char *const *labels; int n, hot,
 static struct MUI_CustomClass *pcls;
 static Object *popwin, *poplist;
 static LONG rowh(void) { return theme_font()->tf_YSize + 5; }
+#define MUIM_Pop_Close (QTAG + 0x3f0)
+/* the list closed: its window shut, and the window it lay over drawn again (it is not repaired on its own) */
+static void pop_close(struct PData *p)
+{
+  Object *root = NULL, *w;
+  ULONG open = FALSE;
+  get(popwin, MUIA_Window_Open, &open);
+  if (!open) return;
+  set(popwin, MUIA_Window_Open, FALSE);
+  if (!p->owner || !(w = _win(p->owner))) return;
+  get(w, MUIA_Window_RootObject, &root);
+  if (root && DoMethod(root, MUIM_Group_InitChange)) DoMethod(root, MUIM_Group_ExitChange);
+}
 static ULONG popdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct PData *p;
@@ -156,6 +169,9 @@ static ULONG popdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     }
     return 0;
   }
+  case MUIM_Pop_Close:
+    pop_close(INST_DATA(cl, obj));
+    return 0;
   case MUIM_HandleInput: {
     struct MUIP_HandleInput *m = (struct MUIP_HandleInput *)msg;
     p = INST_DATA(cl, obj);
@@ -166,7 +182,7 @@ static ULONG popdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
       if (i >= p->n) i = -1;
       if (m->imsg->Class == IDCMP_MOUSEMOVE && i != p->hot) { p->hot = i; MUI_Redraw(obj, MADF_DRAWOBJECT); }
       if (m->imsg->Class == IDCMP_MOUSEBUTTONS && m->imsg->Code == SELECTUP && i >= 0) {
-        DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)_win(obj), 3, MUIM_Set, MUIA_Window_Open, FALSE);
+        DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)obj, 1, MUIM_Pop_Close);
         DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)p->owner, 3, MUIM_Set, p->attr, (ULONG)i);
       }
     }
@@ -189,7 +205,7 @@ void popup_list(Object *owner, LONG x, LONG y, LONG w, const char *const *labels
       WindowContents, VGroup, InnerSpacing(0, 0), MUIA_Group_Spacing, 0, Child, poplist, End, End;
     if (!popwin) { poplist = NULL; return; }
     DoMethod(_app(owner), OM_ADDMEMBER, (ULONG)popwin);
-    DoMethod(popwin, MUIM_Notify, MUIA_Window_Activate, FALSE, (ULONG)popwin, 3, MUIM_Set, MUIA_Window_Open, FALSE);
+    DoMethod(popwin, MUIM_Notify, MUIA_Window_Activate, FALSE, (ULONG)poplist, 1, MUIM_Pop_Close);
   }
   set(popwin, MUIA_Window_Open, FALSE);
   p = INST_DATA(pcls->mcc_Class, poplist);

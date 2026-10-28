@@ -397,7 +397,7 @@ static void put_range(Buf *xml, ZipWriter *zw, Doc *doc, int lo, int hi, int *ok
       if (!store_png(zw, name, px, NULL, doc->w, doc_box(doc))) { free(px); *ok = 0; break; }
       free(px);
       buf_printf(xml, "<layer src=\"%s\" x=\"0\" y=\"0\" easel:fill-layer=\"%d %ld %ld %d %d %d %d\"", name, l->fillp.kind,
-                 (long)l->fillp.c0, (long)l->fillp.c1, l->fillp.gkind, l->fillp.angle, l->fillp.scale, l->fillp.reverse);
+                 (long)(l->fillp.c0 & 0xFFFFFF), (long)(l->fillp.c1 & 0xFFFFFF), l->fillp.gkind, l->fillp.angle, l->fillp.scale, l->fillp.reverse);
     } else {
       /* an adjustment layer: a clear one-pixel picture (others show nothing), the settings in attributes */
       u8 clear[4] = { 0, 0, 0, 0 };

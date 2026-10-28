@@ -16,6 +16,8 @@
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/filters2.h"
+#include "../core/layers.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -217,6 +219,11 @@ static Object *graph(int mode, const u32 *hist, const LONG *lev)
 /* each slider: its label, range and starting value; a value /scale is what the core function gets */
 typedef struct { const char *label; LONG min, max, def; } Param;
 typedef void (*ApplyFn)(Doc *d, const LONG *v, int choice, int tick);
+/* the starting values of the sliders, list and tick (set before a dialog to show a layer's settings) */
+static LONG sd_init_v[6]; static int sd_init_set, sd_init_choice, sd_init_tick = -1;
+static int sd_remember;              /* the dialog is a filter's: remembered for Last Filter */
+/* Filter > Last Filter: the last filter applied through a dialog, with its settings */
+static ApplyFn last_fn; static LONG last_v[6]; static int last_choice, last_tick; static ULONG last_plain;
 static struct {
   Object *sl[6]; int n; Object *cyc, *chk, *pre; ApplyFn fn; Preview pv; LONG v[6]; int pending;
 } sd;
@@ -261,15 +268,16 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   if (!grp) return 0;
   if (choices) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(choicelabel), MUIO_Label_Centered));
-    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.cyc = cycle(choices, 0)));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.cyc = cycle(choices, sd_init_set ? sd_init_choice : 0)));
   }
   for (i = 0; i < n; i++) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(p[i].label), MUIO_Label_Centered));
-    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.sl[i] = SliderObject, MUIA_Numeric_Min, p[i].min, MUIA_Numeric_Max, p[i].max, MUIA_Numeric_Value, p[i].def,
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.sl[i] = SliderObject, MUIA_Numeric_Min, p[i].min, MUIA_Numeric_Max, p[i].max,
+                                         MUIA_Numeric_Value, sd_init_set && i < 6 ? sd_init_v[i] : p[i].def,
                                          MUIA_Numeric_Default, p[i].def, MUIA_CycleChain, 1, MUIA_FixWidthTxt, (ULONG)"MMMMMMMMMMMMMMMMMMMMMM", End));
   }
   if (ticklabel) {
-    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.chk = check(tickdef)));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.chk = check(sd_init_tick >= 0 ? sd_init_tick : tickdef)));
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(ticklabel), MUIO_Label_Centered));
   }
   w = dialog_window(title, VGroup,
@@ -286,32 +294,49 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   /* (the starting values change nothing: the preview is shown once something moves) */
   ok = run_modal(w, ends, sd_each) == ID_DLGOK;
   if (ok && (!sd.pv.shown || sd.pending)) sd_apply();
+  if (ok && sd_remember) {
+    sd_read();
+    last_fn = fn; memcpy(last_v, sd.v, sizeof last_v); last_plain = 0;
+    last_choice = sd.cyc ? (int)xget(sd.cyc, MUIA_Cycle_Active) : 0; last_tick = sd.chk ? (int)xget(sd.chk, MUIA_Selected) : 0;
+  }
   if (!ok) pv_drop(&sd.pv);
   MUI_DisposeObject(w);
   DoMethod(canvas, MUIM_Canvas_Refresh);
   return ok;
 }
 
-/* each adjustment's call with the sliders' values */
-static void a_bc(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_brightness_contrast(d, (int)v[0], (int)v[1]); }
-static void a_exposure(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_exposure(d, v[0] / 100.0, v[1] / 1000.0, v[2] / 100.0); }
-static void a_vibrance(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_vibrance(d, (int)v[0], (int)v[1]); }
-static void a_huesat(Doc *d, const LONG *v, int c, int t) { (void)c; adj_hue_saturation(d, (int)v[0], (int)v[1], (int)v[2], t); }
-static void a_bw(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_black_white(d, (int)v[0], (int)v[1], (int)v[2]); }
-static void a_posterize(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_posterize(d, (int)v[0]); }
-static void a_threshold(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; adj_threshold(d, (int)v[0]); }
+/* each adjustment's call with the sliders' values. Each builds the adjustment's settings and hands
+   them to put_adj: on an adjustment layer of that kind they become its settings (0.3), on a pixel
+   layer they're applied to its pixels. Either way it's one undo step, so the preview works alike */
+static AdjParams adj_base;           /* the settings the dialog started from (the layer's, or defaults) */
+static int adj_editing;              /* the active layer is an adjustment layer being edited */
+static void put_adj(Doc *d, const AdjParams *p)
+{
+  if (adj_editing && d->lay[d->active]->kind == LK_ADJUST) doc_set_adjust(d, d->active, p);
+  else adj_apply(d, p, adj_names[p->kind]);
+}
+static void a_bc(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
+static void a_exposure(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; put_adj(d, &p); }
+static void a_vibrance(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; put_adj(d, &p); }
+static void a_huesat(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; p.v[3] = t; put_adj(d, &p); }
+static void a_bw(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; p.v[1] = (int)v[1]; p.v[2] = (int)v[2]; put_adj(d, &p); }
+static void a_posterize(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; put_adj(d, &p); }
+static void a_threshold(Doc *d, const LONG *v, int c, int t) { AdjParams p = adj_base; (void)c; (void)t; p.v[0] = (int)v[0]; put_adj(d, &p); }
 static void a_balance(Doc *d, const LONG *v, int c, int t)
 {
-  int zero[3] = { 0, 0, 0 }, val[3];
-  val[0] = (int)v[0]; val[1] = (int)v[1]; val[2] = (int)v[2];
-  adj_color_balance(d, c == 0 ? val : zero, c == 1 ? val : zero, c == 2 ? val : zero, t);
+  AdjParams p = adj_base;
+  int k;
+  if (!adj_editing) for (k = 0; k < 9; k++) p.v[k] = 0;  /* (applied to pixels: one tone range at a time) */
+  for (k = 0; k < 3; k++) p.v[(c >= 0 && c < 3 ? c : 0) * 3 + k] = (int)v[k];
+  p.v[9] = t;
+  put_adj(d, &p);
 }
-static ULONG photo_color;
 static void a_photo(Doc *d, const LONG *v, int c, int t)
 {
   static const ULONG cols[] = { 0xEC8A00, 0xFA9600, 0x006DFF, 0x005DFF, 0xEA1A1A, 0x19C900, 0x6B0ACD };
-  (void)photo_color;
-  adj_photo_filter(d, cols[c >= 0 && c < 7 ? c : 0], (int)v[0], t);
+  AdjParams p = adj_base;
+  p.v[0] = (int)cols[c >= 0 && c < 7 ? c : 0]; p.v[1] = (int)v[0]; p.v[2] = t;
+  put_adj(d, &p);
 }
 /* Levels: the five numbers and the channel; Curves: the editor's points */
 static LONG lev[3] = { 0, 255, 100 };
@@ -319,25 +344,131 @@ static Object *lev_graph;
 static u32 lev_hist[1024];
 static void a_levels(Doc *d, const LONG *v, int c, int t)
 {
+  AdjParams p = adj_base;
+  int q[5], k;
   (void)t;
   lev[0] = v[0]; lev[1] = v[2] > v[0] ? v[2] : v[0] + 1; lev[2] = v[1];
   if (lev_graph) set(lev_graph, MUIA_Graph_Hist, (ULONG)(lev_hist + 256 * c));
-  adj_levels(d, c, (int)v[0], (int)lev[1], v[1] / 100.0, (int)v[3], (int)v[4]);
+  q[0] = (int)v[0]; q[1] = (int)lev[1]; q[2] = (int)v[1]; q[3] = (int)v[3]; q[4] = (int)v[4];
+  if (c == 0) for (k = 0; k < 5; k++) p.v[k] = q[k];
+  else {
+    if (p.npts < 15) { for (k = 0; k < 3; k++) { p.pts[k * 5] = 0; p.pts[k * 5 + 1] = 255; p.pts[k * 5 + 2] = 100; p.pts[k * 5 + 3] = 0; p.pts[k * 5 + 4] = 255; } p.npts = 15; }
+    for (k = 0; k < 5; k++) p.pts[(c - 1) * 5 + k] = q[k];
+  }
+  put_adj(d, &p);
 }
 static Object *curve_obj;
 static void a_curves(Doc *d, const LONG *v, int c, int t)
 {
   struct GData *g = INST_DATA(gcls->mcc_Class, curve_obj);
+  AdjParams p = adj_base;
+  int k;
   (void)v; (void)t;
-  adj_curves(d, c, g->pts, g->npts);
+  p.v[0] = c; p.npts = g->npts > 32 ? 32 : g->npts;
+  for (k = 0; k < p.npts * 2; k++) p.pts[k] = g->pts[k];
+  put_adj(d, &p);
+}
+/* Channel Mixer: one output channel's row at a time */
+static void a_mixer(Doc *d, const LONG *v, int c, int t)
+{
+  AdjParams p = adj_base;
+  int row = c >= 0 && c < 3 ? c : 0, k;
+  for (k = 0; k < 4; k++) p.v[row * 4 + k] = (int)v[k];
+  p.v[12] = t;
+  put_adj(d, &p);
+}
+/* Gradient Map: a preset gradient (the colours in use, black to white, and some classic ramps) */
+static void gradmap_preset(int k, AdjParams *p)
+{
+  Doc *d = cur_doc();
+  static const ULONG sets[][4] = { { 0x000000, 0xFFFFFF, 0, 0 }, { 0x000000, 0x800000, 0xFFA000, 0xFFFFE0 }, { 0x001040, 0x2080C0, 0xE0F0FF, 0 },
+                                   { 0x200040, 0xC02060, 0xFFE080, 0 }, { 0x402000, 0xC08040, 0xFFF0D0, 0 } };
+  int n, i;
+  p->npts = 0;
+  if (k == 0 && d) { p->pts[0] = 0; p->pts[1] = (int)d->fg; p->pts[2] = 255; p->pts[3] = (int)d->bg; p->npts = 2; return; }
+  k = k - 1;
+  if (k < 0 || k > 4) k = 0;
+  for (n = 0; n < 4 && (n < 2 || sets[k][n]); n++) continue;
+  for (i = 0; i < n; i++) { p->pts[2 * i] = i * 255 / (n - 1); p->pts[2 * i + 1] = (int)sets[k][i]; }
+  p->npts = n;
+}
+static void a_gradmap(Doc *d, const LONG *v, int c, int t)
+{
+  AdjParams p = adj_base;
+  (void)v;
+  gradmap_preset(c, &p);
+  p.v[0] = t;
+  put_adj(d, &p);
+}
+/* Selective Color: one colour range at a time (cyan, magenta, yellow, black) */
+static void a_selcolor(Doc *d, const LONG *v, int c, int t)
+{
+  AdjParams p = adj_base;
+  int r = c >= 0 && c < 9 ? c : 0, k;
+  for (k = 0; k < 4; k++) p.pts[r * 4 + k] = (int)v[k];
+  p.v[0] = t;
+  put_adj(d, &p);
+}
+/* the adjustment a menu item stands for */
+static int adj_kind_of(ULONG id)
+{
+  switch (id) {
+  case ID_ADJ_BC: return AK_BRIGHTNESS;
+  case ID_ADJ_LEVELS: return AK_LEVELS;
+  case ID_ADJ_CURVES: return AK_CURVES;
+  case ID_ADJ_EXPOSURE: return AK_EXPOSURE;
+  case ID_ADJ_VIBRANCE: return AK_VIBRANCE;
+  case ID_ADJ_HUESAT: return AK_HUESAT;
+  case ID_ADJ_BALANCE: return AK_COLORBALANCE;
+  case ID_ADJ_BW: return AK_BLACKWHITE;
+  case ID_ADJ_PHOTO: return AK_PHOTOFILTER;
+  case ID_ADJ_MIXER: return AK_CHANNELMIXER;
+  case ID_ADJ_INVERT: return AK_INVERT;
+  case ID_ADJ_POSTERIZE: return AK_POSTERIZE;
+  case ID_ADJ_THRESHOLD: return AK_THRESHOLD;
+  case ID_ADJ_GRADMAP: return AK_GRADIENTMAP;
+  case ID_ADJ_SELCOLOR: return AK_SELECTIVECOLOR;
+  default: return -1;
+  }
+}
+ULONG adj_menu_id(int kind)
+{
+  static const ULONG ids[AK_N] = { ID_ADJ_BC, ID_ADJ_LEVELS, ID_ADJ_CURVES, ID_ADJ_EXPOSURE, ID_ADJ_VIBRANCE, ID_ADJ_HUESAT, ID_ADJ_BALANCE,
+    ID_ADJ_BW, ID_ADJ_PHOTO, ID_ADJ_MIXER, ID_ADJ_INVERT, ID_ADJ_POSTERIZE, ID_ADJ_THRESHOLD, ID_ADJ_GRADMAP, ID_ADJ_SELCOLOR };
+  return kind >= 0 && kind < AK_N ? ids[kind] : 0;
 }
 void dlg_adjust(ULONG id)
 {
   Doc *d = cur_doc();
   static const char *const ranges[] = { "Shadows", "Midtones", "Highlights", NULL };
   static const char *const channels[] = { "RGB", "Red", "Green", "Blue", NULL };
+  static const char *const outs[] = { "Red", "Green", "Blue", NULL };
   static const char *const photos[] = { "Warming (85)", "Warming (LBA)", "Cooling (80)", "Cooling (LBB)", "Red", "Green", "Violet", NULL };
-  if (!d) return;
+  static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", NULL };
+  static const char *const scolors[] = { "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", "Whites", "Neutrals", "Blacks", NULL };
+  int kind = adj_kind_of(id);
+  Layer *l;
+  if (!d || kind < 0) return;
+  l = d->lay[d->active];
+  adj_editing = l->kind == LK_ADJUST && l->adj.kind == kind;
+  if (adj_editing) adj_base = l->adj; else adj_defaults(kind, &adj_base);
+  /* a layer's settings shown as the starting values */
+  sd_init_set = adj_editing; sd_init_choice = 0; sd_init_tick = -1;
+  if (adj_editing) {
+    const int *v = l->adj.v;
+    int k;
+    for (k = 0; k < 6; k++) sd_init_v[k] = v[k];
+    switch (kind) {
+    case AK_HUESAT: sd_init_tick = v[3]; break;
+    case AK_COLORBALANCE: sd_init_v[0] = v[3]; sd_init_v[1] = v[4]; sd_init_v[2] = v[5]; sd_init_choice = 1; sd_init_tick = v[9]; break;
+    case AK_PHOTOFILTER: sd_init_v[0] = v[1]; sd_init_tick = v[2]; break;
+    case AK_LEVELS: sd_init_v[0] = v[0]; sd_init_v[1] = v[2] ? v[2] : 100; sd_init_v[2] = v[1] ? v[1] : 255; sd_init_v[3] = v[3]; sd_init_v[4] = v[4] ? v[4] : 255; break;
+    case AK_CHANNELMIXER: for (k = 0; k < 4; k++) sd_init_v[k] = v[k]; sd_init_tick = v[12]; break;
+    case AK_GRADIENTMAP: sd_init_tick = v[0]; break;
+    case AK_SELECTIVECOLOR: for (k = 0; k < 4; k++) sd_init_v[k] = l->adj.pts[k]; sd_init_tick = v[0]; break;
+    default: break;
+    }
+  }
   switch (id) {
   case ID_ADJ_BC: { static const Param p[] = { { "Brightness:", -150, 150, 0 }, { "Contrast:", -50, 100, 0 } }; slider_dialog("Brightness/Contrast", p, 2, NULL, NULL, NULL, 0, a_bc, NULL); break; }
   case ID_ADJ_EXPOSURE: { static const Param p[] = { { "Exposure (x0.01):", -500, 500, 0 }, { "Offset (x0.001):", -500, 500, 0 }, { "Gamma (x0.01):", 1, 999, 100 } }; slider_dialog("Exposure", p, 3, NULL, NULL, NULL, 0, a_exposure, NULL); break; }
@@ -349,6 +480,11 @@ void dlg_adjust(ULONG id)
   case ID_ADJ_PHOTO: { static const Param p[] = { { "Density (%):", 1, 100, 25 } }; slider_dialog("Photo Filter", p, 1, photos, "Filter:", "Preserve Luminosity", 1, a_photo, NULL); break; }
   case ID_ADJ_POSTERIZE: { static const Param p[] = { { "Levels:", 2, 255, 4 } }; slider_dialog("Posterize", p, 1, NULL, NULL, NULL, 0, a_posterize, NULL); break; }
   case ID_ADJ_THRESHOLD: { static const Param p[] = { { "Threshold Level:", 1, 255, 128 } }; slider_dialog("Threshold", p, 1, NULL, NULL, NULL, 0, a_threshold, NULL); break; }
+  case ID_ADJ_MIXER: { static const Param p[] = { { "Red (%):", -200, 200, 100 }, { "Green (%):", -200, 200, 0 }, { "Blue (%):", -200, 200, 0 }, { "Constant (%):", -200, 200, 0 } };
+    slider_dialog("Channel Mixer", p, 4, outs, "Output Channel:", "Monochrome", 0, a_mixer, NULL); break; }
+  case ID_ADJ_GRADMAP: slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
+  case ID_ADJ_SELCOLOR: { static const Param p[] = { { "Cyan (%):", -100, 100, 0 }, { "Magenta (%):", -100, 100, 0 }, { "Yellow (%):", -100, 100, 0 }, { "Black (%):", -100, 100, 0 } };
+    slider_dialog("Selective Color", p, 4, scolors, "Colors:", "Absolute", 0, a_selcolor, NULL); break; }
   case ID_ADJ_LEVELS: {
     static const Param p[] = { { "Input Black:", 0, 253, 0 }, { "Gamma (x0.01):", 10, 999, 100 }, { "Input White:", 2, 255, 255 }, { "Output Black:", 0, 255, 0 }, { "Output White:", 0, 255, 255 } };
     histogram(d, 0, lev_hist);
@@ -362,15 +498,22 @@ void dlg_adjust(ULONG id)
     histogram(d, 0, hist);
     curve_obj = graph(1, hist, NULL);
     if (!curve_obj) return;
+    if (adj_editing && l->adj.npts >= 2) {
+      struct GData *g = INST_DATA(gcls->mcc_Class, curve_obj);
+      int k;
+      g->npts = l->adj.npts;
+      for (k = 0; k < l->adj.npts * 2; k++) g->pts[k] = l->adj.pts[k];
+    }
     notify_change(curve_obj, MUIA_Graph_Changed);
     slider_dialog("Curves", NULL, 0, channels, "Channel:", NULL, 0, a_curves, VGroup, Child, curve_obj,
                   Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Click the line to add a point, drag points to bend it;\ndrag a point out of the box to take it away."), MUIA_Font, MUIV_Font_Tiny, End, End);
     break; }
-  case ID_ADJ_INVERT: adj_invert(d); break;
+  case ID_ADJ_INVERT: if (!adj_editing) adj_invert(d); break;
   case ID_ADJ_DESAT: adj_desaturate(d); break;
   case ID_ADJ_EQUALIZE: adj_equalize(d); break;
   }
-  if (id == ID_ADJ_CURVES || id == ID_ADJ_LEVELS) { (void)0; }
+  sd_init_set = 0; sd_init_tick = -1; sd_init_choice = 0;
+  adj_editing = 0;
 }
 /* the Curves dialog's graph tells of a moved point through its notification */
 /* (wired in slider_dialog by the extra object: see graph_notify) */
@@ -396,14 +539,111 @@ static void f_max(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_m
 static void f_offset(Doc *d, const LONG *v, int c, int t) { (void)c; flt_offset(d, v[0], v[1], t); }
 static void f_oil(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_oil_paint(d, (int)v[0], (int)v[1]); }
 static void f_vignette(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_vignette(d, (int)v[0]); }
+/* 0.2.1's filters (filters2.c) */
+static void f_dust(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_dust_scratches(d, (int)v[0], (int)v[1]); }
+static void f_rnoise(Doc *d, const LONG *v, int c, int t) { (void)c; flt_reduce_noise(d, (int)v[0], (int)v[1], t); }
+static void f_smart(Doc *d, const LONG *v, int c, int t) { (void)t; flt_smart_blur(d, (int)v[0], (int)v[1], c); }
+static void f_surface(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_surface_blur(d, (int)v[0], (int)v[1]); }
+static void f_lens(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lens_blur(d, (int)v[0], (int)v[1], (int)v[2]); }
+static void f_shape(Doc *d, const LONG *v, int c, int t) { (void)t; flt_shape_blur(d, (int)v[0], c); }
+static void f_spin(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spin_blur(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)v[2]); }
+static void f_polar(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_polar_coordinates(d, c == 0); }
+static void f_shear(Doc *d, const LONG *v, int c, int t)
+{
+  int pts[6];
+  (void)c;
+  pts[0] = 0; pts[1] = 128 + (int)v[0]; pts[2] = 128; pts[3] = 128 + (int)v[1]; pts[4] = 255; pts[5] = 128 + (int)v[2];
+  flt_shear(d, pts, 3, t);
+}
+static void f_zigzag(Doc *d, const LONG *v, int c, int t) { (void)t; flt_zigzag(d, (int)v[0], (int)v[1], c); }
+static void f_glass(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_glass(d, (int)v[0], (int)v[1], (int)v[2], 1234); }
+static void f_ocean(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_ocean_ripple(d, (int)v[0], (int)v[1], 4321); }
+static void f_crystal(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_crystallize(d, (int)v[0], 777); }
+static void f_pointil(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_pointillize(d, (int)v[0], 778); }
+static void f_halftone(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_color_halftone(d, (int)v[0], (int)v[1], (int)v[2], (int)v[3]); }
+static void f_mezzo(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_mezzotint(d, c, 991); }
+static void f_contour(Doc *d, const LONG *v, int c, int t) { (void)t; flt_trace_contour(d, (int)v[0], c == 0); }
+static void f_diffuse(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_diffuse(d, c, 555); }
+static void f_tiles(Doc *d, const LONG *v, int c, int t) { (void)t; flt_tiles(d, (int)v[0], (int)v[1], c, 556); }
+static void f_wind(Doc *d, const LONG *v, int c, int t) { (void)v; flt_wind(d, c, t, 557); }
+static void f_fibers(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_fibers(d, (int)v[0], (int)v[1], (unsigned)v[2]); }
+static void f_flare(Doc *d, const LONG *v, int c, int t) { (void)t; flt_lens_flare(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)v[2], c); }
+static void f_lighting(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lighting_basic(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)(v[2] * (d->w > d->h ? d->w : d->h) / 100), (int)v[3], 0xFFFFFF, (int)v[4]); }
+static void f_deint(Doc *d, const LONG *v, int c, int t) { (void)v; flt_de_interlace(d, c == 1, t); }
+static void f_custom(Doc *d, const LONG *v, int c, int t)
+{
+  /* the 3 x 3 middle of the 5 x 5 kernel from the sliders: centre, edges, corners */
+  int k[25], i;
+  (void)c; (void)t;
+  for (i = 0; i < 25; i++) k[i] = 0;
+  k[12] = (int)v[0]; k[7] = k[11] = k[13] = k[17] = (int)v[1]; k[6] = k[8] = k[16] = k[18] = (int)v[2];
+  flt_custom(d, k, (int)v[3], (int)v[4]);
+}
+/* Filter > Last Filter: the last one again, with the same settings and no dialog */
+void dlg_filter_again(void)
+{
+  Doc *d = cur_doc();
+  if (!d) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  if (last_fn) last_fn(d, last_v, last_choice, last_tick);
+  else if (last_plain) dlg_filter(last_plain);
+  set(app, MUIA_Application_Sleep, FALSE);
+}
 void dlg_filter(ULONG id)
 {
   Doc *d = cur_doc();
   static const char *const radial[] = { "Spin", "Zoom", NULL };
   static const char *const dist[] = { "Uniform", "Gaussian", NULL };
   static const char *const rsize[] = { "Small", "Medium", "Large", NULL };
+  static const char *const smodes[] = { "Normal", "Edge Only", "Overlay Edge", NULL };
+  static const char *const shapes[] = { "Square", "Diamond", "Hexagon", "Triangle", "Disc", NULL };
+  static const char *const polar[] = { "Rectangular to Polar", "Polar to Rectangular", NULL };
+  static const char *const zz[] = { "Around Centre", "Out from Centre", "Pond Ripples", NULL };
+  static const char *const mezz[] = { "Fine Dots", "Medium Dots", "Grainy Dots", "Coarse Dots", "Short Lines", "Medium Lines", "Long Lines", "Short Strokes", "Medium Strokes", "Long Strokes", NULL };
+  static const char *const edges[] = { "Upper", "Lower", NULL };
+  static const char *const diffs[] = { "Normal", "Darken Only", "Lighten Only", "Anisotropic", NULL };
+  static const char *const tfill[] = { "Background Colour", "Foreground Colour", "Inverse Image", "Unaltered Image", NULL };
+  static const char *const winds[] = { "Wind", "Blast", "Stagger", NULL };
+  static const char *const lenses[] = { "50-300mm Zoom", "35mm Prime", "105mm Prime", "Movie Prime", NULL };
+  static const char *const deint[] = { "Odd Fields", "Even Fields", NULL };
   if (!d) return;
+  sd_remember = 1;
+  if (id == ID_F_BLUR || id == ID_F_SHARPEN || id == ID_F_SHARPENMORE || id == ID_F_DESPECKLE || id == ID_F_EDGES || id == ID_F_SOLARIZE ||
+      id == ID_F_CLOUDS || id == ID_F_DIFFCLOUDS || id == ID_F_FACET || id == ID_F_FRAGMENT || id == ID_F_NTSC) { last_fn = NULL; last_plain = id; }
   switch (id) {
+  case ID_F_DUST: { static const Param p[] = { { "Radius (px):", 1, 100, 1 }, { "Threshold:", 0, 255, 0 } }; slider_dialog("Dust & Scratches", p, 2, NULL, NULL, NULL, 0, f_dust, NULL); break; }
+  case ID_F_REDUCENOISE: { static const Param p[] = { { "Strength:", 0, 10, 6 }, { "Preserve Details (%):", 0, 100, 60 } }; slider_dialog("Reduce Noise", p, 2, NULL, NULL, "Reduce Colour Noise", 1, f_rnoise, NULL); break; }
+  case ID_F_SMARTBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 3 }, { "Threshold:", 1, 100, 25 } }; slider_dialog("Smart Blur", p, 2, smodes, "Mode:", NULL, 0, f_smart, NULL); break; }
+  case ID_F_SURFACEBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 5 }, { "Threshold:", 2, 255, 15 } }; slider_dialog("Surface Blur", p, 2, NULL, NULL, NULL, 0, f_surface, NULL); break; }
+  case ID_F_LENSBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 15 }, { "Specular Brightness:", 0, 100, 0 }, { "Threshold:", 0, 255, 255 } }; slider_dialog("Lens Blur", p, 3, NULL, NULL, NULL, 0, f_lens, NULL); break; }
+  case ID_F_SHAPEBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 10 } }; slider_dialog("Shape Blur", p, 1, shapes, "Shape:", NULL, 0, f_shape, NULL); break; }
+  case ID_F_SPINBLUR: { static const Param p[] = { { "Centre X (%):", 0, 100, 50 }, { "Centre Y (%):", 0, 100, 50 }, { "Blur Angle:", 1, 360, 15 } }; slider_dialog("Spin Blur", p, 3, NULL, NULL, NULL, 0, f_spin, NULL); break; }
+  case ID_F_POLAR: slider_dialog("Polar Coordinates", NULL, 0, polar, "Conversion:", NULL, 0, f_polar, NULL); break;
+  case ID_F_SHEAR: { static const Param p[] = { { "Top Shift:", -127, 127, 40 }, { "Middle Shift:", -127, 127, 0 }, { "Bottom Shift:", -127, 127, -40 } }; slider_dialog("Shear", p, 3, NULL, NULL, "Wrap Around", 1, f_shear, NULL); break; }
+  case ID_F_ZIGZAG: { static const Param p[] = { { "Amount:", -100, 100, 10 }, { "Ridges:", 1, 20, 5 } }; slider_dialog("ZigZag", p, 2, zz, "Style:", NULL, 0, f_zigzag, NULL); break; }
+  case ID_F_GLASS: { static const Param p[] = { { "Distortion:", 0, 20, 5 }, { "Smoothness:", 1, 15, 3 }, { "Scaling (%):", 50, 200, 100 } }; slider_dialog("Glass", p, 3, NULL, NULL, NULL, 0, f_glass, NULL); break; }
+  case ID_F_OCEAN: { static const Param p[] = { { "Ripple Size:", 1, 15, 9 }, { "Ripple Magnitude:", 0, 20, 9 } }; slider_dialog("Ocean Ripple", p, 2, NULL, NULL, NULL, 0, f_ocean, NULL); break; }
+  case ID_F_CRYSTALLIZE: { static const Param p[] = { { "Cell Size:", 3, 300, 10 } }; slider_dialog("Crystallize", p, 1, NULL, NULL, NULL, 0, f_crystal, NULL); break; }
+  case ID_F_POINTILLIZE: { static const Param p[] = { { "Cell Size:", 3, 300, 5 } }; slider_dialog("Pointillize", p, 1, NULL, NULL, NULL, 0, f_pointil, NULL); break; }
+  case ID_F_HALFTONE: { static const Param p[] = { { "Max. Radius (px):", 4, 127, 8 }, { "Red Angle:", -360, 360, 108 }, { "Green Angle:", -360, 360, 162 }, { "Blue Angle:", -360, 360, 90 } };
+    slider_dialog("Color Halftone", p, 4, NULL, NULL, NULL, 0, f_halftone, NULL); break; }
+  case ID_F_MEZZOTINT: slider_dialog("Mezzotint", NULL, 0, mezz, "Type:", NULL, 0, f_mezzo, NULL); break;
+  case ID_F_CONTOUR: { static const Param p[] = { { "Level:", 0, 255, 128 } }; slider_dialog("Trace Contour", p, 1, edges, "Edge:", NULL, 0, f_contour, NULL); break; }
+  case ID_F_DIFFUSE: slider_dialog("Diffuse", NULL, 0, diffs, "Mode:", NULL, 0, f_diffuse, NULL); break;
+  case ID_F_TILES: { static const Param p[] = { { "Number of Tiles:", 1, 99, 10 }, { "Maximum Offset (%):", 1, 99, 10 } }; slider_dialog("Tiles", p, 2, tfill, "Fill Empty Area With:", NULL, 0, f_tiles, NULL); break; }
+  case ID_F_WIND: slider_dialog("Wind", NULL, 0, winds, "Method:", "From the Left", 0, f_wind, NULL); break;
+  case ID_F_FIBERS: { static const Param p[] = { { "Variance:", 1, 64, 16 }, { "Strength:", 1, 64, 4 }, { "Seed:", 1, 9999, 1 } }; slider_dialog("Fibers", p, 3, NULL, NULL, NULL, 0, f_fibers, NULL); break; }
+  case ID_F_FLARE: { static const Param p[] = { { "Centre X (%):", 0, 100, 30 }, { "Centre Y (%):", 0, 100, 30 }, { "Brightness (%):", 10, 300, 100 } };
+    slider_dialog("Lens Flare", p, 3, lenses, "Lens Type:", NULL, 0, f_flare, NULL); break; }
+  case ID_F_LIGHTING: { static const Param p[] = { { "Light X (%):", 0, 100, 35 }, { "Light Y (%):", 0, 100, 35 }, { "Radius (%):", 5, 200, 60 }, { "Intensity:", 0, 100, 60 }, { "Ambience:", 0, 100, 20 } };
+    slider_dialog("Lighting Effects", p, 5, NULL, NULL, NULL, 0, f_lighting, NULL); break; }
+  case ID_F_DEINTERLACE: slider_dialog("De-Interlace", NULL, 0, deint, "Eliminate:", "Interpolate (else duplicate)", 1, f_deint, NULL); break;
+  case ID_F_CUSTOM: { static const Param p[] = { { "Centre:", -99, 99, 5 }, { "Edges:", -99, 99, -1 }, { "Corners:", -99, 99, 0 }, { "Scale:", 1, 99, 1 }, { "Offset:", -255, 255, 0 } };
+    slider_dialog("Custom", p, 5, NULL, NULL, NULL, 0, f_custom, NULL); break; }
+  case ID_F_DIFFCLOUDS: flt_difference_clouds(d, d->fg, d->bg, (unsigned)rand()); break;
+  case ID_F_FACET: flt_facet(d); break;
+  case ID_F_FRAGMENT: flt_fragment(d); break;
+  case ID_F_NTSC: flt_ntsc_colors(d, 0); break;
   case ID_F_GAUSS: { static const Param p[] = { { "Radius (x0.1 px):", 1, 2500, 20 } }; slider_dialog("Gaussian Blur", p, 1, NULL, NULL, NULL, 0, f_gauss, NULL); break; }
   case ID_F_BOX: { static const Param p[] = { { "Radius (px):", 1, 500, 5 } }; slider_dialog("Box Blur", p, 1, NULL, NULL, NULL, 0, f_box, NULL); break; }
   case ID_F_MOTION: { static const Param p[] = { { "Angle:", -180, 180, 0 }, { "Distance (px):", 1, 500, 10 } }; slider_dialog("Motion Blur", p, 2, NULL, NULL, NULL, 0, f_motion, NULL); break; }
@@ -432,6 +672,7 @@ void dlg_filter(ULONG id)
   case ID_F_SOLARIZE: flt_solarize(d); break;
   case ID_F_CLOUDS: flt_clouds(d, d->fg, d->bg, (unsigned)rand()); break;
   }
+  sd_remember = 0;
 }
 
 /* ------------------------------------------------------------------ New, Image Size, Canvas Size, Rotate */
@@ -553,25 +794,46 @@ void dlg_rotate(void)
 
 /* ------------------------------------------------------------------ layer, fill, stroke, select */
 static const char *const blends[] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
-  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", NULL };
+  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", NULL };
+static const char *const gblends[] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
+  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", "Pass Through", NULL };
+/* Layer Properties: name, opacity and fill, blend mode (Pass Through for a group), visibility,
+   clipping, Blend If, and the mask's density and feather. One undo step */
 void dlg_layer_props(void)
 {
   Doc *d = cur_doc();
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *ns, *os, *bc, *vc;
+  Object *w, *ns, *os, *fs, *bc, *vc, *cc, *b0, *b1, *b2, *b3, *md = NULL, *mf = NULL, *grp;
   Layer *l;
   char name[200];
-  int ok;
+  int ok, isgroup;
   if (!d) return;
   l = d->lay[d->active];
+  isgroup = l->kind == LK_GROUP;
   utf8_to_latin1(l->name, (u32)strlen(l->name), name, sizeof name);
-  w = dialog_window("Layer Properties", ColGroup(2),
+  grp = ColGroup(2),
         Child, QLabel(tr("Name:"), MUIO_Label_SingleFrame),
         Child, ns = StringObject, StringFrame, MUIA_String_Contents, (ULONG)name, MUIA_String_MaxLen, 60, MUIA_CycleChain, 1, End,
         Child, QLabel(tr("Opacity (%):"), MUIO_Label_Centered), Child, os = slider(0, 100, (l->opacity * 100 + 127) / 255),
-        Child, QLabel(tr("Blend Mode:"), MUIO_Label_Centered), Child, bc = cycle(blends, l->blend),
+        Child, QLabel(tr("Fill Opacity (%):"), MUIO_Label_Centered), Child, fs = slider(0, 100, ((255 - l->fill_cut) * 100 + 127) / 255),
+        Child, QLabel(tr("Blend Mode:"), MUIO_Label_Centered),
+        Child, bc = cycle(isgroup ? gblends : blends, l->blend == BM_PASS ? BM_N : l->blend < BM_N ? l->blend : 0),
+        Child, QLabel(tr("Blend If This Layer:"), MUIO_Label_Centered),
+        Child, HGroup, Child, b0 = slider(0, 255, l->blendif[0]), Child, b1 = slider(0, 255, 255 - l->blendif[1]), End,
+        Child, QLabel(tr("Underlying Layer:"), MUIO_Label_Centered),
+        Child, HGroup, Child, b2 = slider(0, 255, l->blendif[2]), Child, b3 = slider(0, 255, 255 - l->blendif[3]), End,
         Child, vc = check(l->visible), Child, QLabel(tr("Visible"), 0),
-      End, NULL);
+        Child, cc = check(l->clip), Child, QLabel(tr("Clipped to the layer below"), 0),
+      End;
+  if (grp && l->mask) {
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr("Mask Density (%):"), MUIO_Label_Centered));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(md = slider(0, 100, ((255 - l->mask_fade) * 100 + 127) / 255)));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr("Mask Feather (px):"), MUIO_Label_Centered));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)(mf = slider(0, 250, l->mask_feather)));
+  }
+  w = dialog_window("Layer Properties", grp, NULL);
   if (!w) return;
   set(w, MUIA_Window_ActiveObject, (ULONG)ns);
   ok = run_modal(w, ends, NULL) == ID_DLGOK;
@@ -579,14 +841,70 @@ void dlg_layer_props(void)
     char u[200];
     const char *s = (const char *)xget(ns, MUIA_String_Contents);
     size_t o = 0;
+    int bl = (int)xget(bc, MUIA_Cycle_Active);
     for (; *s && o + 3 < sizeof u; s++) {
       UBYTE c = (UBYTE)*s;
       if (c < 0x80) u[o++] = (char)c; else { u[o++] = (char)(0xC0 | (c >> 6)); u[o++] = (char)(0x80 | (c & 63)); }
     }
     u[o] = 0;
-    doc_set_layer_props(d, d->active, u, (int)((xget(os, MUIA_Numeric_Value) * 255 + 50) / 100), (int)xget(bc, MUIA_Cycle_Active), (int)xget(vc, MUIA_Selected));
+    doc_begin(d, "Layer Properties");
+    doc_set_layer_props(d, d->active, u, (int)((xget(os, MUIA_Numeric_Value) * 255 + 50) / 100), isgroup && bl == BM_N ? BM_PASS : bl, (int)xget(vc, MUIA_Selected));
+    l->fill_cut = (u8)(255 - (xget(fs, MUIA_Numeric_Value) * 255 + 50) / 100);
+    l->blendif[0] = (u8)xget(b0, MUIA_Numeric_Value); l->blendif[1] = (u8)(255 - xget(b1, MUIA_Numeric_Value));
+    l->blendif[2] = (u8)xget(b2, MUIA_Numeric_Value); l->blendif[3] = (u8)(255 - xget(b3, MUIA_Numeric_Value));
+    if (!isgroup && (int)xget(cc, MUIA_Selected) != l->clip) doc_set_clip(d, d->active, (int)xget(cc, MUIA_Selected));
+    if (md) doc_mask_set(d, d->active, -1, -1, (int)(255 - (xget(md, MUIA_Numeric_Value) * 255 + 50) / 100), (int)xget(mf, MUIA_Numeric_Value));
+    doc_end(d);
   }
   MUI_DisposeObject(w);
+}
+/* a fill layer's settings: a solid colour, or a gradient from the colours in use (new: make one) */
+int dlg_fill_layer(int make_kind)
+{
+  Doc *d = cur_doc();
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  static const char *const kinds[] = { "Solid Colour", "Gradient", NULL };
+  static const char *const styles[] = { "Linear", "Radial", "Angle", "Reflected", "Diamond", NULL };
+  static const char *const cols[] = { "Foreground to Background", "Background to Foreground", "Black to White", "Keep the Colours", NULL };
+  Object *w, *kc, *sc, *cc, *as, *ss, *rc;
+  FillParams f;
+  int ok, editing;
+  if (!d) return 0;
+  editing = make_kind < 0 && d->lay[d->active]->kind == LK_FILL;
+  if (make_kind < 0 && !editing) return 0;
+  if (editing) f = d->lay[d->active]->fillp;
+  else { memset(&f, 0, sizeof f); f.kind = (u8)make_kind; f.c0 = d->fg; f.c1 = d->bg; f.scale = 100; f.angle = 90; }
+  if (f.kind == 0 && !editing) {
+    LONG c = pick_color("Fill Layer Colour", d->fg);
+    if (c < 0) return 0;
+    f.c0 = (u32)c;
+    return doc_new_fill(d, &f, "Color Fill 1") >= 0;
+  }
+  w = dialog_window(editing ? "Layer Content Options" : "Gradient Fill", ColGroup(2),
+        Child, QLabel(tr("Fill:"), MUIO_Label_Centered), Child, kc = cycle(kinds, f.kind),
+        Child, QLabel(tr("Colours:"), MUIO_Label_Centered), Child, cc = cycle(cols, editing ? 3 : 0),
+        Child, QLabel(tr("Style:"), MUIO_Label_Centered), Child, sc = cycle(styles, f.gkind),
+        Child, QLabel(tr("Angle:"), MUIO_Label_Centered), Child, as = slider(-180, 180, f.angle > 180 ? f.angle - 360 : f.angle),
+        Child, QLabel(tr("Scale (%):"), MUIO_Label_Centered), Child, ss = slider(10, 150, f.scale ? f.scale : 100),
+        Child, rc = check(f.reverse), Child, QLabel(tr("Reverse"), 0),
+      End, NULL);
+  if (!w) return 0;
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  if (ok) {
+    int c = (int)xget(cc, MUIA_Cycle_Active);
+    f.kind = (u8)xget(kc, MUIA_Cycle_Active);
+    if (c == 0) { f.c0 = d->fg; f.c1 = d->bg; }
+    else if (c == 1) { f.c0 = d->bg; f.c1 = d->fg; }
+    else if (c == 2) { f.c0 = 0; f.c1 = 0xFFFFFF; }
+    f.gkind = (int)xget(sc, MUIA_Cycle_Active);
+    f.angle = (int)(LONG)xget(as, MUIA_Numeric_Value); if (f.angle < 0) f.angle += 360;
+    f.scale = (int)xget(ss, MUIA_Numeric_Value);
+    f.reverse = (int)xget(rc, MUIA_Selected);
+    if (editing) doc_set_fill(d, d->active, &f);
+    else doc_new_fill(d, &f, f.kind ? "Gradient Fill 1" : "Color Fill 1");
+  }
+  MUI_DisposeObject(w);
+  return ok;
 }
 void dlg_fill(void)
 {
