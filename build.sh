@@ -7,7 +7,7 @@ export PATH=$VBCC/bin:$PATH
 NDK=${NDK:-/opt/amiga/ndk/Include_H}
 MUI=${MUI:-/opt/amiga/mui/include}
 cd "$(dirname "$0")"
-CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c"
+CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/channels.c core/xform.c core/selx.c core/maglasso.c core/crop.c core/matte.c"
 if [ "$1" != "fast" ]; then
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
@@ -29,6 +29,8 @@ if [ "$1" != "fast" ]; then
   # (and psd-tools and ImageMagick where installed) check the files it wrote
   t exchangetest; /tmp/easel_exchangetest | tail -2
   python3 tests/check_exchange.py | tail -2
+  # 0.7: selections and transforms
+  t selxtest;     /tmp/easel_selxtest | tail -2
 fi
 av1/build-av1.sh amiga
 # Easel itself: every amiga/*.c but convert.c, which is EaselConvert's main

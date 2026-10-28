@@ -108,6 +108,8 @@ void doc_free(Doc *d)
   for (i = 0; i < d->nlay; i++) layer_free(d->lay[i]);
   free(d->sel);
   free(d->lastsel);
+  for (i = 0; i < d->nchan; i++) free(d->chan[i]);     /* 0.7 */
+  free(d->qmask);
   free(d);
 }
 
@@ -626,6 +628,8 @@ typedef struct {
   CycleRange cycle[MAXCYCLES]; int ncycle; u32 modeid; u8 ax, ay;
 } PalState;
 typedef Layer Props;                  /* a layer's settings: everything but its buffers (see props_of) */
+/* 0.7: the alpha channels and Quick Mask plane as they were (doc_note_channels; copies, w x h) */
+typedef struct { u8 *chan[MAXCHANNELS]; char name[MAXCHANNELS][32]; int n; u8 *qmask; } ChanState;
 struct UndoStep {
   char name[64];
   Tile *tiles; int ntiles, captiles;
@@ -634,6 +638,7 @@ struct UndoStep {
   int whole; i32 w, h; Layer *lay[MAXLAYERS]; int nlay, active;
   Props *props; int nprops, pactive;   /* the layers' settings before the step (nprops of them) */
   int has_pal; PalState *pal;         /* 0.4: the palette as it was (malloc'd) */
+  int has_chan; ChanState *chan;      /* 0.7: the channels as they were (malloc'd) */
   long bytes;
   UndoStep *next;
   int open;
@@ -646,6 +651,7 @@ static void step_free(UndoStep *u)
   free(u->tiles);
   free(u->sel);
   free(u->pal);                                            /* 0.4 */
+  if (u->chan) { for (i = 0; i < u->chan->n; i++) free(u->chan->chan[i]); free(u->chan->qmask); free(u->chan); }   /* 0.7 */
   if (u->whole) for (i = 0; i < u->nlay; i++) layer_free(u->lay[i]);
   free(u->props);
   free(u);
@@ -688,15 +694,23 @@ void doc_begin(Doc *d, const char *action)
   u->next = d->undo;
   d->undo = u;
 }
+/* the buffer a tile's plane is in: 0 layer li's pixels, 1 its mask; 0.7: 2 the Quick Mask plane,
+   3 + k alpha channel k (li is 0 for those) */
+static u8 *plane_buf(Doc *d, int li, int plane)
+{
+  if (plane >= 3) return plane - 3 < d->nchan ? d->chan[plane - 3] : NULL;
+  if (plane == 2) return d->qmask;
+  if (li < 0 || li >= d->nlay) return NULL;
+  return plane ? d->lay[li]->mask : d->lay[li]->px;
+}
 static void note_plane(Doc *d, int li, Box r, int plane)
 {
   UndoStep *u = open_step(d);
   i32 tx, ty;
   int bpp = plane ? 1 : 4;
   u8 *buf;
-  if (!u || u->whole || li < 0 || li >= d->nlay) return;
-  buf = plane ? d->lay[li]->mask : d->lay[li]->px;
-  if (!buf) return;
+  if (!u || u->whole || (plane >= 2 && u->has_chan)) return;    /* (0.7: the channels' copy covers their planes) */
+  if (!(buf = plane_buf(d, li, plane))) return;
   r = box_clip(r, doc_box(d));
   if (box_empty(r)) return;
   for (ty = r.y0 / TS; ty <= (r.y1 - 1) / TS; ty++)
@@ -727,6 +741,37 @@ static void note_plane(Doc *d, int li, Box r, int plane)
 }
 void doc_note_layer(Doc *d, int li, Box r) { note_plane(d, li, r, 0); }
 void doc_note_mask(Doc *d, int li, Box r) { note_plane(d, li, r, 1); }
+/* 0.7: the channels' planes */
+void doc_note_chan(Doc *d, int k, Box r) { if (k >= 0 && k < d->nchan) note_plane(d, 0, r, 3 + k); }
+void doc_note_qmask(Doc *d, Box r) { note_plane(d, 0, r, 2); }
+void doc_note_channels(Doc *d)
+{
+  UndoStep *u = open_step(d);
+  ChanState *c;
+  size_t n = (size_t)d->w * d->h;
+  int i, k;
+  if (!u || u->has_chan) return;
+  if (!(c = (ChanState *)calloc(1, sizeof *c))) return;
+  for (i = 0; i < d->nchan; i++) {
+    if (!(c->chan[i] = (u8 *)malloc(n))) { while (i--) free(c->chan[i]); free(c); return; }
+    memcpy(c->chan[i], d->chan[i], n);
+  }
+  c->n = d->nchan;
+  memcpy(c->name, d->chan_name, sizeof c->name);
+  if (d->qmask && (c->qmask = (u8 *)malloc(n)) != NULL) memcpy(c->qmask, d->qmask, n);
+  /* tiles of these planes noted already are covered by the copy */
+  for (i = k = 0; i < u->ntiles; i++) {
+    if (u->tiles[i].plane >= 2) {
+      Tile *t = &u->tiles[i];
+      i32 tw = d->w - t->tx * TS < TS ? d->w - t->tx * TS : TS, th = d->h - t->ty * TS < TS ? d->h - t->ty * TS : TS;
+      u->bytes -= (long)tw * th; free(t->px); continue;
+    }
+    u->tiles[k++] = u->tiles[i];
+  }
+  u->ntiles = k;
+  u->chan = c; u->has_chan = 1;
+  u->bytes += (long)(c->n + (c->qmask != NULL)) * (long)n + (long)sizeof *c;
+}
 void doc_note_sel(Doc *d)
 {
   UndoStep *u = open_step(d);
@@ -782,6 +827,7 @@ void doc_note_all(Doc *d)
   }
   u->has_sel = 1; u->selbox = d->selbox;
   if (d->sel && (u->sel = (u8 *)malloc((size_t)d->w * d->h))) memcpy(u->sel, d->sel, (size_t)d->w * d->h);
+  doc_note_channels(d);                                    /* 0.7: and the channels */
 }
 void doc_end(Doc *d)
 {
@@ -790,7 +836,7 @@ void doc_end(Doc *d)
   int k;
   if (!u || --u->open > 0) return;
   /* nothing noted and nothing about the layers changed: no step */
-  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal) {
+  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal && !u->has_chan) {
     int same = u->nprops == d->nlay && u->pactive == d->active, i;
     for (i = 0; same && i < d->nlay; i++) {
       Props now;
@@ -838,9 +884,9 @@ static void swap_step(Doc *d, UndoStep *u)
       int bpp = t->plane ? 1 : 4;
       u8 tmp[TS * 4], *buf;
       if (t->layer >= d->nlay) continue;
-      buf = t->plane ? d->lay[t->layer]->mask : d->lay[t->layer]->px;
+      buf = plane_buf(d, t->layer, t->plane);              /* (0.7: or a channel's plane) */
       if (!buf) continue;
-      if (t->plane) d->lay[t->layer]->maskfx_ok = 0;
+      if (t->plane == 1) d->lay[t->layer]->maskfx_ok = 0;
       for (row = 0; row < th; row++) {
         u8 *a = t->px + (long)row * tw * bpp, *b = buf + ((long)(y0 + row) * d->w + x0) * bpp;
         memcpy(tmp, a, (size_t)tw * bpp); memcpy(a, b, (size_t)tw * bpp); memcpy(b, tmp, (size_t)tw * bpp);
@@ -867,6 +913,18 @@ static void swap_step(Doc *d, UndoStep *u)
     u8 *ts = d->sel;
     Box tb = d->selbox;
     if (u->whole || !u->sel || !ts || 1) { d->sel = u->sel; d->selbox = u->selbox; u->sel = ts; u->selbox = tb; }
+  }
+  if (u->has_chan && u->chan) {                            /* 0.7: the channels swapped */
+    ChanState *c = u->chan;
+    u8 *tq = d->qmask, *tc[MAXCHANNELS];
+    char tn[32];
+    int tcount = d->nchan;
+    memcpy(tc, d->chan, sizeof tc);
+    memcpy(d->chan, c->chan, sizeof tc); d->nchan = c->n; d->qmask = c->qmask;
+    memcpy(c->chan, tc, sizeof tc); c->n = tcount; c->qmask = tq;
+    for (i = 0; i < MAXCHANNELS; i++) {
+      memcpy(tn, d->chan_name[i], 32); memcpy(d->chan_name[i], c->name[i], 32); memcpy(c->name[i], tn, 32);
+    }
   }
   if (u->has_pal && u->pal) {                              /* 0.4: the palette and mode swapped */
     PalState *cur = (PalState *)malloc(sizeof *cur);       /* (off the stack: it is over 1 KB) */
