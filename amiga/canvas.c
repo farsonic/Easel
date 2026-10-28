@@ -96,6 +96,7 @@ struct Data {
   int ov_tool;                           /* the tool whose brush outline the overlay drawn has */
   /* 0.8: the colour samplers in the overlay drawn (image pixels), and the one being dragged */
   LONG ov_sx[4], ov_sy[4]; int ov_nsamp, samp_drag;
+  int ov_cursor;                         /* the painting cursor drawn: 0 outline, 1 crosshair, 2 both */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -229,14 +230,14 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
       for (; ; p += step) {
         LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
         if (s >= (k == 0 ? ix1 : iy1)) break;
-        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, 0x808080, 1); }
-        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, 0x808080, 1);
+        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, prefs.grid_color, 1); }
+        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, prefs.grid_color, 1);
       }
     }
   }
   if (g->show_guides) {
-    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, 0x00C0FF, 0); }
-    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, 0x00C0FF, 0); }
+    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, prefs.guide_color, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
   }
   if (g->show_rulers) {
     int minor, major = ruler_step(d->z, 50, &minor);
@@ -275,14 +276,14 @@ static void ruler_labels(struct Data *d, Object *obj)
   for (p = floor(-d->ox / d->z / major) * major; (LONG)(p * d->z) + d->ox < d->vw; p += major) {
     LONG s = (LONG)floor(p * d->z) + d->ox;
     if (s < RULER) continue;
-    sprintf(buf, "%ld", (long)p);
+    unit_text(buf, p, doc->w, doc->dpi, 0);             /* (0.8: in the preferences' units) */
     Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
   }
   for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
     LONG s = (LONG)floor(p * d->z) + d->oy;
     int c, n;
     if (s < RULER) continue;
-    sprintf(buf, "%ld", (long)p);
+    unit_text(buf, p, doc->h, doc->dpi, 0);
     /* (the digits one under another, as the ruler is narrow) */
     for (c = 0, n = (int)strlen(buf); c < n; c++) { Move(rp, _mleft(obj) + 3, _mtop(obj) + s + 2 + c * rp->TxHeight + rp->TxBaseline); Text(rp, (STRPTR)buf + c, 1); }
   }
@@ -463,11 +464,14 @@ static void ov_draw(struct Data *d, Object *obj)
   SetDrMd(rp, COMPLEMENT);
   SetDrPt(rp, 0xFFFF);
   SetAPen(rp, 1);
-  /* the brush's outline (or a cross when it is too small to see) */
+  /* the brush's outline (or a cross when it is too small to see); 0.8: or a crosshair, as the
+     preferences ask (Caps Lock for it too) */
   if (d->cur_in && brushlike(t) && d->drag != DR_LINE) {
     LONG r = brush_r(d);
-    if (r >= 3) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
-    else { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
+    int cross = d->ov_cursor != 0;
+    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
+    if (cross && (r >= 3 || d->ov_cursor == 1)) { xline(rp, d->cur_x - 6, d->cur_y, d->cur_x + 6, d->cur_y); xline(rp, d->cur_x, d->cur_y - 6, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 6); }
+    else if (r < 3) { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
   }
   switch (d->drag) {
   case DR_MARQUEE:
@@ -558,6 +562,7 @@ static void ov_show(struct Data *d, Object *obj)
   /* (what depends on the tool is remembered, so it is taken away later as it was put up) */
   d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();
   d->ov_tool = d->space ? TL_HAND : tool;
+  d->ov_cursor = prefs.caps_precise && (d->qual & IEQUALIFIER_CAPSLOCK) ? 1 : prefs.cursor;
   {
     DocView *v = cur_view();
     int i;
@@ -1438,6 +1443,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     case 'a': id = ID_SELALL; break;
     case 'd': id = ID_DESELECT; break;
     case 'i': id = alt ? ID_IMAGESIZE : shift ? ID_INVERSE : ID_ADJ_INVERT; break;
+    case 'k': id = ID_PREFS; break;                                      /* 0.8: Preferences */
     case 'l': id = shift ? ID_AUTOTONE : ID_ADJ_LEVELS; break;
     case 'm': id = ID_ADJ_CURVES; break;
     case 'u': id = shift ? ID_ADJ_DESAT : ID_ADJ_HUESAT; break;

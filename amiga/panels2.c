@@ -223,7 +223,9 @@ static void info_draw(struct IData *d, Object *obj)
   if (!doc) return;
   if (canvas_pt.in) {
     int h, s, v;
-    sprintf(buf, "X %ld   Y %ld", (long)canvas_pt.x, (long)canvas_pt.y);
+    char ux[24], uy[24];
+    unit_text(ux, canvas_pt.x, doc->w, doc->dpi, 1); unit_text(uy, canvas_pt.y, doc->h, doc->dpi, 1);   /* (0.8: in the preferences' units) */
+    sprintf(buf, "X %s   Y %s", ux, uy);
     theme_text(rp, theme_font(), x, y, buf, tpen(T_TEXT)); y += lh;
     if (canvas_pt.has_rgb) {
       rgb_hsb(canvas_pt.rgba[0], canvas_pt.rgba[1], canvas_pt.rgba[2], &h, &s, &v);
@@ -238,8 +240,12 @@ static void info_draw(struct IData *d, Object *obj)
   theme_text(rp, theme_font(), x, y, buf, tpen(T_DIM)); y += lh;
   if (doc->sel) {
     Box b;
-    if (sel_bounds(doc, &b)) sprintf(buf, "%s: %ld x %ld at %ld, %ld", tr("Selection"), (long)(b.x1 - b.x0), (long)(b.y1 - b.y0), (long)b.x0, (long)b.y0);
-    else strcpy(buf, tr("Selection: empty"));
+    char u[4][24];
+    if (sel_bounds(doc, &b)) {
+      unit_text(u[0], b.x1 - b.x0, doc->w, doc->dpi, 0); unit_text(u[1], b.y1 - b.y0, doc->h, doc->dpi, 1);
+      unit_text(u[2], b.x0, doc->w, doc->dpi, 0); unit_text(u[3], b.y0, doc->h, doc->dpi, 0);
+      sprintf(buf, "%s: %s x %s at %s, %s", tr("Selection"), u[0], u[1], u[2], u[3]);
+    } else strcpy(buf, tr("Selection: empty"));
   } else strcpy(buf, tr("No selection"));
   theme_text(rp, theme_font(), x, y, buf, tpen(T_DIM)); y += lh + 4;
   /* 0.8: the colour samplers, each with its colour */

@@ -137,7 +137,8 @@ static struct NewMenu menus[] = {
   S("Distort", 0, ID_XF_DISTORT), S("Perspective", 0, ID_XF_PERSPECTIVE), SBAR, S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE), BAR,
-  I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF),
+  I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
+  I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
   M("Image"),
   H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
   S("Color Table...", 0, ID_COLORTABLE), S("Amiga Screen Mode...", 0, ID_SCREENMODE),
@@ -207,6 +208,7 @@ static struct NewMenu menus[] = {
   I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
   I("Hide/Show Panels (Tab)", 0, ID_TOGGLEPANELS), I("Hide/Show Right Panels (Shift-Tab)", 0, ID_TOGGLERIGHT), BAR,
   T("Dark Interface", 0, ID_DARKUI),
+  H("Screen Mode"), S("Window", 0, ID_SCR_WINDOW), S("Easel's Own Screen", 0, ID_SCR_OWN), S("Full Screen", 0, ID_SCR_FULL), SBAR, S("Choose Screen Mode...", 0, ID_SCR_CHOOSE),
   M("Window"),
   I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC), BAR,
   I("Palette", 0, ID_WIN_PALETTE), I("Brush Settings", 0, ID_WIN_BRUSHSET), I("DPaint Brush", 0, ID_WIN_DPAINT),
@@ -523,10 +525,11 @@ static void update_menus(void)
   {
     static char labels[NRECENT][64];
     for (i = 0; i < NRECENT; i++) {
-      if (recent[i][0]) { const char *f = (const char *)FilePart((STRPTR)recent[i]); snprintf(labels[i], sizeof labels[i], "%d  %s", i + 1, f); }
+      int on = recent[i][0] && i < prefs.nrecent;        /* (0.8: as many as the preferences list) */
+      if (on) { const char *f = (const char *)FilePart((STRPTR)recent[i]); snprintf(labels[i], sizeof labels[i], "%d  %s", i + 1, f); }
       else snprintf(labels[i], sizeof labels[i], "%d", i + 1);
       menu_set(ID_RECENT0 + i, MUIA_Menuitem_Title, (ULONG)labels[i]);
-      menu_set(ID_RECENT0 + i, MUIA_Menuitem_Enabled, recent[i][0] != 0);
+      menu_set(ID_RECENT0 + i, MUIA_Menuitem_Enabled, on);
     }
   }
   menu_set(ID_RULERS, MUIA_Menuitem_Checked, has && d->guides.show_rulers);
@@ -574,6 +577,7 @@ static int doc_show(Doc *d, const char *path, int fmt)
   if (path && path[0]) { strncpy(v->path, path, sizeof v->path - 1); base_name(path, v->name, sizeof v->name); }
   else sprintf(v->name, "%s-%d", tr("Untitled"), ++untitled);
   if (!d->fg && !d->bg) { d->fg = 0x000000; d->bg = 0xFFFFFF; }
+  if (!d->guides.grid_x) { d->guides.grid_x = d->guides.grid_y = (u16)prefs.grid_spacing; d->guides.grid_sub = (u8)prefs.grid_sub; }   /* (0.8: the preferences' grid) */
   /* the History Brush's source: the picture as it opened, if there is room for a copy */
   if (AvailMem(MEMF_ANY | MEMF_LARGEST) > (ULONG)d->w * d->h * 8) v->snap = snapshot_take(d);
   curdoc = ndocs++;
@@ -825,7 +829,13 @@ static int write_doc(Doc *d, const char *path, int fmt)
   return ok;
 }
 /* ------------------------------------------------------------------ 0.6: autosave and recovery */
-#define RECOVERY "PROGDIR:Recovery"
+#define RECOVERY prefs.recovery         /* (0.8: a preference, PROGDIR:Recovery at first) */
+/* a file's path in the Recovery drawer */
+static void rec_path(char *out, size_t cap, const char *file)
+{
+  strncpy(out, RECOVERY, cap - 1); out[cap - 1] = 0;
+  AddPart((STRPTR)out, (STRPTR)file, cap);
+}
 /* the state an autosave holds: the undo step on top and how deep */
 static ULONG doc_sig(Doc *d) { return (ULONG)d->undo ^ ((ULONG)d->undo_depth << 20) ^ (ULONG)d->nlay; }
 static void recovery_drop(DocView *v)
@@ -853,7 +863,7 @@ static void autosave(int force)
     if (!v->recov[0]) {
       for (k = 0; v->name[k] && k < 40; k++) clean[k] = strchr("/:*?#\"", v->name[k]) ? '_' : v->name[k];
       clean[k] = 0;
-      snprintf(v->recov, sizeof v->recov, "%s/%s-%lx.ora", RECOVERY, clean, (unsigned long)(ULONG)v->doc);
+      { char fn[80]; snprintf(fn, sizeof fn, "%s-%lx.ora", clean, (unsigned long)(ULONG)v->doc); rec_path(v->recov, sizeof v->recov, fn); }
     }
     if (!(data = ora_write(v->doc, &len))) continue;
     snprintf(tmp, sizeof tmp, "%s.new", v->recov);
@@ -875,7 +885,7 @@ static void recovery_offer(void)
       while (ExNext(l, fib) && n < 16) {
         int len = (int)strlen(fib->fib_FileName);
         if (fib->fib_DirEntryType < 0 && len > 4 && !Stricmp((STRPTR)fib->fib_FileName + len - 4, (STRPTR)".ora"))
-          snprintf(names[n++], sizeof names[0], "%s/%s", RECOVERY, fib->fib_FileName);
+          rec_path(names[n++], sizeof names[0], fib->fib_FileName);
       }
     FreeDosObject(DOS_FIB, fib);
   }
@@ -903,6 +913,7 @@ static void recovery_offer(void)
 }
 static int save_as(void);
 static void hsnaps_free(DocView *v);
+static void save_prefs(void);
 static void icon_for(Doc *d, const char *path);
 static void paste_amiga(Doc *d);
 static int save(void)
@@ -910,11 +921,11 @@ static int save(void)
   DocView *v = cur_view();
   if (!v) return 0;
   if (!v->path[0] || !codec_writable_06(v->fmt)) return save_as();
-  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 &&
+  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 && prefs.ask_flatten &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
   }
-  if (v->fmt == FMT_JPEG) export_quality = 90;
+  if (v->fmt == FMT_JPEG) export_quality = prefs.jpeg_quality;
   if (!write_doc(v->doc, v->path, v->fmt)) return 0;
   icon_for(v->doc, v->path);
   v->doc->dirty = 0;
@@ -936,7 +947,12 @@ static int save_as(void)
   if (!v) return 0;
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
-  if (v->doc->nlay > 1 || !v->path[0]) with_ext(path, sizeof path, ".ora");
+  if (v->doc->nlay > 1) with_ext(path, sizeof path, ".ora");
+  else if (!v->path[0]) {
+    /* 0.8: a new picture in the format the preferences ask for */
+    static const char *const ext[SF_N] = { ".ora", ".png", ".jpg", ".tif", ".psd", ".iff" };
+    with_ext(path, sizeof path, ext[prefs.save_fmt]);
+  }
   if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga)")) return 0;
   fmt = ext_fmt(path);
   if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
@@ -1232,7 +1248,7 @@ static int close_all(void)
 }
 static void new_doc(void)
 {
-  LONG w = 800, h = 600, dpi = 72;
+  LONG w = 800, h = 600, dpi = prefs.dpi;
   int bg = 0;
   Doc *d;
   Doc *c = cur_doc();
@@ -1244,6 +1260,15 @@ static void new_doc(void)
   doc_show(d, "", FMT_ORA);
 }
 static void transform_dialog(void);
+/* 0.8: the window closed and opened again (the theme, its text size or the screen changed) */
+static void win_reopen(void)
+{
+  set(win, MUIA_Window_Open, FALSE);
+  theme_set_dark(pref_dark);
+  theme_set_large(prefs.large_text);
+  set(win, MUIA_Window_Open, TRUE);
+  refresh_all();
+}
 /* File > Place: another picture as a new layer, centred, then scaled and turned as asked */
 static void place_file(void)
 {
@@ -1442,11 +1467,18 @@ static void command(ULONG id)
     return;
   case ID_DARKUI:
     pref_dark = !pref_dark;
-    set(win, MUIA_Window_Open, FALSE);
-    theme_set_dark(pref_dark);
-    set(win, MUIA_Window_Open, TRUE);
-    refresh_all();
+    win_reopen();
     return;
+  case ID_PREFS: {
+    int reopen = 0;
+    if (dlg_preferences(&reopen)) {
+      if (reopen) win_reopen();
+      save_prefs();
+      DoMethod(canvas, MUIM_Canvas_Refresh);
+      refresh_panels();
+      DoMethod(optbar, MUIM_Opts_Refresh);
+    }
+    return; }
   case ID_AUTOSAVE: job_begin(NULL, "Autosave"); autosave(0); job_end(); return;
   case ID_AUTOSAVESET: {
     char buf[16];
@@ -1997,6 +2029,7 @@ static void load_prefs(void)
     else if (!strncmp(line, "screen=", 7)) { strncpy(pub_screen, line + 7, sizeof pub_screen - 1); }
     else if (!strncmp(line, "dir=", 4)) { strncpy(lastdir, line + 4, sizeof lastdir - 1); }
     else if (!strncmp(line, "recent=", 7) && nr < NRECENT) { strncpy(recent[nr], line + 7, sizeof recent[0] - 1); nr++; }
+    else prefs_line(line);
   }
   fclose(f);
 }
@@ -2010,6 +2043,7 @@ static void save_prefs(void)
   if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
   if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
   { int i; for (i = 0; i < NRECENT; i++) if (recent[i][0]) fprintf(f, "recent=%s\n", recent[i]); }
+  prefs_write(f);                        /* 0.8: the Preferences window's settings */
   fclose(f);
 }
 
@@ -2043,7 +2077,10 @@ int main(int argc, char **argv)
     }
     wb_tooltypes(arg_screen, sizeof arg_screen);
   }
+  prefs_defaults();
   load_prefs();
+  prefs_apply();
+  theme_set_large(prefs.large_text);
   if (arg_screen[0]) strcpy(pub_screen, arg_screen);
   if (pub_screen[0]) {
     struct Screen *sc = LockPubScreen((STRPTR)pub_screen);

@@ -1225,7 +1225,7 @@ void dlg_export(int fmt)
   Object *w, *q;
   if (fmt != FMT_JPEG) return;
   w = dialog_window("JPEG Options", ColGroup(2),
-        Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, 85),
+        Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, prefs.jpeg_quality),
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Low quality makes small files; JPEG keeps no layers\nor transparency (it is laid over white)."), End,
       End, "Save");
   if (!w) return;

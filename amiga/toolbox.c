@@ -323,7 +323,8 @@ static int fields_for(int t, Field *f)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
   if (xform_pending) {
     /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
-    TEXT(xform_info); BUTTON("Apply", ID_COMMIT); BUTTON("Cancel", ID_CANCEL);
+    if (prefs.xform_numbers) TEXT(xform_info);      /* (0.8: Preferences > Tools) */
+    BUTTON("Apply", ID_COMMIT); BUTTON("Cancel", ID_CANCEL);
     TEXT("Corners scale (Shift: in proportion), outside turns; Ctrl-corner distorts");
     return n;
   }

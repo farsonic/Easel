@@ -223,6 +223,34 @@ void pens_free(void);
 /* the nearest pen to an 0xRRGGBB on scr (ReleasePen it) */
 LONG rgb_pen(struct Screen *scr, ULONG c);
 
+/* ------------------------------------------------------------------ 0.8: preferences (prefs.c) */
+enum { SF_ORA, SF_PNG, SF_JPEG, SF_TIFF, SF_PSD, SF_ILBM, SF_N };               /* the format new pictures save as */
+enum { UN_PIXELS, UN_INCHES, UN_CM, UN_MM, UN_PERCENT, UN_N };                   /* rulers' and Info's units */
+enum { SM_WINDOW, SM_SCREEN, SM_FULL };                                           /* View > Screen Mode */
+typedef struct {
+  int tips, large_text;               /* help bubbles; the interface's large text */
+  int cursor;                         /* painting cursor: 0 the brush's outline, 1 a crosshair, 2 both */
+  int caps_precise, xform_numbers;    /* Caps Lock gives the crosshair; Free Transform's numbers shown */
+  int save_fmt, jpeg_quality, ask_flatten, nrecent;    /* SF_, 1-100, before saving layers flat, 0-10 */
+  char recovery[256];                 /* the autosave drawer */
+  int units, dpi;                     /* UN_, a new picture's resolution */
+  ULONG guide_color, grid_color;      /* 0xRRGGBB */
+  int grid_spacing, grid_sub;         /* a new picture's grid */
+  int scratch_on, scratch_mb; char scratch[256];        /* undo steps spilled to a drawer, up to so much */
+  int undo_mb, undo_levels;           /* undo's memory and states */
+  int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
+} Prefs;
+extern Prefs prefs;
+extern int pref_autosave, pref_icons;
+extern const char *const unit_names[UN_N + 1];
+void prefs_defaults(void);
+int  prefs_line(const char *line);    /* a line of Easel.prefs taken, if it is one of prefs' */
+void prefs_write(FILE *f);
+void prefs_apply(void);               /* the settings handed to the core and the theme */
+int  dlg_preferences(int *reopen);    /* Edit > Preferences: 1 if OK (reopen: the window must open again) */
+/* a length of px pixels in the units chosen (length: the side it is measured along, for per cent) */
+void unit_text(char *out, double px, long length, int dpi, int name);
+
 /* ------------------------------------------------------------------ main.c helpers */
 extern Object *app, *win, *canvas, *toolbox, *optbar, *colorpanel, *layerpanel, *historypanel, *statusbar, *doctabs;
 extern FontSet fonts;

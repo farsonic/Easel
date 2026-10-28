@@ -1141,12 +1141,14 @@ void theme_icon(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, int di
 
 /* (see theme.h) the panes and rulers' bubbles; the ribbon builds its own the same way, with the
    shortcut on the title line */
+int theme_tips = 1;
 const char *theme_bubble(const char *name, const char *body)
 {
   static char out[500];
   char *o;
   size_t room;
   int col = 0;
+  if (!theme_tips) return NULL;                   /* (0.8: Preferences > General > Help bubbles off) */
   snprintf(out, sizeof out, "\33b%s\33n", name);
   if (!body || !body[0]) return out;
   o = out + strlen(out);

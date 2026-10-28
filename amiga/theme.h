@@ -99,4 +99,5 @@ void theme_icon_pen(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, LO
    wrapped at about 46 characters. Returns a static buffer, good until the next call (MUI copies it
    into the bubble straight away) */
 const char *theme_bubble(const char *name, const char *body);
+extern int theme_tips;                   /* 0: no help bubbles (theme_bubble gives NULL) */
 #endif
