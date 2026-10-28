@@ -38,6 +38,7 @@
 const char verstag[] = "$VER: EaselConvert 0.6 (28.10.2026) converts pictures (Easel's codecs)";
 
 struct GfxBase *GfxBase;                 /* for dtload.c's older-datatype path */
+size_t __stack = 16384;                  /* vbcc's startup gives main this much when the Shell gives less */
 
 #define TEMPLATE "FROM/M/A,TO/K,FORMAT/K,WIDTH/N,HEIGHT/N,SCALE/N,QUALITY/N,COLORS/N,DITHER/S,ICON/S,ICONTYPE/K,DEFTOOL/K,QUIET/S"
 enum { A_FROM, A_TO, A_FORMAT, A_WIDTH, A_HEIGHT, A_SCALE, A_QUALITY, A_COLORS, A_DITHER, A_ICON, A_ICONTYPE, A_DEFTOOL, A_QUIET, A_N };
