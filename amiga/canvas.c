@@ -537,6 +537,8 @@ static void path_overlay(struct Data *d, Object *obj, struct RastPort *rp)
   for (i = 0; i < d->npa; i++) {
     const PathAnchor *a = &d->pa[i];
     LONG x = to_sx(d, obj, a->x), y = to_sy(d, obj, a->y);
+    /* (Path Selection shows only the chosen subpath's anchors, as does a path of very many, such as text's outlines) */
+    if (!a->sel && (!d->ov_handles || d->npa > 300)) continue;
     if (a->sel) RectFill(rp, x - 2, y - 2, x + 2, y + 2); else xrect(rp, x - 2, y - 2, x + 2, y + 2);
     if (a->sel && d->ov_handles) {
       int h;
@@ -2205,7 +2207,7 @@ static void release(struct Data *d, Object *obj)
     draw_all(d, obj);
     tell_changed(d, obj);
     break;
-  case DR_TYPESEL: break;
+  case DR_TYPESEL: tell_changed(d, obj); break;          /* (the Layers panel shows the layer being edited) */
   case DR_PATH:
     d->drag = DR_PATH; ov_hide(d, obj); d->drag = DR_NONE;
     path_release(d, obj);

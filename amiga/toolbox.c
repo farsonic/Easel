@@ -533,6 +533,7 @@ static const char *field_help(const Field *f)
     { "Make Selection", "Makes the active path the selection." },
   };
   int i;
+  if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
   for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!strcmp(h[i].label, f->label)) return h[i].help;
   if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in (Amiga bitmap fonts are marked).";
   if (f->kind == F_CHOICE && f->choices == taa) return "How the text's edges are smoothed: None (hard), Sharp or Smooth.";
@@ -542,6 +543,7 @@ static const char *field_help(const Field *f)
   if (f->kind == F_CHOICE && f->choices == salign) return "Where the stroke goes: centred on the shape's edge, inside it or outside it.";
   if (f->kind == F_SWATCH && f->min == ID_TEXTCOLOR) return "The text's colour (the foreground colour). Click to choose another: the selected text, or all of it, takes it.";
   if (f->kind == F_SWATCH && f->min == ID_STROKECOLOR) return "The stroke's colour. Click to choose another.";
+  if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
   if (f->kind == F_SCRUB && f->val == &opt.stroke_width) return "The stroke's width in pixels.";
   if (f->kind == F_CHOICE && f->choices == gradcols) return "The gradient's colours: foreground to background, or the foreground fading out.";
   if (f->kind == F_CHOICE && f->choices == croplist) return "The crop's proportions or size: free, the picture's own, a ratio, or a size it is resampled to.";
