@@ -544,7 +544,8 @@ TextLayout *text_layout(const TextParams *tpin)
         else base = tp->box ? tp->y + tp->space_before + asc : tp->y;
         first_line = 0;
       } else {
-        double step = tp->leading > 0 ? tp->leading : lead;
+        volatile double step = lead;                   /* (volatile: vbcc's -O2 lost the step here, putting every line on the first) */
+        if (tp->leading > 0) step = tp->leading;
         if (k == g0) step += prev_after + tp->space_before;
         base += tp->vertical ? -step : step;
       }
