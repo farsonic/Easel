@@ -55,7 +55,7 @@
 #define MUIKEYF_WINDOW_CLOSE (1UL << MUIKEY_WINDOW_CLOSE)
 #endif
 
-const char verstag[] = "$VER: Easel 0.2 (28.10.2026) a picture editor for the Amiga (MUI)";
+const char verstag[] = "$VER: Easel 0.5 (28.10.2026) a picture editor for the Amiga (MUI)";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -977,11 +977,13 @@ static void command(ULONG id)
     }
     return; }
   case ID_ABOUT:
-    ask("OK", "%s", "\33cEasel 0.2\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
-        "Layers with blend modes, painting tools, selections,\nadjustments and filters; reads and writes PNG, JPEG, BMP,\n"
-        "IFF ILBM and OpenRaster (.ora), and reads many more.\n\nWritten in C for MUI; drawn with its own icons.\n\n"
+    ask("OK", "%s", "\33cEasel 0.5\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
+        "Live layers (groups, masks, adjustment and fill layers), palettes,\nindexed pictures and colour cycling, the Amiga's screen modes,\n"
+        "brushes, gradients and patterns, selections, adjustments and filters.\n"
+        "Reads and writes PNG, JPEG, BMP, GIF, IFF ILBM and OpenRaster (.ora),\nand reads many more.\n\n"
+        "Written in C for MUI; drawn with its own icons.\n\n"
         "AVIF decoding: dav1d, by VideoLAN and the dav1d authors.\n"
-        "Picture readers ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
+        "Picture readers and brush code ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
         "Fonts: Liberation, Carlito and Caladea.\nSee Licenses.txt for their licences.");
     return;
   case ID_DARKUI:

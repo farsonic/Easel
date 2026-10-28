@@ -1,8 +1,8 @@
-# Easel 0.2
+# Easel 0.5
 
 Easel is a picture editor for the Amiga, laid out the way PhotoCraft is. The options bar runs
 along the top, the tools down the left, and open pictures are tabs over the canvas. The Color,
-History and Layers panels sit down the right, the status bar along the bottom, and the menus
+Swatches, Brushes, History and Layers panels sit down the right, the status bar along the bottom, and the menus
 are in the screen's title bar as usual. It is written in C for MUI and draws its own dark
 interface and icons. None of the icons are copied from any other program.
 
@@ -18,6 +18,74 @@ interface and icons. None of the icons are copied from any other program.
   exactly. On an AGA or ECS screen with 256 colours or fewer they are dithered to a colour cube.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
+
+## New in 0.5: brushes and painting
+
+- Brush tips: round (with angle, roundness and flips), square, sampled from the picture (Edit >
+  Define Brush Preset) and Photoshop .abr brushes (version 1, 2 and 6 to 10). The **Brushes**
+  panel keeps the presets; Window > Brush Settings sets the tip, spacing, shape dynamics,
+  scattering, colour dynamics, transfer, smoothing, symmetry (mirror, radial and mandala) and
+  airbrush build-up.
+- Deluxe Paint brushes: pick up part of the picture as a brush (Edit > Pick Up Brush, from the
+  selection), flip, turn, scale, halve, double or outline it, and paint with it as Matte, Color,
+  Replace, Smear, Shade, Blend or Cycle (Window > DPaint Brush). Brushes load and save as IFF ILBM.
+- New tools: Pattern Stamp and History Brush (with the Clone Stamp, S and Y), Color Replacement
+  (with the Brush), Background Eraser and Magic Eraser (with the Eraser).
+- Gradients with any number of colour and opacity stops, each with a midpoint: the Gradient
+  tool's list of presets, and the Gradient Editor (its Edit button). GIMP .ggr gradients load and
+  save. The Gradient tool can dither.
+- Patterns: Edit > Define Pattern makes one from the selection; the Paint Bucket and Edit > Fill
+  with Pattern use the one chosen. Pattern sets load and save as IFF.
+- The **Swatches** panel: click to set the foreground (Alt-click the background); load and save
+  GIMP .gpl, Photoshop .aco, .act and .ase, IFF CMAP and Easel's own swatch files.
+- A new colour picker, with HSB, RGB, Lab and hex.
+- Edit > Take Snapshot sets what the History Brush paints back (at first, the picture as it opened).
+
+## New in 0.4: palettes and the Amiga screen
+
+- Image > Mode: RGB, Grayscale, Indexed Color (2 to 256 colours, from the picture with median
+  cut, octree or Wu's method, an OCS/ECS 12-bit palette, the current palette or a preset such as
+  Workbench, MagicWB or the web colours; 12 dithers including Floyd-Steinberg, Atkinson and
+  ordered) and Bitmap.
+- An indexed picture keeps its palette as you paint: everything drawn is brought back to its
+  colours, in the same undo step.
+- Image > Color Table (or Window > Palette): edit the colours (RGB or HSV), spread, exchange and
+  copy, lock entries, make an Extra Half-Brite palette, and load or
+  save palettes (.act, .aco, .ase, .gpl, JASC/RIFF .pal, IFF and PNG).
+- Colour cycling: the CRNG, CCRT and DRNG ranges of IFF pictures are kept, can be edited, and
+  play on the canvas.
+- Image > Amiga Screen Mode: choose the display mode (PAL and NTSC, lores to super-hires, laced,
+  Multiscan, Euro72, DblPAL, DblNTSC) and chipset; Easel warns when the picture doesn't fit it.
+- Saving: palette ILBMs open as indexed pictures and save with their palette, cycling, ModeID and
+  pixel aspect. File > Export > IFF ILBM (Amiga options) writes 1 to 8 planes, EHB, HAM6, HAM8,
+  SHAM or 24-bit, with a mask plane or transparent colour. GIF can be saved and exported, and
+  PNG keeps an indexed or grey picture's palette.
+- View: rulers, a grid (Grid Settings), guides (New Guide, Clear Guides) and Snap, which the
+  marquees, shapes, line, gradient and crop snap to.
+
+## New in 0.3: live layers
+
+- Layer groups (folders): new, group and ungroup, collapse, pass-through blending, merge.
+- Layer masks: reveal or hide all, from the selection or from transparency; paint on the mask
+  (click its thumbnail, or Layer > Layer Mask > Edit Mask/Layer); density and feather; enable,
+  link, invert, apply or delete.
+- Clipping masks, and locks for position and for everything.
+- Adjustment layers for every adjustment (including the new Channel Mixer, Gradient Map and
+  Selective Color), changed at any time by double-clicking them; solid colour and gradient fill
+  layers.
+- Fill opacity and Blend If in Layer Properties; Align and Distribute; Merge Layers; Paste Into.
+- The Layers panel shows groups indented, mask thumbnails, clipping arrows and the four locks;
+  Shift-click and Ctrl-click pick several layers; drag a layer onto an open group to put it in.
+- OpenRaster files keep groups, masks, clipping, adjustment and fill layers.
+
+## New in 0.2.1
+
+- Nine more blend modes: Dissolve, Linear Burn, Darker Color, Lighter Color, Vivid Light, Linear
+  Light, Pin Light, Hard Mix and Divide.
+- 29 more filters, among them Lens Blur, Smart and Surface Blur, Reduce Noise, Dust & Scratches,
+  Polar Coordinates, Glass, Ocean Ripple, Crystallize, Pointillize, Color Halftone, Mezzotint,
+  Lens Flare, Lighting Effects, Fibers, De-Interlace, NTSC Colors and Custom; Filter > Last Filter.
+- Select > Reselect, Grow and Similar.
 
 ## New in 0.2
 
@@ -81,10 +149,11 @@ next to itself.
 | Magic Wand | W | tolerance, contiguous, sample all layers |
 | Crop | C | drag a box and adjust its handles; Return or a double-click inside crops, Esc cancels |
 | Eyedropper | I | point, 3 × 3 or 5 × 5 sample, current or all layers; Alt-click sets the background colour |
-| Clone Stamp | S | Alt-click sets the source, then paint |
-| Brush / Pencil | B | size, hardness, blend mode, opacity, flow; Shift-click paints a straight line from the last stroke; Alt picks a colour |
-| Eraser | E | erases to transparency |
-| Gradient / Paint Bucket | G | linear, radial, angle, reflected, diamond; foreground to background or to transparent |
+| Clone Stamp / Pattern Stamp | S | Alt-click sets the clone source, then paint; the pattern stamp paints the chosen pattern |
+| History Brush | Y | paints back the snapshot |
+| Brush / Pencil / Color Replacement | B | size, hardness, blend mode, opacity, flow; Shift-click paints a straight line from the last stroke; Alt picks a colour; Brush Settings for tips and dynamics |
+| Eraser / Background Eraser / Magic Eraser | E | erases to transparency; the background eraser takes away the colour under the brush's centre; the magic eraser the area of similar colour clicked |
+| Gradient / Paint Bucket | G | gradient presets and the Gradient Editor; linear, radial, angle, reflected, diamond; the bucket fills with the foreground or a pattern |
 | Blur / Sharpen / Smudge | R | strength |
 | Dodge / Burn / Sponge | O | exposure |
 | Text | T | click where the text goes, then type it (a bar, \|, starts a new line); font, size, alignment; the text becomes a layer of its own |
@@ -164,20 +233,25 @@ PhotoCraft's Ctrl shortcuts work as well as the menus' Amiga-key ones:
   - Stylize: Emboss, Find Edges, Solarize, Oil Paint and Mosaic.
   - Render: Clouds and Vignette.
   - Other: High Pass, Minimum, Maximum and Offset.
-- **View**: Zoom In, Zoom Out, Fit on Screen, 100%, 200%, 50%, and Dark Interface (on by
-  default; turn it off for a light grey look).
-- **Window**: Next and Previous Document.
+- **View**: Zoom In, Zoom Out, Fit on Screen, 100%, 200%, 50%, Rulers, Grid, Guides, Snap,
+  Grid Settings, New Guide, Clear Guides, and Dark Interface (on by default; turn it off for a
+  light grey look).
+- **Window**: Next and Previous Document, Palette, Brush Settings and DPaint Brush.
+
+The menu lists above are 0.2's; the New in sections above add to them (the Layer menu now has
+New Adjustment Layer, New Fill Layer, Layer Mask, Clipping, Group, Align and Lock; Image has
+Mode; Edit has the brush and pattern commands).
 
 ## Files
 
 | Format | Opens | Saves |
 |---|---|---|
-| OpenRaster (.ora) | layers, names, opacity, blend modes, visibility, locks | the same: Easel's own format, which GIMP, Krita and MyPaint also open |
+| OpenRaster (.ora) | layers and groups, names, opacity, blend modes, visibility, locks, masks, clipping, adjustment and fill layers | the same: Easel's own format, which GIMP, Krita and MyPaint also open |
 | PNG | every kind, with transparency | 8-bit RGB or RGBA, with resolution |
 | JPEG | baseline and progressive | baseline, quality 1 to 100 |
 | BMP | 1, 4, 8, 16, 24 and 32-bit, RLE | 24-bit, or 32-bit with transparency |
-| IFF ILBM | 1 to 8 planes, EHB, HAM6, HAM8, 24 and 32-bit deep, PBM | 24-bit, or 8-bit (256 colours) |
-| GIF | the first frame, with transparency | — |
+| IFF ILBM | 1 to 8 planes, EHB, HAM6, HAM8, 24 and 32-bit deep, PBM; a palette picture opens indexed, with its colour cycling | 24-bit, 256 colours, or with the Amiga options: 1 to 8 planes, EHB, HAM6/HAM8, SHAM, mask, cycling, ModeID |
+| GIF | the first frame, with transparency | 256 colours or the picture's palette |
 | AVIF | 8, 10 and 12-bit, 4:2:0, 4:2:2, 4:4:4 and grey, transparency, tiled (grid) pictures, rotation and mirroring | — |
 | WebP | lossy, lossless, with transparency; the first frame of an animation | — |
 | TIFF | the first page: uncompressed, PackBits, LZW, Deflate, CCITT fax, JPEG; 1 to 32-bit and float; grey, palette, RGB, CMYK, Lab; strips or tiles | — |
@@ -205,7 +279,7 @@ another screen. `DEBUG=file` writes a log.
 ## Not included
 
 Easel leaves out printing and ARexx. Copying pictures to other programs through the clipboard,
-and adjustment layers, may come later.
+animated brushes and drawing guides by dragging from the rulers may come later.
 
 ## Credits and licences
 
@@ -219,5 +293,6 @@ Font License). Licenses.txt, next to Easel, lists them all with their licence te
 The Source drawer holds Easel's C source. `core/` is portable C99: the document, layers and blend
 modes, undo, painting, selections, adjustments, filters, text and the file formats. `av1/` is dav1d
 (the AV1 decoder for AVIF), adapted for vbcc. It has native tests (`tests/coretest.c`,
-`tests/codectest.c`, `tests/rasterstest.c`, `tests/amigafmttest.c`, and `tests/check_avif.py`) run under the address and undefined-behaviour
-sanitizers. `amiga/` is the MUI front end. `build.sh` runs the tests and builds Easel with vbcc.
+`tests/codectest.c`, `tests/rasterstest.c`, `tests/amigafmttest.c`, `tests/layertest.c`,
+`tests/quicktest.c`, `tests/palettetest.c`, `tests/brushtest.c`, `tests/check_avif.py` and
+`tests/check_palette.py`) run under the address and undefined-behaviour sanitizers. `amiga/` is the MUI front end. `build.sh` runs the tests and builds Easel with vbcc.
