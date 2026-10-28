@@ -83,7 +83,7 @@ struct Stroke {
   double next;                        /* the distance from there to the next dab */
   double px, py;                      /* the dab before (smudge, smear) */
   double ix, iy, ip;                  /* the last point given (smoothing) */
-  int smoothing, cmode, finished;
+  int smoothing, cmode, finished, coarse;
   long step, ndabs; u32 dabi;
   double dir, dir0; int have_dir;
   u8 scol[3]; int have_scol;          /* Color Dynamics once a stroke */
@@ -274,9 +274,9 @@ static DabImg *get_dab(Stroke *s, double diam, double angle, double round, int f
   }
   while (angle > 180) angle -= 360;
   while (angle <= -180) angle += 360;
-  /* (half degrees for big dabs; small ones look the same in 2 degree steps, and jittered angles
-     then find their dab in the cache far more often) */
-  ka = kd >= 4 * 64 || s->b.custom ? (int)floor(angle * 2 + 0.5) : (int)floor(angle / 2 + 0.5) * 4;
+  /* (half degrees; but small dabs with a jittered or steered angle look the same in 2 degree
+     steps, and then find their dab in the cache far more often) */
+  ka = kd >= 4 * 64 || s->b.custom || !s->coarse ? (int)floor(angle * 2 + 0.5) : (int)floor(angle / 2 + 0.5) * 4;
   if (kr == 100 && !s->b.tip && !s->b.custom && !fx && !fy) ka = 0;     /* a disc looks the same at any angle */
   for (i = 0; i < NCACHE; i++) {
     c = &s->cache[i];
@@ -943,6 +943,7 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
   }
   rgb_of(s->color, s->col);
   s->cmode = s->b.dyn.transfer_on || s->b.dyn.pressure_opacity;
+  s->coarse = s->b.dyn.shape_on && (s->b.dyn.angle.jitter > 0 || s->b.dyn.angle.control != CTL_OFF);
   s->ntx = (d->w + TS - 1) / TS; s->nty = (d->h + TS - 1) / TS;
   nt = (long)s->ntx * s->nty;
   s->mask = (u8 **)calloc((size_t)nt, sizeof(u8 *));
@@ -1023,20 +1024,22 @@ void stroke_end(Stroke *s)
 /* ------------------------------------------------------------------ previews */
 u8 *brush_dab_preview(const Brush *b, int *w, int *h)
 {
-  Stroke s;
+  Stroke *s = (Stroke *)calloc(1, sizeof *s);    /* (too big for a 68k stack) */
   DabImg *di;
-  u8 *out;
-  memset(&s, 0, sizeof s);
-  s.b = *b;
-  if (s.b.size < 1) s.b.size = 1;
-  if (s.b.size > 5000) s.b.size = 5000;
-  if (s.b.tip && (!s.b.tip->a || s.b.tip->w < 1)) s.b.tip = NULL;
-  if (s.b.custom && (!s.b.custom->px || s.b.custom->w < 1)) s.b.custom = NULL;
-  if (s.b.tip) { s.mip[0] = (Tip *)s.b.tip; s.nmip = 1; }
-  di = get_dab(&s, s.b.custom ? 0 : s.b.size, s.b.angle, s.b.roundness > 0 ? s.b.roundness / 100.0 : 1, b->flip_x != 0, b->flip_y != 0);
-  out = NULL;
+  u8 *out = NULL;
+  int i;
+  if (!s) return NULL;
+  s->b = *b;
+  if (s->b.size < 1) s->b.size = 1;
+  if (s->b.size > 5000) s->b.size = 5000;
+  if (s->b.tip && (!s->b.tip->a || s->b.tip->w < 1)) s->b.tip = NULL;
+  if (s->b.custom && (!s->b.custom->px || s->b.custom->w < 1)) s->b.custom = NULL;
+  if (s->b.tip) { s->mip[0] = (Tip *)s->b.tip; s->nmip = 1; }
+  di = get_dab(s, s->b.custom ? 0 : s->b.size, s->b.angle, s->b.roundness > 0 ? s->b.roundness / 100.0 : 1, b->flip_x != 0, b->flip_y != 0);
   if (di && (out = (u8 *)malloc((size_t)di->w * di->h))) { memcpy(out, di->a, (size_t)di->w * di->h); *w = di->w; *h = di->h; }
-  { int i; for (i = 0; i < NCACHE; i++) if (s.cache[i].used) dab_free(&s.cache[i]); for (i = 1; i < s.nmip; i++) tip_free(s.mip[i]); }
+  for (i = 0; i < NCACHE; i++) if (s->cache[i].used) dab_free(&s->cache[i]);
+  for (i = 1; i < s->nmip; i++) tip_free(s->mip[i]);
+  free(s);
   return out;
 }
 

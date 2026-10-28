@@ -720,7 +720,7 @@ CustomBrush *cbrush_load(const char *path, char *err, size_t errcap)
 }
 
 /* ------------------------------------------------------------------ snapshots */
-Snapshot *snapshot_take(Doc *d, int merged)
+static Snapshot *snap(Doc *d, int merged)
 {
   Snapshot *s;
   if (d->active < 0 || d->active >= d->nlay) return NULL;
@@ -731,4 +731,6 @@ Snapshot *snapshot_take(Doc *d, int merged)
   else { memcpy(s->px, d->lay[d->active]->px, (size_t)d->w * d->h * 4); strncpy(s->name, d->lay[d->active]->name, sizeof s->name - 1); }
   return s;
 }
+Snapshot *snapshot_take(Doc *d) { return snap(d, 0); }
+Snapshot *snapshot_take_merged(Doc *d) { return snap(d, 1); }
 void snapshot_free(Snapshot *s) { if (s) { free(s->px); free(s); } }

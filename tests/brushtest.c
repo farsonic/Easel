@@ -662,7 +662,7 @@ static void tools(void)
     Brush b = brush(PT_BRUSH, 20, 100, 100);
     int good = 1;
     for (y = 0; y < 30; y++) for (x = 0; x < 50; x++) { u8 *p = px(d, 0, x, y); p[0] = (u8)(x * 5); p[1] = (u8)(y * 8); }
-    sn = snapshot_take(d, 0);
+    sn = snapshot_take(d);
     line(d, &b, 0xFFFF00, 5, 15, 45, 15);
     ok("history: painted over", px(d, 0, 25, 15)[0] == 255 && px(d, 0, 25, 15)[2] == 0);
     b = brush(PT_HISTORY, 24, 100, 100);
@@ -891,7 +891,7 @@ static void random_strokes(int rounds)
   CustomBrush *cb = cbrush_new(9, 7);
   Pattern *pat = pattern_builtin(PAT_BRICKS, 16);
   Doc *d = doc2(97, 71);
-  Snapshot *sn = snapshot_take(d, 1);
+  Snapshot *sn = snapshot_take_merged(d);
   int r, i;
   long k;
   for (k = 0; k < 63; k++) { cb->px[k * 4] = (u8)(k * 4); cb->px[k * 4 + 3] = k % 5 ? 255 : 0; }

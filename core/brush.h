@@ -121,7 +121,8 @@ int    brush_symmetry(const BrushDynamics *dy, i32 w, i32 h, double x, double y,
 
 /* ------------------------------------------------------------------ the History Brush */
 typedef struct Snapshot { i32 w, h; u8 *px; char name[64]; } Snapshot;   /* RGBA, the canvas's size */
-Snapshot *snapshot_take(Doc *d, int merged);        /* the active layer, or (merged) everything visible */
+Snapshot *snapshot_take(Doc *d);                    /* a copy of the active layer (a layer without pixels: merged) */
+Snapshot *snapshot_take_merged(Doc *d);             /* everything visible, merged */
 void      snapshot_free(Snapshot *s);
 
 /* ------------------------------------------------------------------ the Magic Eraser */
