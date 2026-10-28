@@ -113,8 +113,9 @@ static struct NewMenu menus[] = {
   I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
-  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), SBAR,
+  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD), SBAR,
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
+  I("File Info...", 0, ID_FILEINFO), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
   I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Toggle Last State", 0, ID_TOGGLELAST), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
@@ -733,6 +734,9 @@ static int ext_fmt(const char *path)
   if (!Stricmp((STRPTR)e, (STRPTR)".iff") || !Stricmp((STRPTR)e, (STRPTR)".ilbm") || !Stricmp((STRPTR)e, (STRPTR)".lbm")) return FMT_ILBM;
   if (!Stricmp((STRPTR)e, (STRPTR)".ora")) return FMT_ORA;
   if (!Stricmp((STRPTR)e, (STRPTR)".gif")) return FMT_GIF;
+  if (!Stricmp((STRPTR)e, (STRPTR)".tif") || !Stricmp((STRPTR)e, (STRPTR)".tiff")) return FMT_TIFF;
+  if (!Stricmp((STRPTR)e, (STRPTR)".tga")) return FMT_TGA;
+  if (!Stricmp((STRPTR)e, (STRPTR)".psd")) return FMT_PSD;
   return FMT_UNKNOWN;
 }
 int export_quality = 85, export_indexed;
@@ -748,7 +752,12 @@ static int write_doc(Doc *d, const char *path, int fmt)
   if (fmt == FMT_ORA) data = ora_write(d, &len);
   /* 0.4: GIF; an indexed (or grey) picture's own palette kept in PNG and ILBM */
   else if (fmt == FMT_GIF) data = gif_write_doc(d, 256, QM_WU, DI_FS, 0, &len);
-  else if (fmt == FMT_PNG && d->mode != MODE_RGB) data = doc_png_encode(d, d->dpi, &len);
+  /* 0.6: TIFF (LZW), Targa (run-length), Photoshop with its layers; PNG and JPEG with File Info */
+  else if (fmt == FMT_TIFF) data = tiff_encode_doc(d, TIFFC_LZW, &len);
+  else if (fmt == FMT_TGA) data = tga_write_doc(d, 1, &len);
+  else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
+  else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
+  else if (fmt == FMT_JPEG) data = jpeg_write_doc(d, export_quality, &len);
   else if (fmt == FMT_ILBM && d->mode == MODE_INDEXED && !export_indexed) {
     IlbmOpts o;
     char err[120];
@@ -857,8 +866,8 @@ static int save(void)
 {
   DocView *v = cur_view();
   if (!v) return 0;
-  if (!v->path[0] || (!codec_writable(v->fmt) && v->fmt != FMT_GIF)) return save_as();
-  if (v->fmt != FMT_ORA && v->doc->nlay > 1 &&
+  if (!v->path[0] || !codec_writable_06(v->fmt)) return save_as();
+  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
   }
@@ -885,7 +894,7 @@ static int save_as(void)
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
   if (v->doc->nlay > 1 || !v->path[0]) with_ext(path, sizeof path, ".ora");
-  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff|gif)")) return 0;
+  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga)")) return 0;
   fmt = ext_fmt(path);
   if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
@@ -905,7 +914,7 @@ static void export_as(int fmt, int indexed)
 {
   DocView *v = cur_view();
   char path[512];
-  static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff", ".gif" };
+  static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff", ".gif", ".ora", ".avif", ".tif", ".psd", ".tga" };
   if (!v) return;
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
@@ -962,7 +971,7 @@ static void save_copy(void)
   if (!v) return;
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, v->doc->nlay > 1 ? "-copy.ora" : "-copy.png");
-  if (!file_request(1, "Save a copy as (the extension picks the format)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff|gif)")) return;
+  if (!file_request(1, "Save a copy as (the extension picks the format)", path, sizeof path, "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   write_doc(v->doc, path, fmt);
@@ -981,7 +990,7 @@ static void export_scaled(void)
   if (pct < 1 || pct > 1000) { ask("OK", "%s", tr("The scale goes from 1 to 1000 per cent.")); return; }
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
-  if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, "#?.(png|jpg|bmp|iff|gif)")) return;
+  if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, "#?.(png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1007,7 +1016,7 @@ static void layers_to_files(void)
   if (!v) return;
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
-  if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, "#?.(png|jpg|bmp|iff|gif)")) return;
+  if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, "#?.(png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1290,6 +1299,10 @@ static void command(ULONG id)
   case ID_EXPILBM: export_as(FMT_ILBM, 0); return;
   case ID_EXPILBM8: export_as(FMT_ILBM, 1); return;
   case ID_EXPGIF: export_as(FMT_GIF, 0); return;
+  case ID_EXPTIFF: export_as(FMT_TIFF, 0); return;
+  case ID_EXPTGA: export_as(FMT_TGA, 0); return;
+  case ID_EXPPSD: export_as(FMT_PSD, 0); return;
+  case ID_FILEINFO: if (d) dlg_file_info(d); return;
   case ID_EXPILBMOPT: export_ilbm_options(); return;
   case ID_SAVECOPY: save_copy(); return;
   case ID_EXPORTAS: export_scaled(); return;

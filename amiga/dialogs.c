@@ -929,6 +929,55 @@ void dlg_fill(void)
   if (k == 5) { LONG p = pick_color("Fill Colour", d->fg); if (p < 0) return; c = (u32)p; }
   fill_selection(d, c, op, mode);
 }
+/* a Latin-1 string (from a gadget) as UTF-8 */
+static void latin1_utf8(const char *s, char *out, size_t cap)
+{
+  size_t o = 0;
+  for (; *s && o + 3 < cap; s++) {
+    unsigned char c = (unsigned char)*s;
+    if (c < 0x80) out[o++] = (char)c;
+    else { out[o++] = (char)(0xC0 | (c >> 6)); out[o++] = (char)(0x80 | (c & 0x3F)); }
+  }
+  out[o] = 0;
+}
+static Object *string_text(const char *utf8, int maxlen)
+{
+  char buf[520];
+  utf8_to_latin1(utf8, strlen(utf8), buf, sizeof buf);
+  return StringObject, StringFrame, MUIA_String_Contents, (ULONG)buf, MUIA_String_MaxLen, maxlen, MUIA_CycleChain, 1, End;
+}
+/* File > File Info: the picture's title, author, description, keywords, copyright and web address,
+   kept in the files that carry them (PNG, JPEG, TIFF, PSD, ORA) */
+void dlg_file_info(Doc *d)
+{
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  Object *w, *s[6];
+  static const char *const labels[] = { "Title:", "Author:", "Description:", "Keywords:", "Copyright:", "Web address:" };
+  char *fields[6];
+  size_t caps[6];
+  int i;
+  fields[0] = d->info.title; caps[0] = sizeof d->info.title;
+  fields[1] = d->info.author; caps[1] = sizeof d->info.author;
+  fields[2] = d->info.description; caps[2] = sizeof d->info.description;
+  fields[3] = d->info.keywords; caps[3] = sizeof d->info.keywords;
+  fields[4] = d->info.copyright; caps[4] = sizeof d->info.copyright;
+  fields[5] = d->info.url; caps[5] = sizeof d->info.url;
+  w = dialog_window("File Info", ColGroup(2),
+        Child, QLabel(tr(labels[0]), MUIO_Label_SingleFrame), Child, s[0] = string_text(fields[0], 120),
+        Child, QLabel(tr(labels[1]), MUIO_Label_SingleFrame), Child, s[1] = string_text(fields[1], 120),
+        Child, QLabel(tr(labels[2]), MUIO_Label_SingleFrame), Child, s[2] = string_text(fields[2], 500),
+        Child, QLabel(tr(labels[3]), MUIO_Label_SingleFrame), Child, s[3] = string_text(fields[3], 250),
+        Child, QLabel(tr(labels[4]), MUIO_Label_SingleFrame), Child, s[4] = string_text(fields[4], 250),
+        Child, QLabel(tr(labels[5]), MUIO_Label_SingleFrame), Child, s[5] = string_text(fields[5], 250),
+        Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Saved in PNG, JPEG, TIFF, PSD and ORA files; keywords separated by commas"), End,
+      End, NULL);
+  if (!w) return;
+  if (run_modal(w, ends, NULL) == ID_DLGOK) {
+    for (i = 0; i < 6; i++) latin1_utf8((const char *)xget(s[i], MUIA_String_Contents), fields[i], caps[i]);
+    d->dirty = 1;
+  }
+  MUI_DisposeObject(w);
+}
 /* Edit > Fade: the last change mixed back by an opacity and blend mode */
 void dlg_fade(void)
 {
