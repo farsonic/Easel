@@ -1,4 +1,4 @@
-# Easel 0.6
+# Easel 0.7
 
 Easel is a picture editor for the Amiga, laid out the way PhotoCraft is. The options bar runs
 along the top, the tools down the left, and open pictures are tabs over the canvas. The Color,
@@ -18,6 +18,32 @@ interface and icons. None of the icons are copied from any other program.
   exactly. On an AGA or ECS screen with 256 colours or fewer they are dithered to a colour cube.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
+
+## New in 0.7: selections and transforms
+
+- Free Transform on the canvas (Edit > Free Transform, Amiga-T): drag a corner to scale (Shift keeps
+  the proportions), a side to stretch, inside to move, outside to turn (Shift: 15 degree steps);
+  Ctrl and a corner distorts, Ctrl-Shift and a side skews, Ctrl-Alt-Shift and a corner sets the
+  perspective. Return applies it, Esc puts it back. Edit > Transform also has Scale, Rotate, Skew,
+  Distort, Perspective and Again, and its flips and quarter turns are exact and follow the
+  selection. (Turning a whole large layer takes a while on a 68040; a selection is quicker.)
+- Select > Transform Selection, Save Selection and Load Selection (with Replace, Add, Subtract,
+  Intersect and Invert), and a Channels tab beside Layers listing the saved selections: click one to
+  load it, Shift-click to add.
+- Quick Mask (Q, or Select > Edit in Quick Mask Mode): the selection shows as a red overlay to
+  paint with the Brush, Pencil or Eraser (black takes away, white adds); Q again turns it back into
+  a selection.
+- Marquee styles: Normal, Fixed Ratio, Fixed Size, Single Row and Single Column; and Anti-alias for
+  the lassos, the elliptical marquee and the Magic Wand.
+- Select > Color Range: sampled colours (the foreground's) or Reds, Yellows, Greens, Cyans, Blues,
+  Magentas, Highlights, Midtones, Shadows and Skin Tones, with Fuzziness, Invert and a preview.
+- New tools: the Magnetic Lasso (with the lassos: it follows edges as you move; click to add points,
+  Backspace takes one back, Return or a double-click closes it) and the Ruler (with the Eyedropper:
+  measures length and angle; Straighten Layer, or the whole picture, levels what it measured).
+- Crop presets, among them the Amiga's PAL and NTSC sizes (320 x 256, 320 x 200 and more).
+- The Move tool copies when you Alt-drag.
+- Layer > Matting: Defringe, Remove Black Matte and Remove White Matte.
+- Crop, Canvas Size, Image Size and the rotations now keep layer masks and saved selections in step.
 
 ## New in 0.6: exchange
 
