@@ -91,19 +91,36 @@ int heal_blend(u8 *out, const u8 *base, const u8 *src, const u8 *mask, i32 bw, i
     }
   }
   if (!push_pull(f, known, bw, bh)) { free(f); free(known); return 0; }
-  /* relaxation towards the harmonic membrane */
-  iters = (bw > bh ? bw : bh) + 20;
-  if (iters > 160) iters = 160;
-  for (it = 0; it < iters; it++)
-    for (y = 0; y < bh; y++)
-      for (x = 0; x < bw; x++) {
-        long kk = (long)y * bw + x, l = x > 0 ? kk - 1 : kk, r = x < bw - 1 ? kk + 1 : kk, u = y > 0 ? kk - bw : kk, dn = y < bh - 1 ? kk + bw : kk;
+  /* relaxation towards the harmonic membrane, over the unknown pixels only (as many sweeps as the
+     area allows: push-pull has already given the broad shape) */
+  {
+    long nu = 0, *idx;
+    for (k = 0; k < n; k++) if (!known[k]) nu++;
+    iters = (bw > bh ? bw : bh) + 20;
+    if (iters > 160) iters = 160;
+    if (nu > 0 && (long)iters * nu > 6000000L) iters = (int)(6000000L / nu);
+    if (iters < 8) iters = 8;
+    /* each unknown pixel and its four neighbours (the edge repeated), as offsets into f */
+    if (nu > 0 && (idx = (long *)malloc((size_t)nu * 5 * sizeof(long)))) {
+      long j = 0;
+      for (y = 0; y < bh; y++) for (x = 0; x < bw; x++) {
+        long kk = (long)y * bw + x, *e;
         if (known[kk]) continue;
-        for (c = 0; c < 3; c++) {
-          float avg = (f[l * 3 + c] + f[r * 3 + c] + f[u * 3 + c] + f[dn * 3 + c]) * 0.25f;
-          f[kk * 3 + c] += 1.7f * (avg - f[kk * 3 + c]);
-        }
+        e = idx + j * 5; j++;
+        e[0] = kk * 3; e[1] = (x > 0 ? kk - 1 : kk) * 3; e[2] = (x < bw - 1 ? kk + 1 : kk) * 3;
+        e[3] = (y > 0 ? kk - bw : kk) * 3; e[4] = (y < bh - 1 ? kk + bw : kk) * 3;
       }
+      for (it = 0; it < iters; it++)
+        for (j = 0; j < nu; j++) {
+          const long *e = idx + j * 5;
+          for (c = 0; c < 3; c++) {
+            float avg = (f[e[1] + c] + f[e[2] + c] + f[e[3] + c] + f[e[4] + c]) * 0.25f;
+            f[e[0] + c] += 1.7f * (avg - f[e[0] + c]);
+          }
+        }
+      free(idx);
+    }
+  }
   for (k = 0; k < n; k++) {
     int m = mask[k];
     if (!m) { if (out != base) memcpy(out + k * 4, base + k * 4, 4); continue; }
