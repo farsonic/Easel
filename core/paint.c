@@ -1,16 +1,14 @@
 /*
- * paint.c - the tools' work on the document (see paint.h): brush strokes, fills, gradients,
- * shapes, selections, moving and transforming, the canvas, and Easel's own clipboard.
- *
- * Brush strokes follow Photoshop's rules: flow builds up dab by dab, but a stroke never covers more
- * than its opacity, however often it crosses itself. For that a stroke keeps, in tiles made as it
- * reaches them, how much it has covered each pixel and what the pixel was before it began.
+ * paint.c - the tools' work on the document (see paint.h): fills, gradients, shapes, selections,
+ * moving and transforming, the canvas, and Easel's own clipboard. (Brush strokes are in stroke.c.)
  */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include "paint.h"
+#include "gradient.h"
+#include "pattern.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -22,7 +20,6 @@ static int sscanf_like_layer(const char *s, int *v)
   return 1;
 }
 
-#define TS 64
 static int mul255(int a, int b) { int t = a * b + 128; return (t + (t >> 8)) >> 8; }
 static int clamp255(double v) { return v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5); }
 static void rgb_of(u32 c, u8 *p) { p[0] = (u8)(c >> 16); p[1] = (u8)(c >> 8); p[2] = (u8)c; }
@@ -53,187 +50,7 @@ static Layer *paintable(Doc *d)
 static Box work_box(Doc *d) { return d->sel ? box_clip(d->selbox, doc_box(d)) : doc_box(d); }
 
 /* ------------------------------------------------------------------ brush strokes */
-struct Stroke {
-  Doc *d; Layer *l; Brush b; u8 col[3];
-  i32 ntx, nty;
-  u8 **mask, **orig;                 /* per tile: coverage so far, and the pixels before the stroke */
-  u8 *dab; int dsz;                  /* the brush tip: dsz x dsz alphas */
-  double x, y, left;                 /* the last dab, and the distance to the next one */
-  double px, py;                     /* (smudge: the dab before) */
-};
-/* the brush tip: a disc with a soft edge that starts at the hardness (a pencil: hard, no smoothing) */
-static void make_dab(Stroke *s)
-{
-  double r = s->b.size / 2.0, inner, dx, dy, dist;
-  int i, j, n;
-  n = (int)ceil(s->b.size) + 2;
-  if (n < 3) n = 3;
-  s->dsz = n;
-  if (!(s->dab = (u8 *)calloc((size_t)n * n, 1))) return;
-  inner = s->b.tool == PT_PENCIL ? r : r * s->b.hardness / 100.0;
-  for (j = 0; j < n; j++)
-    for (i = 0; i < n; i++) {
-      double a;
-      dx = i + 0.5 - n / 2.0; dy = j + 0.5 - n / 2.0;
-      dist = sqrt(dx * dx + dy * dy);
-      if (s->b.tool == PT_PENCIL) a = s->b.size <= 1 ? (i == n / 2 && j == n / 2) : dist <= r ? 1 : 0;
-      else if (dist <= inner) a = 1;
-      else if (dist >= r + 0.5) a = 0;
-      else if (inner >= r - 1) a = r + 0.5 - dist;           /* a hard edge: smoothed over a pixel */
-      else { double t = (dist - inner) / (r - inner); if (t > 1) t = 1; a = 1 - t * t * (3 - 2 * t); }
-      if (a < 0) a = 0;
-      if (a > 1) a = 1;
-      s->dab[j * n + i] = (u8)(a * 255 + 0.5);
-    }
-}
-/* the tile holding pixel x, y made ready: its pixels saved for undo and as the stroke's original */
-static int tile_ready(Stroke *s, i32 x, i32 y)
-{
-  i32 t = (y / TS) * s->ntx + x / TS, x0 = (x / TS) * TS, y0 = (y / TS) * TS, row;
-  Doc *d = s->d;
-  if (s->mask[t]) return 1;
-  if (!(s->mask[t] = (u8 *)calloc(TS * TS, 1))) return 0;
-  if (!(s->orig[t] = (u8 *)malloc(TS * TS * 4))) { free(s->mask[t]); s->mask[t] = NULL; return 0; }
-  doc_note_layer(d, d->active, box_make(x0, y0, x0 + TS, y0 + TS));
-  for (row = 0; row < TS && y0 + row < d->h; row++) {
-    i32 n = d->w - x0 < TS ? d->w - x0 : TS;
-    memcpy(s->orig[t] + row * TS * 4, s->l->px + ((long)(y0 + row) * d->w + x0) * 4, (size_t)n * 4);
-  }
-  return 1;
-}
-/* a pixel as it was before the stroke */
-static const u8 *orig_px(Stroke *s, i32 x, i32 y)
-{
-  i32 t;
-  if (x < 0) x = 0;
-  if (y < 0) y = 0;
-  if (x >= s->d->w) x = s->d->w - 1;
-  if (y >= s->d->h) y = s->d->h - 1;
-  t = (y / TS) * s->ntx + x / TS;
-  if (s->orig[t]) return s->orig[t] + ((y % TS) * TS + x % TS) * 4;
-  return s->l->px + ((long)y * s->d->w + x) * 4;
-}
-static void dab_at(Stroke *s, double cx, double cy, Box *changed)
-{
-  Doc *d = s->d;
-  int n = s->dsz, i, j;
-  i32 x0 = (i32)floor(cx - n / 2.0 + 0.5), y0 = (i32)floor(cy - n / 2.0 + 0.5);
-  Box b = box_clip(box_make(x0, y0, x0 + n, y0 + n), d->sel ? d->selbox : doc_box(d));
-  int flow = s->b.flow * 255 / 100, opa = s->b.opacity;
-  i32 sdx = (i32)floor(cx - s->px + 0.5), sdy = (i32)floor(cy - s->py + 0.5);
-  if (box_empty(b) || !s->dab) return;
-  for (j = b.y0; j < b.y1; j++)
-    for (i = b.x0; i < b.x1; i++) {
-      int a = s->dab[(j - y0) * n + (i - x0)], m, cov, sel;
-      i32 t;
-      u8 *mp, *p, src[4];
-      const u8 *o;
-      if (!a || !(sel = sel_at(d, i, j))) continue;
-      if (!tile_ready(s, i, j)) continue;
-      t = (j / TS) * s->ntx + i / TS;
-      mp = s->mask[t] + (j % TS) * TS + i % TS;
-      m = *mp;
-      if (s->b.tool >= PT_BLUR) { /* the retouching tools act on each pass */ m = mul255(a, flow); }
-      else { m = m + mul255(mul255(a, flow), 255 - m); if (m > *mp) *mp = (u8)m; else m = *mp; }
-      cov = mul255(m * opa / 100, sel);
-      o = orig_px(s, i, j);
-      p = s->l->px + ((long)j * d->w + i) * 4;
-      switch (s->b.tool) {
-      case PT_ERASER:
-        memcpy(p, o, 4);
-        if (!s->l->alpha_lock) p[3] = (u8)mul255(o[3], 255 - cov);
-        break;
-      case PT_CLONE: {
-        const u8 *c = orig_px(s, i + s->b.clone_dx, j + s->b.clone_dy);
-        memcpy(p, o, 4);
-        src[0] = c[0]; src[1] = c[1]; src[2] = c[2];
-        put_px(s->l, p, src, mul255(cov, c[3]), BM_NORMAL);
-        break; }
-      case PT_BLUR: case PT_SHARPEN: {
-        /* the 3x3 average of what is there now, or away from it */
-        int k, sum[4] = { 0, 0, 0, 0 }, dx, dy, f = mul255(cov, s->b.strength * 255 / 100);
-        for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) {
-          i32 xx = i + dx < 0 ? 0 : i + dx >= d->w ? d->w - 1 : i + dx, yy = j + dy < 0 ? 0 : j + dy >= d->h ? d->h - 1 : j + dy;
-          const u8 *q = s->l->px + ((long)yy * d->w + xx) * 4;
-          for (k = 0; k < 4; k++) sum[k] += q[k];
-        }
-        for (k = 0; k < 4; k++) {
-          int avg = sum[k] / 9, v = s->b.tool == PT_BLUR ? avg : clamp255(p[k] + (p[k] - avg) * 0.6);
-          if (k == 3 && s->l->alpha_lock) continue;
-          p[k] = (u8)(p[k] + ((v - p[k]) * f) / 255);
-        }
-        break; }
-      case PT_SMUDGE: {
-        const u8 *q = orig_px(s, i - sdx, j - sdy);
-        int k, f = mul255(cov, s->b.strength * 255 / 100);
-        for (k = 0; k < 4; k++) p[k] = (u8)(p[k] + ((q[k] - p[k]) * f) / 255);
-        break; }
-      case PT_DODGE: case PT_BURN: case PT_SPONGE: {
-        int k, f = mul255(cov, s->b.strength * 255 / 100);
-        if (s->b.tool == PT_SPONGE) {
-          int g = (p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8;
-          for (k = 0; k < 3; k++) p[k] = (u8)(p[k] + ((g - p[k]) * f) / 510);
-        } else
-          for (k = 0; k < 3; k++) {
-            int v = s->b.tool == PT_DODGE ? p[k] + ((255 - p[k]) * f) / 400 : p[k] - (p[k] * f) / 400;
-            p[k] = (u8)(v < 0 ? 0 : v > 255 ? 255 : v);
-          }
-        break; }
-      default:
-        memcpy(p, o, 4);
-        put_px(s->l, p, s->col, cov, s->b.blend);
-      }
-    }
-  if (changed) *changed = box_union(*changed, b);
-}
-Stroke *stroke_begin(Doc *d, const Brush *b, u32 color, double x, double y, Box *changed)
-{
-  static const char *const names[] = { "Brush Tool", "Pencil", "Eraser", "Clone Stamp", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool" };
-  Stroke *s;
-  Layer *l = paintable(d);
-  if (!l || !(s = (Stroke *)calloc(1, sizeof *s))) return NULL;
-  s->d = d; s->l = l; s->b = *b;
-  if (s->b.size < 1) s->b.size = 1;
-  if (s->b.spacing < 1) s->b.spacing = 1;
-  if (s->b.flow < 1) s->b.flow = 1;
-  rgb_of(color, s->col);
-  s->ntx = (d->w + TS - 1) / TS; s->nty = (d->h + TS - 1) / TS;
-  s->mask = (u8 **)calloc((size_t)s->ntx * s->nty, sizeof(u8 *));
-  s->orig = (u8 **)calloc((size_t)s->ntx * s->nty, sizeof(u8 *));
-  make_dab(s);
-  if (!s->mask || !s->orig || !s->dab) { free(s->mask); free(s->orig); free(s->dab); free(s); return NULL; }
-  doc_begin(d, names[b->tool >= 0 && b->tool <= PT_SPONGE ? b->tool : 0]);
-  s->x = s->px = x; s->y = s->py = y;
-  if (changed) *changed = box_make(0, 0, 0, 0);
-  dab_at(s, x, y, changed);
-  return s;
-}
-void stroke_to(Stroke *s, double x, double y, Box *changed)
-{
-  double dx = x - s->x, dy = y - s->y, len = sqrt(dx * dx + dy * dy), step = s->b.size * s->b.spacing / 100.0, t;
-  if (changed) *changed = box_make(0, 0, 0, 0);
-  if (!s) return;
-  if (step < 1) step = 1;
-  if (s->b.tool == PT_PENCIL && step > 1) step = 1;
-  if (len <= 0) return;
-  for (t = step - s->left; t <= len; t += step) {
-    double cx = s->x + dx * t / len, cy = s->y + dy * t / len;
-    dab_at(s, cx, cy, changed);
-    s->px = cx; s->py = cy;
-  }
-  s->left = len - (t - step);
-  if (s->left < 0) s->left = 0;
-  s->x = x; s->y = y;
-}
-void stroke_end(Stroke *s)
-{
-  i32 i;
-  if (!s) return;
-  for (i = 0; i < s->ntx * s->nty; i++) { free(s->mask[i]); free(s->orig[i]); }
-  free(s->mask); free(s->orig); free(s->dab);
-  doc_end(s->d);
-  free(s);
-}
+/* (0.5: moved to stroke.c, with the brushes' pieces in brush.c) */
 
 /* ------------------------------------------------------------------ masks laid on the active layer */
 /* coverage mask m (w*h for the canvas, 0-255) in box b laid on the active layer in color at
@@ -404,6 +221,87 @@ Box fill_gradient(Doc *d, double x0, double y0, double x1, double y1, int kind, 
       put_px(l, l->px + ((long)y * d->w + x) * 4, col, mul255(mul255(alpha, opacity * 255 / 100), s), blend);
     }
   doc_end(d);
+  return b;
+}
+
+/* 0.5: a multi-stop gradient, through a table of 1024 samples (gradient.h) */
+#define GLUT 1024
+Box fill_gradient_ex(Doc *d, double x0, double y0, double x1, double y1, int kind, const Gradient *gsrc, int reverse, int dither, int opacity, int blend)
+{
+  static const u8 bayer[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+  Layer *l = paintable(d);
+  Box b = work_box(d);
+  double dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy, base = atan2(dy, dx);
+  Gradient *g;
+  u8 *lut;
+  i32 x, y;
+  if (!l || len2 < 1e-9 || !gsrc) return box_make(0, 0, 0, 0);
+  if (!(g = (Gradient *)malloc(sizeof *g))) return box_make(0, 0, 0, 0);
+  if (!(lut = (u8 *)malloc(GLUT * 4))) { free(g); return box_make(0, 0, 0, 0); }
+  *g = *gsrc;
+  g->fg = d->fg; g->bg = d->bg;
+  gradient_lut(g, lut, GLUT);
+  free(g);
+  doc_begin(d, "Gradient");
+  doc_note_layer(d, d->active, b);
+  for (y = b.y0; y < b.y1; y++)
+    for (x = b.x0; x < b.x1; x++) {
+      double px = x + 0.5 - x0, py = y + 0.5 - y0, t, dith = dither ? (bayer[(y & 3) * 4 + (x & 3)] - 7.5) / 16.0 : 0;
+      u8 col[3];
+      const u8 *e;
+      int k, s = sel_at(d, x, y), idx;
+      if (!s) continue;
+      switch (kind) {
+      case GR_RADIAL: t = sqrt((px * px + py * py) / len2); break;
+      case GR_ANGLE: t = atan2(py, px) - base; while (t < 0) t += 2 * M_PI; t /= 2 * M_PI; break;
+      case GR_REFLECTED: t = fabs((px * dx + py * dy) / len2); break;
+      case GR_DIAMOND: t = (fabs(px * dx + py * dy) + fabs(-px * dy + py * dx)) / len2; break;
+      default: t = (px * dx + py * dy) / len2;
+      }
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      if (reverse) t = 1 - t;
+      idx = (int)(t * (GLUT - 1) + 0.5);
+      e = lut + idx * 4;
+      for (k = 0; k < 3; k++) col[k] = (u8)clamp255(e[k] + dith);
+      put_px(l, l->px + ((long)y * d->w + x) * 4, col, mul255(mul255(clamp255(e[3] + dith), opacity * 255 / 100), s), blend);
+    }
+  doc_end(d);
+  free(lut);
+  return b;
+}
+/* 0.5: a pattern laid through coverage mask m (NULL: everything) in box b */
+static Box apply_pattern(Doc *d, const u8 *m, Box b, const Pattern *pt, i32 ox, i32 oy, int opacity, int blend, const char *name)
+{
+  Layer *l = paintable(d);
+  i32 x, y;
+  b = box_clip(b, work_box(d));
+  if (!l || box_empty(b) || !pt || !pt->px || pt->w < 1 || pt->h < 1) return box_make(0, 0, 0, 0);
+  doc_begin(d, name);
+  doc_note_layer(d, d->active, b);
+  for (y = b.y0; y < b.y1; y++)
+    for (x = b.x0; x < b.x1; x++) {
+      long k = (long)y * d->w + x;
+      int c = m ? m[k] : 255;
+      const u8 *q;
+      if (!c) continue;
+      q = pattern_at(pt, x, y, ox, oy);
+      put_px(l, l->px + k * 4, q, mul255(mul255(mul255(c, q[3]), opacity * 255 / 100), sel_at(d, x, y)), blend);
+    }
+  doc_end(d);
+  return b;
+}
+Box fill_pattern(Doc *d, const Pattern *p, i32 ox, i32 oy, int opacity, int blend) { return apply_pattern(d, NULL, work_box(d), p, ox, oy, opacity, blend, "Fill"); }
+Box fill_bucket_pattern(Doc *d, i32 x, i32 y, const Pattern *p, int tol, int contiguous, int all_layers, int opacity, int antialias)
+{
+  u8 *m;
+  Box b;
+  if (x < 0 || y < 0 || x >= d->w || y >= d->h || !paintable(d) || !p) return box_make(0, 0, 0, 0);
+  if (!(m = similar(d, x, y, tol, contiguous, all_layers))) return box_make(0, 0, 0, 0);
+  if (antialias) soften(m, d->w, d->h);
+  b = mask_bounds(m, d->w, d->h);
+  b = apply_pattern(d, m, b, p, 0, 0, opacity, BM_NORMAL, "Paint Bucket");
+  free(m);
   return b;
 }
 

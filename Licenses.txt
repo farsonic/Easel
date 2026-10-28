@@ -12,7 +12,11 @@ dav1d (AV1 decoder),         av1/ in the source; decodes AVIF   BSD 2-clause
   VideoLAN and dav1d authors
 PhotoCraft, ArtCraft Team    picture readers in core/: tiff.c,  MIT
   and PhotoCraft contributors  psd.c, rasters.c, webp.c,
-                               amigafmt.c (each says what it took)
+                               amigafmt.c; brushes and painting
+                               in core/: brush.h, brush.c,
+                               stroke.c, preset.h, preset.c,
+                               gradient.h, gradient.c (each says
+                               what it took)
 X.Org rgb.txt colour names   XPM colour names (core/rasters.c)  MIT/X11 (The Open Group,
                                                                   Oracle)
 libwebp, Google              core/webp.c follows its integer    BSD 3-clause, with Google's

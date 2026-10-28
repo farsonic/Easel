@@ -1,7 +1,7 @@
 /*
  * coretest.c - native tests of Easel's core: the document, blending, undo, painting, selections,
  * transforms, adjustments and filters.
- * cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/doc.c core/paint.c core/adjust.c tests/coretest.c -lm
+ * cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/util.c core/doc.c core/paint.c core/stroke.c core/brush.c core/gradient.c core/pattern.c core/adjust.c tests/coretest.c -lm
  */
 #include <stdio.h>
 #include <stdlib.h>
