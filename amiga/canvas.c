@@ -49,7 +49,7 @@ char ruler_info[96];
 static Doc *ruler_doc;                   /* the picture the Ruler's line was drawn on */
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
-       DR_XFORM, DR_RULER };
+       DR_XFORM, DR_RULER, DR_SAMPLE };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
 #define QALT (IEQUALIFIER_LALT | IEQUALIFIER_RALT)
 
@@ -94,6 +94,8 @@ struct Data {
   int ruler_end;                         /* the Ruler's end being dragged (0 the start, 1 the end) */
   int ov_ruler;                          /* the Ruler's line is in the overlay drawn */
   int ov_tool;                           /* the tool whose brush outline the overlay drawn has */
+  /* 0.8: the colour samplers in the overlay drawn (image pixels), and the one being dragged */
+  LONG ov_sx[4], ov_sy[4]; int ov_nsamp, samp_drag;
 };
 
 static struct MUI_CustomClass *ccls;
@@ -513,6 +515,16 @@ static void ov_draw(struct Data *d, Object *obj)
     xpath(d, obj, rp, p, n, &lx, &ly);
     if (d->mlpath && d->nmlpath) xpath(d, obj, rp, d->mlpath, d->nmlpath, &lx, &ly);
   }
+  for (i = 0; i < d->ov_nsamp; i++) {
+    /* 0.8: a colour sampler: a ring round the point with ticks outside it, and its number */
+    LONG sx = to_sx(d, obj, d->ov_sx[i] + 0.5), sy = to_sy(d, obj, d->ov_sy[i] + 0.5);
+    char num[2];
+    DrawEllipse(rp, sx, sy, 4, 4);
+    xline(rp, sx - 9, sy, sx - 6, sy); xline(rp, sx + 6, sy, sx + 9, sy); xline(rp, sx, sy - 9, sx, sy - 6); xline(rp, sx, sy + 6, sx, sy + 9);
+    num[0] = (char)('1' + i); num[1] = 0;
+    SetFont(rp, theme_small());
+    Move(rp, sx + 7, sy + 7 + rp->TxBaseline); Text(rp, (STRPTR)num, 1);
+  }
   if (d->ov_ruler) {
     /* the Ruler's line, with a small cross at each end */
     LONG a = to_sx(d, obj, ruler_xy[0]), b = to_sy(d, obj, ruler_xy[1]), c = to_sx(d, obj, ruler_xy[2]), e = to_sy(d, obj, ruler_xy[3]);
@@ -546,6 +558,12 @@ static void ov_show(struct Data *d, Object *obj)
   /* (what depends on the tool is remembered, so it is taken away later as it was put up) */
   d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();
   d->ov_tool = d->space ? TL_HAND : tool;
+  {
+    DocView *v = cur_view();
+    int i;
+    d->ov_nsamp = v ? v->nsamp : 0;
+    for (i = 0; i < d->ov_nsamp; i++) { d->ov_sx[i] = v->samp_x[i]; d->ov_sy[i] = v->samp_y[i]; }
+  }
   ov_draw(d, obj);
   d->ov_on = 1;
 }
@@ -1020,6 +1038,28 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     ruler_text();
     d->drag = DR_RULER;
     break;
+  case TL_SAMPLER: {
+    /* 0.8: a sampler under the pointer dragged (Alt: removed), else a new one placed (up to four) */
+    DocView *v = cur_view();
+    int i, hit = -1;
+    for (i = 0; i < v->nsamp; i++)
+      if (labs(to_sx(d, obj, v->samp_x[i] + 0.5) - mx) <= 6 && labs(to_sy(d, obj, v->samp_y[i] + 0.5) - my) <= 6) hit = i;
+    if (hit >= 0 && alt) {
+      for (i = hit; i < v->nsamp - 1; i++) { v->samp_x[i] = v->samp_x[i + 1]; v->samp_y[i] = v->samp_y[i + 1]; }
+      v->nsamp--;
+      set(obj, MUIA_Canvas_Pointer, TRUE);
+      break;
+    }
+    if (hit < 0) {
+      if (x < 0 || y < 0 || x >= doc->w || y >= doc->h) break;
+      if (v->nsamp >= 4) { ov_show(d, obj); ask("OK", "%s", tr("There can be four colour samplers: drag one somewhere else, or Alt-click one to remove it.")); return; }
+      hit = v->nsamp++;
+      v->samp_x[hit] = (LONG)x; v->samp_y[hit] = (LONG)y;
+    }
+    d->samp_drag = hit;
+    d->drag = DR_SAMPLE;
+    set(obj, MUIA_Canvas_Pointer, TRUE);
+    break; }
   case TL_LASSO: d->drag = DR_LASSO; d->npoly = 0; poly_add(d, x, y); break;
   case TL_PLASSO:
     if (!d->poly_on) { d->poly_on = 1; d->npoly = 0; poly_add(d, x, y); }
@@ -1140,6 +1180,15 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     ov_show(d, obj);
     DoMethod(optbar, MUIM_Opts_Refresh);
     break;
+  case DR_SAMPLE:
+    /* 0.8: the sampler follows the pointer, within the picture */
+    ov_hide(d, obj);
+    if (d->samp_drag >= 0 && d->samp_drag < v->nsamp) {
+      v->samp_x[d->samp_drag] = x < 0 ? 0 : x >= doc->w ? doc->w - 1 : (LONG)x;
+      v->samp_y[d->samp_drag] = y < 0 ? 0 : y >= doc->h ? doc->h - 1 : (LONG)y;
+    }
+    ov_show(d, obj);
+    break;
   case DR_RULER:
     ov_hide(d, obj);
     ruler_xy[2 * d->ruler_end] = x; ruler_xy[2 * d->ruler_end + 1] = y;
@@ -1221,6 +1270,7 @@ static void release(struct Data *d, Object *obj)
     tell_changed(d, obj);
     break;
   case DR_PICK: break;
+  case DR_SAMPLE: set(obj, MUIA_Canvas_Pointer, TRUE); break;
   case DR_LASSO: d->drag = DR_LASSO; poly_finish(d, obj, 1); break;
   case DR_MARQUEE:
     d->drag = DR_MARQUEE; ov_hide(d, obj); d->drag = DR_NONE;

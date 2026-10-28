@@ -98,10 +98,11 @@ const char *const tool_names[TL_N] = {
   "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Text Tool",
   "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool",
   "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool",
-  "Magnetic Lasso Tool", "Ruler Tool"
+  "Magnetic Lasso Tool", "Ruler Tool",
+  "Color Sampler Tool"
 };
 const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
-  'S', 'Y', 'B', 'E', 'E', 'L', 'I' };
+  'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I' };
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -1524,7 +1525,7 @@ static void command(ULONG id)
     return;
   case ID_NUMTRANSFORM: transform_dialog(); break;
   case ID_XF_AGAIN:
-    if (box_empty(xform_again(d, d->active, RS_BICUBIC))) ask("OK", "%s", tr("There is no transform to do again, or the layer can't be changed."));
+    if (box_empty(xform_again(d, d->active, RS_BICUBIC)) && !progress_aborted) ask("OK", "%s", tr("There is no transform to do again, or the layer can't be changed."));
     break;
   /* (exact, and only the selected part when there is a selection) */
   case ID_ROTATE180: xform_rotate90(d, d->active, 2); break;
@@ -1547,10 +1548,11 @@ static void command(ULONG id)
     if (!ruler_on) { ask("OK", "%s", tr("Drag the Ruler along something that should be level (or upright) first.")); return; }
     ok = opt.ruler_image ? image_straighten(d, ruler_xy[0], ruler_xy[1], ruler_xy[2], ruler_xy[3])
                          : layer_straighten(d, ruler_xy[0], ruler_xy[1], ruler_xy[2], ruler_xy[3], RS_BICUBIC);
-    if (!ok) { ask("OK", "%s", tr("The line is level already, too short, or the layer can't be changed.")); return; }
+    if (!ok) { if (!progress_aborted) ask("OK", "%s", tr("The line is level already, too short, or the layer can't be changed.")); return; }
     ruler_on = 0; ruler_info[0] = 0;
     DoMethod(optbar, MUIM_Opts_Refresh);
     break; }
+  case ID_SAMPCLEAR: { DocView *v = cur_view(); v->nsamp = 0; DoMethod(canvas, MUIM_Canvas_Refresh); refresh_panels(); return; }
   case ID_RULERCLEAR: ruler_on = 0; ruler_info[0] = 0; DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); return;
   /* 0.7: channels and Quick Mask */
   case ID_QUICKMASK:
@@ -1995,7 +1997,7 @@ int main(int argc, char **argv)
   for (i = 0; i < font_count(); i++) if (!strcmp(font_name(i), "Liberation Sans")) opt.text_font = i;
   set_tool(TL_BRUSH);
   refresh_all();
-  if (start_cmd) command(start_cmd);
+  if (start_cmd) DoMethod(app, MUIM_Application_ReturnID, start_cmd);   /* (through the loop: as a job) */
   if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel."));
   for (;;) {
     ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);

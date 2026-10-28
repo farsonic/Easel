@@ -38,6 +38,8 @@ typedef struct {
   int placed;                         /* zoom and scroll have been set for the window */
   Snapshot *snap;                     /* 0.5: what the History Brush paints back (taken at opening) */
   char recov[160]; ULONG asig;        /* 0.6: its autosaved copy in PROGDIR:Recovery, and the state it holds */
+  /* 0.8: the Color Sampler tool's points (image pixels), shown on the canvas and in the Info panel */
+  LONG samp_x[4], samp_y[4]; int nsamp;
 } DocView;
 #define MAXDOCS 12
 extern DocView docs[MAXDOCS];
@@ -53,9 +55,11 @@ enum {
   /* 0.5 */
   TL_PATTERN, TL_HISTORY, TL_REPLACE, TL_BGERASE, TL_MAGICERASE,
   /* 0.7 */
-  TL_MAGLASSO, TL_RULER, TL_N
+  TL_MAGLASSO, TL_RULER,
+  /* 0.8 */
+  TL_SAMPLER, TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's) after the rest */
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's) after the rest */
 #define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */

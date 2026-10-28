@@ -27,6 +27,7 @@
 #include <devices/inputevent.h>
 #include "../core/channels.h"
 #include "../core/util.h"
+#include "../core/paint.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
 static struct MUI_CustomClass *navcls, *infcls, *chancls;
@@ -241,6 +242,25 @@ static void info_draw(struct IData *d, Object *obj)
     else strcpy(buf, tr("Selection: empty"));
   } else strcpy(buf, tr("No selection"));
   theme_text(rp, theme_font(), x, y, buf, tpen(T_DIM)); y += lh + 4;
+  /* 0.8: the colour samplers, each with its colour */
+  {
+    DocView *v = cur_view();
+    int i;
+    for (i = 0; v && i < v->nsamp; i++) {
+      u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], 1, opt.sample) : 0xFFFFFFFFUL;
+      if (c == 0xFFFFFFFFUL) sprintf(buf, "#%d  %s", i + 1, tr("transparent"));
+      else {
+        draw_rgb_box(rp, _screen(obj), x + fh() * 2 + 4, y + 1, x + fh() * 3 + 2, y + fh() - 1, c);
+        theme_rect(rp, x + fh() * 2 + 3, y, x + fh() * 3 + 3, y + fh(), tpen(T_BORDER2));
+        sprintf(buf, "R %d  G %d  B %d   #%06lX", (int)(c >> 16), (int)((c >> 8) & 255), (int)(c & 255), (unsigned long)c);
+        theme_text(rp, theme_font(), x + fh() * 3 + 10, y, buf, tpen(T_TEXT));
+        sprintf(buf, "#%d", i + 1);
+      }
+      theme_text(rp, theme_font(), x, y, buf, tpen(T_TEXT));
+      y += lh;
+    }
+    if (v && v->nsamp) y += 4;
+  }
   /* the histogram */
   if (!d->hok || d->hdoc != doc) info_hist(d, doc);
   hx0 = x; hw = _mwidth(obj) - 16; hy1 = _mbottom(obj) - 6;

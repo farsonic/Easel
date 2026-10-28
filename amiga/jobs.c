@@ -61,6 +61,7 @@ static void pwin_open(void)
   /* the application is asleep while a command runs: this window alone woken */
   for (i = 0; i < 8 && xget(pwin, MUIA_Window_Sleep); i++) set(pwin, MUIA_Window_Sleep, FALSE);
   jobs_shown++;
+  LOG("progress window opened: %s", what);
 }
 static void pwin_close(void)
 {
@@ -91,7 +92,11 @@ void job_begin(Doc *d, const char *name)
   jobs[njobs].doc = d; jobs[njobs].top = d ? (void *)d->undo : NULL; jobs[njobs].hook = progress_hook;
   njobs++;
   if (njobs == 1) { abort_flag = 0; progress_reset(); }
-  if (name && name[0]) snprintf(what, sizeof what, "%s", tr(name));
+  if (name && name[0]) {
+    char *e;
+    snprintf(what, sizeof what, "%s", tr(name));
+    if ((e = strstr(what, "...")) != NULL) *e = 0;          /* ("Image Size...": the dialog is over) */
+  }
   else if (njobs == 1) strcpy(what, tr("Working..."));
   if (ptext) set(ptext, MUIA_Text_Contents, (ULONG)what);
   DateStamp(&started);
@@ -106,6 +111,7 @@ int job_end(void)
   if (njobs >= MAXJOBS) return 0;
   if (aborted) {
     Doc *d = jobs[njobs].doc;
+    LOG("job aborted");
     int i, open = 0;
     for (i = 0; i < ndocs; i++) if (docs[i].doc == d) open = 1;
     /* only a step this job made (the document still open, with something new on top) */

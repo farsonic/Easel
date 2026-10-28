@@ -87,6 +87,7 @@ enum {
   IC_FOLDER, IC_ADJLAYER, IC_ADDMASK, IC_LOCKPOS, IC_LOCKALL,
   IC_T_PATTERN, IC_T_HISTORY, IC_T_REPLACE, IC_T_BGERASE, IC_T_MAGICERASE,
   IC_T_MAGLASSO, IC_T_RULER,
+  IC_T_SAMPLER,
   IC_N
 };
 void theme_icon(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, int dim);

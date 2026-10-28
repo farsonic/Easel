@@ -52,7 +52,8 @@ static void notify_change(Object *o, ULONG attr)
 {
   if (o) DoMethod(o, MUIM_Notify, attr, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
 }
-static void out_of_memory(void) { ask("OK", "%s", tr("There isn't enough memory for that.")); }
+/* (not after Abort was pressed: that is why the operation stopped) */
+static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
 
 /* ------------------------------------------------------------------ previews */
 /* an adjustment or filter shown on the picture: applied again at each change, the step before it
