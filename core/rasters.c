@@ -260,7 +260,7 @@ int pcx_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if ((double)(end - 128) < (double)min * h) { codec_err(err, errcap, "Truncated PCX file"); return 0; }
   if (!alloc(out, w, h, err, errcap)) return 0;
   if (!(row = (u8 *)malloc(line))) { codec_oom = 1; return fail(out, err, errcap, "Out of memory"); }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     u8 *o = out->px + (size_t)y * w * 4;
     if (!pcx_row(d, end, &pos, row, line)) { free(row); return fail(out, err, errcap, "Damaged or truncated PCX file"); }
     for (x = 0; x < w; x++, o += 4) {
@@ -445,7 +445,7 @@ int pnm_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   else if (ascii) { if ((double)w * h * nc > (double)(n - r.pos)) { codec_err(err, errcap, "Truncated Netpbm file"); return 0; } }
   else if ((double)w * h * nc * (maxv > 255 ? 2 : 1) > (double)(n - r.pos)) { codec_err(err, errcap, "Truncated Netpbm file"); return 0; }
   if (!alloc(out, w, h, err, errcap)) return 0;
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     u8 *o = out->px + (size_t)y * w * 4;
     for (x = 0; x < w; x++, o += 4) {
       if (kind == '1' || kind == '4') {                  /* PBM: 1 is black */
@@ -800,7 +800,7 @@ int xpm_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   /* every row must be the right length before the picture is made */
   for (y = 0; y < h; y++) if (ll[1 + nc + y] != (size_t)w * cpp) { msg = "An XPM row has the wrong width"; goto done; }
   if (!alloc(out, w, h, err, errcap)) { msg = NULL; goto done; }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     const u8 *s = buf + ls[1 + nc + y];
     u8 *o = out->px + (size_t)y * w * 4;
     for (x = 0; x < w; x++, o += 4, s += cpp) {
@@ -1028,7 +1028,7 @@ int dds_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if (!alloc(out, w, h, err, errcap)) return 0;
   if (kind == 0) {
     u32 bpp = bits / 8;
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress(y, h); y++) {
       const u8 *p = d + start + (size_t)y * rowb;
       u8 *o = out->px + (size_t)y * w * 4;
       for (x = 0; x < w; x++, p += bpp, o += 4) {
@@ -1239,7 +1239,7 @@ int hdr_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if (!size_ok(w, h)) { codec_err(err, errcap, "Bad Radiance HDR picture size"); return 0; }
   if ((double)(n - p) * 32 < (double)w * h) { codec_err(err, errcap, "Truncated Radiance HDR file"); return 0; }
   if (!alloc(out, w, h, err, errcap)) return 0;
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     u8 *o = out->px + (size_t)(flip ? h - 1 - y : y) * w * 4;
     if (w >= 8 && w < 32768 && n - p >= 4 && d[p] == 2 && d[p + 1] == 2 && !(d[p + 2] & 0x80)) {
       int c;
@@ -1380,7 +1380,7 @@ int fits_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
     if (!i || v > mx) mx = v;
   }
   if (!alloc(out, w, h, err, errcap)) return 0;
-  for (y = 0; y < h; y++)
+  for (y = 0; y < h && !progress(y, h); y++)
     for (x = 0; x < w; x++) {
       u8 *o = out->px + ((size_t)(topdown ? y : h - 1 - y) * w + x) * 4;
       for (k = 0; k < planes; k++) {
@@ -1435,7 +1435,7 @@ int dpx_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if ((double)stride * (h - 1) + line > (double)(n - off)) { codec_err(err, errcap, "Truncated DPX file"); return 0; }
   if (!alloc(out, w, h, err, errcap)) return 0;
   mx = (1u << bits) - 1;
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     const u8 *l = d + off + (size_t)y * stride;
     u32 acc_hi = 0, have = 0, word = 0;
     u8 *o = out->px + (size_t)y * w * 4;

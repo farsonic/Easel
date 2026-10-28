@@ -58,12 +58,18 @@ u8    *file_read(const char *path, size_t *len);
 int    file_write(const char *path, const void *data, size_t len);
 
 /* 0.8: the progress of a long operation, for the UI's progress bar and its Abort button. The slow
-   loops call progress(done, total) as they go; it calls progress_hook (when one is set) whenever the
-   share done has moved on by a thousandth. Once the hook has returned nonzero (Abort pressed)
-   progress_aborted stays set and every call returns nonzero, so the loops stop, until progress_reset */
+   loops call progress(done, total) as they go (once a row or so); with no hook set that is one test.
+   The hook gets the share done in thousandths (done of 1000), only when it has moved on. An
+   operation made of several stages can give each a part of its share: progress_push(lo, hi)
+   narrows what progress reports to lo..hi thousandths of the part in effect (the whole at first),
+   and returns what to give progress_pop to put that back (parts nest). Once the hook has returned nonzero (Abort pressed)
+   progress_aborted stays set and every call returns nonzero, so the loops stop, until
+   progress_reset (which also puts the part back to the whole) */
 extern int (*progress_hook)(long done, long total);
 extern int progress_aborted;
 int    progress(long done, long total);
+long   progress_push(long lo, long hi);
+void   progress_pop(long saved);
 void   progress_reset(void);
 
 #endif

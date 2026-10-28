@@ -15,7 +15,10 @@
 #include "core/paint.h"
 #include "core/adjust.h"
 #include "core/layers.h"
+#include "core/filters2.h"
 #include "core/channels.h"
+#include "core/codec.h"
+#include "core/palette.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -170,6 +173,7 @@ static void test_progress(void)
   calls = 0; stop_at = 1L << 30; last_done = 0; monotone = 1; progress_reset();
   flt_gaussian_blur(d, 4.0);
   CHECK(calls > 10 && monotone && !progress_aborted, "progress: Gaussian Blur reports as it goes");
+  CHECK(last_done >= 990, "progress: and the count reaches the end");
   doc_discard_last(d);
   CHECK(state_same(d, &before), "progress: (taken back)");
   /* aborted part way: the loops stop; the step is taken back as the UI does */
@@ -186,6 +190,60 @@ static void test_progress(void)
   CHECK(progress_aborted, "progress: Abort stops an adjustment");
   if (doc_can_undo(d)) doc_discard_last(d);
   CHECK(state_same(d, &before), "progress: the aborted adjustment taken back");
+  /* every kind of long operation stops at Abort and leaves the picture as it was */
+  {
+    static const char *const what[] = { "Motion Blur", "Lens Blur", "Rotate 33", "Canvas Size", "Indexed Color", "Merge Visible", "Feather", "Levels", "Wave" };
+    int k;
+    doc_add_layer(d, layer_new(d, "Layer 1"), 1);
+    for (x = 0; x < 300L * 200 * 4; x++) d->lay[1]->px[x] = (u8)rn();
+    d->active = 0;
+    sel_rect(d, 20, 20, 250, 180, SEL_REPLACE, 0);
+    doc_forget_undo(d);
+    state_free(&before); state_take(d, &before);
+    for (k = 0; k < 9; k++) {
+      int depth = d->undo_depth;
+      calls = 0; stop_at = 3; last_done = 0; progress_reset();
+      switch (k) {
+      case 0: flt_motion_blur(d, 30, 20); break;
+      case 1: flt_lens_blur(d, 8, 0, 255); break;
+      case 2: image_rotate_angle(d, 33); break;
+      case 3: canvas_resize(d, 500, 400, 4, 0xFFFFFF); break;
+      case 4: doc_to_indexed(d, 64, QM_WU, DI_FS, NULL, 0); break;
+      case 5: doc_merge_visible(d); break;
+      case 6: sel_feather(d, 40); break;
+      case 7: adj_levels(d, 0, 20, 230, 1.2, 0, 255); break;
+      case 8: flt_wave(d, 40, 10); break;
+      }
+      if (!progress_aborted) printf("  %s wasn't stopped\n", what[k]);
+      CHECK(progress_aborted, "progress: Abort stops each kind of operation");
+      if (d->undo_depth > depth) doc_discard_last(d);   /* (as the UI's job_end does) */
+      if (!state_same(d, &before)) printf("  %s changed the picture\n", what[k]);
+      CHECK(state_same(d, &before), "progress: and leaves the picture as it was");
+    }
+  }
+  /* reading and writing: aborted, nothing comes of them */
+  {
+    size_t len = 0;
+    u8 *png, *ora;
+    char err[100];
+    progress_hook = NULL; progress_reset();
+    png = png_write_doc(d, &len);
+    CHECK(png != NULL, "progress: (a PNG to read)");
+    calls = 0; stop_at = 2; last_done = 0; progress_hook = hook; progress_reset();
+    CHECK(codec_load_doc(png, len, err, sizeof err) == NULL && progress_aborted, "progress: Abort stops opening a picture");
+    calls = 0; stop_at = 1L << 30; last_done = 0; monotone = 1; progress_reset();
+    { Doc *t = codec_load_doc(png, len, err, sizeof err); CHECK(t && calls > 3, "progress: opening reports as it goes"); doc_free(t); }
+    free(png);
+    calls = 0; stop_at = 2; last_done = 0; progress_reset();
+    CHECK(png_write_doc(d, &len) == NULL, "progress: Abort stops saving a PNG");
+    calls = 0; stop_at = 6; last_done = 0; progress_reset();
+    CHECK((ora = ora_write(d, &len)) == NULL, "progress: Abort stops saving an OpenRaster file");
+    free(ora);
+    calls = 0; stop_at = 1L << 30; last_done = 0; monotone = 1; progress_reset();
+    ora = ora_write(d, &len);
+    CHECK(ora && monotone && last_done >= 900, "progress: saving an OpenRaster file reports in order to the end");
+    free(ora);
+  }
   /* no hook: nothing stops */
   progress_hook = NULL; progress_reset();
   CHECK(image_resize(d, 150, 100, RS_BILINEAR) && d->w == 150, "progress: without a hook all is done");

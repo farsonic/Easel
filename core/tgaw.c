@@ -67,7 +67,7 @@ static u8 *tga_rgba(const Rgba *im, int gray, int rle, size_t *len)
   if (!(row = (u8 *)malloc((size_t)im->w * 4))) return NULL;
   buf_init(&b);
   header(&b, 0, gray ? (rle ? 11 : 3) : (rle ? 10 : 2), 0, 0, im->w, im->h, bpp * 8, alpha ? 8 : 0);
-  for (y = 0; y < im->h; y++) {
+  for (y = 0; y < im->h && !progress(y, im->h); y++) {
     const u8 *p = im->px + (size_t)y * im->w * 4;
     for (x = 0; x < im->w; x++, p += 4) {
       u8 *o = row + (size_t)x * bpp;

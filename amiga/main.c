@@ -713,6 +713,7 @@ static Doc *load(const char *path, int *fmt)
   if (!d) d = load_doc_big_stack(data, len, err, sizeof err);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
+  if (!d && progress_aborted) return NULL;              /* (0.8: Abort pressed: nothing to say) */
   if (!d && !codec_oom) {
     /* the last resort: whatever datatypes the system has */
     char err2[160];
@@ -743,7 +744,10 @@ static void open_path(const char *path)
   int fmt = 0, i;
   Doc *d;
   for (i = 0; i < ndocs; i++) if (docs[i].path[0] && !Stricmp((STRPTR)docs[i].path, (STRPTR)path)) { doc_switch(i); return; }
-  if ((d = load(path, &fmt))) { doc_show(d, path, fmt); recent_add(path); }
+  job_begin(NULL, "Opening the picture");              /* (0.8: progress, and Abort) */
+  d = load(path, &fmt);
+  job_end();
+  if (d) { doc_show(d, path, fmt); recent_add(path); }
   strncpy(lastdir, path, sizeof lastdir - 1);
 }
 static void open_file(void)
@@ -809,6 +813,7 @@ static int write_doc(Doc *d, const char *path, int fmt)
     }
     rgba_free(&im);
   }
+  if (progress_aborted) { free(data); set(app, MUIA_Application_Sleep, FALSE); return 0; }   /* (0.8: Abort: nothing written) */
   ok = data && write_file(path, data, len);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
@@ -1070,8 +1075,13 @@ static void layers_to_files(void)
     if (!(t = doc_new(v->doc->w, v->doc->h, 0, 1))) break;
     memcpy(t->lay[0]->px, l->px, (size_t)v->doc->w * v->doc->h * 4);
     t->dpi = v->doc->dpi;
-    if (write_doc(t, name, fmt)) n++;
+    {
+      long pp = progress_push(1000L * i / v->doc->nlay, 1000L * (i + 1) / v->doc->nlay);   /* (0.8: each layer a share) */
+      if (write_doc(t, name, fmt)) n++;
+      progress_pop(pp);
+    }
     doc_free(t);
+    if (progress_aborted) break;
   }
   snprintf(msg, sizeof msg, tr("%d layers were written."), n);
   ask("OK", "%s", msg);
@@ -1107,9 +1117,11 @@ static void load_stack(void)
   Doc *d = NULL;
   char name[108];
   if (!n) return;
-  for (i = 0; i < n; i++) {
+  for (i = 0; i < n && !progress_aborted; i++) {
+    long pp = progress_push(1000L * i / n, 1000L * (i + 1) / n);   /* (0.8: each file a share) */
     Doc *o = load(paths[i], &fmt);
     Rgba im;
+    progress_pop(pp);
     if (!o) continue;
     base_name(paths[i], name, sizeof name);
     if (!d) {
@@ -1130,6 +1142,7 @@ static void load_stack(void)
     doc_free(o);
   }
   if (!d) return;
+  if (progress_aborted) { doc_free(d); return; }        /* (0.8: Abort pressed) */
   doc_forget_undo(d);
   d->dirty = 1;
   doc_show(d, "", FMT_ORA);
@@ -1385,7 +1398,7 @@ static void command(ULONG id)
     set(win, MUIA_Window_Open, TRUE);
     refresh_all();
     return;
-  case ID_AUTOSAVE: autosave(0); return;
+  case ID_AUTOSAVE: job_begin(NULL, "Autosave"); autosave(0); job_end(); return;
   case ID_AUTOSAVESET: {
     char buf[16];
     sprintf(buf, "%d", pref_autosave);

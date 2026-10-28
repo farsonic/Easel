@@ -70,7 +70,7 @@ static int unfilter(u8 *raw, u32 rb, u32 h, int fb)
 {
   u32 y, x;
   u8 *prev = NULL;
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     u8 *r = raw + (size_t)y * (rb + 1), f = r[0], *c = r + 1;
     switch (f) {
     case 0: break;
@@ -200,7 +200,7 @@ int png_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if (!p->interlace) {
     u32 rb = (p->w * (u32)p->bpp + 7) / 8, y;
     if (!unfilter(raw, rb, p->h, fb)) goto done;
-    for (y = 0; y < p->h; y++) png_row(p, raw + (size_t)y * (rb + 1) + 1, p->w, out->px + (size_t)y * p->w * 4, 4);
+    for (y = 0; y < p->h && !progress(y, p->h); y++) png_row(p, raw + (size_t)y * (rb + 1) + 1, p->w, out->px + (size_t)y * p->w * 4, 4);
   } else {
     u8 *r = raw;
     for (pass = 0; pass < 7; pass++) {
@@ -252,11 +252,13 @@ u8 *png_encode(const Rgba *im, int dpi, size_t *len)
   u8 *filtered = NULL, *rows = NULL, *z = NULL, hdr[13];
   size_t zlen;
   Buf b;
+  long pp;
   for (i = 0; i < n; i++) if (im->px[i * 4 + 3] != 255) { ch = 4; break; }
   fb = ch;
   rb = (u32)im->w * ch;
   if (!(filtered = (u8 *)malloc((size_t)im->h * (rb + 1))) || !(rows = (u8 *)malloc((size_t)rb * 2))) { free(filtered); free(rows); return NULL; }
-  for (y = 0; y < (u32)im->h; y++) {
+  pp = progress_push(0, 400);                  /* (0.8: the rows filtered, then deflated) */
+  for (y = 0; y < (u32)im->h && !progress(y, (u32)im->h); y++) {
     u8 *cur = rows + (y & 1) * rb, *prev = y ? rows + ((y - 1) & 1) * rb : NULL, *o = filtered + (size_t)y * (rb + 1);
     const u8 *s = im->px + (size_t)y * im->w * 4;
     unsigned long sum, bestsum = 0;
@@ -270,7 +272,9 @@ u8 *png_encode(const Rgba *im, int dpi, size_t *len)
     for (x = 0; x < rb; x++) o[x + 1] = filt(best, cur, prev, x, fb);
   }
   free(rows);
-  z = zlib_compress(filtered, (size_t)im->h * (rb + 1), &zlen);
+  progress_pop(pp); pp = progress_push(400, 1000);
+  z = progress_aborted ? NULL : zlib_compress(filtered, (size_t)im->h * (rb + 1), &zlen);
+  progress_pop(pp);
   free(filtered);
   if (!z) return NULL;
   buf_init(&b);
@@ -334,7 +338,7 @@ u8 *png_encode_indexed(const u8 *idx, i32 w, i32 h, const u8 *pal, int npal, con
   u8 *f, *out;
   if (!idx || !pal || w < 1 || h < 1 || npal < 1 || npal > 256) return NULL;
   if (!(f = (u8 *)calloc((size_t)h, rb + 1))) return NULL;
-  for (y = 0; y < (u32)h; y++) {
+  for (y = 0; y < (u32)h && !progress(y, (u32)h); y++) {
     u8 *o = f + (size_t)y * (rb + 1) + 1;
     const u8 *s = idx + (size_t)y * w;
     for (x = 0; x < (u32)w; x++) o[x / per] |= (u8)((s[x] & ((1 << depth) - 1)) << ((per - 1 - x % per) * depth));
@@ -355,7 +359,7 @@ u8 *png_encode_gray(const Rgba *im, int dpi, size_t *len)
   for (i = 0; i < n; i++) if (im->px[i * 4 + 3] != 255) { ch = 2; break; }
   rb = (u32)im->w * ch;
   if (!(filtered = (u8 *)malloc((size_t)im->h * (rb + 1))) || !(rows = (u8 *)malloc((size_t)rb * 2))) { free(filtered); return NULL; }
-  for (y = 0; y < (u32)im->h; y++) {
+  for (y = 0; y < (u32)im->h && !progress(y, (u32)im->h); y++) {
     u8 *cur = rows + (y & 1) * rb, *prev = y ? rows + ((y - 1) & 1) * rb : NULL, *o = filtered + (size_t)y * (rb + 1);
     const u8 *s = im->px + (size_t)y * im->w * 4;
     unsigned long sum, bestsum = 0;

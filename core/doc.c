@@ -1231,12 +1231,25 @@ int doc_duplicate_layer(Doc *d, int i)
   return 1;
 }
 /* layers s..e (whole blocks at one level) replaced by one pixel layer of their composite */
+/* 0.8: layers lo..hi-1 at depth (or with lo < 0 the whole picture) composited into out (the canvas's
+   size) in bands of rows, telling progress; 0 if Abort stopped it */
+static int comp_bands(Doc *d, int lo, int hi, int depth, u8 *out)
+{
+  i32 y;
+  for (y = 0; y < d->h; y += 32) {
+    Box b = box_make(0, y, d->w, y + 32 < d->h ? y + 32 : d->h);
+    if (progress(y, d->h)) return 0;
+    if (lo < 0) doc_composite(d, b, out + (long)y * d->w * 4, (long)d->w * 4);
+    else doc_composite_range(d, lo, hi, depth, b, out + (long)y * d->w * 4, (long)d->w * 4, 0);
+  }
+  return 1;
+}
 static int merge_blocks(Doc *d, int s, int e, const char *name)
 {
   Layer *m;
   int depth = d->lay[e]->depth, k;
   if (!(m = layer_new(d, d->lay[s]->kind == LK_PIXEL ? d->lay[s]->name : d->lay[e]->name))) return 0;
-  doc_composite_range(d, s, e + 1, depth, doc_box(d), m->px, (long)d->w * 4, 0);
+  if (!comp_bands(d, s, e + 1, depth, m->px)) { layer_free(m); return 0; }
   doc_begin(d, name);
   doc_note_all(d);
   for (k = s; k <= e; k++) layer_free(d->lay[k]);
@@ -1270,7 +1283,7 @@ int doc_merge_visible(Doc *d)
   for (i = 0; i < d->nlay; i++) if (shown[i] && d->lay[i]->kind != LK_GROUP) { first = i; break; }
   if (first < 0) return 0;
   if (!(m = layer_new(d, d->lay[first]->name))) return 0;
-  doc_composite(d, doc_box(d), m->px, (long)d->w * 4);
+  if (!comp_bands(d, -1, 0, 0, m->px)) { layer_free(m); return 0; }
   doc_begin(d, "Merge Visible");
   doc_note_all(d);
   for (i = k = 0; i < d->nlay; i++) {
@@ -1289,7 +1302,7 @@ int doc_flatten(Doc *d)
   long k, n = (long)d->w * d->h;
   int i;
   if (!(m = layer_new(d, "Background"))) return 0;
-  doc_composite(d, doc_box(d), m->px, (long)d->w * 4);
+  if (!comp_bands(d, -1, 0, 0, m->px)) { layer_free(m); return 0; }
   /* flattened onto the background colour: no transparency left */
   for (k = 0; k < n; k++) {
     u8 bgp[4], *p = m->px + k * 4;

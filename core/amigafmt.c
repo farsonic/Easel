@@ -234,7 +234,7 @@ static const char *planar_render(const Planar *f, const u8 *buf, size_t ystride,
   if (f->pchg && !(chg = pchg_parse(f->pchg, f->pchglen, &nchg, &msg))) return msg;
   if (!(vals = (u32 *)malloc(sizeof(u32) * (size_t)w))) { free(chg); return oom(); }
   if (!rgba_alloc(out, w, f->h)) { free(chg); free(vals); return "Out of memory"; }
-  for (y = 0; y < f->h; y++) {
+  for (y = 0; y < f->h && !progress(y, f->h); y++) {
     const u8 *row = buf + (size_t)y * ystride;
     u8 *px = out->px + (size_t)y * w * 4, cr, cg, cb;
     if (nsham) {                                      /* this line's 16 colours (laced pictures share them in pairs) */
@@ -846,7 +846,7 @@ int sunras_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
     memcpy(buf, d + o, size);
   }
   if (!rgba_alloc(out, w, h)) { free(buf); return fail(out, err, errcap, "Out of memory"); }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     const u8 *r = buf + (size_t)y * rowbytes;
     for (x = 0; x < w; x++) {
       u8 *q = out->px + ((size_t)y * w + x) * 4;
@@ -886,7 +886,7 @@ int sgi_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if (!(row = (u8 *)malloc((size_t)w))) return fail(out, err, errcap, oom());
   if (!rgba_alloc(out, w, h)) { free(row); return fail(out, err, errcap, "Out of memory"); }
   for (ch = 0; ch < zs; ch++)
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress(y, h); y++) {
       size_t ri = (size_t)ch * h + y;
       if (!rle) {
         size_t o = 512 + ri * (size_t)w * bpc;

@@ -721,7 +721,7 @@ int flt_mosaic(Doc *d, int cell)
   i32 x, y, i, j;
   if (cell < 2) cell = 2;
   if (!op_begin(&o, d, "Mosaic", 1)) return 0;
-  for (y = (o.b.y0 / cell) * cell; y < o.b.y1; y += cell)
+  for (y = (o.b.y0 / cell) * cell; y < o.b.y1 && !op_tick(&o, y < o.b.y0 ? o.b.y0 : y); y += cell)
     for (x = (o.b.x0 / cell) * cell; x < o.b.x1; x += cell) {
       double acc[4] = { 0, 0, 0, 0 };
       long n = 0;

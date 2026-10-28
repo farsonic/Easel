@@ -298,7 +298,7 @@ u8 *jpeg_encode(const Rgba *im, int quality, int dpi, size_t *len)
   dht(&e->o, 0x01, dc_chr_bits, dc_vals); dht(&e->o, 0x11, ac_chr_bits, ac_chr_vals);
   /* the scan: all three components, the whole spectrum */
   buf_add(&e->o, "\377\332\000\014\003\001\000\002\021\003\021\000\077\000", 14);
-  for (my = 0; my < im->h; my += mcu)
+  for (my = 0; my < im->h && !progress(my, im->h); my += mcu)
     for (mx = 0; mx < im->w; mx += mcu) {
       int bx, by, x, y;
       mcu_samples(im, mx, my, mcu, Y, Cb, Cr);

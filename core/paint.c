@@ -454,7 +454,7 @@ static void mask_blur(u8 *m, i32 w, i32 h, int r)
   if (r < 1) return;
   if (!(t = (u8 *)malloc((size_t)(w > h ? w : h)))) return;
   for (pass = 0; pass < 3; pass++) {
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < h && !progress((long)pass * (w + h) + y, 3L * (w + h)); y++) {   /* (0.8: progress, and Abort) */
       u8 *row = m + (long)y * w;
       long sum = 0;
       memcpy(t, row, (size_t)w);
@@ -464,7 +464,7 @@ static void mask_blur(u8 *m, i32 w, i32 h, int r)
         sum += t[x + r + 1 >= w ? w - 1 : x + r + 1] - t[x - r < 0 ? 0 : x - r];
       }
     }
-    for (x = 0; x < w; x++) {
+    for (x = 0; x < w && !progress((long)pass * (w + h) + h + x, 3L * (w + h)); x++) {
       long sum = 0;
       for (y = 0; y < h; y++) t[y] = m[(long)y * w + x];
       for (y = -r; y <= r; y++) sum += t[y < 0 ? 0 : y >= h ? h - 1 : y];
@@ -566,6 +566,7 @@ static void sel_modify(Doc *d, const char *name, void (*fn)(Doc *, u8 *, int), i
   if (!d->sel || !(m = (u8 *)malloc((size_t)d->w * d->h))) return;
   memcpy(m, d->sel, (size_t)d->w * d->h);
   fn(d, m, arg);
+  if (progress_aborted) { free(m); return; }             /* (0.8: Abort pressed: the selection as it was) */
   sel_combine(d, m, SEL_REPLACE, name);
 }
 static void do_feather(Doc *d, u8 *m, int r) { mask_blur(m, d->w, d->h, r); }
@@ -577,7 +578,7 @@ static void do_grow(Doc *d, u8 *m, int by)
   int r = by < 0 ? -by : by, grow = by > 0;
   u8 *t = (u8 *)malloc((size_t)(w > h ? w : h));
   if (!t || !r) { free(t); return; }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, (long)w + h); y++) {          /* (0.8: progress, and Abort) */
     u8 *row = m + (long)y * w;
     memcpy(t, row, (size_t)w);
     for (x = 0; x < w; x++) {
@@ -589,7 +590,7 @@ static void do_grow(Doc *d, u8 *m, int by)
       row[x] = (u8)v;
     }
   }
-  for (x = 0; x < w; x++) {
+  for (x = 0; x < w && !progress((long)h + x, (long)w + h); x++) {
     for (y = 0; y < h; y++) t[y] = m[(long)y * w + x];
     for (y = 0; y < h; y++) {
       int v = t[y];

@@ -274,17 +274,31 @@ int file_write(const char *path, const void *data, size_t len)
 /* ------------------------------------------------------------------ 0.8: progress and Abort */
 int (*progress_hook)(long done, long total);
 int progress_aborted;
-static long prog_last = -1, prog_total = -1;
-/* (see util.h) the hook told, at most once a thousandth of the way */
+static long prog_last = -1, prog_lo = 0, prog_hi = 1000;
+/* (see util.h) done of total mapped into the part of the whole set by progress_push, in
+   thousandths; the hook told only when that has moved on */
 int progress(long done, long total)
 {
   long pm;
   if (progress_aborted) return 1;
   if (!progress_hook || total <= 0) return 0;
-  pm = (long)((double)done * 1000.0 / (double)total);
-  if (pm == prog_last && total == prog_total) return 0;
-  prog_last = pm; prog_total = total;
-  if (progress_hook(done, total)) progress_aborted = 1;
+  if (done < 0) done = 0;
+  if (done > total) done = total;
+  pm = prog_lo + (long)((double)done * (double)(prog_hi - prog_lo) / (double)total);
+  if (pm == prog_last) return 0;
+  prog_last = pm;
+  if (progress_hook(pm, 1000)) progress_aborted = 1;
   return progress_aborted;
 }
-void progress_reset(void) { progress_aborted = 0; prog_last = prog_total = -1; }
+/* (see util.h) the part now in effect narrowed to its lo..hi thousandths; what it was, for progress_pop */
+long progress_push(long lo, long hi)
+{
+  long saved = prog_lo * 2000 + prog_hi, w = prog_hi - prog_lo;
+  if (lo < 0) lo = 0;
+  if (hi > 1000) hi = 1000;
+  if (hi < lo) hi = lo;
+  prog_hi = prog_lo + w * hi / 1000; prog_lo = prog_lo + w * lo / 1000;
+  return saved;
+}
+void progress_pop(long saved) { prog_lo = saved / 2000; prog_hi = saved % 2000; }
+void progress_reset(void) { progress_aborted = 0; prog_last = -1; prog_lo = 0; prog_hi = 1000; }

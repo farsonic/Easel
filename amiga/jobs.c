@@ -27,17 +27,17 @@ static struct { Doc *doc; void *top; int (*hook)(long, long); } jobs[MAXJOBS];
 static int njobs;
 static Object *pwin, *pgauge, *ptext;
 static LONG abort_flag;
-static struct DateStamp started;         /* when the operation now running began */
+static LONG started, lastcall;           /* when the operation now running began, and last told its progress */
 static char what[80];                    /* its name, for the window's text */
 int jobs_shown;                          /* (for testing) how many times the window has opened */
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
-/* fiftieths of a second since started */
-static LONG ticks_since(void)
+/* the time in fiftieths of a second */
+static LONG now_ticks(void)
 {
   struct DateStamp now;
   DateStamp(&now);
-  return (now.ds_Days - started.ds_Days) * 24 * 60 * 50 * 60 + (now.ds_Minute - started.ds_Minute) * 60 * 50 + (now.ds_Tick - started.ds_Tick);
+  return now.ds_Days * (24L * 60 * 60 * 50) + now.ds_Minute * (60L * 50) + now.ds_Tick;
 }
 /* the progress window made and opened over the main window (awake, though the rest sleeps) */
 static void pwin_open(void)
@@ -76,13 +76,33 @@ static void pwin_close(void)
    gauge moved, the window's input dealt with; nonzero when Abort has been pressed */
 static int hook(long done, long total)
 {
+  static LONG shown_at;
+  static int shown_pc = -1;
+  LONG t;
+  char buf[100];
+  int pc;
   if (!app) return 0;
-  if (done == 0 && !pwin) DateStamp(&started);
-  if (!pwin && ticks_since() >= 25) pwin_open();
-  if (pwin) {
-    set(pgauge, MUIA_Gauge_Current, (ULONG)(total > 0 ? (double)done * 1000.0 / total : 0));
-    DoMethod(app, MUIM_Application_InputBuffered);
+  t = now_ticks();
+  /* (a pause since the last call, such as a dialog, and this is another operation: timed afresh) */
+  if (!pwin && t - lastcall > 10) started = t;
+  lastcall = t;
+  t -= started;
+  if (!pwin) {
+    if (t < 25) return abort_flag != 0;
+    pwin_open();
+    shown_at = -100; shown_pc = -1;
   }
+  /* the window brought up to date at most ten times a second */
+  if (!pwin || t - shown_at < 5) return abort_flag != 0;
+  shown_at = t;
+  pc = total > 0 ? (int)((double)done * 100.0 / total) : 0;
+  set(pgauge, MUIA_Gauge_Current, (ULONG)(total > 0 ? (double)done * 1000.0 / total : 0));
+  if (pc != shown_pc) {
+    shown_pc = pc;
+    snprintf(buf, sizeof buf, "%s   %d%%", what, pc);
+    set(ptext, MUIA_Text_Contents, (ULONG)buf);
+  }
+  DoMethod(app, MUIM_Application_InputBuffered);
   return abort_flag != 0;
 }
 /* (see easel.h) a job begun: d's undo step on top noted, the hook set */
@@ -99,7 +119,7 @@ void job_begin(Doc *d, const char *name)
   }
   else if (njobs == 1) strcpy(what, tr("Working..."));
   if (ptext) set(ptext, MUIA_Text_Contents, (ULONG)what);
-  DateStamp(&started);
+  started = lastcall = now_ticks();
   progress_hook = hook;
 }
 /* (see easel.h) the job ended: if Abort was pressed, its undo step taken back; 1 if it was aborted */

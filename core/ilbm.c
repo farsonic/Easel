@@ -104,7 +104,7 @@ int ilbm_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   if (comp == 0) memcpy(buf, body, size);
   else if (!unpack(body, bodylen, buf, size)) { msg = "Truncated ILBM file"; goto done; }
   if (!rgba_alloc(out, w, h)) { msg = "Out of memory"; goto done; }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     const u8 *row = buf + (size_t)y * rowsize;
     u8 *px = out->px + (size_t)y * w * 4, cr, cg, cb;
     int p;
@@ -296,7 +296,7 @@ int quantize(const Rgba *im, int maxc, int dither, u8 *pal, u8 *idx)
     int *cur, *nxt;
     if (!(err = (int *)calloc((size_t)(w + 2) * 6, sizeof(int)))) { nc = 0; goto done; }
     cur = err; nxt = err + (w + 2) * 3;
-    for (y = 0; y < im->h; y++) {
+    for (y = 0; y < im->h && !progress(y, im->h); y++) {
       memset(nxt, 0, sizeof(int) * (size_t)(w + 2) * 3);
       for (x = 0; x < w; x++) {
         const u8 *p = im->px + ((long)y * w + x) * 4;
@@ -379,7 +379,7 @@ u8 *ilbm_encode(const Rgba *im, int indexed256, int dither, size_t *len)
     buf_add(&b, "CAMG", 4); put32(&b, 4); put32(&b, 0);
   }
   buf_add(&b, "BODY", 4); bodypos = b.len; put32(&b, 0);
-  for (y = 0; y < im->h; y++) {
+  for (y = 0; y < im->h && !progress(y, im->h); y++) {
     const u8 *s = flat.px + (size_t)y * im->w * 4;
     for (p = 0; p < np; p++) {
       memset(plane, 0, rowbytes);
@@ -654,7 +654,7 @@ u8 *ilbm_write(const Rgba *im, const u8 *inpal, int innpal, const u8 *inidx, con
       for (i = 0; i < 16; i++) { const u8 *c = sham + (size_t)y * 48 + i * 3; put16(&b, ((u32)(c[0] / 17) << 8) | ((u32)(c[1] / 17) << 4) | (u32)(c[2] / 17)); }
   }
   buf_add(&b, "BODY", 4); bodypos = b.len; put32(&b, 0);
-  for (y = 0; y < im->h; y++) {
+  for (y = 0; y < im->h && !progress(y, im->h); y++) {
     const u8 *s = flat.px + (size_t)y * im->w * 4;
     if (np == 24) {
       for (p = 0; p < 24; p++) {
@@ -783,7 +783,7 @@ Doc *ilbm_read_indexed(const u8 *d, size_t n, char *err, size_t errcap)
   else for (i = 0; i < (1 << f.np); i++) doc->pal[i * 3] = doc->pal[i * 3 + 1] = doc->pal[i * 3 + 2] = (u8)(i * 255 / ((1 << f.np) - 1));
   if (ehb) for (i = 0; i < 96; i++) doc->pal[96 + i] = (u8)(doc->pal[i] >> 1);
   doc->npal = npal < 2 ? 2 : npal;
-  for (y = 0; y < f.h; y++) {
+  for (y = 0; y < f.h && !progress(y, f.h); y++) {
     u8 *ir = idx + (size_t)y * f.w, *pr = doc->lay[0]->px + (size_t)y * f.w * 4;
     int p;
     if (f.form == 1) memcpy(ir, buf + (size_t)y * rowsize, (size_t)f.w);

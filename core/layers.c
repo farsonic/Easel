@@ -502,7 +502,7 @@ static void shift_layer(Doc *d, int i, i32 dx, i32 dy)
   i32 x, y;
   if (!l->px || (!dx && !dy) || l->lock_pos || l->lock_all) return;
   if ((n = (u8 *)calloc((size_t)d->w * d->h, 4)) == NULL) return;
-  for (y = 0; y < d->h; y++) for (x = 0; x < d->w; x++) {
+  for (y = 0; y < d->h && !progress(y, d->h); y++) for (x = 0; x < d->w; x++) {
     i32 sx = x - dx, sy = y - dy;
     if (sx >= 0 && sy >= 0 && sx < d->w && sy < d->h) memcpy(n + ((long)y * d->w + x) * 4, l->px + ((long)sy * d->w + sx) * 4, 4);
   }

@@ -46,7 +46,7 @@ Box layer_defringe(Doc *d, int width)
   if (!dist || !state || !col || !pend) { free(dist); free(state); free(col); free(pend); return box_make(0, 0, 0, 0); }
   /* chessboard distance to transparency, two passes (past the canvas counts as solid) */
   for (k = 0; k < n; k++) dist[k] = l->px[k * 4 + 3] ? 60000 : 0;
-  for (y = 0; y < h; y++)
+  for (y = 0; y < h && !progress(y, h); y++)
     for (x = 0; x < w; x++) {
       long o = (long)y * w + x;
       u16 m = dist[o];

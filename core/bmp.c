@@ -143,7 +143,7 @@ int bmp_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
       for (x = 0; x < w; x++) if (d[off + (size_t)y * stride + (size_t)x * 4 + 3]) { usealpha = 1; break; }
     if (usealpha) field(&fa, 0xFF000000UL);
   }
-  for (y = 0; y < h; y++) {
+  for (y = 0; y < h && !progress(y, h); y++) {
     const u8 *r = d + off + (size_t)y * stride;
     u8 *o = out->px + (size_t)(topdown ? y : h - 1 - y) * w * 4;
     for (x = 0; x < w; x++, o += 4) {
