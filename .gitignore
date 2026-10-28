@@ -1,0 +1,6 @@
+/Easel
+*.lha
+.*.lha.new
+/av1/obj/
+*.o
+*.whl

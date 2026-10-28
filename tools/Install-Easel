@@ -1,0 +1,227 @@
+; $VER: Install-Easel 0.2 (28.10.2026)
+;
+; Installer script for Easel, the picture editor (Commodore's Installer 43 or later, or AROS's).
+; Started from its icon (default tool Installer). It installs or updates Easel in a drawer of your
+; choosing, or removes it.
+;
+; Installs:  <where you choose>/Easel: the program, README.md, Licenses.txt, the Fonts and TrueType drawers,
+;            the example pictures (optional) and the source code (optional), all with their
+;            icons; the Easel drawer gets Easel's own icon. The example pictures' icons are set
+;            to open in the Easel just installed.
+; Keeps:     your settings (Easel.prefs, Easel.recent) when updating.
+; Needs:     a 68040 or better, MUI 3.8 or later (muimaster.library 19).
+;
+; The script runs in the drawer it was unpacked into (Easel/), so its sources are relative to that.
+; Texts carry their own line breaks (AROS's Installer doesn't wrap them), and function names are
+; in lower case (AROS's Installer doesn't know "IN", only "in").
+
+(set @app-name "Easel")
+(set #version "0.2")
+
+; ------------------------------------------------------------------ install or remove
+
+(set #mode
+  (askchoice
+    (prompt "Do you want to install Easel,\nor remove an installed copy?")
+    (help "Install or update: copies Easel into a drawer of\n"
+          "your choosing. Installing over an older Easel updates\n"
+          "it and keeps your settings (Easel.prefs) and recent\n"
+          "pictures.\n\n"
+          "Remove: deletes an installed Easel drawer, settings\n"
+          "and all. Your pictures are not touched unless you\n"
+          "saved them inside the Easel drawer.")
+    (choices "Install or update" "Remove")
+    (default 0)))
+
+(if (= #mode 1)
+(
+  ; ---------------------------------------------------------------- remove
+  (set #old
+    (askdir
+      (prompt "Which Easel drawer should be removed?")
+      (help "Choose the Easel drawer itself: the one holding\n"
+            "the Easel program and its Fonts drawer.")
+      (default (if (exists "Work:Easel" (noreq)) "Work:Easel" "SYS:"))))
+  ; only a drawer that really is Easel's
+  (if (not (and (exists (tackon #old "Easel")) (exists (tackon #old "Fonts/QuillSans.font"))))
+    (abort (cat "\"" #old "\"\n"
+                "doesn't look like a Easel drawer (there is no\n"
+                "Easel program with a Fonts drawer in it),\n"
+                "so nothing was removed.")))
+  (if (askbool
+        (prompt (cat "Delete the whole drawer\n\n" #old "\n\n"
+                     "with everything in it, including your Easel\n"
+                     "settings and any pictures saved there?"))
+        (help "This can't be undone. Move any pictures you\n"
+              "want to keep out of the drawer first.")
+        (default 0))
+  (
+    (set #parentinfo (cat #old ".info"))
+    (run (cat "C:Delete >NIL: \"" #old "\" ALL QUIET FORCE"))
+    (if (exists #parentinfo (noreq)) (delete #parentinfo))
+    (exit "Easel has been removed." (quiet))
+  )
+  (exit "Nothing was removed." (quiet)))
+))
+
+; ------------------------------------------------------------------ checks
+
+(set #cpu (database "cpu"))
+(if (or (= #cpu "68000") (= #cpu "68010") (= #cpu "68020") (= #cpu "68030"))
+  (if (not (askbool
+             (prompt (cat "This Amiga has a " #cpu " processor.\n"
+                          "Easel is built for a 68040 or better\n"
+                          "and will not run on it.\n\n"
+                          "Install anyway (for another Amiga, say)?"))
+             (help "Easel uses the 68040's instructions and its\n"
+                   "floating-point unit for its picture work. An\n"
+                   "accelerator card with a 68040 or 68060 is needed.")
+             (default 0)))
+    (abort "Easel was not installed.")))
+
+(set #mui 0)
+(if (exists "LIBS:muimaster.library" (noreq))
+  (set #mui (/ (getversion "LIBS:muimaster.library") 65536)))
+(if (< #mui 19)
+  (if (not (askbool
+             (prompt (if (= #mui 0)
+                       (cat "MUI isn't installed (there is no\n"
+                            "LIBS:muimaster.library).\n\n"
+                            "Easel needs MUI 3.8 or later. Install\n"
+                            "Easel anyway and add MUI afterwards?")
+                       (cat "The MUI installed (muimaster.library " #mui ")\n"
+                            "is older than Easel needs (version 19,\n"
+                            "MUI 3.8).\n\n"
+                            "Install Easel anyway and update MUI\n"
+                            "afterwards?")))
+             (help "MUI is the user interface system Easel is built\n"
+                   "with. It is on Aminet (dev/gui/mui38usr.lha) and\n"
+                   "at muidev.de (MUI 5). AROS and MorphOS have it\n"
+                   "built in.")
+             (default 1)))
+    (abort "Easel was not installed.")))
+
+; ------------------------------------------------------------------ where
+
+(set #where
+  (askdir
+    (prompt "Where should Easel go? A drawer called \"Easel\"\n"
+            "is made there (or updated, if it is there already).")
+    (help "Choose the drawer or disk to put Easel in, for\n"
+          "example Work:. Easel goes into a drawer of its own,\n"
+          "Easel, inside the one you choose. If an older Easel\n"
+          "is there, it is updated and your settings are kept.")
+    (default (if (exists "Work:" (noreq)) "Work:" "SYS:"))
+    (disk)))
+(set #dest (tackon #where "Easel"))
+(set @default-dest #dest)
+
+(set #update (exists (tackon #dest "Easel") (noreq)))
+
+; the parts
+(set #parts
+  (askoptions
+    (prompt "Which parts should be installed?")
+    (help "Easel itself (the program, its screen fonts and\n"
+          "the fonts for the Text tool) is always installed.\n\n"
+          "Example pictures: a sample photo showing\n"
+          "what Easel can do (a few KB).\n\n"
+          "Source code: Easel's C source, for programmers\n"
+          "(about 1 MB).")
+    (choices "Example pictures" "Source code")
+    (default 1)))
+
+; ------------------------------------------------------------------ copy
+
+; the same drawer it was unpacked in: nothing to copy, only the icons to point at it
+(set #here (expandpath ""))
+(set #same (if (exists #dest (noreq)) (= (expandpath #dest) #here) 0))
+
+(if (not #same)
+(
+  (if (not (exists #dest (noreq)))
+    (makedir #dest
+      (prompt "Making the Easel drawer")
+      (help @makedir-help)))
+  ; the drawer's own icon (next to the unpacked drawer), else a plain one
+  (if (exists "/Easel.info" (noreq))
+    (copyfiles (source "/Easel.info") (dest #where) (nogauge))
+    (if (not (exists (cat #dest ".info") (noreq)))
+      (run (cat "C:Copy >NIL: \"ENVARC:Sys/def_drawer.info\" \"" #dest ".info\""))))
+
+  (complete 5)
+  (copyfiles
+    (prompt "Copying Easel")
+    (help @copyfiles-help)
+    (source "Easel")
+    (dest #dest)
+    (infos))
+  (copyfiles
+    (source "README.md")
+    (dest #dest)
+    (infos)
+    (nogauge))
+  (copyfiles
+    (source "Licenses.txt")
+    (dest #dest)
+    (infos)
+    (nogauge))
+  (complete 10)
+  (copyfiles
+    (prompt "Copying Easel's screen fonts")
+    (help @copyfiles-help)
+    (source "Fonts")
+    (dest (tackon #dest "Fonts"))
+    (all))
+  (if (exists "Fonts.info" (noreq)) (copyfiles (source "Fonts.info") (dest #dest) (nogauge)))
+  (complete 55)
+  (copyfiles
+    (prompt "Copying the fonts for the Text tool")
+    (help @copyfiles-help)
+    (source "TrueType")
+    (dest (tackon #dest "TrueType"))
+    (all))
+  (if (exists "TrueType.info" (noreq)) (copyfiles (source "TrueType.info") (dest #dest) (nogauge)))
+  (complete 80)
+  (complete 85)
+
+  (if (in #parts 0)
+    (copyfiles
+      (prompt "Copying the example pictures")
+      (help @copyfiles-help)
+      (source "")
+      (dest #dest)
+      (pattern "#?.(jpg|png|ora|iff)")
+      (infos)))
+  (complete 90)
+  (if (in #parts 1)
+  (
+    (copyfiles
+      (prompt "Copying the source code")
+      (help @copyfiles-help)
+      (source "Source")
+      (dest (tackon #dest "Source"))
+      (all))
+    (if (exists "Source.info" (noreq)) (copyfiles (source "Source.info") (dest #dest) (nogauge)))
+  ))
+))
+
+; ------------------------------------------------------------------ icons
+
+; the example pictures open in the Easel just installed
+(set #tool (tackon #dest "Easel"))
+(foreach #dest "#?.(jpg|png|ora|iff)"
+  (if (exists (tackon #dest (cat @each-name ".info")) (noreq))
+    (tooltype
+      (dest (tackon #dest @each-name))
+      (setdefaulttool #tool))))
+(complete 100)
+
+(exit
+  (cat "Easel " #version " is "
+       (if #same "ready in" (if #update "updated in" "installed in"))
+       "\n\n" #dest "\n\n"
+       "Double-click the Easel icon to start it, or a\n"
+       "picture whose icon has Easel as its default\n"
+       "tool. README.md tells you what it can do and\n"
+       "how to use it."))

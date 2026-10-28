@@ -1,0 +1,346 @@
+Easel - credits and licences
+============================
+
+Easel's own code is by its author. Easel also contains work by other people, used under the
+licences below. Every one of them allows Easel to be given away, sold, or supported by
+donations. What they ask in return is that their copyright notices and licence texts travel with
+Easel, which is what this file is for. Thank you to all of them.
+
+What                         Where in Easel                     Licence
+---------------------------  ---------------------------------  ---------------------------
+dav1d (AV1 decoder),         av1/ in the source; decodes AVIF   BSD 2-clause
+  VideoLAN and dav1d authors
+PhotoCraft, ArtCraft Team    picture readers in core/: tiff.c,  MIT
+  and PhotoCraft contributors  psd.c, rasters.c, webp.c,
+                               amigafmt.c (each says what it took)
+X.Org rgb.txt colour names   XPM colour names (core/rasters.c)  MIT/X11 (The Open Group,
+                                                                  Oracle)
+libwebp, Google              core/webp.c follows its integer    BSD 3-clause, with Google's
+                               arithmetic so WebP pictures come   WebM patent grant
+                               out exactly as libwebp's do
+Liberation fonts (Red Hat,   TrueType drawer, and the Quill*    SIL Open Font License 1.1
+  Google), Carlito, Caladea    bitmap fonts made from them
+                               (renamed, as the licence asks)
+
+Changes made to dav1d for Easel: built for one thread without assembly (av1/config.h,
+av1/compat/), anonymous structs and unions given names so vbcc can compile it
+(av1/tools/name_anon.py does this), and small vbcc fixes in attributes.h, cdf.c and itx_tmpl.c.
+
+Easel needs MUI (muimaster.library) to run. MUI is not part of Easel and is not included; it has
+its own licence from its authors.
+
+==============================================================================
+
+dav1d
+
+==============================================================================
+
+Copyright © 2018-2025, VideoLAN and dav1d authors
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+==============================================================================
+
+PhotoCraft (https://github.com/storytold/photocraft), used under the MIT License (it is offered
+as MIT or Apache-2.0; Easel takes the MIT option). PhotoCraft's name and logos are trademarks of
+the ArtCraft Team and are not used by Easel; the name appears here only to credit the code.
+
+==============================================================================
+
+MIT License
+
+Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+==============================================================================
+
+X.Org rgb.txt (the X11 colour names)
+
+==============================================================================
+
+Copyright 1985, 1989, 1998  The Open Group
+
+Permission to use, copy, modify, distribute, and sell this software and its
+documentation for any purpose is hereby granted without fee, provided that
+the above copyright notice appear in all copies and that both that
+copyright notice and this permission notice appear in supporting
+documentation.
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE OPEN GROUP BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the name of The Open Group shall
+not be used in advertising or otherwise to promote the sale, use or
+other dealings in this Software without prior written authorization
+from The Open Group.
+
+Copyright (c) 1994, 2008, Oracle and/or its affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next
+paragraph) shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+==============================================================================
+
+libwebp (https://chromium.googlesource.com/webm/libwebp)
+==============================================================================
+Copyright (c) 2010, Google Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+
+  * Neither the name of Google nor the names of its contributors may
+    be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+Additional IP Rights Grant (Patents)
+------------------------------------
+
+"These implementations" means the copyrightable works that implement the WebM
+codecs distributed by Google as part of the WebM Project.
+
+Google hereby grants to you a perpetual, worldwide, non-exclusive, no-charge,
+royalty-free, irrevocable (except as stated in this section) patent license to
+make, have made, use, offer to sell, sell, import, transfer, and otherwise
+run, modify and propagate the contents of these implementations of WebM, where
+such license applies only to those patent claims, both currently owned by
+Google and acquired in the future, licensable by Google that are necessarily
+infringed by these implementations of WebM. This grant does not include claims
+that would be infringed only as a consequence of further modification of these
+implementations. If you or your agent or exclusive licensee institute or order
+or agree to the institution of patent litigation or any other patent
+enforcement activity against any entity (including a cross-claim or
+counterclaim in a lawsuit) alleging that any of these implementations of WebM
+or any code incorporated within any of these implementations of WebM
+constitute direct or contributory patent infringement, or inducement of
+patent infringement, then any patent rights granted to you under this License
+for these implementations of WebM shall terminate as of the date such
+litigation is filed.
+
+==============================================================================
+
+Fonts
+
+==============================================================================
+
+The fonts in this drawer are not part of Easel's own code. Each is distributed unmodified under
+the SIL Open Font License, Version 1.1, reproduced below.
+
+Caladea: Copyright 2012 The Caladea Project Authors (https://github.com/huertatipografica/Caladea)
+Carlito: Copyright 2013 The Carlito Project Authors (https://github.com/googlefonts/carlito)
+Liberation Mono: Digitized data copyright (c) 2010 Google Corporation.
+Copyright (c) 2012 Red Hat, Inc.
+Liberation Sans: Digitized data copyright (c) 2010 Google Corporation.
+Copyright (c) 2012 Red Hat, Inc.
+Liberation Serif: Digitized data copyright (c) 2010 Google Corporation.
+Copyright (c) 2012 Red Hat, Inc.
+
+Liberation fonts: https://github.com/liberationfonts
+Carlito and Caladea: Google Fonts (crosextra), https://github.com/googlefonts
+
+----------------------------------------------------------------------
+
+This Font Software is licensed under the SIL Open Font License,
+Version 1.1.
+
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+PREAMBLE The goals of the Open Font License (OFL) are to stimulate
+worldwide development of collaborative font projects, to support the font
+creation efforts of academic and linguistic communities, and to provide
+a free and open framework in which fonts may be shared and improved in
+partnership with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves.
+The fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works.  The fonts and derivatives,
+however, cannot be released under any other type of license.  The
+requirement for fonts to remain under this license does not apply to
+any document created using the fonts or their derivatives.
+
+.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such.
+This may include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components
+as distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting ? in part or in whole ?
+any of the components of the Original Version, by changing formats or
+by porting the Font Software to a new environment.
+
+"Author" refers to any designer, engineer, programmer, technical writer
+or other person who contributed to the Font Software.
+
+.
+PERMISSION & CONDITIONS
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,in
+   Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+   redistributed and/or sold with any software, provided that each copy
+   contains the above copyright notice and this license. These can be
+   included either as stand-alone text files, human-readable headers or
+   in the appropriate machine-readable metadata fields within text or
+   binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+   Name(s) unless explicit written permission is granted by the
+   corresponding Copyright Holder. This restriction only applies to the
+   primary font name as presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+   Software shall not be used to promote, endorse or advertise any
+   Modified Version, except to acknowledge the contribution(s) of the
+   Copyright Holder(s) and the Author(s) or with their explicit written
+   permission.
+
+5) The Font Software, modified or unmodified, in part or in whole, must
+   be distributed entirely under this license, and must not be distributed
+   under any other license. The requirement for fonts to remain under
+   this license does not apply to any document created using the Font
+   Software.
+
+.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are not met.
+
+.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT.  IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER
+DEALINGS IN THE FONT SOFTWARE.
+
+
+Files: debian/*
+Copyright:
+2008 Alan Baghumian <alan@technotux.org>
+2008-2018 Holger Levsen <holger@debian.org>
+2009-2012 Christian Perrier <bubulle@debian.org>
+2011-2023 Fabian Greffrath <fabian@debian.org>
+2018 Rene Engelhard <rene@debian.org>
+License: GPL-2+
+This package is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This package is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>
+
+On Debian systems, the complete text of the GNU General
+Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+

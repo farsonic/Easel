@@ -1,0 +1,1231 @@
+/*
+ * main.c - Easel, a picture editor for the Amiga (MUI) laid out as PhotoCraft is: the options bar
+ * along the top, the tools down the left, the documents as tabs over the canvas, the Color,
+ * Layers and History panels down the right, the status bar along the bottom, and the menus.
+ *
+ * This file holds the window, the menus and their commands, the open documents, the files
+ * (opening and saving through core/codec.c), and the program's start and end.
+ */
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <math.h>
+#include <exec/memory.h>
+#include <exec/tasks.h>
+#include <dos/dos.h>
+#include <dos/dosextens.h>
+#include <workbench/startup.h>
+#include <libraries/asl.h>
+#include <libraries/gadtools.h>
+#include <graphics/gfxbase.h>
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <proto/intuition.h>
+#include <proto/graphics.h>
+#include <proto/muimaster.h>
+#include <proto/utility.h>
+#include <proto/icon.h>
+#include <clib/alib_protos.h>
+#include "easel.h"
+#include "theme.h"
+#include "lang.h"
+#include "ids.h"
+#include "splash.h"
+#include "sysfonts.h"
+#include "../core/codec.h"
+#include "../core/image.h"
+
+#ifndef MUIA_Window_DisableKeys
+#define MUIA_Window_DisableKeys 0x80424c36UL
+#endif
+#ifndef MUIKEYF_WINDOW_CLOSE
+#define MUIKEYF_WINDOW_CLOSE (1UL << MUIKEY_WINDOW_CLOSE)
+#endif
+
+const char verstag[] = "$VER: Easel 0.2 (28.10.2026) a picture editor for the Amiga (MUI)";
+
+struct IntuitionBase *IntuitionBase;
+struct GfxBase *GfxBase;
+struct Library *MUIMasterBase, *LayersBase, *DiskfontBase, *KeymapBase, *UtilityBase, *CyberGfxBase;
+extern struct WBStartup *_WBenchMsg;
+
+FILE *qlog;
+char pub_screen[64];
+Object *app, *win, *canvas, *toolbox, *optbar, *colorpanel, *layerpanel, *historypanel, *statusbar, *doctabs;
+static Object *vscroll, *hscroll;
+FontSet fonts;
+int pref_dark = 1;
+DocView docs[MAXDOCS];
+int ndocs, curdoc = -1;
+Opts opt;
+int tool = TL_BRUSH;
+static Clip *clip;                       /* what Easel copied last */
+static int fonts_assigned;
+static int untitled;
+static LONG win_box[4];
+
+const char *const tool_names[TL_N] = {
+  "Move Tool", "Rectangular Marquee Tool", "Elliptical Marquee Tool", "Lasso Tool", "Polygonal Lasso Tool", "Magic Wand Tool",
+  "Crop Tool", "Eyedropper Tool", "Clone Stamp Tool", "Brush Tool", "Pencil Tool", "Eraser Tool", "Paint Bucket Tool",
+  "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Text Tool",
+  "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool"
+};
+const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z' };
+
+/* ------------------------------------------------------------------ the menus */
+#define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
+#define I(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)id }
+#define H(label) { NM_ITEM, (STRPTR)label, 0, 0, 0, 0 }
+#define S(label, key, id) { NM_SUB, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)id }
+#define T(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, CHECKIT | MENUTOGGLE, 0, (APTR)id }
+#define BAR { NM_ITEM, NM_BARLABEL, 0, 0, 0, 0 }
+#define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
+static struct NewMenu menus[] = {
+  M("File"),
+  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN), I("Place as Layer...", 0, ID_PLACE), BAR,
+  I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), BAR,
+  I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Revert", 0, ID_REVERT),
+  H("Export"), S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), BAR,
+  I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
+  M("Edit"),
+  I("Undo", "Z", ID_UNDO), I("Redo", "Y", ID_REDO), I("Step Backward", 0, ID_STEPBACK), I("Step Forward", 0, ID_STEPFWD), BAR,
+  I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE), I("Clear", 0, ID_CLEAR), BAR,
+  I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
+  I("Free Transform...", "T", ID_FREETRANSFORM),
+  H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
+  S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
+  I("Purge Undo History", 0, ID_PURGE),
+  M("Image"),
+  H("Adjustments"),
+  S("Brightness/Contrast...", 0, ID_ADJ_BC), S("Levels...", "L", ID_ADJ_LEVELS), S("Curves...", "M", ID_ADJ_CURVES), S("Exposure...", 0, ID_ADJ_EXPOSURE), SBAR,
+  S("Vibrance...", 0, ID_ADJ_VIBRANCE), S("Hue/Saturation...", "U", ID_ADJ_HUESAT), S("Color Balance...", "B", ID_ADJ_BALANCE), S("Black & White...", 0, ID_ADJ_BW),
+  S("Photo Filter...", 0, ID_ADJ_PHOTO), SBAR,
+  S("Invert", "I", ID_ADJ_INVERT), S("Posterize...", 0, ID_ADJ_POSTERIZE), S("Threshold...", 0, ID_ADJ_THRESHOLD), SBAR,
+  S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE),
+  I("Auto Tone", 0, ID_AUTOTONE), I("Auto Contrast", 0, ID_AUTOCONTRAST), I("Auto Color", 0, ID_AUTOCOLOR), BAR,
+  I("Image Size...", 0, ID_IMAGESIZE), I("Canvas Size...", 0, ID_CANVASSIZE),
+  H("Image Rotation"), S("180\260", 0, ID_IMG_R180), S("90\260 Clockwise", 0, ID_IMG_R90R), S("90\260 Anticlockwise", 0, ID_IMG_R90L), S("Arbitrary...", 0, ID_IMG_RANY), SBAR,
+  S("Flip Canvas Horizontal", 0, ID_IMG_FLIPH), S("Flip Canvas Vertical", 0, ID_IMG_FLIPV),
+  I("Crop", 0, ID_CROP), I("Trim", 0, ID_TRIM), BAR, I("Duplicate", 0, ID_DUPIMAGE),
+  M("Layer"),
+  I("New Layer", 0, ID_NEWLAYER), I("Duplicate Layer", "J", ID_DUPLAYER), I("Delete Layer", 0, ID_DELLAYER), I("Layer Properties...", 0, ID_LAYERPROPS), BAR,
+  I("New Layer via Copy", 0, ID_LAYERFROMSEL), I("New Layer via Cut", 0, ID_LAYERCUTSEL), BAR,
+  H("Arrange"), S("Bring to Front", 0, ID_TOFRONT), S("Bring Forward", 0, ID_RAISE), S("Send Backward", 0, ID_LOWER), S("Send to Back", 0, ID_TOBACK),
+  I("Lock Layer", 0, ID_LOCKLAYER), I("Lock Transparency", 0, ID_ALPHALOCK), I("Hide/Show Layer", 0, ID_HIDELAYER), BAR,
+  I("Merge Down", "E", ID_MERGEDOWN), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
+  M("Select"),
+  I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Inverse", 0, ID_INVERSE), BAR,
+  I("Color Range...", 0, ID_COLORRANGE), I("Layer Transparency", 0, ID_SELALPHA), BAR,
+  H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
+  M("Filter"),
+  H("Blur"), S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL), S("Blur", 0, ID_F_BLUR),
+  H("Sharpen"), S("Unsharp Mask...", 0, ID_F_UNSHARP), S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen More", 0, ID_F_SHARPENMORE),
+  H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Median...", 0, ID_F_MEDIAN), S("Despeckle", 0, ID_F_DESPECKLE),
+  H("Distort"), S("Twirl...", 0, ID_F_TWIRL), S("Pinch...", 0, ID_F_PINCH), S("Spherize...", 0, ID_F_SPHERIZE), S("Ripple...", 0, ID_F_RIPPLE), S("Wave...", 0, ID_F_WAVE),
+  H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Solarize", 0, ID_F_SOLARIZE), S("Oil Paint...", 0, ID_F_OIL), S("Mosaic...", 0, ID_F_MOSAIC),
+  H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Vignette...", 0, ID_F_VIGNETTE),
+  H("Other"), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
+  M("View"),
+  I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
+  T("Dark Interface", 0, ID_DARKUI),
+  M("Window"),
+  I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC),
+  { NM_END, 0, 0, 0, 0, 0 }
+};
+
+/* ------------------------------------------------------------------ small helpers */
+DocView *cur_view(void) { return curdoc >= 0 && curdoc < ndocs ? &docs[curdoc] : NULL; }
+Doc *cur_doc(void) { DocView *v = cur_view(); return v ? v->doc : NULL; }
+static ULONG xget(Object *o, ULONG attr) { ULONG v = 0; get(o, attr, &v); return v; }
+int ask(const char *gadgets, const char *fmt, const char *arg)
+{
+  return (int)MUI_Request(app, win, 0, (STRPTR)"Easel", (STRPTR)tr(gadgets), (STRPTR)tr(fmt), arg);
+}
+static void menu_set(ULONG id, ULONG attr, ULONG val)
+{
+  Object *strip = win ? (Object *)xget(win, MUIA_Window_Menustrip) : NULL, *it;
+  if (strip && (it = (Object *)DoMethod(strip, MUIM_FindUData, id))) set(it, attr, val);
+}
+/* the ASL file requester, starting in path's drawer with its file name; path is replaced by the
+   choice. 1 if a file was chosen */
+static int file_request(int save, const char *titletext, char *path, size_t cap, const char *pattern)
+{
+  struct FileRequester *fr;
+  char dir[400], file[108];
+  int ok = 0;
+  strncpy(dir, path, sizeof dir - 1); dir[sizeof dir - 1] = 0;
+  *PathPart((STRPTR)dir) = 0;
+  strncpy(file, path[0] ? (const char *)FilePart((STRPTR)path) : "", sizeof file - 1); file[sizeof file - 1] = 0;
+  if (!(fr = (struct FileRequester *)MUI_AllocAslRequestTags(ASL_FileRequest, ASLFR_TitleText, (ULONG)tr(titletext),
+        ASLFR_DoSaveMode, save, ASLFR_InitialDrawer, (ULONG)dir, ASLFR_InitialFile, (ULONG)file,
+        (ULONG)(pattern ? ASLFR_InitialPattern : TAG_IGNORE), (ULONG)pattern, (ULONG)(pattern ? ASLFR_DoPatterns : TAG_IGNORE), TRUE, TAG_DONE))) return 0;
+  if (MUI_AslRequestTags(fr, ASLFR_Window, (ULONG)xget(win, MUIA_Window_Window), TAG_DONE)) {
+    strncpy(path, (const char *)fr->fr_Drawer, cap - 1); path[cap - 1] = 0;
+    ok = AddPart((STRPTR)path, fr->fr_File, cap) && fr->fr_File[0];
+  }
+  MUI_FreeAslRequest(fr);
+  return ok;
+}
+
+/* ------------------------------------------------------------------ modal dialogs */
+ULONG run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id))
+{
+  ULONG sigs = 0, id = 0;
+  int i, done = 0;
+  if (!w) return ID_DLGCANCEL;
+  DoMethod(app, OM_ADDMEMBER, (ULONG)w);
+  DoMethod(w, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCANCEL);
+  set(win, MUIA_Window_Sleep, TRUE);
+  set(w, MUIA_Window_Open, TRUE);
+  while (!done) {
+    id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
+    if (id == ID_DLGCANCEL || id == MUIV_Application_ReturnID_Quit) { id = ID_DLGCANCEL; break; }
+    for (i = 0; ends[i]; i++) if (id == ends[i]) done = 1;
+    if (done) break;
+    if (id && each) each(id);
+    if (!id && each) each(0);                   /* (idle: a dialog's preview catches up) */
+    if (sigs) sigs = Wait(sigs | SIGBREAKF_CTRL_C);
+  }
+  set(w, MUIA_Window_Open, FALSE);
+  set(win, MUIA_Window_Sleep, FALSE);
+  DoMethod(app, OM_REMMEMBER, (ULONG)w);
+  return id;
+}
+Object *dialog_window(const char *t, Object *contents, const char *oklabel)
+{
+  Object *ok, *cancel, *w;
+  w = QWindowObject, MUIA_Window_Title, (ULONG)tr(t), MUIA_Window_RefWindow, (ULONG)win, MUIA_Window_LeftEdge, MUIV_Window_LeftEdge_Centered,
+    MUIA_Window_TopEdge, MUIV_Window_TopEdge_Centered,
+    WindowContents, VGroup, QDLG,
+      Child, contents,
+      Child, HGroup, Child, HSpace(0), Child, ok = QButton(tr(oklabel ? oklabel : "OK")), Child, cancel = QButton(tr("Cancel")), End,
+    End,
+  End;
+  if (!w) { if (contents) MUI_DisposeObject(contents); return NULL; }
+  DoMethod(ok, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGOK);
+  DoMethod(cancel, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCANCEL);
+  return w;
+}
+int ask_string(const char *t, const char *label, char *buf, int cap)
+{
+  Object *str, *w;
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  int ok;
+  w = dialog_window(t, HGroup, Child, QLabel(tr(label), MUIO_Label_SingleFrame),
+                    Child, str = StringObject, StringFrame, MUIA_String_Contents, (ULONG)buf, MUIA_String_MaxLen, cap, MUIA_CycleChain, 1, MUIA_FixWidthTxt, (ULONG)"MMMMMMMMMMMMMMMMMMMMMMMM", End, End, NULL);
+  if (!w) return 0;
+  DoMethod(str, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGOK);
+  set(w, MUIA_Window_ActiveObject, (ULONG)str);
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  if (ok) { strncpy(buf, (const char *)xget(str, MUIA_String_Contents), cap - 1); buf[cap - 1] = 0; }
+  MUI_DisposeObject(w);
+  return ok;
+}
+int ask_number(const char *t, const char *label, LONG *v, LONG min, LONG max)
+{
+  char buf[24];
+  LONG n;
+  sprintf(buf, "%ld", (long)*v);
+  if (!ask_string(t, label, buf, sizeof buf)) return 0;
+  n = atol(buf);
+  if (n < min) n = min;
+  if (n > max) n = max;
+  *v = n;
+  return 1;
+}
+/* the colour picker: MUI's Coloradjust (red, green and blue, or a colour wheel) and the hex value */
+LONG pick_color(const char *t, ULONG start)
+{
+  Object *ca, *hex, *w;
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  ULONG rgb[3];
+  char buf[16];
+  LONG c = -1;
+  rgb[0] = ((start >> 16) & 255) * 0x01010101UL; rgb[1] = ((start >> 8) & 255) * 0x01010101UL; rgb[2] = (start & 255) * 0x01010101UL;
+  sprintf(buf, "%06lX", (unsigned long)(start & 0xFFFFFF));
+  w = dialog_window(t, VGroup,
+        Child, ca = ColoradjustObject, MUIA_Coloradjust_RGB, (ULONG)rgb, End,
+        Child, HGroup, Child, QLabel(tr("Hex #"), MUIO_Label_SingleFrame),
+          Child, hex = StringObject, StringFrame, MUIA_String_Contents, (ULONG)buf, MUIA_String_MaxLen, 8, MUIA_String_Accept, (ULONG)"0123456789abcdefABCDEF", MUIA_CycleChain, 1, End,
+          Child, HSpace(0), End,
+      End, NULL);
+  if (!w) return -1;
+  DoMethod(hex, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
+  for (;;) {
+    static const ULONG ends2[] = { ID_DLGOK, ID_DLGCHANGE, 0 };
+    ULONG id = run_modal(w, ends2, NULL);
+    if (id == ID_DLGCHANGE) {
+      ULONG v = strtoul((const char *)xget(hex, MUIA_String_Contents), NULL, 16);
+      rgb[0] = ((v >> 16) & 255) * 0x01010101UL; rgb[1] = ((v >> 8) & 255) * 0x01010101UL; rgb[2] = (v & 255) * 0x01010101UL;
+      set(ca, MUIA_Coloradjust_RGB, (ULONG)rgb);
+      continue;
+    }
+    if (id == ID_DLGOK) {
+      ULONG *p = (ULONG *)xget(ca, MUIA_Coloradjust_RGB);
+      if (p) c = (LONG)(((p[0] >> 24) << 16) | ((p[1] >> 24) << 8) | (p[2] >> 24));
+    }
+    break;
+  }
+  (void)ends;
+  MUI_DisposeObject(w);
+  return c;
+}
+
+/* ------------------------------------------------------------------ fonts for the Text tool */
+static const char *famlist[MAXFACES];
+static int nfam = -1;
+int font_count(void)
+{
+  if (nfam < 0) nfam = fonts_families(&fonts, famlist, MAXFACES);
+  return nfam;
+}
+const char *font_name(int i) { return i >= 0 && i < font_count() ? famlist[i] : "Liberation Sans"; }
+
+/* ------------------------------------------------------------------ tools */
+Brush tool_brush(int t)
+{
+  Brush b;
+  memset(&b, 0, sizeof b);
+  b.tool = t == TL_PENCIL ? PT_PENCIL : t == TL_ERASER ? PT_ERASER : t == TL_CLONE ? PT_CLONE : t == TL_BLUR ? PT_BLUR :
+           t == TL_SHARPEN ? PT_SHARPEN : t == TL_SMUDGE ? PT_SMUDGE : t == TL_DODGE ? PT_DODGE : t == TL_BURN ? PT_BURN :
+           t == TL_SPONGE ? PT_SPONGE : PT_BRUSH;
+  b.size = opt.size[t]; b.hardness = opt.hardness[t]; b.opacity = opt.opacity[t]; b.flow = opt.flow[t];
+  b.spacing = 25; b.blend = opt.mode[t]; b.strength = opt.strength[t];
+  return b;
+}
+static void opts_defaults(void)
+{
+  int t;
+  for (t = 0; t < TL_N; t++) { opt.size[t] = 20; opt.hardness[t] = 100; opt.opacity[t] = 100; opt.flow[t] = 100; opt.mode[t] = BM_NORMAL; opt.strength[t] = 50; }
+  opt.hardness[TL_BRUSH] = 80; opt.size[TL_PENCIL] = 1; opt.size[TL_ERASER] = 40; opt.hardness[TL_ERASER] = 50;
+  opt.size[TL_BLUR] = opt.size[TL_SHARPEN] = opt.size[TL_SMUDGE] = 30; opt.hardness[TL_BLUR] = opt.hardness[TL_SMUDGE] = 0;
+  opt.size[TL_DODGE] = opt.size[TL_BURN] = opt.size[TL_SPONGE] = 50; opt.hardness[TL_DODGE] = opt.hardness[TL_BURN] = opt.hardness[TL_SPONGE] = 0;
+  opt.tolerance = 32; opt.contiguous = 1; opt.antialias = 1; opt.fill_opacity = 100;
+  opt.line_width = 3; opt.text_size = 48; opt.sample = 0;
+}
+/* each letter's tool: the one used last of those sharing it, at first the group's usual one */
+static signed char key_tool[26];
+int tool_for_key(int c)
+{
+  static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
+    TL_BLUR, TL_DODGE, TL_TEXT, TL_RECT, TL_HAND, TL_ZOOM };
+  int i;
+  if (c < 'A' || c > 'Z') return -1;
+  if (key_tool[c - 'A']) return key_tool[c - 'A'] - 1;
+  for (i = 0; i < (int)(sizeof first / sizeof first[0]); i++) if (tool_keys[first[i]] == c) return first[i];
+  return -1;
+}
+void set_tool(int t)
+{
+  if (t < 0 || t >= TL_N) return;
+  tool = t;
+  key_tool[tool_keys[t] - 'A'] = (signed char)(t + 1);
+  if (canvas) DoMethod(canvas, MUIM_Canvas_Tool);
+  if (toolbox) DoMethod(toolbox, MUIM_Tools_Refresh);
+  if (optbar) DoMethod(optbar, MUIM_Opts_Refresh);
+}
+
+/* ------------------------------------------------------------------ keeping everything up to date */
+static void set_title(void)
+{
+  static char t[200];
+  DocView *v = cur_view();
+  if (v) snprintf(t, sizeof t, "Easel - %s%s", v->name, v->doc->dirty ? " *" : "");
+  else strcpy(t, "Easel");
+  if (win) set(win, MUIA_Window_Title, (ULONG)t);
+}
+static void update_menus(void)
+{
+  Doc *d = cur_doc();
+  static char undo[80], redo[80];
+  int has = d != NULL;
+  static const ULONG needdoc[] = { ID_CLOSE, ID_CLOSEALL, ID_SAVE, ID_SAVEAS, ID_REVERT, ID_PLACE, ID_EXPPNG, ID_EXPJPEG, ID_EXPBMP, ID_EXPILBM, ID_EXPILBM8,
+    ID_CUT, ID_COPY, ID_COPYMERGED, ID_CLEAR, ID_FILL, ID_FILLFG, ID_FILLBG, ID_STROKE, ID_FREETRANSFORM, ID_IMAGESIZE, ID_CANVASSIZE, ID_CROP, ID_TRIM,
+    ID_DUPIMAGE, ID_NEWLAYER, ID_DUPLAYER, ID_DELLAYER, ID_LAYERPROPS, ID_MERGEVISIBLE, ID_FLATTEN, ID_SELALL, ID_DESELECT, ID_INVERSE,
+    ID_COLORRANGE, ID_SELALPHA, ID_AUTOTONE, ID_AUTOCONTRAST, ID_AUTOCOLOR, ID_ZOOMIN, ID_ZOOMOUT, ID_FIT, ID_ACTUAL, ID_ZOOM200, ID_ZOOM50,
+    ID_PURGE, ID_LOCKLAYER, ID_ALPHALOCK, ID_HIDELAYER, 0 };
+  int i;
+  if (!win) return;
+  for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, has);
+  menu_set(ID_PASTE, MUIA_Menuitem_Enabled, has && clip != NULL);
+  menu_set(ID_PASTEINPLACE, MUIA_Menuitem_Enabled, has && clip != NULL);
+  menu_set(ID_MERGEDOWN, MUIA_Menuitem_Enabled, has && d->active > 0);
+  menu_set(ID_UNDO, MUIA_Menuitem_Enabled, has && doc_can_undo(d));
+  menu_set(ID_REDO, MUIA_Menuitem_Enabled, has && doc_can_redo(d));
+  menu_set(ID_STEPBACK, MUIA_Menuitem_Enabled, has && doc_can_undo(d));
+  menu_set(ID_STEPFWD, MUIA_Menuitem_Enabled, has && doc_can_redo(d));
+  snprintf(undo, sizeof undo, "%s %s", tr("Undo"), has && doc_can_undo(d) ? tr(doc_undo_name(d)) : "");
+  snprintf(redo, sizeof redo, "%s %s", tr("Redo"), has && doc_can_redo(d) ? tr(doc_redo_name(d)) : "");
+  menu_set(ID_UNDO, MUIA_Menuitem_Title, (ULONG)undo);
+  menu_set(ID_REDO, MUIA_Menuitem_Title, (ULONG)redo);
+  menu_set(ID_DARKUI, MUIA_Menuitem_Checked, pref_dark);
+}
+void refresh_panels(void)
+{
+  DoMethod(layerpanel, MUIM_Layers_Refresh);
+  DoMethod(historypanel, MUIM_History_Refresh);
+  DoMethod(colorpanel, MUIM_Color_Refresh);
+  DoMethod(toolbox, MUIM_Tools_Refresh);
+  DoMethod(doctabs, MUIM_DocTabs_Refresh);
+  DoMethod(statusbar, MUIM_Status_Refresh);
+  set_title();
+  update_menus();
+}
+void refresh_all(void)
+{
+  DoMethod(canvas, MUIM_Canvas_Refresh);
+  refresh_panels();
+}
+
+/* ------------------------------------------------------------------ documents */
+static void base_name(const char *path, char *out, size_t cap)
+{
+  const char *f = (const char *)FilePart((STRPTR)path);
+  strncpy(out, f, cap - 1); out[cap - 1] = 0;
+}
+/* a document added as a tab and shown (takes d) */
+static int doc_show(Doc *d, const char *path, int fmt)
+{
+  DocView *v;
+  if (!d) return 0;
+  if (ndocs >= MAXDOCS) { doc_free(d); ask("OK", "Easel can have %s pictures open at once.\nClose one to open another.", "12"); return 0; }
+  DoMethod(canvas, MUIM_Canvas_Tool);
+  v = &docs[ndocs];
+  memset(v, 0, sizeof *v);
+  v->doc = d; v->fmt = fmt; v->zoom = 1;
+  if (path && path[0]) { strncpy(v->path, path, sizeof v->path - 1); base_name(path, v->name, sizeof v->name); }
+  else sprintf(v->name, "%s-%d", tr("Untitled"), ++untitled);
+  if (!d->fg && !d->bg) { d->fg = 0x000000; d->bg = 0xFFFFFF; }
+  curdoc = ndocs++;
+  refresh_all();
+  return 1;
+}
+static void doc_switch(int i)
+{
+  if (i < 0 || i >= ndocs || i == curdoc) return;
+  DoMethod(canvas, MUIM_Canvas_Tool);
+  curdoc = i;
+  refresh_all();
+}
+/* the whole of a file, malloc'd; NULL if it can't be read */
+static u8 *read_file(const char *path, size_t *len)
+{
+  FILE *f = fopen(path, "rb");
+  long n;
+  u8 *buf;
+  if (!f) return NULL;
+  fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+  if (n <= 0 || !(buf = (u8 *)malloc((size_t)n))) { fclose(f); return NULL; }
+  if (fread(buf, 1, (size_t)n, f) != (size_t)n) { free(buf); fclose(f); return NULL; }
+  fclose(f);
+  *len = (size_t)n;
+  return buf;
+}
+static int write_file(const char *path, const u8 *data, size_t len)
+{
+  FILE *f = fopen(path, "wb");
+  int ok;
+  if (!f) return 0;
+  ok = fwrite(data, 1, len, f) == len;
+  if (fclose(f)) ok = 0;
+  return ok;
+}
+/* a picture there wasn't the memory for: what it needs said plainly, and a JPEG offered at a
+   size that fits in the largest free block (decoded straight to that size, so the full-size
+   picture is never in memory) */
+/* Decoding runs on a stack of its own: the AVIF decoder (dav1d) keeps big buffers on the stack,
+   far more than Easel is started with. The arguments and result go through statics, since the
+   function that runs there gets only one pointer. */
+#define DECODE_STACK (384L * 1024)
+long run_on_stack(struct StackSwapStruct *ss, long (*fn)(void *), void *arg);
+static struct { const u8 *data; size_t len; char *err; size_t errcap; Doc *doc; } bigload;
+static long bigload_run(void *unused)
+{
+  (void)unused;
+  bigload.doc = codec_load_doc(bigload.data, bigload.len, bigload.err, bigload.errcap);
+  return 0;
+}
+static Doc *load_doc_big_stack(const u8 *data, size_t len, char *err, size_t errcap)
+{
+  struct StackSwapStruct ss;
+  u8 *stack = AllocVec(DECODE_STACK, MEMF_ANY);
+  if (!stack) {
+    codec_oom = 1;
+    snprintf(err, errcap, "%s", tr("Not enough memory to open a picture"));
+    return NULL;
+  }
+  bigload.data = data; bigload.len = len; bigload.err = err; bigload.errcap = errcap; bigload.doc = NULL;
+  ss.stk_Lower = stack;
+  ss.stk_Upper = (ULONG)(stack + DECODE_STACK);
+  ss.stk_Pointer = (APTR)(stack + DECODE_STACK);
+  run_on_stack(&ss, bigload_run, NULL);
+  FreeVec(stack);
+  return bigload.doc;
+}
+
+static Doc *load_smaller(const char *path, const char *why)
+{
+  static char msg[600];
+  size_t len = 0;
+  u8 *data;
+  u32 w = 0, h = 0;
+  int kind, k;
+  ULONG largest = AvailMem(MEMF_ANY | MEMF_LARGEST), total = AvailMem(MEMF_ANY);
+  Doc *d = NULL;
+  const char *name = (const char *)FilePart((STRPTR)path);
+  if (!(data = read_file(path, &len))) return NULL;
+  kind = img_info(data, (u32)len, &w, &h);
+  if (kind != IMG_JPEG || !w || !h) {
+    if (w && h)
+      snprintf(msg, sizeof msg, tr("There isn't enough memory to open %s.\nIt is %lu x %lu pixels, which needs %lu KB in one piece;\nthe largest free block is %lu KB (%lu KB free in all).\nClose other pictures or programs and try again."),
+               name, (unsigned long)w, (unsigned long)h, (unsigned long)((unsigned long)w * h * 4 / 1024), (unsigned long)(largest / 1024), (unsigned long)(total / 1024));
+    else snprintf(msg, sizeof msg, tr("There isn't enough memory to open %s:\n%s\nClose other pictures or programs and try again."), name, why);
+    ask("OK", "%s", msg);
+    free(data);
+    return NULL;
+  }
+  /* the smallest reduction whose layer (and some room to work in) fits the largest block */
+  for (k = 2; k <= 16; k++) {
+    unsigned long need = (unsigned long)(w / k) * (h / k) * 4;
+    if (need * 3 / 2 < largest && w / k >= 1 && h / k >= 1) break;
+  }
+  if (k > 16) {
+    snprintf(msg, sizeof msg, tr("There isn't enough memory to open %s, even at a much smaller size\n(the largest free block is %lu KB)."), name, (unsigned long)(largest / 1024));
+    ask("OK", "%s", msg);
+    free(data);
+    return NULL;
+  }
+  snprintf(msg, sizeof msg, tr("There isn't enough memory to open %s at its full size.\nIt is %lu x %lu pixels, which needs %lu KB in one piece;\nthe largest free block is %lu KB (%lu KB free in all).\n\nOpen it at %lu x %lu pixels instead?"),
+           name, (unsigned long)w, (unsigned long)h, (unsigned long)((unsigned long)w * h * 4 / 1024), (unsigned long)(largest / 1024), (unsigned long)(total / 1024),
+           (unsigned long)(w / k), (unsigned long)(h / k));
+  if (ask("Open Smaller|Cancel", "%s", msg) == 1) {
+    char err[160];
+    set(app, MUIA_Application_Sleep, TRUE);
+    err[0] = 0;
+    d = codec_load_doc_scaled(data, len, (i32)(w / k), (i32)(h / k), err, sizeof err);
+    set(app, MUIA_Application_Sleep, FALSE);
+    if (!d) {
+      snprintf(msg, sizeof msg, tr("%s couldn't be opened:\n%s"), name, err[0] ? err : tr("not enough memory"));
+      ask("OK", "%s", msg);
+    }
+  }
+  free(data);
+  return d;
+}
+static Doc *load(const char *path, int *fmt)
+{
+  size_t len = 0;
+  u8 *data;
+  char err[160];
+  Doc *d;
+  static char msg[400];
+  set(app, MUIA_Application_Sleep, TRUE);
+  data = read_file(path, &len);
+  if (!data) {
+    set(app, MUIA_Application_Sleep, FALSE);
+    snprintf(msg, sizeof msg, tr("%s couldn't be read."), (const char *)FilePart((STRPTR)path));
+    ask("OK", "%s", msg);
+    return NULL;
+  }
+  *fmt = codec_detect(data, len);
+  err[0] = 0;
+  d = load_doc_big_stack(data, len, err, sizeof err);
+  free(data);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!d && codec_oom) d = load_smaller(path, err);
+  else if (!d) {
+    snprintf(msg, sizeof msg, tr("%s couldn't be opened:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not a picture Easel knows"));
+    ask("OK", "%s", msg);
+  }
+  return d;
+}
+/* the pictures Easel opens, for the file requester (any file can still be typed in) */
+#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
+static char lastdir[512];
+static void open_path(const char *path)
+{
+  int fmt = 0, i;
+  Doc *d;
+  for (i = 0; i < ndocs; i++) if (docs[i].path[0] && !Stricmp((STRPTR)docs[i].path, (STRPTR)path)) { doc_switch(i); return; }
+  if ((d = load(path, &fmt))) doc_show(d, path, fmt);
+  strncpy(lastdir, path, sizeof lastdir - 1);
+}
+static void open_file(void)
+{
+  char path[512];
+  strcpy(path, lastdir);
+  if (!file_request(0, "Open a picture", path, sizeof path, OPEN_PATTERN)) return;
+  open_path(path);
+}
+/* the composite as a flat picture (malloc'd pixels in im) */
+static int flat_image(Doc *d, Rgba *im)
+{
+  if (!rgba_alloc(im, d->w, d->h)) return 0;
+  doc_composite(d, doc_box(d), im->px, (long)d->w * 4);
+  return 1;
+}
+static int ext_fmt(const char *path)
+{
+  const char *e = strrchr((const char *)FilePart((STRPTR)path), '.');
+  if (!e) return FMT_UNKNOWN;
+  if (!Stricmp((STRPTR)e, (STRPTR)".png")) return FMT_PNG;
+  if (!Stricmp((STRPTR)e, (STRPTR)".jpg") || !Stricmp((STRPTR)e, (STRPTR)".jpeg")) return FMT_JPEG;
+  if (!Stricmp((STRPTR)e, (STRPTR)".bmp")) return FMT_BMP;
+  if (!Stricmp((STRPTR)e, (STRPTR)".iff") || !Stricmp((STRPTR)e, (STRPTR)".ilbm") || !Stricmp((STRPTR)e, (STRPTR)".lbm")) return FMT_ILBM;
+  if (!Stricmp((STRPTR)e, (STRPTR)".ora")) return FMT_ORA;
+  return FMT_UNKNOWN;
+}
+int export_quality = 85, export_indexed;
+/* the document written to path as fmt; 1 if it was */
+static int write_doc(Doc *d, const char *path, int fmt)
+{
+  u8 *data = NULL;
+  size_t len = 0;
+  Rgba im;
+  int ok;
+  static char msg[300];
+  set(app, MUIA_Application_Sleep, TRUE);
+  if (fmt == FMT_ORA) data = ora_write(d, &len);
+  else if (flat_image(d, &im)) {
+    switch (fmt) {
+    case FMT_JPEG: data = jpeg_encode(&im, export_quality, d->dpi, &len); break;
+    case FMT_BMP: data = bmp_encode(&im, &len); break;
+    case FMT_ILBM: data = ilbm_encode(&im, export_indexed, 1, &len); break;
+    default: data = png_encode(&im, d->dpi, &len); break;
+    }
+    rgba_free(&im);
+  }
+  ok = data && write_file(path, data, len);
+  free(data);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!ok) {
+    snprintf(msg, sizeof msg, tr("%s couldn't be saved (out of memory, or the disk is full or write-protected)."), (const char *)FilePart((STRPTR)path));
+    ask("OK", "%s", msg);
+  }
+  return ok;
+}
+static int save_as(void);
+static int save(void)
+{
+  DocView *v = cur_view();
+  if (!v) return 0;
+  if (!v->path[0] || !codec_writable(v->fmt)) return save_as();
+  if (v->fmt != FMT_ORA && v->doc->nlay > 1 &&
+      ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
+    return save_as();
+  }
+  if (v->fmt == FMT_JPEG) export_quality = 90;
+  if (!write_doc(v->doc, v->path, v->fmt)) return 0;
+  v->doc->dirty = 0;
+  refresh_panels();
+  return 1;
+}
+static void with_ext(char *path, size_t cap, const char *ext)
+{
+  char *dot = strrchr((char *)FilePart((STRPTR)path), '.');
+  if (dot) *dot = 0;
+  strncat(path, ext, cap - 1 - strlen(path));
+}
+static int save_as(void)
+{
+  DocView *v = cur_view();
+  char path[512];
+  int fmt;
+  if (!v) return 0;
+  strcpy(path, v->path[0] ? v->path : lastdir);
+  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
+  if (v->doc->nlay > 1 || !v->path[0]) with_ext(path, sizeof path, ".ora");
+  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|png|jpg|bmp|iff)")) return 0;
+  fmt = ext_fmt(path);
+  if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
+  if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
+  if (!write_doc(v->doc, path, fmt)) return 0;
+  strcpy(v->path, path); v->fmt = fmt;
+  base_name(path, v->name, sizeof v->name);
+  v->doc->dirty = 0;
+  strcpy(lastdir, path);
+  refresh_panels();
+  return 1;
+}
+/* File > Export: a flat copy in the format asked for, the document's own file left as it is */
+static void export_as(int fmt, int indexed)
+{
+  DocView *v = cur_view();
+  char path[512];
+  static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff" };
+  if (!v) return;
+  strcpy(path, v->path[0] ? v->path : lastdir);
+  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
+  with_ext(path, sizeof path, ext[fmt]);
+  if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
+  if (!file_request(1, "Export as", path, sizeof path, NULL)) return;
+  export_indexed = indexed;
+  write_doc(v->doc, path, fmt);
+  export_indexed = 0;
+}
+static int may_discard(int i)
+{
+  static char msg[300];
+  int r;
+  if (!docs[i].doc->dirty) return 1;
+  doc_switch(i);
+  snprintf(msg, sizeof msg, tr("Save the changes to %s before closing?"), docs[i].name);
+  r = ask("Save|Don't Save|Cancel", "%s", msg);
+  if (r == 1) return save();
+  return r == 2;
+}
+static int doc_close(int i)
+{
+  if (i < 0 || i >= ndocs) return 1;
+  if (!may_discard(i)) return 0;
+  DoMethod(canvas, MUIM_Canvas_Cancel);
+  doc_free(docs[i].doc);
+  memmove(&docs[i], &docs[i + 1], (size_t)(ndocs - i - 1) * sizeof docs[0]);
+  ndocs--;
+  if (curdoc >= ndocs) curdoc = ndocs - 1;
+  else if (curdoc > i) curdoc--;
+  refresh_all();
+  return 1;
+}
+static int close_all(void)
+{
+  while (ndocs) if (!doc_close(ndocs - 1)) return 0;
+  return 1;
+}
+static void new_doc(void)
+{
+  LONG w = 800, h = 600, dpi = 72;
+  int bg = 0;
+  Doc *d;
+  Doc *c = cur_doc();
+  if (!dlg_new_values(&w, &h, &dpi, &bg)) return;
+  d = doc_new((i32)w, (i32)h, bg == 1 && c ? c->bg : 0xFFFFFF, bg == 2);
+  if (!d) { ask("OK", "%s", tr("There isn't enough memory for a picture that size.")); return; }
+  d->dpi = (u16)dpi;
+  if (c) { d->fg = c->fg; d->bg = c->bg; } else { d->fg = 0; d->bg = 0xFFFFFF; }
+  doc_show(d, "", FMT_ORA);
+}
+/* File > Place: another picture as a new layer, centred */
+static void place_file(void)
+{
+  Doc *d = cur_doc(), *o;
+  char path[512];
+  int fmt, i;
+  if (!d) return;
+  strcpy(path, lastdir);
+  if (!file_request(0, "Place a picture as a layer", path, sizeof path, OPEN_PATTERN)) return;
+  if (!(o = load(path, &fmt))) return;
+  {
+    Rgba im;
+    Clip c;
+    if (!flat_image(o, &im)) { doc_free(o); return; }
+    c.w = im.w; c.h = im.h; c.px = im.px; c.x = (d->w - im.w) / 2; c.y = (d->h - im.h) / 2;
+    clip_paste(d, &c, 1);
+    rgba_free(&im);
+    for (i = 0; i < 1; i++) ;
+  }
+  doc_free(o);
+  {
+    char name[64];
+    base_name(path, name, sizeof name);
+    doc_set_layer_props(d, d->active, name, -1, -1, -1);
+  }
+  refresh_all();
+}
+
+/* ------------------------------------------------------------------ commands */
+static void layer_new_named(Doc *d)
+{
+  char name[32];
+  static int n = 1;
+  int i, used;
+  Layer *l;
+  /* "Layer N" with the first N not in use */
+  for (;; n++) {
+    sprintf(name, "%s %d", tr("Layer"), n);
+    for (used = 0, i = 0; i < d->nlay; i++) if (!strcmp(d->lay[i]->name, name)) used = 1;
+    if (!used) break;
+  }
+  if ((l = layer_new(d, name))) doc_add_layer(d, l, d->active + 1);
+}
+static void transform_dialog(void)
+{
+  /* Free Transform as numbers: scale (per cent across and down) and turn (degrees) about the
+     middle of the selection or the layer */
+  Doc *d = cur_doc();
+  char buf[64] = "100 100 0";
+  double sx = 100, sy = 100, ang = 0, cx, cy, m[6], c, s;
+  Box b;
+  if (!d) return;
+  if (!ask_string("Free Transform", "Width %, height %, angle:", buf, sizeof buf)) return;
+  if (sscanf(buf, "%lf %lf %lf", &sx, &sy, &ang) < 1) return;
+  if (sscanf(buf, "%lf %lf", &sx, &sy) < 2) sy = sx;
+  if (sx < 1 || sy < 1 || sx > 10000 || sy > 10000) return;
+  if (!sel_bounds(d, &b)) b = doc_box(d);
+  cx = (b.x0 + b.x1) / 2.0; cy = (b.y0 + b.y1) / 2.0;
+  c = cos(-ang * 3.14159265358979 / 180); s = sin(-ang * 3.14159265358979 / 180);
+  /* new to old: undo the turn, then the scale, about the middle */
+  m[0] = c * 100 / sx; m[1] = -s * 100 / sx; m[3] = s * 100 / sy; m[4] = c * 100 / sy;
+  m[2] = cx - m[0] * cx - m[1] * cy; m[5] = cy - m[3] * cx - m[4] * cy;
+  transform_layer(d, m);
+}
+static void command(ULONG id)
+{
+  Doc *d = cur_doc();
+  Box ch;
+  if (id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) { if (d) dlg_adjust(id); refresh_all(); return; }
+  if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
+  switch (id) {
+  case ID_NEW: new_doc(); return;
+  case ID_OPEN: open_file(); return;
+  case ID_PLACE: place_file(); return;
+  case ID_CLOSE: doc_close(curdoc); return;
+  case ID_CLOSEALL: close_all(); return;
+  case ID_SAVE: save(); return;
+  case ID_SAVEAS: save_as(); return;
+  case ID_EXPPNG: export_as(FMT_PNG, 0); return;
+  case ID_EXPJPEG: export_as(FMT_JPEG, 0); return;
+  case ID_EXPBMP: export_as(FMT_BMP, 0); return;
+  case ID_EXPILBM: export_as(FMT_ILBM, 0); return;
+  case ID_EXPILBM8: export_as(FMT_ILBM, 1); return;
+  case ID_REVERT: {
+    DocView *v = cur_view();
+    int fmt;
+    Doc *n;
+    if (!v || !v->path[0]) return;
+    if (v->doc->dirty && ask("Revert|Cancel", "%s", tr("Go back to the picture as it was last saved? The changes are lost.")) != 1) return;
+    if ((n = load(v->path, &fmt))) { DoMethod(canvas, MUIM_Canvas_Cancel); doc_free(v->doc); v->doc = n; v->placed = 0; refresh_all(); }
+    return; }
+  case ID_ABOUT:
+    ask("OK", "%s", "\33cEasel 0.2\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
+        "Layers with blend modes, painting tools, selections,\nadjustments and filters; reads and writes PNG, JPEG, BMP,\n"
+        "IFF ILBM and OpenRaster (.ora), and reads many more.\n\nWritten in C for MUI; drawn with its own icons.\n\n"
+        "AVIF decoding: dav1d, by VideoLAN and the dav1d authors.\n"
+        "Picture readers ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
+        "Fonts: Liberation, Carlito and Caladea.\nSee Licenses.txt for their licences.");
+    return;
+  case ID_DARKUI:
+    pref_dark = !pref_dark;
+    set(win, MUIA_Window_Open, FALSE);
+    theme_set_dark(pref_dark);
+    set(win, MUIA_Window_Open, TRUE);
+    refresh_all();
+    return;
+  case ID_NEXTDOC: if (ndocs > 1) doc_switch((curdoc + 1) % ndocs); return;
+  case ID_PREVDOC: if (ndocs > 1) doc_switch((curdoc + ndocs - 1) % ndocs); return;
+  case ID_SWAPCOLORS: if (d) { u32 t = d->fg; d->fg = d->bg; d->bg = t; refresh_panels(); } return;
+  case ID_DEFCOLORS: if (d) { d->fg = 0; d->bg = 0xFFFFFF; refresh_panels(); } return;
+  case ID_COMMIT: DoMethod(canvas, MUIM_Canvas_Commit); return;
+  case ID_CANCEL: DoMethod(canvas, MUIM_Canvas_Cancel); return;
+  case ID_ZOOMIN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 1); refresh_panels(); return;
+  case ID_ZOOMOUT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, -1); refresh_panels(); return;
+  case ID_FIT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 2); refresh_panels(); return;
+  case ID_ACTUAL: DoMethod(canvas, MUIM_Canvas_Zoom, 1000, 0); refresh_panels(); return;
+  case ID_ZOOM200: DoMethod(canvas, MUIM_Canvas_Zoom, 2000, 0); refresh_panels(); return;
+  case ID_ZOOM50: DoMethod(canvas, MUIM_Canvas_Zoom, 500, 0); refresh_panels(); return;
+  }
+  if (!d) return;
+  switch (id) {
+  case ID_UNDO: case ID_STEPBACK: doc_undo(d); break;
+  case ID_REDO: case ID_STEPFWD: doc_redo(d); break;
+  case ID_PURGE: doc_forget_undo(d); break;
+  case ID_CUT: case ID_COPY: case ID_COPYMERGED: {
+    Clip *c = clip_copy(d, id == ID_COPYMERGED);
+    if (!c) { ask("OK", "%s", tr("There is nothing to copy: the selection is empty.")); return; }
+    clip_free(clip); clip = c;
+    if (id == ID_CUT) clip_cut(d);
+    break; }
+  case ID_PASTE: case ID_PASTEINPLACE: if (clip) clip_paste(d, clip, id == ID_PASTEINPLACE); break;
+  case ID_CLEAR: ch = clear_selection(d); if (box_empty(ch) && d->lay[d->active]->locked) ask("OK", "%s", tr("The layer is locked.")); break;
+  case ID_FILL: dlg_fill(); break;
+  case ID_FILLFG: fill_selection(d, d->fg, 100, BM_NORMAL); break;
+  case ID_FILLBG: fill_selection(d, d->bg, 100, BM_NORMAL); break;
+  case ID_STROKE: dlg_stroke(); break;
+  case ID_FREETRANSFORM: transform_dialog(); break;
+  case ID_ROTATE180: { double m[6] = { -1, 0, d->w - 1, 0, -1, d->h - 1 }; Box b; if (sel_bounds(d, &b)) { m[2] = b.x0 + b.x1 - 1; m[5] = b.y0 + b.y1 - 1; } transform_layer(d, m); break; }
+  case ID_ROTATE90R: case ID_ROTATE90L: {
+    Box b;
+    double cx, cy, m[6];
+    if (!sel_bounds(d, &b)) b = doc_box(d);
+    cx = (b.x0 + b.x1) / 2.0; cy = (b.y0 + b.y1) / 2.0;
+    /* old = R^-1 (new - c) + c */
+    if (id == ID_ROTATE90R) { m[0] = 0; m[1] = 1; m[3] = -1; m[4] = 0; }
+    else { m[0] = 0; m[1] = -1; m[3] = 1; m[4] = 0; }
+    m[2] = cx - m[0] * cx - m[1] * cy - 0.5 * (m[0] + m[1]) + 0.5; m[5] = cy - m[3] * cx - m[4] * cy - 0.5 * (m[3] + m[4]) + 0.5;
+    transform_layer(d, m);
+    break; }
+  case ID_FLIPLH: flip_layer(d, 0); break;
+  case ID_FLIPLV: flip_layer(d, 1); break;
+  case ID_AUTOTONE: adj_auto_tone(d); break;
+  case ID_AUTOCONTRAST: adj_auto_contrast(d); break;
+  case ID_AUTOCOLOR: adj_auto_color(d); break;
+  case ID_IMAGESIZE: dlg_image_size(); break;
+  case ID_CANVASSIZE: dlg_canvas_size(); break;
+  case ID_IMG_R180: image_rotate(d, 2); break;
+  case ID_IMG_R90R: image_rotate(d, 1); break;
+  case ID_IMG_R90L: image_rotate(d, 3); break;
+  case ID_IMG_RANY: dlg_rotate(); break;
+  case ID_IMG_FLIPH: image_flip(d, 0); break;
+  case ID_IMG_FLIPV: image_flip(d, 1); break;
+  case ID_CROP: {
+    Box b;
+    if (crop_pending) { DoMethod(canvas, MUIM_Canvas_Commit); return; }
+    if (!sel_bounds(d, &b)) { ask("OK", "%s", tr("Select the part to keep first (or use the Crop tool).")); return; }
+    image_crop(d, b);
+    break; }
+  case ID_TRIM: image_trim(d); break;
+  case ID_DUPIMAGE: {
+    u8 *data;
+    size_t len;
+    Doc *n;
+    char err[80];
+    /* (through OpenRaster: every layer and its settings come across) */
+    if (!(data = ora_write(d, &len))) return;
+    n = codec_load_doc(data, len, err, sizeof err);
+    free(data);
+    if (n) { n->fg = d->fg; n->bg = d->bg; doc_show(n, "", FMT_ORA); }
+    return; }
+  case ID_NEWLAYER: layer_new_named(d); break;
+  case ID_DUPLAYER: doc_duplicate_layer(d, d->active); break;
+  case ID_DELLAYER:
+    if (d->nlay < 2) { ask("OK", "%s", tr("A picture needs at least one layer.")); return; }
+    doc_delete_layer(d, d->active);
+    break;
+  case ID_LAYERPROPS: dlg_layer_props(); break;
+  case ID_LAYERFROMSEL: case ID_LAYERCUTSEL: {
+    Clip *c = clip_copy(d, 0);
+    if (!c) return;
+    if (id == ID_LAYERCUTSEL) clip_cut(d);
+    clip_paste(d, c, 1);
+    clip_free(c);
+    break; }
+  case ID_RAISE: if (d->active < d->nlay - 1) doc_move_layer(d, d->active, d->active + 1); break;
+  case ID_LOWER: if (d->active > 0) doc_move_layer(d, d->active, d->active - 1); break;
+  case ID_TOFRONT: if (d->active < d->nlay - 1) doc_move_layer(d, d->active, d->nlay - 1); break;
+  case ID_TOBACK: if (d->active > 0) doc_move_layer(d, d->active, 0); break;
+  case ID_LOCKLAYER: d->lay[d->active]->locked = !d->lay[d->active]->locked; break;
+  case ID_ALPHALOCK: d->lay[d->active]->alpha_lock = !d->lay[d->active]->alpha_lock; break;
+  case ID_HIDELAYER: doc_set_layer_props(d, d->active, NULL, -1, -1, !d->lay[d->active]->visible); break;
+  case ID_MERGEDOWN: if (d->active > 0) doc_merge_down(d, d->active); break;
+  case ID_MERGEVISIBLE: doc_merge_visible(d); break;
+  case ID_FLATTEN: doc_flatten(d); break;
+  case ID_SELALL: sel_all(d); break;
+  case ID_DESELECT: sel_none(d); break;
+  case ID_INVERSE: sel_invert(d); break;
+  case ID_SELALPHA: sel_from_alpha(d, d->active); break;
+  case ID_COLORRANGE: case ID_FEATHER: case ID_EXPAND: case ID_CONTRACT: case ID_BORDER: case ID_SMOOTH: dlg_select(id); break;
+  default: return;
+  }
+  refresh_all();
+}
+
+/* ------------------------------------------------------------------ the window */
+static const char *const head_color[] = { "Color", "History", NULL };
+static Object *toppages, *tophead;
+static const char *const head_layers[] = { "Layers", NULL };
+static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
+static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
+static int win_make(void)
+{
+  Object *strip = MUI_MakeObject(MUIO_MenustripNM, (ULONG)menus, 0);
+  /* the whole screen below its title bar, as PhotoCraft fills its screen */
+  struct Screen *scr = LockPubScreen((STRPTR)(pub_screen[0] ? pub_screen : NULL));
+  LONG sw = 800, sh = 580, top = 12;
+  if (scr) { sw = scr->Width; top = scr->BarHeight + 1; sh = scr->Height - top; UnlockPubScreen(NULL, scr); }
+  win = QWindowObject,
+    MUIA_Window_Title, (ULONG)"Easel",
+    MUIA_Window_ID, MAKE_ID('E','A','S','L'),
+    MUIA_Window_DisableKeys, MUIKEYF_WINDOW_CLOSE,
+    MUIA_Window_Menustrip, (ULONG)strip,
+    MUIA_Window_Width, sw,
+    MUIA_Window_Height, sh,
+    MUIA_Window_LeftEdge, 0,
+    MUIA_Window_TopEdge, top,
+    WindowContents, VGroup, InnerSpacing(0, 0), MUIA_Group_Spacing, 0,
+      Child, optbar = NewObject(optbar_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+      Child, HGroup, MUIA_Group_Spacing, 0,
+        Child, toolbox = NewObject(toolbox_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+        Child, VGroup, MUIA_Group_Spacing, 0,
+          Child, doctabs = NewObject(doctabs_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+          Child, HGroup, MUIA_Group_Spacing, 0,
+            Child, canvas = NewObject(canvas_class()->mcc_Class, NULL, MUIA_FillArea, FALSE, TAG_DONE),
+            Child, vscroll = flat(0),
+          End,
+          Child, hscroll = flat(1),
+        End,
+        Child, VGroup, MUIA_Group_Spacing, 0, MUIA_HorizWeight, 0,
+          Child, tophead = head(head_color),
+          Child, toppages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 0,
+            Child, colorpanel = NewObject(color_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+            Child, historypanel = NewObject(history_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+          End,
+          Child, head(head_layers),
+          Child, layerpanel = NewObject(layers_class()->mcc_Class, NULL, MUIA_VertWeight, 300, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+        End,
+      End,
+      Child, statusbar = NewObject(status_class()->mcc_Class, NULL, TAG_DONE),
+    End,
+  End;
+  if (!win) { if (strip) MUI_DisposeObject(strip); return 0; }
+  DoMethod(app, OM_ADDMEMBER, (ULONG)win);
+  SetAttrs(canvas, MUIA_Canvas_VProp, (ULONG)vscroll, MUIA_Canvas_HProp, (ULONG)hscroll, TAG_DONE);
+  DoMethod(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_QUIT);
+  DoMethod(vscroll, MUIM_Notify, MUIA_Prop_First, MUIV_EveryTime, (ULONG)canvas, 3, MUIM_Set, MUIA_Canvas_Top, MUIV_TriggerValue);
+  DoMethod(hscroll, MUIM_Notify, MUIA_Prop_First, MUIV_EveryTime, (ULONG)canvas, 3, MUIM_Set, MUIA_Canvas_Left, MUIV_TriggerValue);
+  DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_CANVASCHG);
+  DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Pointer, MUIV_EveryTime, (ULONG)statusbar, 1, MUIM_Status_Refresh);
+  DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Picked, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_PICKED);
+  DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Zoomed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_ZOOMED);
+  DoMethod(toolbox, MUIM_Notify, MUIA_Tools_Pick, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_TOOLPICK);
+  DoMethod(toolbox, MUIM_Notify, MUIA_Tools_Color, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_COLORCLICK);
+  DoMethod(colorpanel, MUIM_Notify, MUIA_Color_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_COLORCHG);
+  DoMethod(layerpanel, MUIM_Notify, MUIA_Layers_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_LAYERSCHG);
+  DoMethod(historypanel, MUIM_Notify, MUIA_History_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_HISTCHG);
+  DoMethod(doctabs, MUIM_Notify, MUIA_DocTabs_Pick, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DOCPICK);
+  DoMethod(doctabs, MUIM_Notify, MUIA_DocTabs_Close, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DOCCLOSE);
+  DoMethod(tophead, MUIM_Notify, MUIA_Head_Active, MUIV_EveryTime, (ULONG)toppages, 3, MUIM_Set, MUIA_Group_ActivePage, MUIV_TriggerValue);
+  set(win, MUIA_Window_Open, TRUE);
+  if (!xget(win, MUIA_Window_Open)) return 0;
+  {
+    struct Window *w = (struct Window *)xget(win, MUIA_Window_Window);
+    if (w) LOG("screen %ld x %ld, window %ld,%ld %ld x %ld", (long)w->WScreen->Width, (long)w->WScreen->Height, (long)w->LeftEdge, (long)w->TopEdge, (long)w->Width, (long)w->Height);
+  }
+  return 1;
+}
+
+/* ------------------------------------------------------------------ starting up */
+static BPTR home_lock, home_old;
+static void scan_step(int done, int total)
+{
+  static char what[80];
+  snprintf(what, sizeof what, tr("Looking for installed fonts (%d of %d)"), done, total);
+  splash_step(10 + (total ? 30 * done / total : 0), what);
+}
+static void wb_tooltypes(char *screen, int size)
+{
+  struct Library *IconBase;
+  struct WBArg *wa = &_WBenchMsg->sm_ArgList[0];
+  struct DiskObject *dob;
+  BPTR old;
+  STRPTR v;
+  if (!(IconBase = OpenLibrary((STRPTR)"icon.library", 37))) return;
+  old = CurrentDir(wa->wa_Lock);
+  if ((dob = GetDiskObject((STRPTR)wa->wa_Name))) {
+    if ((v = FindToolType((STRPTR *)dob->do_ToolTypes, (STRPTR)"PUBSCREEN")) && !screen[0]) { strncpy(screen, (char *)v, size - 1); screen[size - 1] = 0; }
+    FreeDiskObject(dob);
+  }
+  CurrentDir(old);
+  CloseLibrary(IconBase);
+}
+static int home_has_fonts(BPTR dir)
+{
+  BPTR old = CurrentDir(dir), l = Lock((STRPTR)"Fonts/QuillSans.font", ACCESS_READ);
+  CurrentDir(old);
+  if (l) UnLock(l);
+  return l != 0;
+}
+/* PROGDIR: made right if a shell started Easel without it (it holds Fonts and TrueType) */
+static void find_home(const char *argv0)
+{
+  char name[256];
+  const char *tries[2];
+  int i;
+  struct Process *me = (struct Process *)FindTask(NULL);
+  APTR pw = me->pr_WindowPtr;
+  BPTR l;
+  me->pr_WindowPtr = (APTR)-1;
+  l = GetProgramDir() ? Lock((STRPTR)"PROGDIR:Fonts/QuillSans.font", ACCESS_READ) : 0;
+  if (l) { UnLock(l); me->pr_WindowPtr = pw; return; }
+  tries[0] = argv0;
+  tries[1] = GetProgramName((STRPTR)name, sizeof name) ? name : NULL;
+  for (i = 0; i < 2 && !home_lock; i++) {
+    BPTR f, d;
+    if (!tries[i] || !tries[i][0] || !(f = Lock((STRPTR)tries[i], ACCESS_READ))) continue;
+    d = ParentDir(f);
+    UnLock(f);
+    if (d && home_has_fonts(d)) home_lock = d; else if (d) UnLock(d);
+  }
+  if (home_lock) home_old = SetProgramDir(home_lock);
+  me->pr_WindowPtr = pw;
+}
+static void free_home(void)
+{
+  if (!home_lock) return;
+  SetProgramDir(home_old);
+  UnLock(home_lock);
+  home_lock = 0;
+}
+static void add_fonts(void)
+{
+  BPTR l = Lock((STRPTR)"PROGDIR:Fonts", ACCESS_READ), sys;
+  struct Process *me = (struct Process *)FindTask(NULL);
+  APTR pw = me->pr_WindowPtr;
+  if (!l) return;
+  me->pr_WindowPtr = (APTR)-1;
+  if ((sys = Lock((STRPTR)"FONTS:", ACCESS_READ))) {
+    LONG same = SameLock(l, sys);
+    UnLock(sys);
+    if (same == LOCK_SAME) { UnLock(l); me->pr_WindowPtr = pw; return; }
+  }
+  me->pr_WindowPtr = pw;
+  if (AssignAdd((STRPTR)"FONTS", l)) fonts_assigned = 1; else UnLock(l);
+}
+static void remove_fonts(void)
+{
+  BPTR l;
+  if (!fonts_assigned) return;
+  if ((l = Lock((STRPTR)"PROGDIR:Fonts", ACCESS_READ))) { RemAssignList((STRPTR)"FONTS", l); UnLock(l); }
+  fonts_assigned = 0;
+}
+static void load_prefs(void)
+{
+  FILE *f = fopen("PROGDIR:Easel.prefs", "r");
+  char line[200];
+  if (!f) return;
+  while (fgets(line, sizeof line, f)) {
+    line[strcspn(line, "\r\n")] = 0;
+    if (!strncmp(line, "dark=", 5)) pref_dark = atoi(line + 5);
+    else if (!strncmp(line, "screen=", 7)) { strncpy(pub_screen, line + 7, sizeof pub_screen - 1); }
+    else if (!strncmp(line, "dir=", 4)) { strncpy(lastdir, line + 4, sizeof lastdir - 1); }
+  }
+  fclose(f);
+}
+static void save_prefs(void)
+{
+  FILE *f = fopen("PROGDIR:Easel.prefs", "w");
+  if (!f) return;
+  fprintf(f, "dark=%d\n", pref_dark);
+  if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
+  if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
+  fclose(f);
+}
+
+int main(int argc, char **argv)
+{
+  ULONG sigs = 0;
+  int rc = 20, i;
+  char start[8][512];
+  int nstart = 0;
+  char arg_screen[64] = "";
+  if (!(IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39)) ||
+      !(GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39)) ||
+      !(LayersBase = OpenLibrary((STRPTR)"layers.library", 39)) ||
+      !(UtilityBase = OpenLibrary((STRPTR)"utility.library", 39)) ||
+      !(KeymapBase = OpenLibrary((STRPTR)"keymap.library", 37))) goto done;
+  if (!(MUIMasterBase = OpenLibrary((STRPTR)MUIMASTER_NAME, 19))) { printf("Easel needs MUI (muimaster.library 19 or later).\n"); goto done; }
+  CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 40);
+  find_home(argc > 0 ? argv[0] : NULL);
+  for (i = 1; i < argc; i++) {
+    if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");
+    else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"PUBSCREEN=", 10)) { strncpy(arg_screen, argv[i] + 10, sizeof arg_screen - 1); }
+    else if (nstart < 8) { strncpy(start[nstart], argv[i], 511); start[nstart++][511] = 0; }
+  }
+  if (argc == 0 && _WBenchMsg) {
+    for (i = 1; i < _WBenchMsg->sm_NumArgs && nstart < 8; i++) {
+      struct WBArg *wa = &_WBenchMsg->sm_ArgList[i];
+      if (NameFromLock(wa->wa_Lock, (STRPTR)start[nstart], 512) && AddPart((STRPTR)start[nstart], wa->wa_Name, 512)) nstart++;
+    }
+    wb_tooltypes(arg_screen, sizeof arg_screen);
+  }
+  load_prefs();
+  if (arg_screen[0]) strcpy(pub_screen, arg_screen);
+  if (pub_screen[0]) {
+    struct Screen *sc = LockPubScreen((STRPTR)pub_screen);
+    if (sc) UnlockPubScreen(NULL, sc); else pub_screen[0] = 0;
+  }
+  LOG("Easel starting, cybergraphics %p", (void *)CyberGfxBase);
+  lang_set(LANG_EN);
+  theme_set_dark(pref_dark);
+  opts_defaults();
+  splash_open(pub_screen, "Easel 0.2");
+  splash_step(3, tr("Adding Easel's fonts drawer"));
+  DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
+  add_fonts();
+  splash_step(6, tr("Reading the TrueType fonts"));
+  fonts_init(&fonts, "PROGDIR:TrueType");
+  splash_step(10, tr("Looking for installed fonts"));
+  sysfonts_scan(&fonts, scan_step);
+  splash_step(45, tr("Preparing"));
+  if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
+      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
+  splash_step(60, tr("Building the window"));
+  app = ApplicationObject,
+    MUIA_Application_Title, (ULONG)"Easel",
+    MUIA_Application_Version, (ULONG)verstag,
+    MUIA_Application_Description, (ULONG)"A picture editor",
+    MUIA_Application_Base, (ULONG)"EASEL",
+  End;
+  if (!app) { printf("Easel: the application could not be made (MUI classes missing?)\n"); goto done; }
+  splash_step(75, tr("Opening the window"));
+  if (!win_make()) { printf("Easel: the window could not be made\n"); goto done; }
+  for (i = 0; i < nstart; i++) {
+    static char what[300];
+    snprintf(what, sizeof what, tr("Opening %s"), (const char *)FilePart((STRPTR)start[i]));
+    splash_front();
+    splash_step(85, what);
+    open_path(start[i]);
+  }
+  splash_close();
+  for (i = 0; i < font_count(); i++) if (!strcmp(font_name(i), "Liberation Sans")) opt.text_font = i;
+  set_tool(TL_BRUSH);
+  refresh_all();
+  if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel."));
+  for (;;) {
+    ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
+    if (id) LOG("id %lu", (unsigned long)id);
+    if (id == MUIV_Application_ReturnID_Quit || id == ID_QUIT) { if (close_all()) break; }
+    else if (id == ID_CANVASCHG || id == ID_LAYERSCHG || id == ID_HISTCHG) {
+      if (id != ID_CANVASCHG) DoMethod(canvas, MUIM_Canvas_Refresh);
+      refresh_panels();
+    }
+    else if (id == ID_PICKED || id == ID_COLORCHG) { DoMethod(colorpanel, MUIM_Color_Refresh); DoMethod(toolbox, MUIM_Tools_Refresh); }
+    else if (id == ID_ZOOMED) { DoMethod(doctabs, MUIM_DocTabs_Refresh); DoMethod(statusbar, MUIM_Status_Refresh); }
+    else if (id == ID_TOOLPICK) set_tool((int)xget(toolbox, MUIA_Tools_Pick));
+    else if (id == ID_COLORCLICK) {
+      Doc *d = cur_doc();
+      int which = (int)xget(toolbox, MUIA_Tools_Color);
+      LONG c;
+      if (d && (c = pick_color(which == 1 ? "Color Picker (Foreground Color)" : "Color Picker (Background Color)", which == 1 ? d->fg : d->bg)) >= 0) {
+        if (which == 1) d->fg = (u32)c; else d->bg = (u32)c;
+      }
+      refresh_panels();
+    }
+    else if (id == ID_DOCPICK) doc_switch((int)xget(doctabs, MUIA_DocTabs_Pick));
+    else if (id == ID_DOCCLOSE) doc_close((int)xget(doctabs, MUIA_DocTabs_Close));
+    else if (id) { set(app, MUIA_Application_Sleep, TRUE); command(id); set(app, MUIA_Application_Sleep, FALSE); }
+    if (sigs) {
+      sigs = Wait(sigs | SIGBREAKF_CTRL_C);
+      if (sigs & SIGBREAKF_CTRL_C) break;
+    }
+  }
+  save_prefs();
+  rc = 0;
+done:
+  for (i = 0; i < ndocs; i++) doc_free(docs[i].doc);
+  ndocs = 0; curdoc = -1;
+  clip_free(clip); clip = NULL;
+  if (app) MUI_DisposeObject(app);
+  pens_free();
+  canvas_class_free();
+  toolbox_free();
+  panels_free();
+  popup_free();
+  qbutton_class_free();
+  fonts_free(&fonts);
+  theme_free_fonts();
+  remove_fonts();
+  free_home();
+  splash_close();
+  if (qlog) { fclose(qlog); qlog = NULL; }
+  if (CyberGfxBase) CloseLibrary(CyberGfxBase);
+  if (DiskfontBase) CloseLibrary(DiskfontBase);
+  if (MUIMasterBase) CloseLibrary(MUIMasterBase);
+  if (KeymapBase) CloseLibrary(KeymapBase);
+  if (UtilityBase) CloseLibrary(UtilityBase);
+  if (LayersBase) CloseLibrary(LayersBase);
+  if (GfxBase) CloseLibrary((struct Library *)GfxBase);
+  if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
+  (void)win_box;
+  return rc;
+}
