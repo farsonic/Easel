@@ -1525,10 +1525,10 @@ static void command(ULONG id)
   case ID_DEFRINGE: {
     static LONG width = 1;
     if (!ask_number("Defringe", "Width (px):", &width, 1, 200)) return;
-    if (box_empty(layer_defringe(d, (int)width))) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
+    if (box_empty(layer_defringe(d, (int)width))) ask("OK", "%s", tr("Nothing was changed: the layer has no transparent edge, or it is locked."));
     break; }
   case ID_BLACKMATTE: case ID_WHITEMATTE:
-    if (box_empty(id == ID_BLACKMATTE ? layer_remove_black_matte(d) : layer_remove_white_matte(d))) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
+    if (box_empty(id == ID_BLACKMATTE ? layer_remove_black_matte(d) : layer_remove_white_matte(d))) ask("OK", "%s", tr("Nothing was changed: the layer has no partly transparent edge, or it is locked."));
     break;
   /* 0.7: the Ruler's Straighten (the active layer, or with the tick the whole picture, cropped) */
   case ID_STRAIGHTEN: {
