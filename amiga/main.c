@@ -522,6 +522,9 @@ static void update_menus(void)
   menu_set(ID_UNDO, MUIA_Menuitem_Title, (ULONG)undo);
   menu_set(ID_REDO, MUIA_Menuitem_Title, (ULONG)redo);
   menu_set(ID_DARKUI, MUIA_Menuitem_Checked, pref_dark);
+  menu_set(ID_SCR_WINDOW, MUIA_Menuitem_Enabled, prefs.screen_mode != SM_WINDOW);   /* (0.8: the mode in use greyed) */
+  menu_set(ID_SCR_OWN, MUIA_Menuitem_Enabled, prefs.screen_mode != SM_SCREEN);
+  menu_set(ID_SCR_FULL, MUIA_Menuitem_Enabled, prefs.screen_mode != SM_FULL);
   menu_set(ID_ICONPREF, MUIA_Menuitem_Checked, pref_icons);
   {
     static char labels[NRECENT][64];
@@ -1346,6 +1349,81 @@ static void hsnaps_free(DocView *v)
   v->nhsnap = 0;
 }
 
+/* ------------------------------------------------------------------ 0.8: View > Screen Mode */
+/* 0.8: Easel's own screen (View > Screen Mode), a public screen like the Workbench's or in the mode
+   chosen, while it is open; and the public screen asked for at the start, for going back to a window */
+static struct Screen *own_scr;
+static ULONG own_id;
+static char user_screen[64];
+#define OWN_NAME "EASEL.1"
+/* Full Screen: on Easel's own screen, whose title bar is then hidden (the menus still show it) */
+static int full_screen(void)
+{
+  if (own_scr) ShowTitle(own_scr, prefs.screen_mode != SM_FULL);
+  return own_scr && prefs.screen_mode == SM_FULL;
+}
+/* Easel's own screen opened (if it isn't, in prefs.screen_id's mode or the Workbench's); 1 if it is */
+static int own_open(void)
+{
+  ULONG id = prefs.screen_id;
+  if (own_scr && own_id == id) return 1;
+  if (own_scr) { PubScreenStatus(own_scr, PSNF_PRIVATE); if (!CloseScreen(own_scr)) { PubScreenStatus(own_scr, 0); return 1; } own_scr = NULL; }
+  own_scr = OpenScreenTags(NULL, SA_LikeWorkbench, TRUE, (ULONG)(id ? SA_DisplayID : TAG_IGNORE), id,
+                           (ULONG)(id ? SA_Width : TAG_IGNORE), STDSCREENWIDTH, (ULONG)(id ? SA_Height : TAG_IGNORE), STDSCREENHEIGHT,
+                           SA_Title, (ULONG)"Easel", SA_PubName, (ULONG)OWN_NAME, SA_ShowTitle, TRUE, TAG_DONE);
+  if (!own_scr && id) own_scr = OpenScreenTags(NULL, SA_LikeWorkbench, TRUE, SA_Title, (ULONG)"Easel", SA_PubName, (ULONG)OWN_NAME, TAG_DONE);
+  if (!own_scr) return 0;
+  own_id = id;
+  PubScreenStatus(own_scr, 0);
+  return 1;
+}
+/* Easel's own screen closed, if nothing else is on it */
+static void own_close(void)
+{
+  if (!own_scr) return;
+  PubScreenStatus(own_scr, PSNF_PRIVATE);
+  if (CloseScreen(own_scr)) own_scr = NULL; else PubScreenStatus(own_scr, 0);
+}
+static int win_make(void);
+/* the window made again on the screen the preferences ask for (a window on the Workbench or the
+   public screen asked for, Easel's own screen, or all of it), its pictures shown again */
+static void screen_switch(int mode)
+{
+  int old = prefs.screen_mode;
+  if (mode != SM_WINDOW && !own_open()) { ask("OK", "%s", tr("Easel's own screen couldn't be opened (not enough memory, or the mode isn't available).")); return; }
+  prefs.screen_mode = mode;
+  set(win, MUIA_Window_Open, FALSE);
+  DoMethod(app, OM_REMMEMBER, (ULONG)win);
+  MUI_DisposeObject(win);
+  win = NULL;
+  strcpy(pub_screen, mode == SM_WINDOW ? user_screen : OWN_NAME);
+  if (mode == SM_WINDOW) own_close();
+  if (!win_make()) {
+    /* back where it was */
+    prefs.screen_mode = old;
+    strcpy(pub_screen, old == SM_WINDOW ? user_screen : OWN_NAME);
+    if (old != SM_WINDOW) own_open();
+    if (!win_make()) return;
+  }
+  appdrop_attach(win, app, open_path);
+  set_tool(tool);
+  refresh_all();
+}
+/* View > Screen Mode > Choose Screen Mode: the mode of Easel's own screen, from the ASL requester */
+static void screen_choose(void)
+{
+  struct ScreenModeRequester *sm;
+  if (!(sm = (struct ScreenModeRequester *)MUI_AllocAslRequestTags(ASL_ScreenModeRequest, ASLSM_TitleText, (ULONG)tr("Easel's own screen"),
+        (ULONG)(prefs.screen_id ? ASLSM_InitialDisplayID : TAG_IGNORE), prefs.screen_id, TAG_DONE))) return;
+  if (MUI_AslRequestTags(sm, ASLSM_Window, (ULONG)xget(win, MUIA_Window_Window), TAG_DONE)) {
+    prefs.screen_id = sm->sm_DisplayID;
+    MUI_FreeAslRequest(sm);
+    screen_switch(prefs.screen_mode == SM_WINDOW ? SM_SCREEN : prefs.screen_mode);
+    return;
+  }
+  MUI_FreeAslRequest(sm);
+}
+
 /* ------------------------------------------------------------------ commands */
 static void layer_new_named(Doc *d)
 {
@@ -1466,6 +1544,10 @@ static void command(ULONG id)
         "Picture readers and brush code ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
         "Fonts: Liberation, Carlito and Caladea.\nSee Licenses.txt for their licences.");
     return;
+  case ID_SCR_WINDOW: screen_switch(SM_WINDOW); save_prefs(); return;
+  case ID_SCR_OWN: screen_switch(SM_SCREEN); save_prefs(); return;
+  case ID_SCR_FULL: screen_switch(SM_FULL); save_prefs(); return;
+  case ID_SCR_CHOOSE: screen_choose(); save_prefs(); return;
   case ID_DARKUI:
     pref_dark = !pref_dark;
     win_reopen();
@@ -1857,13 +1939,18 @@ static Object *head(const char *const *labels) { return NewObject(head_class()->
 static int win_make(void)
 {
   Object *strip = MUI_MakeObject(MUIO_MenustripNM, (ULONG)menus, 0);
-  /* the whole screen below its title bar, as PhotoCraft fills its screen */
+  /* the whole screen below its title bar, as PhotoCraft fills its screen (0.8: or all of Easel's own
+     screen, without borders, in Full Screen) */
   struct Screen *scr = LockPubScreen((STRPTR)(pub_screen[0] ? pub_screen : NULL));
   LONG sw = 800, sh = 580, top = 12;
-  if (scr) { sw = scr->Width; top = scr->BarHeight + 1; sh = scr->Height - top; UnlockPubScreen(NULL, scr); }
+  int full = full_screen();
+  if (scr) { sw = scr->Width; top = full ? 0 : scr->BarHeight + 1; sh = scr->Height - top; UnlockPubScreen(NULL, scr); }
   win = QWindowObject,
+    (ULONG)(full ? MUIA_Window_Borderless : TAG_IGNORE), TRUE, (ULONG)(full ? MUIA_Window_Backdrop : TAG_IGNORE), TRUE,
+    (ULONG)(full ? MUIA_Window_DragBar : TAG_IGNORE), FALSE, (ULONG)(full ? MUIA_Window_DepthGadget : TAG_IGNORE), FALSE,
+    (ULONG)(full ? MUIA_Window_SizeGadget : TAG_IGNORE), FALSE, (ULONG)(full ? MUIA_Window_CloseGadget : TAG_IGNORE), FALSE,
     MUIA_Window_Title, (ULONG)"Easel",
-    MUIA_Window_ID, MAKE_ID('E','A','S','L'),
+    (ULONG)(own_scr ? TAG_IGNORE : MUIA_Window_ID), MAKE_ID('E','A','S','L'),
     MUIA_Window_DisableKeys, MUIKEYF_WINDOW_CLOSE,
     MUIA_Window_AppWindow, TRUE,
     MUIA_Window_Menustrip, (ULONG)strip,
@@ -1925,6 +2012,7 @@ static int win_make(void)
   DoMethod(tophead, MUIM_Notify, MUIA_Head_Active, MUIV_EveryTime, (ULONG)toppages, 3, MUIM_Set, MUIA_Group_ActivePage, MUIV_TriggerValue);
   set(win, MUIA_Window_Open, TRUE);
   if (!xget(win, MUIA_Window_Open)) return 0;
+  if (full) ShowTitle(own_scr, FALSE);    /* (0.8: again, now the backdrop window is there) */
   if (swatchpanel) DoMethod(swatchpanel, MUIM_Notify, MUIA_Swatches_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_COLORCHG);
   {
     struct Window *w = (struct Window *)xget(win, MUIA_Window_Window);
@@ -2042,7 +2130,7 @@ static void save_prefs(void)
   fprintf(f, "dark=%d\n", pref_dark);
   fprintf(f, "autosave=%d\n", pref_autosave);
   fprintf(f, "icons=%d\n", pref_icons);
-  if (pub_screen[0]) fprintf(f, "screen=%s\n", pub_screen);
+  if (user_screen[0]) fprintf(f, "screen=%s\n", user_screen);     /* (0.8: not Easel's own screen) */
   if (lastdir[0]) fprintf(f, "dir=%s\n", lastdir);
   { int i; for (i = 0; i < NRECENT; i++) if (recent[i][0]) fprintf(f, "recent=%s\n", recent[i]); }
   prefs_write(f);                        /* 0.8: the Preferences window's settings */
@@ -2088,6 +2176,10 @@ int main(int argc, char **argv)
     struct Screen *sc = LockPubScreen((STRPTR)pub_screen);
     if (sc) UnlockPubScreen(NULL, sc); else pub_screen[0] = 0;
   }
+  strcpy(user_screen, pub_screen);
+  /* 0.8: Easel's own screen, when the preferences ask for it (not when PUBSCREEN= names one) */
+  if (prefs.screen_mode != SM_WINDOW && !arg_screen[0]) { if (own_open()) strcpy(pub_screen, OWN_NAME); else prefs.screen_mode = SM_WINDOW; }
+  else if (arg_screen[0]) prefs.screen_mode = SM_WINDOW;
   LOG("Easel starting, cybergraphics %p", (void *)CyberGfxBase);
   lang_set(LANG_EN);
   theme_set_dark(pref_dark);
@@ -2185,6 +2277,7 @@ done:
   palwin_dispose();
   clip_free(clip); clip = NULL;
   if (app) MUI_DisposeObject(app);
+  if (own_scr) { strcpy(pub_screen, user_screen); splash_close(); own_close(); }   /* 0.8: Easel's own screen */
   appdrop_free();
   brushwin_free(); brushwin_classes_free();
   swatchwin_free(); swatchwin_class_free();
