@@ -113,6 +113,19 @@ struct MUIP_Canvas_Zoom { ULONG MethodID; LONG permille; LONG how; };  /* how: 0
 #define MUIM_Canvas_Cancel  (QTAG + 0x105) /* and dropped (Esc) */
 #define MUIM_Canvas_Tool    (QTAG + 0x106) /* the tool changed: what it was doing put away */
 #define MUIM_Canvas_StrokeTick (QTAG + 0x107) /* (timer, 0.5) airbrush build-up and smoothing while the button is held */
+#define MUIM_Canvas_ScrollTo (QTAG + 0x108) /* (0.6) struct MUIP_Canvas_ScrollTo: the view centred on an image point */
+struct MUIP_Canvas_ScrollTo { ULONG MethodID; LONG x, y; };
+/* 0.6: where the pointer is over the picture, and the colour there (for the Info panel) */
+typedef struct { LONG x, y; int in, has_rgb; int rgba[4]; } CanvasPoint;
+extern CanvasPoint canvas_pt;
+/* the Navigator and Info panels (panels2.c) */
+#define MUIM_Navigator_Refresh (QTAG + 0x340)   /* struct MUIP_Navigator_Refresh: the view moved, or (picture) the picture changed */
+struct MUIP_Navigator_Refresh { ULONG MethodID; LONG picture; };
+#define MUIM_Info_Refresh (QTAG + 0x341)        /* struct MUIP_Info_Refresh: the pointer moved, or (picture) the picture changed */
+struct MUIP_Info_Refresh { ULONG MethodID; LONG picture; };
+struct MUI_CustomClass *navigator_class(void);
+struct MUI_CustomClass *info_class(void);
+void panels2_free(void);
 struct MUI_CustomClass *canvas_class(void);
 void canvas_class_free(void);
 /* the pointer's place in the image and the colour there, for the status bar ("" when outside) */

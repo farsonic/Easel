@@ -34,6 +34,7 @@
 #include "../core/text.h"
 
 char canvas_info[96];
+CanvasPoint canvas_pt;
 int crop_pending;
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK };
@@ -1058,7 +1059,9 @@ static ULONG handle(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *m)
         const u8 *p = d->comp && d->doc == doc ? d->comp + ((long)(i32)y * doc->w + (i32)x) * 4 : NULL;
         if (p) sprintf(canvas_info, "X %ld  Y %ld   R %d G %d B %d A %d", (long)x, (long)y, (int)p[0], (int)p[1], (int)p[2], (int)p[3]);
         else sprintf(canvas_info, "X %ld  Y %ld", (long)x, (long)y);
-      } else canvas_info[0] = 0;
+        canvas_pt.x = (LONG)x; canvas_pt.y = (LONG)y; canvas_pt.in = 1; canvas_pt.has_rgb = p != NULL;
+        if (p) { canvas_pt.rgba[0] = p[0]; canvas_pt.rgba[1] = p[1]; canvas_pt.rgba[2] = p[2]; canvas_pt.rgba[3] = p[3]; }
+      } else { canvas_info[0] = 0; canvas_pt.in = 0; }
       if (d->drag == DR_MARQUEE || d->drag == DR_SHAPE || d->drag == DR_CROP)
         sprintf(canvas_info + strlen(canvas_info), "   %ld x %ld", (long)fabs(floor(d->bx + 0.5) - floor(d->ax + 0.5)), (long)fabs(floor(d->by + 0.5) - floor(d->ay + 0.5)));
       set(obj, MUIA_Canvas_Pointer, TRUE);
@@ -1166,6 +1169,15 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
       ov_show(d, obj);
     }
     return 0;
+  case MUIM_Canvas_ScrollTo: {
+    struct MUIP_Canvas_ScrollTo *m = (struct MUIP_Canvas_ScrollTo *)msg;
+    DocView *v = cur_view();
+    d = INST_DATA(cl, obj);
+    if (!v || !d->shown) return 0;
+    v->sx = (LONG)(m->x * v->zoom) - _mwidth(obj) / 2;
+    v->sy = (LONG)(m->y * v->zoom) - _mheight(obj) / 2;
+    draw_all(d, obj);
+    return 0; }
   case MUIM_Canvas_StrokeTick: {
     Box ch;
     d = INST_DATA(cl, obj);

@@ -73,6 +73,7 @@ int ndocs, curdoc = -1;
 Opts opt;
 int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
+static Object *navpanel, *infopanel;     /* (0.6) the Navigator and Info panels */
 static int fonts_assigned;
 static int untitled;
 static LONG win_box[4];
@@ -477,6 +478,8 @@ void refresh_panels(void)
   palwin_set_doc(cur_doc());
   DoMethod(layerpanel, MUIM_Layers_Refresh);
   DoMethod(historypanel, MUIM_History_Refresh);
+  DoMethod(navpanel, MUIM_Navigator_Refresh, 1);
+  DoMethod(infopanel, MUIM_Info_Refresh, 1);
   DoMethod(colorpanel, MUIM_Color_Refresh);
   DoMethod(toolbox, MUIM_Tools_Refresh);
   DoMethod(doctabs, MUIM_DocTabs_Refresh);
@@ -1436,7 +1439,8 @@ static void brush_picked(const Brush *b)
   DoMethod(optbar, MUIM_Opts_Refresh);
 }
 static void brush_changed(void) { DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); }
-static const char *const head_layers[] = { "Layers", NULL };
+static const char *const head_layers[] = { "Layers", "Navigator", "Info", NULL };
+static Object *lowpages, *lowhead;
 static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
 static int win_make(void)
@@ -1475,8 +1479,12 @@ static int win_make(void)
             Child, brushpanel = brushwin_panel(),
             Child, historypanel = NewObject(history_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
           End,
-          Child, head(head_layers),
-          Child, layerpanel = NewObject(layers_class()->mcc_Class, NULL, MUIA_VertWeight, 300, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+          Child, lowhead = head(head_layers),
+          Child, lowpages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 300,
+            Child, layerpanel = NewObject(layers_class()->mcc_Class, NULL, MUIA_VertWeight, 300, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+            Child, navpanel = NewObject(navigator_class()->mcc_Class, NULL, TAG_DONE),
+            Child, infopanel = NewObject(info_class()->mcc_Class, NULL, TAG_DONE),
+          End,
         End,
       End,
       Child, statusbar = NewObject(status_class()->mcc_Class, NULL, TAG_DONE),
@@ -1490,6 +1498,8 @@ static int win_make(void)
   DoMethod(hscroll, MUIM_Notify, MUIA_Prop_First, MUIV_EveryTime, (ULONG)canvas, 3, MUIM_Set, MUIA_Canvas_Left, MUIV_TriggerValue);
   DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Changed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_CANVASCHG);
   DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Pointer, MUIV_EveryTime, (ULONG)statusbar, 1, MUIM_Status_Refresh);
+  DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Pointer, MUIV_EveryTime, (ULONG)infopanel, 2, MUIM_Info_Refresh, 0);
+  DoMethod(lowhead, MUIM_Notify, MUIA_Head_Active, MUIV_EveryTime, (ULONG)lowpages, 3, MUIM_Set, MUIA_Group_ActivePage, MUIV_TriggerValue);
   DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Picked, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_PICKED);
   DoMethod(canvas, MUIM_Notify, MUIA_Canvas_Zoomed, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_ZOOMED);
   DoMethod(toolbox, MUIM_Notify, MUIA_Tools_Pick, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_TOOLPICK);
@@ -1670,7 +1680,7 @@ int main(int argc, char **argv)
   sysfonts_scan(&fonts, scan_step);
   splash_step(45, tr("Preparing"));
   if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
-      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
+      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
   /* 0.5: brushes, swatches, patterns, gradients (before the window, which shows their panels) */
   swatch_palette_hooks();
   brushwin_init();
@@ -1714,7 +1724,7 @@ int main(int argc, char **argv)
       refresh_panels();
     }
     else if (id == ID_PICKED || id == ID_COLORCHG) { DoMethod(colorpanel, MUIM_Color_Refresh); DoMethod(toolbox, MUIM_Tools_Refresh); }
-    else if (id == ID_ZOOMED) { DoMethod(doctabs, MUIM_DocTabs_Refresh); DoMethod(statusbar, MUIM_Status_Refresh); }
+    else if (id == ID_ZOOMED) { DoMethod(doctabs, MUIM_DocTabs_Refresh); DoMethod(statusbar, MUIM_Status_Refresh); DoMethod(navpanel, MUIM_Navigator_Refresh, 0); }
     else if (id == ID_TOOLPICK) set_tool((int)xget(toolbox, MUIA_Tools_Pick));
     else if (id == ID_COLORCLICK) {
       Doc *d = cur_doc();
@@ -1751,6 +1761,7 @@ done:
   canvas_class_free();
   toolbox_free();
   panels_free();
+  panels2_free();
   popup_free();
   qbutton_class_free();
   fonts_free(&fonts);
