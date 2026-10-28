@@ -302,7 +302,9 @@ struct MUI_CustomClass *toolbox_class(void)
 }
 
 /* ------------------------------------------------------------------ the options bar */
-enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT, F_SWATCH };   /* F_SWATCH (0.9): a colour, clicked for the command min */
+enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT, F_SWATCH, F_ICON };
+/* (0.9) F_SWATCH: a colour, clicked for the command min; F_ICON: icon max as a small button for the
+   command min (the label is its name, for the help bubble) */
 typedef struct {
   int kind;
   const char *label;
@@ -327,7 +329,7 @@ static const char *fontlist[96];
 /* 0.9: type and shapes */
 static const char *const tstyles[] = { "Regular", "Bold", "Italic", "Bold Italic" };
 static const char *const taa[] = { "None", "Sharp", "Smooth" };
-static const char *const taligns[] = { "Left", "Centre", "Right", "Justify", "Justify All" };
+static const char *const taligns[] = { "Left", "Centre", "Right", "Justify", "Just. All" };
 static const char *const shmodes[] = { "Shape Layer", "Pixels" };
 static const char *const salign[] = { "Centre", "Inside", "Outside" };
 static int fg_show;                     /* the foreground colour, for the Type tool's swatch */
@@ -344,6 +346,7 @@ static int fields_for(int t, Field *f)
 #define TEXT(l) (f[n].kind = F_TEXT, f[n].label = l, n++)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
 #define SWATCH(l, v, id) (f[n].kind = F_SWATCH, f[n].label = l, f[n].val = &(v), f[n].min = id, n++)
+#define ICONBTN(l, ic, id) (f[n].kind = F_ICON, f[n].label = l, f[n].min = id, f[n].max = ic, n++)
   if (xform_pending) {
     /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
     if (prefs.xform_numbers) TEXT(xform_info);      /* (0.8: Preferences > Tools) */
@@ -411,9 +414,9 @@ static int fields_for(int t, Field *f)
     if (t == TL_TYPEMASK) SELOPS();
     if (i) CHOICE("", opt.text_font, fontlist, i);
     CHOICE("", opt.text_style, tstyles, 4);
-    SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("AA:", opt.text_aa, taa, 3); CHOICE("Align:", opt.text_align, taligns, 5);
-    if (t != TL_TYPEMASK) { fg_show = doc ? (int)doc->fg : 0; SWATCH("Color", fg_show, ID_TEXTCOLOR); BUTTON("Warp", ID_WARPTEXT); }
-    BUTTON("Character", ID_TYPECHAR); BUTTON("Paragraph", ID_TYPEPARA);
+    SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 3); CHOICE("", opt.text_align, taligns, 5);
+    if (t != TL_TYPEMASK) { fg_show = doc ? (int)doc->fg : 0; SWATCH("", fg_show, ID_TEXTCOLOR); ICONBTN("Warp", IC_WARP, ID_WARPTEXT); }
+    ICONBTN("Character", IC_FONTDLG, ID_TYPECHAR); ICONBTN("Paragraph", IC_PARADLG, ID_TYPEPARA);
     if (type_editing) BUTTON("Commit", ID_COMMIT);
     else if (t == TL_TYPEMASK) TEXT("Click and type; Esc makes the selection");
     break; }
@@ -454,6 +457,7 @@ static int fields_for(int t, Field *f)
 #undef TEXT
 #undef SELOPS
 #undef SWATCH
+#undef ICONBTN
 }
 
 struct OData {
@@ -513,7 +517,6 @@ static const char *field_help(const Field *f)
     { "Zoom Out", "Zooms out a step." },
     /* 0.9 */
     { "AA:", "How the text's edges are smoothed: None (hard), Sharp or Smooth." },
-    { "Color", "The text's colour (the foreground colour). Click to choose another: the selected text, or all of it, takes it." },
     { "Warp", "Bends the text into an arc, a wave, a flag and other shapes, and can still be edited." },
     { "Character", "The font, size, leading, tracking, baseline shift, colour and styles of the selected text." },
     { "Paragraph", "Alignment, indents and the space before and after paragraphs." },
@@ -532,9 +535,12 @@ static const char *field_help(const Field *f)
   int i;
   for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!strcmp(h[i].label, f->label)) return h[i].help;
   if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in (Amiga bitmap fonts are marked).";
+  if (f->kind == F_CHOICE && f->choices == taa) return "How the text's edges are smoothed: None (hard), Sharp or Smooth.";
+  if (f->kind == F_CHOICE && f->choices == taligns) return "How the lines line up: left, centre, right, or justified to the paragraph's box.";
   if (f->kind == F_CHOICE && f->choices == tstyles) return "Regular, bold, italic or both: the font's own bold and italic faces when it has them, else drawn slanted or heavier.";
   if (f->kind == F_CHOICE && f->choices == shmodes) return "A shape layer stays sharp and can be changed later (Layer > Shape Properties); Pixels paints the shape on the layer in use.";
   if (f->kind == F_CHOICE && f->choices == salign) return "Where the stroke goes: centred on the shape's edge, inside it or outside it.";
+  if (f->kind == F_SWATCH && f->min == ID_TEXTCOLOR) return "The text's colour (the foreground colour). Click to choose another: the selected text, or all of it, takes it.";
   if (f->kind == F_SWATCH && f->min == ID_STROKECOLOR) return "The stroke's colour. Click to choose another.";
   if (f->kind == F_SCRUB && f->val == &opt.stroke_width) return "The stroke's width in pixels.";
   if (f->kind == F_CHOICE && f->choices == gradcols) return "The gradient's colours: foreground to background, or the foreground fading out.";
@@ -557,7 +563,7 @@ static void ob_layout(struct OData *d, Object *obj)
     case F_CHOICE: {
       int k;
       for (k = 0; k < f->nchoices; k++) { LONG w = theme_textlen(rp, theme_font(), f->choices[k]); if (w > vw) vw = w; }
-      if (vw > 160) vw = 160;
+      if (vw > (f->choices == fontlist ? 110 : 160)) vw = f->choices == fontlist ? 110 : 160;
       vw += 26;
       break; }
     case F_CHECK: lw = 0; vw = 16 + theme_textlen(rp, theme_font(), f->label); break;
@@ -565,10 +571,11 @@ static void ob_layout(struct OData *d, Object *obj)
     case F_BUTTON: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 20; break;
     case F_TEXT: lw = 0; vw = theme_textlen(rp, theme_font(), f->label); break;
     case F_SWATCH: lw = 0; vw = 24 + (f->label[0] ? theme_textlen(rp, theme_font(), f->label) + 5 : 0); break;
+    case F_ICON: lw = 0; vw = 22; break;
     }
     d->vx0[i] = x + lw;
     d->x1[i] = x + lw + vw;
-    x = d->x1[i] + (f->kind == F_SELOPS ? 18 : 14);
+    x = d->x1[i] + (f->kind == F_SELOPS ? 18 : f->kind == F_ICON ? 6 : 12);
   }
 }
 static void ob_draw(struct OData *d, Object *obj)
@@ -636,6 +643,10 @@ static void ob_draw(struct OData *d, Object *obj)
       break;
     case F_TEXT:
       theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_GROUPLABEL));
+      break;
+    case F_ICON:
+      if (d->hot == i) theme_fill(rp, x0, vt, x1, vb, tpen(T_HOVER));
+      theme_icon(rp, f->max, x0 + 3, my - 8, 16, 0);
       break;
     case F_SWATCH: {
       LONG sx = x0;
@@ -777,7 +788,7 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
       case F_SCRUB: d->drag = h; d->grabx = im->MouseX; d->grabv = *f->val; d->moved = 0; break;
       case F_CHECK: *f->val = !*f->val; ob_redraw(d, obj); ob_changed(obj); break;
       case F_SELOPS: { int k = (int)((im->MouseX - d->vx0[h]) / 22); if (k >= 0 && k < 4) *f->val = k; ob_redraw(d, obj); break; }
-      case F_BUTTON: case F_SWATCH: DoMethod(_app(obj), MUIM_Application_ReturnID, (ULONG)f->min); break;
+      case F_BUTTON: case F_SWATCH: case F_ICON: DoMethod(_app(obj), MUIM_Application_ReturnID, (ULONG)f->min); break;
       case F_CHOICE: {
         struct Window *w = _window(obj);
         d->popfield = h;

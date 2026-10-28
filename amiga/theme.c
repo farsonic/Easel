@@ -1066,6 +1066,7 @@ static const char *const icons[IC_N] = {
   /* PATHFILL: fill path: a disc in the foreground colour */ "ci O 8 8 6 ca E 8 8 5",
   /* PATHSTROKE: stroke path: a thick ring */ "ci O 8 8 6 O 8 8 5 O 8 8 4",
   /* PATHFROMSEL: work path from the selection: a dashed box becoming a path */ "cd L 1 1 3 1 L 6 1 8 1 L 1 1 1 3 L 1 6 1 8 ci L 5 13 13 5 L 4 14 5 13 ca F 3 12 5 14 F 12 3 14 5",
+  /* WARP: warp text: a T over an arched line */ "ci F 3 2 12 3 F 7 2 8 10 ca P 5 1 14 4 12 8 11 12 12 15 14",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

@@ -971,6 +971,35 @@ struct MUI_CustomClass *history_class(void)
 
 /* ================================================================== a panel's title strip */
 struct PHData { struct MUI_EventHandlerNode ehn; int shown, active, n; const char *const *labels; };
+/* 0.9: tab i's label: "Long|Short" gives the short one when the long ones don't all fit (into buf) */
+static const char *head_label(struct PHData *d, int i, int brief, char *buf)
+{
+  const char *l = tr(d->labels[i]), *bar = strchr(l, '|');
+  size_t n;
+  if (!bar) return l;
+  if (brief) return bar + 1;
+  n = (size_t)(bar - l) < 39 ? (size_t)(bar - l) : 39;
+  memcpy(buf, l, n); buf[n] = 0;
+  return buf;
+}
+/* the tabs' widths: the long labels with room round them if they fit, else the short ones, closer
+   together if need be (w[i] each tab's width; *brief set when the short labels are used) */
+static void head_widths(struct PHData *d, Object *obj, LONG *w, int *brief)
+{
+  struct RastPort *rp = _rp(obj);
+  char buf[40];
+  LONG tot, pad;
+  int i, b;
+  for (b = 0; b < 2; b++) {
+    for (tot = 0, i = 0; i < d->n; i++) tot += theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), head_label(d, i, b, buf));
+    if (tot + 20 * d->n <= _mwidth(obj) || b == 1) break;
+  }
+  pad = (_mwidth(obj) - tot) / (d->n ? d->n : 1);
+  if (pad > 20) pad = 20;
+  if (pad < 6) pad = 6;
+  for (i = 0; i < d->n; i++) w[i] = theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), head_label(d, i, b, buf)) + pad;
+  *brief = b;
+}
 static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct PHData *d;
@@ -1009,11 +1038,19 @@ static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     if (!(((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE))) return 0;
     theme_fill(rp, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj), tpen(T_TABSTRIP));
     x = _mleft(obj);
-    for (i = 0; i < d->n; i++) {
-      LONG w = theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), d->labels[i]) + 20;
-      if (i == d->active) theme_fill(rp, x, _mtop(obj) + 1, x + w - 1, _mbottom(obj), tpen(T_PANEL));
-      theme_text(rp, i == d->active ? theme_bold() : theme_font(), x + 10, _mtop(obj) + 4, d->labels[i], tpen(i == d->active ? T_TEXT : T_DIM));
-      x += w;
+    {
+      LONG ws[8];
+      int brief;
+      char buf[40];
+      head_widths(d, obj, ws, &brief);
+      for (i = 0; i < d->n && i < 8; i++) {
+        LONG w = ws[i];
+        if (i == d->active) theme_fill(rp, x, _mtop(obj) + 1, x + w - 1, _mbottom(obj), tpen(T_PANEL));
+        const char *lab = head_label(d, i, brief, buf);
+        struct TextFont *tf = i == d->active ? theme_bold() : theme_font();
+        theme_text(rp, tf, x + (w - theme_textlen(rp, tf, lab)) / 2, _mtop(obj) + 4, lab, tpen(i == d->active ? T_TEXT : T_DIM));
+        x += w;
+      }
     }
     SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj), _mtop(obj)); Draw(rp, _mright(obj), _mtop(obj));
     return 0;
@@ -1025,10 +1062,15 @@ static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     d = INST_DATA(cl, obj);
     if (!im || !d->shown || im->Code != SELECTDOWN || im->MouseY < _mtop(obj) || im->MouseY > _mbottom(obj)) return 0;
     x = _mleft(obj);
-    for (i = 0; i < d->n; i++) {
-      LONG w = theme_textlen(_rp(obj), i == d->active ? theme_bold() : theme_font(), d->labels[i]) + 20;
-      if (im->MouseX >= x && im->MouseX < x + w) { if (i != d->active) SetAttrs(obj, MUIA_Head_Active, i, TAG_DONE); return MUI_EventHandlerRC_Eat; }
-      x += w;
+    {
+      LONG ws[8];
+      int brief;
+      head_widths(d, obj, ws, &brief);
+      for (i = 0; i < d->n && i < 8; i++) {
+        LONG w = ws[i];
+        if (im->MouseX >= x && im->MouseX < x + w) { if (i != d->active) SetAttrs(obj, MUIA_Head_Active, i, TAG_DONE); return MUI_EventHandlerRC_Eat; }
+        x += w;
+      }
     }
     return 0;
   }

@@ -2182,7 +2182,7 @@ static void brush_picked(const Brush *b)
   DoMethod(optbar, MUIM_Opts_Refresh);
 }
 static void brush_changed(void) { DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); }
-static const char *const head_layers[] = { "Layers", "Channels", "Paths", "Navigator", "Info", NULL };
+static const char *const head_layers[] = { "Layers", "Channels|Chan.", "Paths", "Navigator|Nav.", "Info", NULL };
 static Object *lowpages, *lowhead;
 static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }

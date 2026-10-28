@@ -92,7 +92,7 @@ enum {
   /* 0.9: type, pens and paths, shapes (in TL_ order from TL_TYPEMASK), then the Paths panel's buttons */
   IC_T_TYPEMASK, IC_T_VTEXT, IC_T_PEN, IC_T_ADDANCHOR, IC_T_DELANCHOR, IC_T_CONVERT, IC_T_PATHSEL, IC_T_DIRECTSEL,
   IC_T_ROUNDRECT, IC_T_POLYGON, IC_T_CUSTOMSHAPE,
-  IC_PATHFILL, IC_PATHSTROKE, IC_PATHFROMSEL,
+  IC_PATHFILL, IC_PATHSTROKE, IC_PATHFROMSEL, IC_WARP,
   IC_N
 };
 void theme_icon(struct RastPort *rp, int icon, LONG x, LONG y, LONG size, int dim);
