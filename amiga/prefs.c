@@ -155,7 +155,7 @@ int dlg_preferences(int *reopen)
   sprintf(usage, tr("In the drawer now: %ld KB of undo steps."), undo_scratch_bytes / 1024);
   w = dialog_window("Preferences", HGroup,
         Child, list = ListviewObject, MUIA_Listview_Input, TRUE, MUIA_CycleChain, 1, MUIA_HorizWeight, 30,
-          MUIA_Listview_List, ListObject, InputListFrame, MUIA_List_SourceArray, (ULONG)pagelist, MUIA_List_Active, 0, MUIA_List_AdjustWidth, TRUE, End, End,
+          MUIA_Listview_List, ListObject, InputListFrame, (ULONG)(theme_dialog_font() ? MUIA_Font : TAG_IGNORE), (ULONG)theme_dialog_font(), MUIA_List_SourceArray, (ULONG)pagelist, MUIA_List_Active, 0, MUIA_List_AdjustWidth, TRUE, End, End,
         Child, pg = VGroup, MUIA_Group_PageMode, TRUE, MUIA_HorizWeight, 100,
           /* General */
           Child, VGroup, Child, QTitleObject(tr("General")), Child, ColGroup(2),
