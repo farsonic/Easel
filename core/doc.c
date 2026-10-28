@@ -11,6 +11,8 @@
 #include <math.h>
 #include "doc.h"
 #include "palette.h"
+#include "path.h"                     /* 0.9 */
+#include "live.h"
 
 const char *const blend_names[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Linear Dodge (Add)",
   "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
@@ -56,6 +58,7 @@ void layer_free(Layer *l)
   free(l->idx);
   free(l->maskfx);
   if (l->adjprog) { if (adjlayer_free) adjlayer_free(l->adjprog); else free(l->adjprog); }
+  free(l->live); free(l->livepx);                          /* 0.9 */
   free(l);
 }
 Layer *layer_copy(const Layer *l, i32 w, i32 h)
@@ -65,6 +68,12 @@ Layer *layer_copy(const Layer *l, i32 w, i32 h)
   *c = *l;
   c->px = c->mask = c->idx = c->maskfx = NULL; c->maskfx_ok = 0;
   c->adjprog = NULL; c->adjprog_ok = 0;
+  c->live = NULL; c->livepx = NULL;                        /* 0.9: the settings and their rendering copied too */
+  if (l->live && (c->live = malloc(l->livelen)) != NULL) memcpy(c->live, l->live, l->livelen);
+  if (l->live && !c->live) { free(c); return NULL; }
+  if (l->livepx && l->live_ok && (c->livepx = (u8 *)malloc((size_t)(l->livebox.x1 - l->livebox.x0) * (l->livebox.y1 - l->livebox.y0) * 4)) != NULL)
+    memcpy(c->livepx, l->livepx, (size_t)(l->livebox.x1 - l->livebox.x0) * (l->livebox.y1 - l->livebox.y0) * 4);
+  if (!c->livepx) c->live_ok = 0;
   if (l->px && !(c->px = (u8 *)malloc((size_t)w * h * 4))) { free(c); return NULL; }
   if (l->px) memcpy(c->px, l->px, (size_t)w * h * 4);
   if (l->mask && (c->mask = (u8 *)malloc((size_t)w * h)) != NULL) memcpy(c->mask, l->mask, (size_t)w * h);
@@ -110,6 +119,8 @@ void doc_free(Doc *d)
   free(d->lastsel);
   for (i = 0; i < d->nchan; i++) free(d->chan[i]);     /* 0.7 */
   free(d->qmask);
+  for (i = 0; i < d->npaths; i++) path_free(d->path[i]);  /* 0.9 */
+  path_free(d->workpath);
   free(d);
 }
 
@@ -399,9 +410,22 @@ static int px_cover(Comp *c, const Layer *l, const u8 *mask, int base, i32 x, co
   return op;
 }
 /* the source row of a pixel or fill layer (NULL for others) */
-static const u8 *src_row(Comp *c, const Layer *l, u8 *tmp)
+static const u8 *src_row(Comp *c, Layer *l, u8 *tmp)
 {
   if (l->kind == LK_FILL) { fill_row(c, l, tmp); return tmp; }
+  if (l->kind == LK_TEXT || l->kind == LK_SHAPE) {
+    /* 0.9: a type or shape layer's rendering (worked out when first wanted), placed in its row */
+    Box b;
+    if (!l->live_ok) live_render(c->d, l);
+    b = l->livebox;
+    if (!l->livepx || c->y < b.y0 || c->y >= b.y1 || c->x0 + c->n <= b.x0 || c->x0 >= b.x1) return NULL;
+    {
+      i32 a = c->x0 > b.x0 ? c->x0 : b.x0, e = c->x0 + c->n < b.x1 ? c->x0 + c->n : b.x1;
+      memset(tmp, 0, (size_t)c->n * 4);
+      memcpy(tmp + (a - c->x0) * 4, l->livepx + ((size_t)(c->y - b.y0) * (b.x1 - b.x0) + (a - b.x0)) * 4, (size_t)(e - a) * 4);
+    }
+    return tmp;
+  }
   if (!l->px) return NULL;
   return l->px + ((long)c->y * c->d->w + c->x0) * 4;
 }
@@ -416,8 +440,8 @@ static void put_layer(Comp *c, Layer *l, u8 *acc, int keep)
   if (!l->visible || (!base && !keep)) return;
   if (l->kind == LK_ADJUST) { adj_mix(c, l, acc, keep); return; }
   mask = layer_mask_used(c->d, l);
-  tmp = l->kind == LK_FILL ? row_get(c) : NULL;
-  if (l->kind == LK_FILL && !tmp) return;
+  tmp = l->kind == LK_FILL || l->kind == LK_TEXT || l->kind == LK_SHAPE ? row_get(c) : NULL;   /* (0.9: type and shape too) */
+  if (!tmp && l->kind != LK_PIXEL) return;
   s = src_row(c, l, tmp);
   if (s) {
     for (x = 0; x < c->n; x++, s += 4) {
@@ -630,6 +654,9 @@ typedef struct {
 typedef Layer Props;                  /* a layer's settings: everything but its buffers (see props_of) */
 /* 0.7: the alpha channels and Quick Mask plane as they were (doc_note_channels; copies, w x h) */
 typedef struct { u8 *chan[MAXCHANNELS]; char name[MAXCHANNELS][32]; int n; u8 *qmask; } ChanState;
+/* 0.9: a live layer's settings as they were (doc_note_live), and the paths (doc_note_paths) */
+typedef struct { int layer; void *live; u32 len; } LiveSave;
+typedef struct { Path *path[MAXPATHS]; char name[MAXPATHS][32]; int n; Path *work; int active; } PathState;
 struct UndoStep {
   char name[64];
   Tile *tiles; int ntiles, captiles;
@@ -639,6 +666,8 @@ struct UndoStep {
   Props *props; int nprops, pactive;   /* the layers' settings before the step (nprops of them) */
   int has_pal; PalState *pal;         /* 0.4: the palette as it was (malloc'd) */
   int has_chan; ChanState *chan;      /* 0.7: the channels as they were (malloc'd) */
+  LiveSave *lives; int nlives;        /* 0.9: live layers' settings as they were */
+  int has_paths; PathState *paths;    /* 0.9: the paths as they were (malloc'd) */
   long bytes;
   UndoStep *next;
   int open;
@@ -654,6 +683,9 @@ static void step_free(UndoStep *u)
   if (u->chan) { for (i = 0; i < u->chan->n; i++) free(u->chan->chan[i]); free(u->chan->qmask); free(u->chan); }   /* 0.7 */
   if (u->whole) for (i = 0; i < u->nlay; i++) layer_free(u->lay[i]);
   free(u->props);
+  for (i = 0; i < u->nlives; i++) free(u->lives[i].live);   /* 0.9 */
+  free(u->lives);
+  if (u->paths) { for (i = 0; i < u->paths->n; i++) path_free(u->paths->path[i]); path_free(u->paths->work); free(u->paths); }
   free(u);
 }
 static void list_free(UndoStep *u) { while (u) { UndoStep *n = u->next; step_free(u); u = n; } }
@@ -664,6 +696,7 @@ static void props_of(const Layer *l, Props *p)
   *p = *l;
   p->px = p->mask = p->idx = p->maskfx = NULL; p->adjprog = NULL;
   p->maskfx_ok = p->adjprog_ok = 0; p->picked = 0; p->edit_mask = 0;
+  p->live = NULL; p->livelen = 0; p->livepx = NULL; p->livebox = box_make(0, 0, 0, 0); p->live_ok = 0;   /* 0.9 (doc_note_live keeps those) */
 }
 /* settings p put back on layer l (its buffers, caches and panel state kept) */
 static void props_set(Layer *l, const Props *p)
@@ -671,6 +704,7 @@ static void props_set(Layer *l, const Props *p)
   Layer keep = *l;
   *l = *p;
   l->px = keep.px; l->mask = keep.mask; l->idx = keep.idx; l->maskfx = keep.maskfx; l->adjprog = keep.adjprog;
+  l->live = keep.live; l->livelen = keep.livelen; l->livepx = keep.livepx; l->livebox = keep.livebox; l->live_ok = keep.live_ok;   /* 0.9 */
   l->picked = keep.picked; l->edit_mask = keep.edit_mask;
   l->maskfx_ok = keep.maskfx_ok && p->mask_feather == keep.mask_feather;
   l->adjprog_ok = 0;
@@ -772,6 +806,42 @@ void doc_note_channels(Doc *d)
   u->chan = c; u->has_chan = 1;
   u->bytes += (long)(c->n + (c->qmask != NULL)) * (long)n + (long)sizeof *c;
 }
+/* 0.9: a live layer's settings, once a step */
+void doc_note_live(Doc *d, int li)
+{
+  UndoStep *u = open_step(d);
+  LiveSave *n;
+  Layer *l;
+  int k;
+  if (!u || u->whole || li < 0 || li >= d->nlay || !(l = d->lay[li])->live) return;
+  for (k = 0; k < u->nlives; k++) if (u->lives[k].layer == li) return;
+  if (!(n = (LiveSave *)realloc(u->lives, (size_t)(u->nlives + 1) * sizeof *n))) return;
+  u->lives = n;
+  if (!(n[u->nlives].live = malloc(l->livelen))) return;
+  memcpy(n[u->nlives].live, l->live, l->livelen);
+  n[u->nlives].len = l->livelen; n[u->nlives].layer = li;
+  u->nlives++;
+  u->bytes += (long)l->livelen;
+}
+/* 0.9: every path copied */
+void doc_note_paths(Doc *d)
+{
+  UndoStep *u = open_step(d);
+  PathState *p;
+  int i;
+  if (!u || u->has_paths) return;
+  if (!(p = (PathState *)calloc(1, sizeof *p))) return;
+  for (i = 0; i < d->npaths; i++) {
+    if (!(p->path[i] = path_copy(d->path[i]))) { while (i--) path_free(p->path[i]); free(p); return; }
+    u->bytes += path_bytes(p->path[i]);
+  }
+  if (d->workpath && !(p->work = path_copy(d->workpath))) { for (i = 0; i < d->npaths; i++) path_free(p->path[i]); free(p); return; }
+  if (p->work) u->bytes += path_bytes(p->work);
+  p->n = d->npaths; p->active = d->path_active;
+  memcpy(p->name, d->path_name, sizeof p->name);
+  u->paths = p; u->has_paths = 1;
+  u->bytes += (long)sizeof *p;
+}
 void doc_note_sel(Doc *d)
 {
   UndoStep *u = open_step(d);
@@ -828,6 +898,9 @@ void doc_note_all(Doc *d)
   u->has_sel = 1; u->selbox = d->selbox;
   if (d->sel && (u->sel = (u8 *)malloc((size_t)d->w * d->h))) memcpy(u->sel, d->sel, (size_t)d->w * d->h);
   doc_note_channels(d);                                    /* 0.7: and the channels */
+  doc_note_paths(d);                                       /* 0.9: and the paths */
+  for (i = 0; i < u->nlives; i++) free(u->lives[i].live);  /* (0.9: live settings are in the copy) */
+  free(u->lives); u->lives = NULL; u->nlives = 0;
 }
 void doc_end(Doc *d)
 {
@@ -836,7 +909,7 @@ void doc_end(Doc *d)
   int k;
   if (!u || --u->open > 0) return;
   /* nothing noted and nothing about the layers changed: no step */
-  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal && !u->has_chan) {
+  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal && !u->has_chan && !u->nlives && !u->has_paths) {
     int same = u->nprops == d->nlay && u->pactive == d->active, i;
     for (i = 0; same && i < d->nlay; i++) {
       Props now;
@@ -925,6 +998,28 @@ static void swap_step(Doc *d, UndoStep *u)
     for (i = 0; i < MAXCHANNELS; i++) {
       memcpy(tn, d->chan_name[i], 32); memcpy(d->chan_name[i], c->name[i], 32); memcpy(c->name[i], tn, 32);
     }
+  }
+  if (!u->whole)                                           /* 0.9: live layers' settings swapped */
+    for (i = 0; i < u->nlives; i++) {
+      LiveSave *v = &u->lives[i];
+      Layer *l;
+      void *tp;
+      u32 tl;
+      if (v->layer >= d->nlay || !(l = d->lay[v->layer])->live) continue;
+      tp = l->live; tl = l->livelen;
+      l->live = v->live; l->livelen = v->len;
+      v->live = tp; v->len = tl;
+      l->live_ok = 0;
+    }
+  if (u->has_paths && u->paths) {                          /* 0.9: the paths swapped */
+    PathState *p = u->paths;
+    Path *tp[MAXPATHS], *tw = d->workpath;
+    char tn[32];
+    int tcount = d->npaths, ta = d->path_active;
+    memcpy(tp, d->path, sizeof tp);
+    memcpy(d->path, p->path, sizeof tp); d->npaths = p->n; d->workpath = p->work; d->path_active = p->active;
+    memcpy(p->path, tp, sizeof tp); p->n = tcount; p->work = tw; p->active = ta;
+    for (i = 0; i < MAXPATHS; i++) { memcpy(tn, d->path_name[i], 32); memcpy(d->path_name[i], p->name[i], 32); memcpy(p->name[i], tn, 32); }
   }
   if (u->has_pal && u->pal) {                              /* 0.4: the palette and mode swapped */
     PalState *cur = (PalState *)malloc(sizeof *cur);       /* (off the stack: it is over 1 KB) */

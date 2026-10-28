@@ -61,5 +61,10 @@ int  ttr_glyph(TTRaster *r, u16 g, i32 ppem64, TTBitmap *bm);
 /* for one bit a pixel (set at coverage >= thr): a stroke thinner than a pixel, that would fall
    between pixels and vanish, keeps its strongest pixel (across and down) */
 void ttr_dropout(TTBitmap *bm, int thr);
+/* 0.9: glyph g's outline (unhinted) as straight lines, curves flattened, at ppem64 (26.6, 1-400 pixels):
+   x0, y0, x1, y1 a line in 26.6 pixels, y downwards, the pen's origin at 0, 0; each contour's lines
+   follow on from one another and end where it began. *segs malloc'd (NULL for an empty glyph), *n
+   lines. 0 on a damaged glyph */
+int  ttr_outline(TTRaster *r, u16 g, i32 ppem64, i32 **segs, u32 *n);
 
 #endif

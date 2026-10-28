@@ -979,7 +979,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
     r->b = box_make(0, 0, 0, 0); r->mb = box_make(0, 0, 0, 0); r->mdef = 255;
     r->nch = 4;
     if (r->what == PR_LAYER) {
-      if (l->kind == LK_FILL) { if (!(r->px = fill_pixels(doc, r->i))) goto done; r->ownpx = 1; }
+      if (l->kind == LK_FILL || l->kind == LK_TEXT || l->kind == LK_SHAPE) { if (!(r->px = fill_pixels(doc, r->i))) goto done; r->ownpx = 1; }   /* (0.9: type and shape layers as their pixels) */
       else r->px = l->kind == LK_PIXEL ? l->px : NULL;
       if (r->px) r->b = alpha_box(r->px, w, h);
       if (l->mask) {

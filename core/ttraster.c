@@ -850,6 +850,29 @@ static void hint_lines(TTRaster *r, Lines *ls, i32 ppem64)
   }
 }
 
+/* 0.9: glyph g's outline as lines for Easel's vector filler (type warps, Type Mask, big sizes) */
+int ttr_outline(TTRaster *r, u16 g, i32 ppem64, i32 **segs, u32 *n)
+{
+  Lines ls;
+  u32 i;
+  int ok;
+  *segs = NULL; *n = 0;
+  if (!r->fp || ppem64 < 64 || ppem64 > 64 * 400) return 0;
+  ls.l = (Line *)r->lines; ls.n = 0; ls.cap = r->caplines;
+  ok = glyph_lines(r, g, ppem64, &ls);
+  if (ok && ls.n) {
+    if (!(*segs = (i32 *)malloc((size_t)ls.n * 4 * sizeof(i32)))) ok = 0;
+    else {
+      for (i = 0; i < ls.n; i++) {
+        (*segs)[4 * i] = ls.l[i].x0; (*segs)[4 * i + 1] = ls.l[i].y0;
+        (*segs)[4 * i + 2] = ls.l[i].x1; (*segs)[4 * i + 3] = ls.l[i].y1;
+      }
+      *n = ls.n;
+    }
+  }
+  r->lines = ls.l; r->caplines = ls.cap;
+  return ok;
+}
 /* renders with a non-zero winding rule, 16 samples a pixel (4 rows of 4), coverage scaled to
    0-255. Sizes from 1 to 400 pixels; hinting (when on) only up to 64. A glyph with no outline
    gives a 0 x 0 bitmap and success. bm->cov is malloc'd for the caller to free */

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "paint.h"
+#include "live.h"                     /* 0.9 */
 #include "gradient.h"
 #include "pattern.h"
 #include "palette.h"
@@ -884,7 +885,7 @@ void flip_layer(Doc *d, int vertical)
 }
 /* every layer (and the selection) remade at w x h by fn(old pixels, new pixels, arg) */
 typedef void (*Remap)(Doc *d, const u8 *src, u8 *dst, i32 nw, i32 nh, int bpp, const void *arg);
-static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const char *name)
+static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const char *name, const double *fwd)
 {
   u8 *np[MAXLAYERS], *ns = NULL, *nc[MAXCHANNELS], *nq = NULL, **nm, **ni;
   int i;
@@ -934,6 +935,7 @@ static int remap_all(Doc *d, i32 nw, i32 nh, Remap fn, const void *arg, const ch
     if (d->qmask) { free(d->qmask); d->qmask = nq; }
   }
   free(nm);
+  live_remap(d, fwd);                                      /* 0.9: type and shape layers and paths follow (fwd: old to new) */
   d->w = nw; d->h = nh;
   sel_update_box(d);
   doc_end(d);
@@ -946,7 +948,12 @@ static void remap_flip(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, cons
   for (y = 0; y < nh; y++) for (x = 0; x < nw; x++)
     memcpy(o + ((long)y * nw + x) * bpp, s + ((long)(v ? d->h - 1 - y : y) * d->w + (v ? x : d->w - 1 - x)) * bpp, (size_t)bpp);
 }
-void image_flip(Doc *d, int vertical) { remap_all(d, d->w, d->h, remap_flip, &vertical, vertical ? "Flip Canvas Vertical" : "Flip Canvas Horizontal"); }
+void image_flip(Doc *d, int vertical)
+{
+  double m[6] = { 1, 0, 0, 0, 1, 0 };
+  if (vertical) { m[4] = -1; m[5] = d->h; } else { m[0] = -1; m[2] = d->w; }
+  remap_all(d, d->w, d->h, remap_flip, &vertical, vertical ? "Flip Canvas Vertical" : "Flip Canvas Horizontal", m);
+}
 static void remap_rot(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const void *arg)
 {
   int q = *(const int *)arg;
@@ -962,9 +969,13 @@ static void remap_rot(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const
 void image_rotate(Doc *d, int q)
 {
   static const char *const names[] = { "", "Rotate 90 Clockwise", "Rotate 180", "Rotate 90 Counter Clockwise" };
+  double m[6];
   q = ((q % 4) + 4) % 4;
   if (!q) return;
-  remap_all(d, q == 2 ? d->w : d->h, q == 2 ? d->h : d->w, remap_rot, &q, names[q]);
+  if (q == 1) { m[0] = 0; m[1] = -1; m[2] = d->h; m[3] = 1; m[4] = 0; m[5] = 0; }
+  else if (q == 2) { m[0] = -1; m[1] = 0; m[2] = d->w; m[3] = 0; m[4] = -1; m[5] = d->h; }
+  else { m[0] = 0; m[1] = 1; m[2] = 0; m[3] = -1; m[4] = 0; m[5] = d->w; }
+  remap_all(d, q == 2 ? d->w : d->h, q == 2 ? d->h : d->w, remap_rot, &q, names[q], m);
 }
 typedef struct { int method; } ResizeArg;
 static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const void *arg)
@@ -1011,8 +1022,10 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
 int image_resize(Doc *d, i32 w, i32 h, int method)
 {
   ResizeArg a;
+  double m[6];
   a.method = method;
-  return remap_all(d, w, h, remap_resize, &a, "Image Size");
+  m[0] = (double)w / d->w; m[1] = 0; m[2] = 0; m[3] = 0; m[4] = (double)h / d->h; m[5] = 0;
+  return remap_all(d, w, h, remap_resize, &a, "Image Size", m);
 }
 typedef struct { i32 ox, oy; u32 fill; } CanvasArg;
 static void remap_canvas(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const void *arg)
@@ -1037,7 +1050,11 @@ int canvas_resize(Doc *d, i32 w, i32 h, int anchor, u32 fill)
   /* the background gets the fill colour where it grows, if it has no transparency of its own */
   for (k = 0; k < n && opaque; k++) if (d->lay[0]->px[k * 4 + 3] != 255) opaque = 0;
   a.fill = opaque ? fill : 0xFFFFFFFFUL;
-  return remap_all(d, w, h, remap_canvas, &a, "Canvas Size");
+  {
+    double m[6];
+    m[0] = 1; m[1] = 0; m[2] = a.ox; m[3] = 0; m[4] = 1; m[5] = a.oy;
+    return remap_all(d, w, h, remap_canvas, &a, "Canvas Size", m);
+  }
 }
 int image_crop(Doc *d, Box b)
 {
@@ -1045,7 +1062,11 @@ int image_crop(Doc *d, Box b)
   b = box_clip(b, doc_box(d));
   if (box_empty(b)) return 0;
   a.ox = -b.x0; a.oy = -b.y0; a.fill = 0xFFFFFFFFUL;
-  if (!remap_all(d, b.x1 - b.x0, b.y1 - b.y0, remap_canvas, &a, "Crop")) return 0;
+  {
+    double m[6];
+    m[0] = 1; m[1] = 0; m[2] = a.ox; m[3] = 0; m[4] = 1; m[5] = a.oy;
+    if (!remap_all(d, b.x1 - b.x0, b.y1 - b.y0, remap_canvas, &a, "Crop", m)) return 0;
+  }
   return 1;
 }
 int image_trim(Doc *d)
@@ -1106,8 +1127,25 @@ static void remap_hom(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, const
 int image_remap(Doc *d, i32 nw, i32 nh, const double *inv, int interp, const char *name)
 {
   HomArg a;
+  double f[9], m[6], det;
   a.h = inv; a.interp = interp;
-  if (!remap_all(d, nw, nh, remap_hom, &a, name)) return 0;
+  /* 0.9: the forward map for live layers: inv's inverse, made affine about the old canvas's centre */
+  det = inv[0] * (inv[4] * inv[8] - inv[5] * inv[7]) - inv[1] * (inv[3] * inv[8] - inv[5] * inv[6]) + inv[2] * (inv[3] * inv[7] - inv[4] * inv[6]);
+  if (det == 0) { m[0] = m[4] = 1; m[1] = m[2] = m[3] = m[5] = 0; }
+  else {
+    double cx = d->w / 2.0, cy = d->h / 2.0, wq, X, Y, e = 1;
+    f[0] = (inv[4] * inv[8] - inv[5] * inv[7]) / det; f[1] = (inv[2] * inv[7] - inv[1] * inv[8]) / det; f[2] = (inv[1] * inv[5] - inv[2] * inv[4]) / det;
+    f[3] = (inv[5] * inv[6] - inv[3] * inv[8]) / det; f[4] = (inv[0] * inv[8] - inv[2] * inv[6]) / det; f[5] = (inv[2] * inv[3] - inv[0] * inv[5]) / det;
+    f[6] = (inv[3] * inv[7] - inv[4] * inv[6]) / det; f[7] = (inv[1] * inv[6] - inv[0] * inv[7]) / det; f[8] = (inv[0] * inv[4] - inv[1] * inv[3]) / det;
+    /* (the map and its derivatives at the centre) */
+    wq = f[6] * cx + f[7] * cy + f[8];
+    if (wq == 0) wq = 1e-12;
+    X = (f[0] * cx + f[1] * cy + f[2]) / wq; Y = (f[3] * cx + f[4] * cy + f[5]) / wq;
+    m[0] = (f[0] - X * f[6]) / wq * e; m[1] = (f[1] - X * f[7]) / wq * e;
+    m[3] = (f[3] - Y * f[6]) / wq * e; m[4] = (f[4] - Y * f[7]) / wq * e;
+    m[2] = X - m[0] * cx - m[1] * cy; m[5] = Y - m[3] * cx - m[4] * cy;
+  }
+  if (!remap_all(d, nw, nh, remap_hom, &a, name, m)) return 0;
   if (d->mode != MODE_RGB) doc_index_sync_all(d);          /* (resampled colours brought back to the palette) */
   return 1;
 }
@@ -1116,8 +1154,10 @@ int image_rotate_angle(Doc *d, double deg)
   RotArg r;
   double a = deg * M_PI / 180, c = cos(a), s = sin(a);
   i32 nw = (i32)ceil(fabs(d->w * c) + fabs(d->h * s) - 1e-6), nh = (i32)ceil(fabs(d->w * s) + fabs(d->h * c) - 1e-6);
+  double m[6];
   r.c = c; r.s = s; r.cx = d->w / 2.0; r.cy = d->h / 2.0; r.ncx = nw / 2.0; r.ncy = nh / 2.0;
-  return remap_all(d, nw, nh, remap_angle, &r, "Rotate Canvas");
+  m[0] = c; m[1] = -s; m[2] = r.ncx - c * r.cx + s * r.cy; m[3] = s; m[4] = c; m[5] = r.ncy - s * r.cx - c * r.cy;
+  return remap_all(d, nw, nh, remap_angle, &r, "Rotate Canvas", m);
 }
 
 /* ------------------------------------------------------------------ the clipboard */

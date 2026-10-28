@@ -396,7 +396,7 @@ int doc_rasterize(Doc *d, int i)
   if (i < 0 || i >= d->nlay) return 0;
   l = d->lay[i];
   if (l->kind == LK_GROUP) return doc_merge_group(d, i);
-  if (l->kind != LK_FILL) return 0;
+  if (l->kind != LK_FILL && l->kind != LK_TEXT && l->kind != LK_SHAPE) return 0;   /* (0.9: type and shape layers too) */
   {
     u8 *px = (u8 *)malloc((size_t)d->w * d->h * 4);
     u8 op = l->opacity, bl = l->blend, fc = l->fill_cut, vis = l->visible, mon = l->mask_on, clip = l->clip;
@@ -407,9 +407,11 @@ int doc_rasterize(Doc *d, int i)
     l->opacity = 255; l->blend = BM_NORMAL; l->fill_cut = 0; l->visible = 1; l->mask_on = 0; l->clip = 0; memset(l->blendif, 0, 4);
     doc_composite_range(d, i, i + 1, l->depth, doc_box(d), px, (long)d->w * 4, 0);
     l->opacity = op; l->blend = bl; l->fill_cut = fc; l->visible = vis; l->mask_on = mon; l->clip = clip; memcpy(l->blendif, bi, 4);
-    doc_begin(d, "Rasterize Layer");
+    doc_begin(d, l->kind == LK_TEXT ? "Rasterize Type" : l->kind == LK_SHAPE ? "Rasterize Shape" : "Rasterize Layer");
     doc_note_all(d);
     l->px = px; l->kind = LK_PIXEL;
+    free(l->live); l->live = NULL; l->livelen = 0;           /* 0.9 */
+    free(l->livepx); l->livepx = NULL; l->live_ok = 0;
     doc_end(d);
   }
   return 1;

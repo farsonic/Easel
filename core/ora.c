@@ -23,6 +23,8 @@
 #include "adjust.h"
 #include "zip.h"
 #include "xml.h"
+#include "live.h"                     /* 0.9 */
+#include "path.h"
 
 /* the blend modes by BM_ value; svg:subtract doesn't exist, Krita calls it krita:subtract */
 static const char *const op_names[BM_N] = { "svg:src-over", "svg:multiply", "svg:screen", "svg:overlay", "svg:darken", "svg:lighten",
@@ -52,6 +54,7 @@ typedef struct {
   int mask_on, mask_linked, mask_fade, mask_feather;
   int blendif[4];
   AdjParams adj; FillParams fillp;
+  char *live;                         /* 0.9: a type or shape layer's settings (easel:text, easel:shape), malloc'd */
 } OraLayer;
 
 /* a 0-1 attribute as 0-255 (absent: 255) */
@@ -196,6 +199,9 @@ static int parse_stack(const char *s, size_t n, i32 *w, i32 *h, int *dpi, OraLay
       copy_name(l->src, sizeof l->src, a);
       l->kind = LK_PIXEL; l->depth = depth > 0 ? depth - 1 : 0;
       common_attrs(&x, l);
+      /* 0.9: type and shape layers */
+      if ((a = xml_attr(&x, "text")) != NULL && (l->live = str_dup(a)) != NULL) l->kind = LK_TEXT;
+      else if ((a = xml_attr(&x, "shape")) != NULL && (l->live = str_dup(a)) != NULL) l->kind = LK_SHAPE;
       cnt++;
     }
   }
@@ -223,6 +229,32 @@ static void read_channels(ZipReader *z, const char *s, size_t n, Doc *doc)
     nm = xml_attr(&x, "name");
     copy_name(doc->chan_name[doc->nchan], sizeof doc->chan_name[0], nm ? nm : "Alpha");
     doc->chan[doc->nchan++] = p;
+  }
+  xml_free(&x);
+}
+
+/* 0.9: the paths (easel:path elements: SVG path data, the anchors' types) read into the document */
+static void read_paths(const char *s, size_t n, Doc *doc)
+{
+  Xml x;
+  xml_init(&x, s, n);
+  while (xml_next(&x) != XT_EOF) {
+    const char *dd, *nm, *a;
+    Path *p;
+    if (x.type != XT_START || strcmp(x.name, "path") || !(dd = xml_attr(&x, "d"))) continue;
+    if (!(p = path_from_svg(dd))) break;
+    path_set_types(p, xml_attr(&x, "types"));
+    p->evenodd = is_true(xml_attr(&x, "evenodd"));
+    if (is_true(xml_attr(&x, "work"))) {
+      path_free(doc->workpath); doc->workpath = p;
+      if (is_true(xml_attr(&x, "active"))) doc->path_active = -1;
+      continue;
+    }
+    if (doc->npaths >= MAXPATHS) { path_free(p); continue; }
+    nm = xml_attr(&x, "name");
+    copy_name(doc->path_name[doc->npaths], sizeof doc->path_name[0], nm ? nm : "Path");
+    doc->path[doc->npaths++] = p;
+    if ((a = xml_attr(&x, "active")) && is_true(a)) doc->path_active = doc->npaths;
   }
   xml_free(&x);
 }
@@ -259,7 +291,7 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
     for (k = cnt - 1; k >= 0; k--) {
       OraLayer *o = &ls[k];
       Layer *l;
-      if (o->kind == LK_PIXEL || o->kind == LK_FILL) l = layer_new(doc, o->name);
+      if (o->kind == LK_PIXEL || o->kind == LK_FILL || o->kind == LK_TEXT || o->kind == LK_SHAPE) l = layer_new(doc, o->name);
       else if ((l = (Layer *)calloc(1, sizeof *l)) != NULL) copy_name(l->name, sizeof l->name, o->name);
       if (!l) { codec_err(err, errcap, "Out of memory for the layers"); doc_free(doc); doc = NULL; goto fail; }
       l->kind = (u8)o->kind; l->depth = (u8)o->depth;
@@ -279,6 +311,20 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
           memcpy(l->px + ((size_t)cy * w + o->x + x0) * 4, im.px + ((size_t)y * im.w + x0) * 4, (size_t)(x1 - x0) * 4);
         }
         rgba_free(&im);
+      }
+      /* 0.9: a type or shape layer: its settings, and the picture kept as its rendering until they change */
+      if ((o->kind == LK_TEXT || o->kind == LK_SHAPE) && l->px) {
+        if (live_load(l, o->kind, o->live)) {
+          Box b = box_make(w, h, 0, 0);
+          i32 xx;
+          for (y = 0; y < h; y++) for (xx = 0; xx < w; xx++) if (l->px[((size_t)y * w + xx) * 4 + 3]) b = box_union(b, box_make(xx, y, xx + 1, y + 1));
+          if (b.x0 > b.x1 || box_empty(b)) { l->live_ok = 0; }
+          else if ((l->livepx = (u8 *)malloc((size_t)(b.x1 - b.x0) * (b.y1 - b.y0) * 4)) != NULL) {
+            for (y = b.y0; y < b.y1; y++) memcpy(l->livepx + (size_t)(y - b.y0) * (b.x1 - b.x0) * 4, l->px + ((size_t)y * w + b.x0) * 4, (size_t)(b.x1 - b.x0) * 4);
+            l->livebox = b; l->live_ok = 1;
+          }
+          free(l->px); l->px = NULL;
+        } else l->kind = LK_PIXEL;
       }
       /* the mask: grey (the red channel) placed on a canvas-size mask, white outside the picture */
       if (o->mask[0] && (l->mask = (u8 *)malloc((size_t)w * h)) != NULL) {
@@ -310,9 +356,11 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
   }
   if (dpi > 0 && dpi < 65536) doc->dpi = (u16)dpi;
   if (xml) read_channels(&z, (const char *)xml, xlen, doc);          /* 0.7 */
+  if (xml) read_paths((const char *)xml, xlen, doc);                  /* 0.9 */
   doc_forget_undo(doc);
   doc->dirty = 0;
 fail:
+  for (i = 0; ls && i < cnt; i++) free(ls[i].live);       /* 0.9 */
   free(xml);
   free(ls);
   zip_close(&z);
@@ -414,6 +462,27 @@ static void put_range(Buf *xml, ZipWriter *zw, Doc *doc, int lo, int hi, int *ok
       if (box_empty(b)) b = box_make(0, 0, 1, 1);
       if (!store_png(zw, name, l->px, NULL, doc->w, b)) { *ok = 0; break; }
       buf_printf(xml, "<layer src=\"%s\" x=\"%ld\" y=\"%ld\"", name, (long)b.x0, (long)b.y0);
+    } else if (l->kind == LK_TEXT || l->kind == LK_SHAPE) {
+      /* 0.9: a type or shape layer's rendering (so other programs show it), its settings in an attribute */
+      u8 *px = (u8 *)malloc((size_t)doc->w * doc->h * 4);
+      u8 op = l->opacity, bl = l->blend, fc = l->fill_cut, vis = l->visible, mon = l->mask_on, cl = l->clip;
+      char *set;
+      Box b;
+      Layer tmp;
+      if (!px) { *ok = 0; break; }
+      l->opacity = 255; l->blend = BM_NORMAL; l->fill_cut = 0; l->visible = 1; l->mask_on = 0; l->clip = 0;
+      doc_composite_range(doc, i, i + 1, l->depth, doc_box(doc), px, (long)doc->w * 4, 0);
+      l->opacity = op; l->blend = bl; l->fill_cut = fc; l->visible = vis; l->mask_on = mon; l->clip = cl;
+      tmp.px = px;
+      b = opaque_box(&tmp, doc->w, doc->h);
+      if (box_empty(b)) b = box_make(0, 0, 1, 1);
+      if (!store_png(zw, name, px, NULL, doc->w, b)) { free(px); *ok = 0; break; }
+      free(px);
+      if (!(set = live_save(l))) { *ok = 0; break; }
+      buf_printf(xml, "<layer src=\"%s\" x=\"%ld\" y=\"%ld\" easel:%s=\"", name, (long)b.x0, (long)b.y0, l->kind == LK_TEXT ? "text" : "shape");
+      xml_escape(xml, set, strlen(set));
+      buf_adds(xml, "\"");
+      free(set);
     } else if (l->kind == LK_FILL) {
       /* the fill's own pixels, so other programs show it */
       u8 *px = (u8 *)malloc((size_t)doc->w * doc->h * 4);
@@ -477,6 +546,24 @@ u8 *ora_write(Doc *doc, size_t *len)
       buf_printf(&xml, "<easel:channel src=\"%s\" name=\"", name);
       xml_escape(&xml, doc->chan_name[k], strlen(doc->chan_name[k]));
       buf_adds(&xml, "\"/>\n");
+    }
+  }
+  {
+    /* 0.9: the paths */
+    int k;
+    for (k = -1; ok && k < doc->npaths; k++) {
+      Path *p = k < 0 ? doc->workpath : doc->path[k];
+      char *dd, *ty;
+      if (!p) continue;
+      dd = path_to_svg(p); ty = path_types(p);
+      if (!dd || !ty) { free(dd); free(ty); ok = 0; break; }
+      buf_adds(&xml, "<easel:path name=\"");
+      if (k < 0) buf_adds(&xml, "Work Path"); else xml_escape(&xml, doc->path_name[k], strlen(doc->path_name[k]));
+      buf_adds(&xml, "\" d=\"");
+      xml_escape(&xml, dd, strlen(dd));
+      buf_printf(&xml, "\" types=\"%s\"%s%s%s/>\n", ty, k < 0 ? " work=\"true\"" : "", p->evenodd ? " evenodd=\"true\"" : "",
+                 doc->path_active == (k < 0 ? -1 : k + 1) ? " active=\"true\"" : "");
+      free(dd); free(ty);
     }
   }
   buf_adds(&xml, "</image>\n");
