@@ -29,12 +29,14 @@
 static int fh(void) { return theme_font()->tf_YSize; }
 
 /* ------------------------------------------------------------------ the groups */
-typedef struct { int n; int tools[4]; } Group;
+typedef struct { int n; int tools[6]; } Group;
 static const Group groups[] = {
   { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 1, { TL_WAND } },
   { 1, { TL_CROP } }, { 3, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER } }, { 4, { TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REDEYE } } /* 1.0 */, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
-  { 1, { TL_TEXT } }, { 3, { TL_RECT, TL_ELLIPSE, TL_LINE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
+  /* 0.9: the pens, type, path selection and the shapes */
+  { 4, { TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT } }, { 3, { TL_TEXT, TL_VTEXT, TL_TYPEMASK } }, { 2, { TL_PATHSEL, TL_DIRECTSEL } },
+  { 6, { TL_RECT, TL_ROUNDRECT, TL_ELLIPSE, TL_POLYGON, TL_LINE, TL_CUSTOMSHAPE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
 };
 #define NGROUPS (int)(sizeof groups / sizeof groups[0])
 #define G_HAND (NGROUPS - 2)             /* the Hand's group, set apart with the Zoom's at the bottom */
@@ -49,7 +51,7 @@ static int shown_tool[NGROUPS];          /* each group's tool last used (the one
 #define TB_W 36                          /* the toolbox's width, and each button's height */
 #define TB_H 25
 
-struct TData { struct MUI_EventHandlerNode ehn; int shown, hot, popgroup; char labels[4][48]; const char *lp[4]; int pick, color; };
+struct TData { struct MUI_EventHandlerNode ehn; int shown, hot, popgroup; char labels[6][48]; const char *lp[6]; int pick, color; };
 static struct MUI_CustomClass *tcls, *ocls;
 
 static int tbcols = 1;                   /* two columns on a short screen (set up in MUIM_Setup) */
@@ -126,10 +128,10 @@ static const char *const tool_help[TL_N] = {
   "Lightens what you paint over.",
   "Darkens what you paint over.",
   "Takes the colour out of (or puts more into) what you paint over.",
-  "Writes text in the foreground colour: click where it goes and type.",
-  "Draws a filled rectangle in the foreground colour (rounded with a radius).",
-  "Draws a filled ellipse in the foreground colour.",
-  "Draws a straight line in the foreground colour.",
+  "Writes text you can edit later: click and type a line, or drag a box for a paragraph. Click a type layer to edit it; Esc or another tool finishes.",
+  "Draws a rectangle as a shape layer (or in pixels) in the foreground colour, rounded with a radius.",
+  "Draws an ellipse as a shape layer (or in pixels) in the foreground colour. Shift makes a circle.",
+  "Draws a straight line as a shape layer (or in pixels), with arrowheads if you like.",
   "Scrolls the picture as you drag. Hold the space bar for it with any tool.",
   "Zooms in where you click; Alt-click zooms out.",
   "Paints with the chosen pattern.",
@@ -139,11 +141,24 @@ static const char *const tool_help[TL_N] = {
   "Rubs out the area of similar colour where you click, at once.",
   "Selects along edges as you go: click to start, move round the edge (clicking to pin it down), then double-click or press Return. Backspace takes the last point back.",
   "Measures a distance and an angle: drag between two points. Straighten Layer then turns the layer so the line is level.",
+  "Marks up to four points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.",
   /* 1.0 */
   "Paints out spots and blemishes: brush over them, and when you let go they are filled from the picture round them.",
   "Paints with texture from another part of the picture (Alt-click the source first), blended into the colour and light of where you paint when you let go.",
   "Mends an area from another: draw round it, then drag the selection to the part that should replace it.",
-  "Takes the red out of eyes in flash photographs: click on the pupil, or drag a box round the eye."
+  "Takes the red out of eyes in flash photographs: click on the pupil, or drag a box round the eye.",
+  /* 0.9 */
+  "Makes a selection in the shape of text: click and type, then press Esc.",
+  "Writes text in columns, top to bottom: click and type, or drag a box.",
+  "Draws paths: click for corners, drag for curves, click the first point to close, Return to finish. Click on the path to add or delete a point.",
+  "Adds a point to a path where you click on it.",
+  "Deletes the path's point you click.",
+  "Turns a smooth point into a corner (click) or a corner into a smooth point (drag); drags one handle alone.",
+  "Chooses and moves a whole path; with Free Transform it scales and turns the path.",
+  "Chooses and moves points and handles of a path; drag across points to choose several. Backspace deletes them.",
+  "Draws a rectangle with round corners as a shape layer (or in pixels).",
+  "Draws a polygon or a star as a shape layer (or in pixels).",
+  "Draws the active path as a shape, fitted to the box you drag."
 };
 
 static int tb_hit(Object *obj, LONG mx, LONG my, int *corner)
@@ -204,7 +219,7 @@ static ULONG tdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
   }
   case MUIM_Setup:
     if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
-    tbcols = _screen(obj)->Height < 600 ? 2 : 1;
+    tbcols = _screen(obj)->Height < 700 ? 2 : 1;          /* (0.9: nineteen groups need 700 lines in one column) */
     theme_setup(obj);
     theme_handler(obj, &((struct TData *)INST_DATA(cl, obj))->ehn);
     return TRUE;
@@ -295,7 +310,9 @@ struct MUI_CustomClass *toolbox_class(void)
 }
 
 /* ------------------------------------------------------------------ the options bar */
-enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT };
+enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT, F_SWATCH, F_ICON };
+/* (0.9) F_SWATCH: a colour, clicked for the command min; F_ICON: icon max as a small button for the
+   command min (the label is its name, for the help bubble) */
 typedef struct {
   int kind;
   const char *label;
@@ -304,7 +321,7 @@ typedef struct {
   const char *suffix;                    /* F_SCRUB: "px", "%" */
   const char *const *choices; int nchoices;
 } Field;
-#define MAXF 10
+#define MAXF 16
 static const char *const blendlist[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
 static const char *const samples[] = { "Point Sample", "3 by 3 Average", "5 by 5 Average" };
@@ -316,7 +333,14 @@ static const char *const fillsrc[] = { "Foreground", "Pattern" };
 static const char *const rplmodes[] = { "Hue", "Saturation", "Color", "Luminosity" };
 static const char *const samplings[] = { "Continuous", "Once", "Background Swatch" };
 static const char *const limitlist[] = { "Contiguous", "Discontiguous", "Find Edges" };
-static const char *fontlist[64];
+static const char *fontlist[96];
+/* 0.9: type and shapes */
+static const char *const tstyles[] = { "Regular", "Bold", "Italic", "Bold Italic" };
+static const char *const taa[] = { "None", "Sharp", "Smooth" };
+static const char *const taligns[] = { "Left", "Centre", "Right", "Justify", "Just. All" };
+static const char *const shmodes[] = { "Shape Layer", "Pixels" };
+static const char *const salign[] = { "Centre", "Inside", "Outside" };
+static int fg_show;                     /* the foreground colour, for the Type tool's swatch */
 static const char *const mqstyles[] = { "Normal", "Fixed Ratio", "Fixed Size", "Single Row", "Single Column" };
 static const char *croplist[32];
 
@@ -329,6 +353,8 @@ static int fields_for(int t, Field *f)
 #define BUTTON(l, id) (f[n].kind = F_BUTTON, f[n].label = l, f[n].min = id, n++)
 #define TEXT(l) (f[n].kind = F_TEXT, f[n].label = l, n++)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
+#define SWATCH(l, v, id) (f[n].kind = F_SWATCH, f[n].label = l, f[n].val = &(v), f[n].min = id, n++)
+#define ICONBTN(l, ic, id) (f[n].kind = F_ICON, f[n].label = l, f[n].min = id, f[n].max = ic, n++)
   if (xform_pending) {
     /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
     if (prefs.xform_numbers) TEXT(xform_info);      /* (0.8: Preferences > Tools) */
@@ -394,14 +420,44 @@ static int fields_for(int t, Field *f)
     SCRUB("Strength:", opt.strength[t], 1, 100, "%"); break;
   case TL_DODGE: case TL_BURN: case TL_SPONGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%");
     SCRUB(t == TL_SPONGE ? "Flow:" : "Exposure:", opt.strength[t], 1, 100, "%"); break;
-  case TL_TEXT:
-    for (i = 0; i < font_count() && i < 64; i++) fontlist[i] = font_name(i);
+  case TL_TEXT: case TL_VTEXT: case TL_TYPEMASK: {
+    /* 0.9: the font, its style and size, anti-aliasing, alignment, the colour; Warp, Character, Paragraph */
+    Doc *doc = cur_doc();
+    for (i = 0; i < font_count() && i < 96; i++) fontlist[i] = font_label(i);
+    if (t == TL_TYPEMASK) SELOPS();
     if (i) CHOICE("", opt.text_font, fontlist, i);
-    SCRUB("Size:", opt.text_size, 4, 1000, "px"); CHOICE("Align:", opt.text_align, aligns, 3); CHECK("Anti-alias", opt.antialias);
-    TEXT("Click where the text goes"); break;
-  case TL_RECT: SCRUB("Radius:", opt.shape_fill_radius, 0, 1000, "px"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); TEXT("Drag; Shift makes a square"); break;
-  case TL_ELLIPSE: SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); TEXT("Drag; Shift makes a circle"); break;
-  case TL_LINE: SCRUB("Weight:", opt.line_width, 1, 1000, "px"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); break;
+    CHOICE("", opt.text_style, tstyles, 4);
+    SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 3); CHOICE("", opt.text_align, taligns, 5);
+    if (t != TL_TYPEMASK) { fg_show = doc ? (int)doc->fg : 0; SWATCH("", fg_show, ID_TEXTCOLOR); ICONBTN("Warp", IC_WARP, ID_WARPTEXT); }
+    ICONBTN("Character", IC_FONTDLG, ID_TYPECHAR); ICONBTN("Paragraph", IC_PARADLG, ID_TYPEPARA);
+    if (type_editing) BUTTON("Commit", ID_COMMIT);
+    else if (t == TL_TYPEMASK) TEXT("Click and type; Esc makes the selection");
+    break; }
+  case TL_RECT: case TL_ELLIPSE: case TL_LINE: case TL_ROUNDRECT: case TL_POLYGON: case TL_CUSTOMSHAPE:
+    /* 0.9: a shape layer or pixels; filled with the foreground colour, stroked; each shape's own */
+    CHOICE("", opt.shape_mode, shmodes, 2);
+    if (t != TL_LINE) CHECK("Fill", opt.shape_fill);
+    if (t != TL_LINE || !opt.shape_mode) CHECK("Stroke", opt.shape_stroke);
+    if (opt.shape_stroke && (t != TL_LINE || !opt.shape_mode)) {
+      SCRUB("", opt.stroke_width, 1, 500, "px"); SWATCH("", opt.stroke_color, ID_STROKECOLOR);
+      if (!opt.shape_mode) CHOICE("", opt.stroke_align, salign, 3);
+    }
+    if (t == TL_RECT) SCRUB("Radius:", opt.shape_fill_radius, 0, 1000, "px");
+    if (t == TL_ROUNDRECT) SCRUB("Radius:", opt.round_radius, 0, 1000, "px");
+    if (t == TL_POLYGON) { SCRUB("Sides:", opt.poly_sides, 3, 100, ""); CHECK("Star", opt.poly_star); if (opt.poly_star) SCRUB("Indent:", opt.poly_indent, 1, 99, "%"); }
+    if (t == TL_LINE) { SCRUB("Weight:", opt.line_width, 1, 1000, "px"); if (!opt.shape_mode) { CHECK("Start", opt.arrow_start); CHECK("End", opt.arrow_end); } }
+    if (t == TL_CUSTOMSHAPE) TEXT("Drag: the active path, fitted to the box");
+    else if (t == TL_ELLIPSE || t == TL_RECT) TEXT("Shift: a square or circle");
+    break;
+  /* 0.9: the pens and path selection */
+  case TL_PEN: TEXT("Click: a corner; drag: a curve; click the first point to close; Return finishes"); break;
+  case TL_ADDANCHOR: TEXT("Click on the path to add a point (drag to move it)"); break;
+  case TL_DELANCHOR: TEXT("Click a point to delete it"); break;
+  case TL_CONVERT: TEXT("Click a point: a corner; drag from it: a curve; drag a handle: alone"); break;
+  case TL_PATHSEL: case TL_DIRECTSEL:
+    BUTTON("Fill Path", ID_PATHFILL); BUTTON("Stroke Path", ID_PATHSTROKE); BUTTON("Make Selection", ID_PATHMKSEL);
+    TEXT(t == TL_PATHSEL ? "Drag a path to move it; Ctrl-T transforms it" : "Drag points or handles; drag across points to choose them");
+    break;
   case TL_HAND: case TL_ZOOM: BUTTON("100%", ID_ACTUAL); BUTTON("Fit Screen", ID_FIT); BUTTON("Zoom In", ID_ZOOMIN); BUTTON("Zoom Out", ID_ZOOMOUT);
     if (t == TL_ZOOM) TEXT("Alt-click zooms out");
     break;
@@ -413,6 +469,8 @@ static int fields_for(int t, Field *f)
 #undef BUTTON
 #undef TEXT
 #undef SELOPS
+#undef SWATCH
+#undef ICONBTN
 }
 
 struct OData {
@@ -470,10 +528,36 @@ static const char *field_help(const Field *f)
     { "Fit Screen", "Zooms so the whole picture fits the window." },
     { "Zoom In", "Zooms in a step." },
     { "Zoom Out", "Zooms out a step." },
+    /* 0.9 */
+    { "AA:", "How the text's edges are smoothed: None (hard), Sharp or Smooth." },
+    { "Warp", "Bends the text into an arc, a wave, a flag and other shapes, and can still be edited." },
+    { "Character", "The font, size, leading, tracking, baseline shift, colour and styles of the selected text." },
+    { "Paragraph", "Alignment, indents and the space before and after paragraphs." },
+    { "Commit", "Finishes editing the text (Esc, or Enter on the keypad)." },
+    { "Fill", "Fills the shape with the foreground colour." },
+    { "Stroke", "Draws an outline round the shape, as wide and in the colour beside it." },
+    { "Sides:", "How many sides (or points, for a star) the polygon has." },
+    { "Star", "Makes the polygon a star." },
+    { "Indent:", "How far the star's inner corners come in." },
+    { "Start", "An arrowhead at the line's start." },
+    { "End", "An arrowhead at the line's end." },
+    { "Fill Path", "Fills the active path with the foreground colour on the layer in use." },
+    { "Stroke Path", "Paints along the active path with the Brush tool's settings." },
+    { "Make Selection", "Makes the active path the selection." },
   };
   int i;
+  if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
   for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!strcmp(h[i].label, f->label)) return h[i].help;
-  if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in.";
+  if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in (Amiga bitmap fonts are marked).";
+  if (f->kind == F_CHOICE && f->choices == taa) return "How the text's edges are smoothed: None (hard), Sharp or Smooth.";
+  if (f->kind == F_CHOICE && f->choices == taligns) return "How the lines line up: left, centre, right, or justified to the paragraph's box.";
+  if (f->kind == F_CHOICE && f->choices == tstyles) return "Regular, bold, italic or both: the font's own bold and italic faces when it has them, else drawn slanted or heavier.";
+  if (f->kind == F_CHOICE && f->choices == shmodes) return "A shape layer stays sharp and can be changed later (Layer > Shape Properties); Pixels paints the shape on the layer in use.";
+  if (f->kind == F_CHOICE && f->choices == salign) return "Where the stroke goes: centred on the shape's edge, inside it or outside it.";
+  if (f->kind == F_SWATCH && f->min == ID_TEXTCOLOR) return "The text's colour (the foreground colour). Click to choose another: the selected text, or all of it, takes it.";
+  if (f->kind == F_SWATCH && f->min == ID_STROKECOLOR) return "The stroke's colour. Click to choose another.";
+  if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
+  if (f->kind == F_SCRUB && f->val == &opt.stroke_width) return "The stroke's width in pixels.";
   if (f->kind == F_CHOICE && f->choices == gradcols) return "The gradient's colours: foreground to background, or the foreground fading out.";
   if (f->kind == F_CHOICE && f->choices == croplist) return "The crop's proportions or size: free, the picture's own, a ratio, or a size it is resampled to.";
   if (f->kind == F_BUTTON && f->min == ID_CROPSWAP) return "Swaps the preset's width and height (portrait or landscape).";
@@ -494,17 +578,19 @@ static void ob_layout(struct OData *d, Object *obj)
     case F_CHOICE: {
       int k;
       for (k = 0; k < f->nchoices; k++) { LONG w = theme_textlen(rp, theme_font(), f->choices[k]); if (w > vw) vw = w; }
-      if (vw > 160) vw = 160;
+      if (vw > (f->choices == fontlist ? 110 : 160)) vw = f->choices == fontlist ? 110 : 160;
       vw += 26;
       break; }
     case F_CHECK: lw = 0; vw = 16 + theme_textlen(rp, theme_font(), f->label); break;
     case F_SELOPS: lw = 0; vw = 4 * 22; break;
     case F_BUTTON: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 20; break;
     case F_TEXT: lw = 0; vw = theme_textlen(rp, theme_font(), f->label); break;
+    case F_SWATCH: lw = 0; vw = 24 + (f->label[0] ? theme_textlen(rp, theme_font(), f->label) + 5 : 0); break;
+    case F_ICON: lw = 0; vw = 22; break;
     }
     d->vx0[i] = x + lw;
     d->x1[i] = x + lw + vw;
-    x = d->x1[i] + (f->kind == F_SELOPS ? 18 : 14);
+    x = d->x1[i] + (f->kind == F_SELOPS ? 18 : f->kind == F_ICON ? 6 : 12);
   }
 }
 static void ob_draw(struct OData *d, Object *obj)
@@ -573,6 +659,16 @@ static void ob_draw(struct OData *d, Object *obj)
     case F_TEXT:
       theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_GROUPLABEL));
       break;
+    case F_ICON:
+      if (d->hot == i) theme_fill(rp, x0, vt, x1, vb, tpen(T_HOVER));
+      theme_icon(rp, f->max, x0 + 3, my - 8, 16, 0);
+      break;
+    case F_SWATCH: {
+      LONG sx = x0;
+      if (f->label[0]) { theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_DIM)); sx += theme_textlen(rp, theme_font(), f->label) + 5; }
+      theme_rect(rp, sx, vt, sx + 22, vb, tpen(d->hot == i ? T_ACCENT : T_BORDER2));
+      draw_rgb_box(rp, _screen(obj), sx + 2, vt + 2, sx + 20, vb - 2, (ULONG)*f->val & 0xFFFFFF);
+      break; }
     }
   }
 }
@@ -584,6 +680,8 @@ static int ob_hit(struct OData *d, LONG mx, LONG my, Object *obj)
   return -1;
 }
 static void ob_redraw(struct OData *d, Object *obj) { if (d->shown) MUI_Redraw(obj, MADF_DRAWOBJECT); }
+/* 0.9: a setting changed: main.c tells the canvas (the Type tool applies it to the text) */
+static void ob_changed(Object *obj) { DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)_app(obj), 2, MUIM_Application_ReturnID, ID_OPTCHG); }
 static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct OData *d;
@@ -601,6 +699,7 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
     if (t && d->popfield >= 0 && d->popfield < d->n && d->f[d->popfield].kind == F_CHOICE) {
       *d->f[d->popfield].val = (int)t->ti_Data;
       ob_redraw(d, obj);
+      ob_changed(obj);
     }
     break;
   }
@@ -692,6 +791,7 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
         if (ask_number("Tool Options", t, &v, f->min, f->max)) *f->val = (int)v;
       }
       ob_redraw(d, obj);
+      ob_changed(obj);
       return MUI_EventHandlerRC_Eat;
     }
     if (im->Code != SELECTDOWN) return 0;
@@ -701,9 +801,9 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
       Field *f = &d->f[h];
       switch (f->kind) {
       case F_SCRUB: d->drag = h; d->grabx = im->MouseX; d->grabv = *f->val; d->moved = 0; break;
-      case F_CHECK: *f->val = !*f->val; ob_redraw(d, obj); break;
+      case F_CHECK: *f->val = !*f->val; ob_redraw(d, obj); ob_changed(obj); break;
       case F_SELOPS: { int k = (int)((im->MouseX - d->vx0[h]) / 22); if (k >= 0 && k < 4) *f->val = k; ob_redraw(d, obj); break; }
-      case F_BUTTON: DoMethod(_app(obj), MUIM_Application_ReturnID, (ULONG)f->min); break;
+      case F_BUTTON: case F_SWATCH: case F_ICON: DoMethod(_app(obj), MUIM_Application_ReturnID, (ULONG)f->min); break;
       case F_CHOICE: {
         struct Window *w = _window(obj);
         d->popfield = h;

@@ -38,6 +38,11 @@
 #include "../core/selx.h"
 #include "../core/maglasso.h"
 #include "../core/crop.h"
+#include "../core/type.h"
+#include "../core/path.h"
+#include "../core/pathops.h"
+#include "../core/shape.h"
+#include "../core/live.h"
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -50,7 +55,10 @@ char ruler_info[96];
 static Doc *ruler_doc;                   /* the picture the Ruler's line was drawn on */
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
-       DR_XFORM, DR_RULER, DR_SAMPLE };
+       DR_XFORM, DR_RULER, DR_SAMPLE,
+       DR_TYPEBOX, DR_TYPESEL, DR_PATH };              /* 0.9: a paragraph box dragged out, text selected, a path edited */
+/* 0.9: what a path tool's drag does */
+enum { PE_NONE, PE_HANDLES, PE_ANCHOR, PE_SELMOVE, PE_HANDLE, PE_SUBMOVE, PE_BOX };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
 #define QALT (IEQUALIFIER_LALT | IEQUALIFIER_RALT)
 
@@ -88,6 +96,7 @@ struct Data {
   i32 *edges; int nedges, phase, edges_ok;
   /* 0.7: Free Transform: the quad, the quad when the drag began, the handle held, its picture */
   int xf_on, xf_sel, xf_mode, xf_handle; XForm xf, xf0; Doc *xf_doc;
+  int xf_kind;                           /* 0.9: 0 pixels (or the selection), 1 a type or shape layer's settings, 2 the active path */
   UWORD qual;                            /* the qualifiers at the last pointer move */
   Box mbox;                              /* the marquee's box as its style makes it */
   /* the Magnetic Lasso, its live path (the lasso's own buffer, good until the next track) and its op */
@@ -100,6 +109,16 @@ struct Data {
   int ov_cursor;                         /* the painting cursor drawn: 0 outline, 1 crosshair, 2 both */
   /* 0.8: a spring-loaded tool key: the key held, the tool before it, when it went down, used meanwhile */
   UWORD spring_code; int spring_prev, spring_used; ULONG spring_secs, spring_micros;
+  /* 0.9: a shape's outline while it is dragged out (image points), and whether it is in the overlay */
+  Poly prev; int prev_on, ov_prev;
+  /* 0.9: the active path as drawn in the overlay: its outline and its anchors (a copy, made again
+     when path_dirty is set), with or without anchors and handles */
+  Poly pp; PathAnchor *pa; int npa, capa, path_dirty, ov_path, ov_anchors, ov_handles;
+  /* the Pen tool's open subpath being drawn; a path tool's drag: what, which anchor or handle, the
+     last point; an undo step open for the drag */
+  int pen_on, pen_sub; Doc *pen_doc;
+  int pe_what, pe_s, pe_k, pe_which, pe_alone, pe_moved; double pe_lx, pe_ly; Doc *pe_doc;
+  int ov_type;                           /* the Type tool's caret and selection are in the overlay drawn */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -458,6 +477,120 @@ static void xf_handles(struct Data *d, Object *obj, LONG *hx, LONG *hy)
   if (xform_matrix(&d->xf, h)) xform_point(h, (d->xf.src.x0 + d->xf.src.x1) / 2.0, (d->xf.src.y0 + d->xf.src.y1) / 2.0, &cx, &cy);
   hx[8] = to_sx(d, obj, cx); hy[8] = to_sy(d, obj, cy);
 }
+/* ------------------------------------------------------------------ 0.9: what the overlay shows of paths and type */
+/* the Type tool's editing: the layer (found again by its pointer, as the Layers panel may move it),
+   whether this editing made it, the undo step that did, the settings being edited and as they
+   were, their layout, the caret and the other end of the selection */
+int type_editing;
+static struct {
+  Doc *doc; Layer *lay;
+  int isnew, mask;                       /* made by this editing; the Type Mask tool's (a selection at the end) */
+  void *mark;                            /* d->undo after the New Type Layer step */
+  TextParams *tp, *orig;
+  TextLayout *tl;
+  int caret, anchor, changed;
+  int o_font, o_style, o_size, o_aa, o_align;   /* the options bar as last applied */
+} ty;
+static void ty_end(struct Data *d, Object *obj, int how);
+/* the path the Paths panel has chosen (make: the work path, made if needed, when none is) */
+static Path *cur_path(Doc *doc, int make)
+{
+  if (!doc) return NULL;
+  if (!doc->path_active && make) doc->path_active = -1;
+  if (doc->path_active > doc->npaths) doc->path_active = 0;
+  if (!doc->path_active) return NULL;
+  return doc_path(doc, doc->path_active < 0 ? -1 : doc->path_active - 1, make);
+}
+/* the active path copied for the overlay when it has changed: its outline flattened for this zoom
+   and its anchors; what is shown depends on the tool (anchors with the path tools, handles of the
+   chosen anchors except with Path Selection) */
+static void path_snapshot(struct Data *d)
+{
+  Doc *doc = cur_doc();
+  Path *p = cur_path(doc, 0);
+  int t = d->ov_tool;
+  d->ov_path = p && p->na > 0;
+  d->ov_anchors = PATH_TOOL(t);
+  d->ov_handles = PATH_TOOL(t) && t != TL_PATHSEL;
+  if (!d->ov_path || !d->path_dirty) return;
+  d->path_dirty = 0;
+  poly_free(&d->pp); poly_init(&d->pp);
+  if (!path_flatten(p, 0.7 / d->z, &d->pp)) { poly_free(&d->pp); poly_init(&d->pp); }
+  if (d->capa < p->na) {
+    PathAnchor *n = (PathAnchor *)realloc(d->pa, (size_t)p->na * sizeof *n);
+    if (!n) { d->npa = 0; return; }
+    d->pa = n; d->capa = p->na;
+  }
+  memcpy(d->pa, p->a, (size_t)p->na * sizeof *d->pa);
+  d->npa = p->na;
+}
+/* the path copy drawn in COMPLEMENT: the outline, the anchors as small squares (filled when chosen)
+   and the chosen anchors' handles */
+static void path_overlay(struct Data *d, Object *obj, struct RastPort *rp)
+{
+  int c, st = 0, i;
+  for (c = 0; c < d->pp.nc; c++) {
+    LONG lx = -32000, ly = 0;
+    int en = d->pp.end[c];
+    xpath(d, obj, rp, d->pp.xy + 2 * st, en - st, &lx, &ly);
+    if (d->pp.closed[c] && en - st > 2) xpath(d, obj, rp, d->pp.xy + 2 * st, 1, &lx, &ly);
+    st = en;
+  }
+  if (!d->ov_anchors) return;
+  for (i = 0; i < d->npa; i++) {
+    const PathAnchor *a = &d->pa[i];
+    LONG x = to_sx(d, obj, a->x), y = to_sy(d, obj, a->y);
+    /* (Path Selection shows only the chosen subpath's anchors, as does a path of very many, such as text's outlines) */
+    if (!a->sel && (!d->ov_handles || d->npa > 300)) continue;
+    if (a->sel) RectFill(rp, x - 2, y - 2, x + 2, y + 2); else xrect(rp, x - 2, y - 2, x + 2, y + 2);
+    if (a->sel && d->ov_handles) {
+      int h;
+      for (h = 0; h < 2; h++) {
+        double hx = h ? a->ox : a->ix, hy = h ? a->oy : a->iy;
+        LONG sx = to_sx(d, obj, hx), sy = to_sy(d, obj, hy);
+        if (labs(sx - x) + labs(sy - y) < 4) continue;
+        xline(rp, x, y, sx, sy);
+        RectFill(rp, sx - 1, sy - 1, sx + 1, sy + 1);
+      }
+    }
+  }
+}
+/* the Type tool's caret (or its selection, lit) and a paragraph's box, in COMPLEMENT */
+static void type_overlay(struct Data *d, Object *obj, struct RastPort *rp)
+{
+  double q[8 * 64], x0, y0, x1, y1;
+  int a = ty.anchor < ty.caret ? ty.anchor : ty.caret, b = ty.anchor < ty.caret ? ty.caret : ty.anchor, n, i, k;
+  if (ty.tp->box) {
+    /* the box (through the layer's transform) */
+    double bx[4], by[4];
+    const double *m = ty.tp->xf;
+    for (k = 0; k < 4; k++) {
+      double px = ty.tp->x + (k == 1 || k == 2 ? ty.tp->bw : 0), py = ty.tp->y + (k >= 2 ? ty.tp->bh : 0);
+      bx[k] = m[0] * px + m[1] * py + m[2]; by[k] = m[3] * px + m[4] * py + m[5];
+    }
+    SetDrPt(rp, 0xCCCC);
+    for (k = 0; k < 4; k++) xline(rp, to_sx(d, obj, bx[k]), to_sy(d, obj, by[k]), to_sx(d, obj, bx[(k + 1) % 4]), to_sy(d, obj, by[(k + 1) % 4]));
+    SetDrPt(rp, 0xFFFF);
+  }
+  if (a < b) {
+    n = text_sel_quads(ty.tl, a, b, q, 64);
+    for (i = 0; i < n; i++) {
+      const double *c = q + 8 * i;
+      LONG sx[4], sy[4];
+      for (k = 0; k < 4; k++) { sx[k] = to_sx(d, obj, c[2 * k]); sy[k] = to_sy(d, obj, c[2 * k + 1]); }
+      if ((sy[0] == sy[1] && sx[1] == sx[2]) || (sx[0] == sx[1] && sy[1] == sy[2])) {
+        /* square on the screen: filled */
+        LONG l = sx[0], r = sx[0], t = sy[0], bo = sy[0];
+        for (k = 1; k < 4; k++) { if (sx[k] < l) l = sx[k]; if (sx[k] > r) r = sx[k]; if (sy[k] < t) t = sy[k]; if (sy[k] > bo) bo = sy[k]; }
+        if (r > l && bo > t) RectFill(rp, l, t, r - 1, bo - 1);
+      } else for (k = 0; k < 4; k++) xline(rp, sx[k], sy[k], sx[(k + 1) % 4], sy[(k + 1) % 4]);
+    }
+  } else if (text_caret_pos(ty.tl, ty.caret, &x0, &y0, &x1, &y1)) {
+    LONG a0 = to_sx(d, obj, x0), b0 = to_sy(d, obj, y0), a1 = to_sx(d, obj, x1), b1 = to_sy(d, obj, y1);
+    xline(rp, a0, b0, a1, b1);
+    if (a0 == a1) xline(rp, a0 + 1, b0, a1 + 1, b1);        /* (two pixels wide, to be seen) */
+  }
+}
 /* everything in the overlay drawn (or, drawn again, taken away) */
 static void ov_draw(struct Data *d, Object *obj)
 {
@@ -484,11 +617,19 @@ static void ov_draw(struct Data *d, Object *obj)
     else xrect(rp, to_sx(d, obj, d->mbox.x0), to_sy(d, obj, d->mbox.y0), to_sx(d, obj, d->mbox.x1), to_sy(d, obj, d->mbox.y1));
     break;
   case DR_SHAPE:
+    if (d->ov_prev) break;
     if (tool == TL_ELLIPSE) xellipse(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
     else xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
     break;
   case DR_LINE:
+    if (d->ov_prev) break;
     xline(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    break;
+  case DR_TYPEBOX:
+    xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    break;
+  case DR_PATH:
+    if (d->pe_what == PE_BOX) xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
     break;
   case DR_MOVE: {
     /* what is moving: the selection's bounds or the whole layer, where it would go */
@@ -524,6 +665,19 @@ static void ov_draw(struct Data *d, Object *obj)
     xpath(d, obj, rp, p, n, &lx, &ly);
     if (d->mlpath && d->nmlpath) xpath(d, obj, rp, d->mlpath, d->nmlpath, &lx, &ly);
   }
+  if (d->ov_prev) {
+    /* 0.9: a shape's outline as it is dragged out */
+    int c, st = 0;
+    for (c = 0; c < d->prev.nc; c++) {
+      LONG lx = -32000, ly = 0;
+      int en = d->prev.end[c];
+      xpath(d, obj, rp, d->prev.xy + 2 * st, en - st, &lx, &ly);
+      if (d->prev.closed[c] && en - st > 1) xpath(d, obj, rp, d->prev.xy + 2 * st, 1, &lx, &ly);
+      st = en;
+    }
+  }
+  if (d->ov_path) path_overlay(d, obj, rp);
+  if (d->ov_type) type_overlay(d, obj, rp);
   for (i = 0; i < d->ov_nsamp; i++) {
     /* 0.8: a colour sampler: a ring round the point with ticks outside it, and its number */
     LONG sx = to_sx(d, obj, d->ov_sx[i] + 0.5), sy = to_sy(d, obj, d->ov_sy[i] + 0.5);
@@ -568,6 +722,9 @@ static void ov_show(struct Data *d, Object *obj)
   d->ov_ruler = ruler_on && tool == TL_RULER && ruler_doc == cur_doc();
   d->ov_tool = d->space ? TL_HAND : tool;
   d->ov_cursor = prefs.caps_precise && (d->qual & IEQUALIFIER_CAPSLOCK) ? 1 : prefs.cursor;
+  d->ov_prev = d->prev_on && (d->drag == DR_SHAPE || d->drag == DR_LINE);
+  path_snapshot(d);
+  d->ov_type = type_editing && ty.doc == cur_doc() && ty.tl;
   {
     DocView *v = cur_view();
     int i;
@@ -587,6 +744,7 @@ static void draw_all(struct Data *d, Object *obj)
   comp_ready(d);
   place(d, obj);
   if (!d->edges_ok) edges_make(d);
+  d->path_dirty = 1;                     /* (0.9: the path's outline flattened again for this zoom) */
   render(d, 0, 0, d->vw, d->vh);
   d->ov_on = 0;
   blit(d, obj, 0, 0, d->vw, d->vh);
@@ -663,7 +821,7 @@ static int sel_op_of(int qual)
   if (alt) return SEL_SUBTRACT;
   return opt.sel_op;
 }
-static void poly_add(struct Data *d, double x, double y)
+static void lasso_add(struct Data *d, double x, double y)
 {
   if (d->npoly >= d->cappoly) {
     int nc = d->cappoly ? d->cappoly * 2 : 64;
@@ -753,25 +911,59 @@ static void xf_info(struct Data *d)
   fmt1(a, atan2(q[3] - q[1], q[2] - q[0]) * 180 / M_PI);
   sprintf(xform_info, "W %s%%   H %s%%   %s\260", w, h, a);
 }
+/* 0.9: a path's extent as whole pixels (empty for none) */
+static Box path_box(const Path *p)
+{
+  double x0, y0, x1, y1;
+  if (!p || !path_bounds(p, &x0, &y0, &x1, &y1)) return box_make(0, 0, 0, 0);
+  if (x1 - x0 < 1) x1 = x0 + 1;
+  if (y1 - y0 < 1) y1 = y0 + 1;
+  return box_make((i32)floor(x0), (i32)floor(y0), (i32)ceil(x1), (i32)ceil(y1));
+}
+/* 0.9: what Free Transform's box is for a type layer (its text) or a shape layer (its path, and
+   half the stroke round it) */
+static Box live_src_box(Doc *doc, int i)
+{
+  const TextParams *tp = layer_text(doc->lay[i]);
+  const ShapeParams *sp = layer_shape(doc->lay[i]);
+  if (tp) return text_bounds(tp);
+  if (sp) {
+    Path v = shape_path(sp);
+    Box b = path_box(&v);
+    i32 m = sp->stroke_on ? (i32)(sp->stroke_width / 2 + 1) : 0;
+    if (!box_empty(b)) return box_make(b.x0 - m, b.y0 - m, b.x1 + m, b.y1 + m);
+  }
+  return box_make(0, 0, 0, 0);
+}
 /* the handles put up round the selection (or the layer's pixels): mode is the handles' XM_, sel
    whether only the selection's outline is to change */
 static void xf_start(struct Data *d, Object *obj, int mode, int sel)
 {
   Doc *doc = cur_doc();
   Box b;
+  int kind = 0;
+  Path *ap;
   if (!doc) return;
+  if (type_editing) ty_end(d, obj, 1);
   if (!sel) {
     Layer *l = doc->lay[doc->active];
-    if (!l->px || l->kind != LK_PIXEL) { ask("OK", "%s", tr("This layer has no pixels to transform: rasterize it first.")); return; }
-    if (l->locked || l->lock_all || l->lock_pos) { ask("OK", "%s", tr("The layer is locked.")); return; }
+    /* 0.9: with a path tool, the active path; a type or shape layer's settings; else pixels */
+    if (PATH_TOOL(tool) && (ap = cur_path(doc, 0)) && ap->na) kind = 2;
+    else if (l->live && (l->kind == LK_TEXT || l->kind == LK_SHAPE)) {
+      kind = 1;
+      if (l->lock_all || l->lock_pos) { ask("OK", "%s", tr("The layer is locked.")); return; }
+    } else {
+      if (!l->px || l->kind != LK_PIXEL) { ask("OK", "%s", tr("This layer has no pixels to transform: rasterize it first.")); return; }
+      if (l->locked || l->lock_all || l->lock_pos) { ask("OK", "%s", tr("The layer is locked.")); return; }
+    }
   }
-  b = sel ? (sel_bounds(doc, &b) ? b : box_make(0, 0, 0, 0)) : xform_source_box(doc, doc->active);
+  b = sel ? (sel_bounds(doc, &b) ? b : box_make(0, 0, 0, 0)) : kind == 2 ? path_box(cur_path(doc, 0)) : kind == 1 ? live_src_box(doc, doc->active) : xform_source_box(doc, doc->active);
   if (box_empty(b)) { ask("OK", "%s", tr(sel ? "Nothing is selected." : "There is nothing to transform: the layer is empty.")); return; }
   ov_hide(d, obj);
   if (d->crop_on) { d->crop_on = 0; crop_pending = 0; }
   d->poly_on = 0; d->npoly = 0;
   xform_init(&d->xf, b);
-  d->xf_on = 1; d->xf_sel = sel; d->xf_mode = mode; d->xf_doc = doc; d->xf_handle = -1;
+  d->xf_on = 1; d->xf_sel = sel; d->xf_mode = mode; d->xf_doc = doc; d->xf_handle = -1; d->xf_kind = kind;
   xform_pending = 1;
   xf_info(d);
   ov_show(d, obj);
@@ -878,11 +1070,28 @@ static void xf_finish(struct Data *d, Object *obj, int apply)
     if (!xform_valid(&d->xf)) { ask("OK", "%s", tr("The shape can't be applied: its corners cross or it has no area.\nMove the handles back, or press Esc to cancel.")); return; }
     ov_hide(d, obj);
     d->xf_on = 0; xform_pending = 0;
+    if (d->xf_kind) {
+      /* 0.9: a type or shape layer, or the active path: through the affine map taking the box's
+         top left, top right and bottom left corners to the quad's */
+      double m[6], w = d->xf.src.x1 - d->xf.src.x0, h = d->xf.src.y1 - d->xf.src.y0, x0 = d->xf.src.x0, y0 = d->xf.src.y0;
+      const double *q = d->xf.q;
+      m[0] = (q[2] - q[0]) / w; m[1] = (q[6] - q[0]) / h; m[2] = q[0] - m[0] * x0 - m[1] * y0;
+      m[3] = (q[3] - q[1]) / w; m[4] = (q[7] - q[1]) / h; m[5] = q[1] - m[3] * x0 - m[4] * y0;
+      if (d->xf_kind == 1) ok = doc_live_transform(doc, doc->active, m);
+      else {
+        doc_begin(doc, "Transform Path");
+        doc_note_paths(doc);
+        if ((ok = cur_path(doc, 0) != NULL)) path_transform(cur_path(doc, 0), m);
+        doc_end(doc);
+        d->path_dirty = 1;
+      }
+    } else {
     set(_app(obj), MUIA_Application_Sleep, TRUE);
     job_begin(doc, d->xf_sel ? "Transform Selection" : "Free Transform");     /* (0.8: progress and Abort) */
     ok = d->xf_sel ? xform_selection(doc, &d->xf) : !box_empty(xform_layer(doc, doc->active, &d->xf, RS_BICUBIC));
     if (job_end()) ok = -1;
     set(_app(obj), MUIA_Application_Sleep, FALSE);
+    }
     if (ok > 0) changed(d, obj);
     else if (!ok) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
     d->edges_ok = 0;
@@ -951,6 +1160,636 @@ static void place_text(struct Data *d, Object *obj, double x, double y)
   tell_changed(d, obj);
 }
 
+/* ------------------------------------------------------------------ 0.9: the Type tools */
+/* the layer being edited, found again by its pointer; -1 if it has gone */
+static int ty_index(void)
+{
+  int i;
+  if (!type_editing || !ty.doc) return -1;
+  for (i = 0; i < ty.doc->nlay; i++) if (ty.doc->lay[i] == ty.lay) return i;
+  return -1;
+}
+static void ty_free(void)
+{
+  text_layout_free(ty.tl);
+  free(ty.tp); free(ty.orig);
+  memset(&ty, 0, sizeof ty);
+  type_editing = 0;
+}
+/* where text drawn with these settings may reach (a margin for the caret and faux styles) */
+static Box ty_box(const TextParams *tp)
+{
+  Box b = text_bounds(tp);
+  i32 m = (i32)(tp->run[0].size / 3) + 4;
+  if (box_empty(b)) b = box_make((i32)tp->x, (i32)tp->y, (i32)tp->x + 1, (i32)tp->y + 1);
+  return box_make(b.x0 - m, b.y0 - m, b.x1 + m, b.y1 + m);
+}
+/* a run set to the options bar's font and style: the real bold or italic face when the family has
+   one, else the faux style */
+static void ty_run_style(TextRun *r, const char *family, int style)
+{
+  int wb = (style & 1) != 0, wi = (style & 2) != 0;
+  Face *f = text_face_lookup && (wb || wi) ? text_face_lookup(family, wb, wi) : NULL;
+  int rb = wb && f && f->bold && !Stricmp((STRPTR)f->family, (STRPTR)family);
+  int ri = wi && f && f->italic && !Stricmp((STRPTR)f->family, (STRPTR)family);
+  strncpy(r->family, family, sizeof r->family - 1); r->family[sizeof r->family - 1] = 0;
+  r->bold = (u8)rb; r->faux_bold = (u8)(wb && !rb);
+  r->italic = (u8)ri; r->faux_italic = (u8)(wi && !ri);
+}
+/* the options bar shown as the text at the caret is (and remembered as applied) */
+static void ty_sync_opts(const TextParams *tp, int at)
+{
+  const TextRun *r = &tp->run[text_run_at(tp, at)];
+  int f = font_find(r->family);
+  if (f >= 0) opt.text_font = f;
+  opt.text_size = (int)(r->size + 0.5);
+  opt.text_style = ((r->bold || r->faux_bold) ? 1 : 0) | ((r->italic || r->faux_italic) ? 2 : 0);
+  opt.text_aa = tp->aa; opt.text_align = tp->align;
+  ty.o_font = opt.text_font; ty.o_style = opt.text_style; ty.o_size = opt.text_size; ty.o_aa = opt.text_aa; ty.o_align = opt.text_align;
+  if (optbar) DoMethod(optbar, MUIM_Opts_Refresh);
+}
+/* the working copy put into the layer (no undo step yet: that is made when the editing ends), laid
+   out again and the canvas brought up to date (call with the overlay hidden) */
+static void ty_apply(struct Data *d, Object *obj)
+{
+  int i = ty_index();
+  Layer *l;
+  Box old;
+  if (i < 0) return;
+  l = ty.doc->lay[i];
+  old = ty_box((const TextParams *)l->live);
+  memcpy(l->live, ty.tp, sizeof(TextParams));
+  l->live_ok = 0;
+  text_layout_free(ty.tl);
+  ty.tl = text_layout(ty.tp);
+  ty.changed = 1;
+  if (ty.caret > (int)strlen(ty.tp->text)) ty.caret = (int)strlen(ty.tp->text);
+  if (ty.anchor > (int)strlen(ty.tp->text)) ty.anchor = ty.caret;
+  update_box(d, obj, box_union(old, ty_box(ty.tp)));
+}
+/* editing begun on type layer i of doc (isnew: just made for it; mask: the Type Mask tool's) */
+static int ty_begin(Doc *doc, int i, int isnew, int mask)
+{
+  const TextParams *lt = layer_text(doc->lay[i]);
+  if (!lt) return 0;
+  memset(&ty, 0, sizeof ty);
+  ty.tp = (TextParams *)malloc(sizeof(TextParams));
+  ty.orig = (TextParams *)malloc(sizeof(TextParams));
+  if (!ty.tp || !ty.orig) { free(ty.tp); free(ty.orig); memset(&ty, 0, sizeof ty); return 0; }
+  *ty.tp = *lt; *ty.orig = *lt;
+  ty.doc = doc; ty.lay = doc->lay[i]; ty.isnew = isnew; ty.mask = mask;
+  ty.mark = isnew ? (void *)doc->undo : NULL;
+  ty.tl = text_layout(ty.tp);
+  ty.caret = ty.anchor = (int)strlen(ty.tp->text);
+  doc->active = i;
+  type_editing = 1;
+  return 1;
+}
+/* a new type layer (empty) at x, y: point text, or a paragraph in the box w x h; editing begun */
+static int ty_new(Doc *doc, double x, double y, int box, double w, double h)
+{
+  TextParams *tp = (TextParams *)malloc(sizeof(TextParams));
+  int i, mask = tool == TL_TYPEMASK;
+  if (!tp) return 0;
+  if (!font_count()) { free(tp); ask("OK", "%s", tr("There are no fonts to write with.\nKeep the TrueType drawer next to Easel.")); return 0; }
+  text_params_init(tp, font_name(opt.text_font), opt.text_size, mask ? 0xFF0000 : doc->fg, x, y);
+  ty_run_style(&tp->run[0], font_name(opt.text_font), opt.text_style);
+  tp->aa = (u8)opt.text_aa; tp->align = (u8)opt.text_align;
+  tp->vertical = tool == TL_VTEXT;
+  if (box) { tp->box = 1; tp->bw = w; tp->bh = h; }
+  i = doc_new_text(doc, tp, mask ? "Type Mask" : "Text");
+  free(tp);
+  if (i < 0) { ask("OK", "%s", tr("There isn't enough memory for that.")); return 0; }
+  if (mask) doc->lay[i]->opacity = 128;                     /* (red, half seen, as a quick mask) */
+  if (!ty_begin(doc, i, 1, mask)) return 0;
+  ty_sync_opts(ty.tp, 0);
+  return 1;
+}
+/* the editing ended: how 1 keeps it (one undo step: the new layer named after its text, or Edit
+   Type; the Type Mask's selection), 0 puts the layer back as it was, -1 just forgets (the picture
+   was changed under it, as by the History panel) */
+static void ty_end(struct Data *d, Object *obj, int how)
+{
+  Doc *doc = ty.doc;
+  int i = ty_index();
+  if (!type_editing) return;
+  ov_hide(d, obj);
+  if (i >= 0 && how >= 0) {
+    Layer *l = doc->lay[i];
+    int empty = !ty.tp->text[0];
+    if (ty.isnew && (void *)doc->undo == ty.mark) {
+      doc_discard_last(doc);                                  /* (the empty layer made for it) */
+      if (how > 0 && !empty) {
+        if (ty.mask) sel_from_text(doc, ty.tp, opt.sel_op);
+        else doc_new_text(doc, ty.tp, NULL);
+      }
+    } else if (ty.changed || ty.isnew) {
+      memcpy(l->live, ty.orig, sizeof(TextParams));
+      l->live_ok = 0;
+      if (how > 0) {
+        if (empty || ty.mask) { if (empty || ty.isnew) doc_delete_layer(doc, i); }
+        else doc_set_text(doc, i, ty.tp);
+        if (ty.mask && !empty) sel_from_text(doc, ty.tp, opt.sel_op);
+      }
+    }
+  }
+  ty_free();
+  if (doc == cur_doc()) {
+    changed(d, obj);
+    d->edges_ok = 0;
+    comp_free(d);
+    draw_all(d, obj);
+    tell_changed(d, obj);
+  }
+}
+/* text put in at the caret, over the selection */
+static void ty_insert(struct Data *d, Object *obj, const char *u, int n)
+{
+  int a = ty.anchor < ty.caret ? ty.anchor : ty.caret, b = ty.anchor < ty.caret ? ty.caret : ty.anchor;
+  ov_hide(d, obj);
+  if (a < b) { text_delete(ty.tp, a, b); ty.caret = a; }
+  if (n && text_insert(ty.tp, ty.caret, u, n)) ty.caret += n;
+  ty.anchor = ty.caret;
+  ty_apply(d, obj);
+  ov_show(d, obj);
+}
+/* a key while typing: 1 if it was the Type tool's */
+static int ty_key(struct Data *d, Object *obj, struct IntuiMessage *im)
+{
+  UWORD code = im->Code, q = im->Qualifier;
+  int shift = (q & QSHIFT) != 0, ctrl = (q & IEQUALIFIER_CONTROL) != 0, len = (int)strlen(ty.tp->text);
+  int a = ty.anchor < ty.caret ? ty.anchor : ty.caret, b = ty.anchor < ty.caret ? ty.caret : ty.anchor, how = -1;
+  if (code & IECODE_UP_PREFIX) return code == (0x40 | IECODE_UP_PREFIX);
+  if (q & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) {
+    if (code == 0x44 || code == 0x43) { ty_end(d, obj, 1); return 1; }     /* Amiga-Return commits */
+    return 0;
+  }
+  switch (code) {
+  case 0x45: case 0x43: ty_end(d, obj, 1); return 1;                     /* Esc, Enter: done */
+  case 0x44: ty_insert(d, obj, "\n", 1); return 1;                        /* Return: a new paragraph */
+  case 0x41:                                                              /* Backspace */
+    if (a < b) ty_insert(d, obj, "", 0);
+    else if (ty.caret > 0) { ov_hide(d, obj); ty.anchor = text_caret_move(ty.tl, ty.caret, TCM_LEFT); ty_insert(d, obj, "", 0); }
+    return 1;
+  case 0x46:                                                              /* Del */
+    if (a < b) ty_insert(d, obj, "", 0);
+    else if (ty.caret < len) { ov_hide(d, obj); ty.anchor = text_caret_move(ty.tl, ty.caret, TCM_RIGHT); ty_insert(d, obj, "", 0); }
+    return 1;
+  case 0x4C: how = ctrl ? TCM_START : TCM_UP; break;
+  case 0x4D: how = ctrl ? TCM_END_ALL : TCM_DOWN; break;
+  case 0x4E: how = ctrl ? TCM_WORDRIGHT : TCM_RIGHT; break;
+  case 0x4F: how = ctrl ? TCM_WORDLEFT : TCM_LEFT; break;
+  case 0x70: how = ctrl ? TCM_START : TCM_HOME; break;                    /* Home, End (on keyboards that have them) */
+  case 0x71: how = ctrl ? TCM_END_ALL : TCM_END; break;
+  }
+  if (how >= 0) {
+    ov_hide(d, obj);
+    if (!shift && a < b && (how == TCM_LEFT || how == TCM_RIGHT)) ty.caret = how == TCM_LEFT ? a : b;   /* (a selection collapses) */
+    else ty.caret = text_caret_move(ty.tl, ty.caret, how);
+    if (!shift) ty.anchor = ty.caret;
+    ov_show(d, obj);
+    return 1;
+  }
+  {
+    /* a character (Latin-1 from the keymap) put in as UTF-8 */
+    struct InputEvent ie;
+    UBYTE buf[4];
+    char u[3];
+    memset(&ie, 0, sizeof ie);
+    ie.ie_Class = IECLASS_RAWKEY; ie.ie_Code = code; ie.ie_Qualifier = q & ~IEQUALIFIER_CONTROL;
+    ie.ie_EventAddress = (APTR *)*((ULONG *)im->IAddress);
+    if (MapRawKey(&ie, (STRPTR)buf, sizeof buf, NULL) != 1) return 0;
+    if (ctrl) {
+      if (buf[0] == 'a' || buf[0] == 'A') { ov_hide(d, obj); ty.anchor = 0; ty.caret = len; ov_show(d, obj); return 1; }
+      return 0;                                                           /* (the other Ctrl keys: commands) */
+    }
+    if (buf[0] < 32 && buf[0] != 9) return buf[0] != 0;
+    if (buf[0] >= 127 && buf[0] < 160) return 1;
+    if (buf[0] < 0x80) { u[0] = (char)buf[0]; ty_insert(d, obj, u, 1); }
+    else { u[0] = (char)(0xC0 | (buf[0] >> 6)); u[1] = (char)(0x80 | (buf[0] & 63)); ty_insert(d, obj, u, 2); }
+    return 1;
+  }
+}
+/* the type layer under image point x, y (the topmost visible one whose text reaches there), -1 none */
+static int ty_layer_at(Doc *doc, double x, double y, double margin)
+{
+  int i;
+  for (i = doc->nlay - 1; i >= 0; i--) {
+    const TextParams *tp = layer_text(doc->lay[i]);
+    Box b;
+    if (!tp || !layer_shown(doc, i)) continue;
+    b = text_bounds(tp);
+    if (tp->box && !tp->xf_on) b = box_union(b, box_make((i32)tp->x, (i32)tp->y, (i32)(tp->x + tp->bw), (i32)(tp->y + tp->bh)));
+    if (x >= b.x0 - margin && x < b.x1 + margin && y >= b.y0 - margin && y < b.y1 + margin) return i;
+  }
+  return -1;
+}
+/* the Type tool's click: in the text being edited, the caret (Shift: the selection) put there and a
+   double-click takes the word; on another type layer, editing it; elsewhere a drag for a paragraph's box */
+static void ty_press(struct Data *d, Object *obj, Doc *doc, double x, double y, int shift, int dbl)
+{
+  int i;
+  if (type_editing && ty.doc == doc && ty_index() >= 0) {
+    if (ty_layer_at(doc, x, y, 8 / d->z) == ty_index() || (ty.tp->box && x >= ty.tp->x && y >= ty.tp->y && x < ty.tp->x + ty.tp->bw && y < ty.tp->y + ty.tp->bh)) {
+      ty.caret = text_hit(ty.tl, x, y);
+      if (dbl) { int e = text_caret_move(ty.tl, ty.caret, TCM_WORDRIGHT); ty.anchor = text_caret_move(ty.tl, e, TCM_WORDLEFT); ty.caret = e; }
+      else if (!shift) ty.anchor = ty.caret;
+      ty_sync_opts(ty.tp, ty.caret);
+      d->drag = DR_TYPESEL;
+      return;
+    }
+    ty_end(d, obj, 1);
+    ov_hide(d, obj);
+  }
+  if (tool != TL_TYPEMASK && (i = ty_layer_at(doc, x, y, 4 / d->z)) >= 0) {
+    Layer *l = doc->lay[i];
+    if (l->lock_all) { ask("OK", "%s", tr("The layer is locked.")); return; }
+    if (ty_begin(doc, i, 0, 0)) {
+      ty.caret = ty.anchor = text_hit(ty.tl, x, y);
+      ty_sync_opts(ty.tp, ty.caret);
+      changed(d, obj);
+      d->drag = DR_TYPESEL;
+    }
+    return;
+  }
+  d->drag = DR_TYPEBOX;
+}
+/* the options bar's type settings applied where they differ from those last applied: to the text
+   selected, or all of it */
+static void ty_from_opts(TextParams *tp, int from, int to)
+{
+  TextRun r;
+  u32 m = 0;
+  memset(&r, 0, sizeof r);
+  if (opt.text_font != ty.o_font || opt.text_style != ty.o_style) { ty_run_style(&r, font_name(opt.text_font), opt.text_style); m |= TS_BOLD | TS_ITALIC | TS_FAUXBOLD | TS_FAUXITALIC; }
+  if (opt.text_font != ty.o_font) m |= TS_FAMILY;
+  if (opt.text_size != ty.o_size) { r.size = opt.text_size; m |= TS_SIZE; }
+  if (m) {
+    if (from >= to) { from = 0; to = (int)strlen(tp->text); }
+    if (to > from) text_style(tp, from, to, &r, m);
+    else {
+      /* no text yet: the first run's style */
+      if (m & TS_FAMILY) strcpy(tp->run[0].family, r.family);
+      if (m & TS_BOLD) { tp->run[0].bold = r.bold; tp->run[0].faux_bold = r.faux_bold; tp->run[0].italic = r.italic; tp->run[0].faux_italic = r.faux_italic; }
+      if (m & TS_SIZE) tp->run[0].size = r.size;
+    }
+  }
+  if (opt.text_aa != ty.o_aa) tp->aa = (u8)opt.text_aa;
+  if (opt.text_align != ty.o_align) tp->align = (u8)opt.text_align;
+  ty.o_font = opt.text_font; ty.o_style = opt.text_style; ty.o_size = opt.text_size; ty.o_aa = opt.text_aa; ty.o_align = opt.text_align;
+}
+/* MUIM_Canvas_TypeCmd: the options bar, the Character, Paragraph and Warp windows, orientation and
+   the colour, applied to the text being edited (its selection, or all of it) or else to the whole
+   active type layer as an undo step; TC_EDIT starts editing the active type layer, TC_COMMIT ends it */
+static void ty_cmd(struct Data *d, Object *obj, int code, int arg)
+{
+  Doc *doc = cur_doc();
+  TextParams *tp;
+  int editing = type_editing && ty.doc == doc && ty_index() >= 0, from = 0, to = 0, ok = 1, li;
+  if (!doc) return;
+  if (code == TC_COMMIT) { if (type_editing) ty_end(d, obj, 1); return; }
+  if (code == TC_EDIT) {
+    if (type_editing) ty_end(d, obj, 1);
+    if (!layer_text(doc->lay[doc->active])) return;
+    ov_hide(d, obj);
+    if (ty_begin(doc, doc->active, 0, 0)) { ty.anchor = 0; ty_sync_opts(ty.tp, 0); }
+    ov_show(d, obj);
+    return;
+  }
+  if (editing) {
+    tp = ty.tp;
+    from = ty.anchor < ty.caret ? ty.anchor : ty.caret; to = ty.anchor < ty.caret ? ty.caret : ty.anchor;
+  } else {
+    const TextParams *lt = layer_text(doc->lay[doc->active]);
+    if (!lt) {
+      if (code != TC_OPTS) ask("OK", "%s", tr("Choose a type layer first (or click in the picture with the Type tool)."));
+      ty.o_font = opt.text_font; ty.o_style = opt.text_style; ty.o_size = opt.text_size; ty.o_aa = opt.text_aa; ty.o_align = opt.text_align;
+      return;
+    }
+    if (code == TC_OPTS && !TYPE_TOOL(tool)) return;
+    if (!(tp = (TextParams *)malloc(sizeof(TextParams)))) return;
+    *tp = *lt;
+  }
+  switch (code) {
+  case TC_OPTS: ty_from_opts(tp, from, to); break;
+  case TC_CHARACTER: ok = dlg_character(tp, from, to); break;
+  case TC_PARAGRAPH: ok = dlg_paragraph(tp); break;
+  case TC_WARP: ok = dlg_warp(tp); break;
+  case TC_ORIENT: tp->vertical = (u8)(arg != 0); break;
+  case TC_COLOR: {
+    TextRun r;
+    memset(&r, 0, sizeof r);
+    r.color = doc->fg;
+    if (from >= to) { from = 0; to = (int)strlen(tp->text); }
+    if (to > from) text_style(tp, from, to, &r, TS_COLOR); else tp->run[0].color = doc->fg;
+    break; }
+  }
+  if (editing) {
+    if (ok) { ov_hide(d, obj); ty_apply(d, obj); ov_show(d, obj); }
+    return;
+  }
+  li = doc->active;
+  if (ok && memcmp(tp, layer_text(doc->lay[li]), sizeof *tp)) {
+    Box old = ty_box(layer_text(doc->lay[li]));
+    doc_set_text(doc, li, tp);
+    changed(d, obj);
+    update_box(d, obj, box_union(old, ty_box(tp)));
+    tell_changed(d, obj);
+  }
+  free(tp);
+}
+
+/* ------------------------------------------------------------------ 0.9: the pen and path tools */
+static void path_clear_sel(Path *p) { int i; for (i = 0; p && i < p->na; i++) p->a[i].sel = 0; }
+static PathAnchor *anchor_of(Path *p, int s, int k) { return &p->a[p->s[s].first + k]; }
+/* an undo step for the paths begun (ended when the button is let go) */
+static void pe_begin(struct Data *d, Doc *doc, const char *name)
+{
+  if (d->pe_doc) doc_end(d->pe_doc);
+  doc_begin(doc, name);
+  doc_note_paths(doc);
+  d->pe_doc = doc;
+}
+static void pe_end(struct Data *d)
+{
+  int i;
+  if (!d->pe_doc) return;
+  for (i = 0; i < ndocs; i++) if (docs[i].doc == d->pe_doc) doc_end(d->pe_doc);
+  d->pe_doc = NULL;
+}
+/* a path tool's click: the Pen lays anchors (a click a corner, a drag a smooth one; on the first
+   anchor it closes the subpath; on the path it adds or deletes an anchor), Add and Delete Anchor
+   Point, Convert Point, Direct Selection (anchors and handles; a drag on nothing chooses anchors in
+   a box) and Path Selection (a whole subpath) */
+static void path_press(struct Data *d, Object *obj, Doc *doc, LONG mx, LONG my, double x, double y, int shift, int alt)
+{
+  double tol = 5 / d->z;
+  PathHit h;
+  Path *p;
+  int hit, k;
+  d->pe_what = PE_NONE; d->pe_moved = 0; d->pe_lx = x; d->pe_ly = y; d->pe_alone = alt;
+  d->drag = DR_PATH;
+  d->path_dirty = 1;
+  if (tool == TL_PEN) {
+    pe_begin(d, doc, "Pen");
+    if (!(p = cur_path(doc, 1))) return;
+    if (d->pen_on && (d->pen_doc != doc || d->pen_sub != p->ns - 1 || p->s[d->pen_sub].closed || !p->s[d->pen_sub].n)) d->pen_on = 0;
+    if (d->pen_on) {
+      SubPath *sp = &p->s[d->pen_sub];
+      PathAnchor *a0 = &p->a[sp->first];
+      if (sp->n >= 2 && labs(to_sx(d, obj, a0->x) - mx) <= 5 && labs(to_sy(d, obj, a0->y) - my) <= 5) {
+        path_close(p); d->pen_on = 0;
+        d->pe_s = d->pen_sub; d->pe_k = 0; d->pe_what = PE_HANDLES;
+      } else if (path_line_to(p, x, y)) { d->pe_s = d->pen_sub; d->pe_k = p->s[d->pen_sub].n - 1; d->pe_what = PE_HANDLES; }
+    } else {
+      hit = path_hit(p, x, y, tol, 0, &h);
+      if (hit == PH_SEGMENT && (k = path_split_segment(p, h.s, h.k, h.t)) > 0) { d->pe_s = h.s; d->pe_k = k; d->pe_what = PE_ANCHOR; }
+      else if (hit == PH_ANCHOR) {
+        SubPath *sp = &p->s[h.s];
+        if (!sp->closed && h.s == p->ns - 1 && (h.k == sp->n - 1 || h.k == 0) && sp->n >= 1) {
+          /* an open end: the subpath carried on from it */
+          if (h.k == 0 && sp->n > 1) path_reverse(p, h.s);
+          d->pen_on = 1; d->pen_sub = h.s; d->pen_doc = doc;
+          d->pe_s = h.s; d->pe_k = p->s[h.s].n - 1;
+          d->pe_what = PE_NONE;
+          path_clear_sel(p); anchor_of(p, d->pe_s, d->pe_k)->sel = 1;
+          return;
+        }
+        path_delete_anchor(p, h.s, h.k);
+      } else if ((k = path_move_to(p, x, y)) > 0) { d->pen_on = 1; d->pen_sub = k - 1; d->pen_doc = doc; d->pe_s = k - 1; d->pe_k = 0; d->pe_what = PE_HANDLES; }
+    }
+    path_clear_sel(p);
+    if (d->pe_what != PE_NONE) anchor_of(p, d->pe_s, d->pe_k)->sel = 1;
+    return;
+  }
+  if (!(p = cur_path(doc, 0)) && doc->workpath) { doc->path_active = -1; p = cur_path(doc, 0); }
+  if (!p) { if (tool != TL_PATHSEL && tool != TL_DIRECTSEL) ask("OK", "%s", tr("There is no path: draw one with the Pen tool, or choose one in the Paths panel.")); d->drag = DR_NONE; return; }
+  hit = path_hit(p, x, y, tol, tool == TL_CONVERT, &h);
+  switch (tool) {
+  case TL_ADDANCHOR:
+    if (hit == PH_SEGMENT) {
+      pe_begin(d, doc, "Add Anchor Point");
+      if ((k = path_split_segment(p, h.s, h.k, h.t)) > 0) { path_clear_sel(p); anchor_of(p, h.s, k)->sel = 1; d->pe_s = h.s; d->pe_k = k; d->pe_what = PE_ANCHOR; }
+    }
+    break;
+  case TL_DELANCHOR:
+    if (hit == PH_ANCHOR) { pe_begin(d, doc, "Delete Anchor Point"); path_delete_anchor(p, h.s, h.k); }
+    break;
+  case TL_CONVERT:
+    if (hit == PH_ANCHOR) {
+      PathAnchor *a = anchor_of(p, h.s, h.k);
+      pe_begin(d, doc, "Convert Point");
+      if (a->ix != a->x || a->iy != a->y || a->ox != a->x || a->oy != a->y) path_convert_anchor(p, h.s, h.k, PA_CORNER);
+      path_clear_sel(p); a->sel = 1;
+      d->pe_s = h.s; d->pe_k = h.k; d->pe_what = PE_HANDLES;
+    } else if (hit == PH_IN || hit == PH_OUT) {
+      pe_begin(d, doc, "Convert Point");
+      d->pe_s = h.s; d->pe_k = h.k; d->pe_which = hit == PH_OUT; d->pe_alone = 1; d->pe_what = PE_HANDLE;
+    }
+    break;
+  case TL_DIRECTSEL:
+    if (hit == PH_ANCHOR) {
+      PathAnchor *a = anchor_of(p, h.s, h.k);
+      if (shift) a->sel = !a->sel;
+      else if (!a->sel) { path_clear_sel(p); a->sel = 1; }
+      pe_begin(d, doc, "Move Anchor"); d->pe_what = PE_SELMOVE;
+    } else if (hit == PH_IN || hit == PH_OUT) {
+      pe_begin(d, doc, "Move Handle");
+      d->pe_s = h.s; d->pe_k = h.k; d->pe_which = hit == PH_OUT; d->pe_what = PE_HANDLE;
+    } else if (hit == PH_SEGMENT) {
+      int n = p->s[h.s].n;
+      if (!shift) path_clear_sel(p);
+      anchor_of(p, h.s, h.k)->sel = 1; anchor_of(p, h.s, (h.k + 1) % n)->sel = 1;
+      pe_begin(d, doc, "Move Segment"); d->pe_what = PE_SELMOVE;
+    } else { if (!shift) path_clear_sel(p); d->pe_what = PE_BOX; }
+    break;
+  case TL_PATHSEL:
+    path_clear_sel(p);
+    if (hit != PH_NONE) {
+      for (k = 0; k < p->s[h.s].n; k++) anchor_of(p, h.s, k)->sel = 1;
+      pe_begin(d, doc, "Move Path"); d->pe_s = h.s; d->pe_what = PE_SUBMOVE;
+    }
+    break;
+  }
+}
+/* a path tool's drag to x, y (call with the overlay hidden) */
+static void path_motion(struct Data *d, Object *obj, double x, double y)
+{
+  Doc *doc = cur_doc();
+  Path *p = cur_path(doc, 0);
+  double dx = x - d->pe_lx, dy = y - d->pe_ly;
+  int s, k;
+  d->bx = x; d->by = y;
+  if (!p || d->pe_what == PE_NONE) return;
+  if (!d->pe_moved && fabs((x - d->ax) * d->z) + fabs((y - d->ay) * d->z) < 3) return;
+  d->pe_moved = 1;
+  if (d->pe_what != PE_BOX && (d->pe_s >= p->ns || d->pe_k >= p->s[d->pe_s].n)) return;
+  switch (d->pe_what) {
+  case PE_HANDLES: path_drag_handles(p, d->pe_s, d->pe_k, x, y); break;
+  case PE_ANCHOR: path_move_anchor(p, d->pe_s, d->pe_k, dx, dy); break;
+  case PE_HANDLE: path_move_handle(p, d->pe_s, d->pe_k, d->pe_which, x, y, d->pe_alone); break;
+  case PE_SELMOVE:
+    for (s = 0; s < p->ns; s++) for (k = 0; k < p->s[s].n; k++) if (anchor_of(p, s, k)->sel) path_move_anchor(p, s, k, dx, dy);
+    break;
+  case PE_SUBMOVE:
+    for (k = 0; k < p->s[d->pe_s].n; k++) path_move_anchor(p, d->pe_s, k, dx, dy);
+    break;
+  }
+  d->pe_lx = x; d->pe_ly = y;
+  d->path_dirty = 1;
+}
+/* the button let go: Direct Selection's box chooses the anchors in it; the step ended */
+static void path_release(struct Data *d, Object *obj)
+{
+  Doc *doc = cur_doc();
+  Path *p = cur_path(doc, 0);
+  if (p && d->pe_what == PE_BOX) {
+    double x0 = d->ax < d->bx ? d->ax : d->bx, x1 = d->ax < d->bx ? d->bx : d->ax, y0 = d->ay < d->by ? d->ay : d->by, y1 = d->ay < d->by ? d->by : d->ay;
+    int i;
+    for (i = 0; i < p->na; i++) if (p->a[i].x >= x0 && p->a[i].x <= x1 && p->a[i].y >= y0 && p->a[i].y <= y1) p->a[i].sel = 1;
+  }
+  pe_end(d);
+  d->pe_what = PE_NONE;
+  d->path_dirty = 1;
+  changed(d, obj);
+  tell_changed(d, obj);
+}
+/* the chosen anchors of the active path deleted (Direct Selection's Backspace); 1 if there were any */
+static int path_delete_sel(struct Data *d, Object *obj)
+{
+  Doc *doc = cur_doc();
+  Path *p = cur_path(doc, 0);
+  int s, k, any = 0;
+  if (!p) return 0;
+  for (s = 0; s < p->ns; s++) for (k = 0; k < p->s[s].n; k++) if (anchor_of(p, s, k)->sel) any = 1;
+  if (!any) return 0;
+  ov_hide(d, obj);
+  doc_begin(doc, "Delete Anchor Point");
+  doc_note_paths(doc);
+  p = cur_path(doc, 0);
+  for (s = p->ns - 1; s >= 0; s--) for (k = p->s[s].n - 1; k >= 0; k--) if (s < p->ns && k < p->s[s].n && anchor_of(p, s, k)->sel) path_delete_anchor(p, s, k);
+  doc_end(doc);
+  d->path_dirty = 1;
+  ov_show(d, obj);
+  changed(d, obj);
+  tell_changed(d, obj);
+  return 1;
+}
+
+/* ------------------------------------------------------------------ 0.9: the shape tools */
+/* the settings the shape tool and its options bar make for the box (a line: from x0, y0 to x1, y1) */
+static void shape_params_for(ShapeParams *sp, int t, double x0, double y0, double x1, double y1, u32 fg)
+{
+  int kind = t == TL_ELLIPSE ? SH_ELLIPSE : t == TL_LINE ? SH_LINE : t == TL_ROUNDRECT ? SH_ROUNDRECT : t == TL_POLYGON ? SH_POLYGON :
+             t == TL_CUSTOMSHAPE ? SH_CUSTOM : SH_RECT;
+  shape_defaults(sp, kind, x0, y0, x1, y1, fg);
+  sp->fill_on = (u8)(opt.shape_fill != 0);
+  sp->stroke_on = (u8)(opt.shape_stroke != 0);
+  sp->stroke_width = opt.stroke_width > 0 ? opt.stroke_width : 1;
+  sp->stroke_color = (u32)opt.stroke_color & 0xFFFFFF;
+  sp->align = (u8)opt.stroke_align;
+  if (kind == SH_RECT) sp->radius = opt.shape_fill_radius;
+  if (kind == SH_ROUNDRECT) sp->radius = opt.round_radius;
+  if (kind == SH_POLYGON) { sp->sides = opt.poly_sides < 3 ? 3 : opt.poly_sides; sp->star = (u8)(opt.poly_star != 0); sp->indent = opt.poly_indent; }
+  if (kind == SH_LINE) { sp->line_width = opt.line_width > 0 ? opt.line_width : 1; sp->arrow_start = (u8)(opt.arrow_start != 0); sp->arrow_end = (u8)(opt.arrow_end != 0); sp->fill_on = 1; }
+  if (kind == SH_LINE || kind == SH_CUSTOM || kind == SH_POLYGON) sp->join = JOIN_ROUND;
+}
+/* the active path scaled into the box (the Custom Shape tool's shape), or NULL */
+static Path *custom_path(Doc *doc, double x0, double y0, double x1, double y1)
+{
+  Path *src = cur_path(doc, 0), *p;
+  double bx0, by0, bx1, by1, m[6];
+  if (!src || !src->na || !path_bounds(src, &bx0, &by0, &bx1, &by1) || bx1 - bx0 < 1e-6 || by1 - by0 < 1e-6) return NULL;
+  if (!(p = path_copy(src))) return NULL;
+  if (x0 > x1) { double t = x0; x0 = x1; x1 = t; }
+  if (y0 > y1) { double t = y0; y0 = y1; y1 = t; }
+  m[0] = (x1 - x0) / (bx1 - bx0); m[1] = 0; m[2] = x0 - bx0 * m[0];
+  m[3] = 0; m[4] = (y1 - y0) / (by1 - by0); m[5] = y0 - by0 * m[4];
+  path_transform(p, m);
+  path_clear_sel(p);
+  return p;
+}
+/* the drag's box in order (a line keeps its ends) */
+static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1)
+{
+  if (tool == TL_LINE) { *x0 = d->ax; *y0 = d->ay; *x1 = d->bx; *y1 = d->by; return; }
+  *x0 = d->ax < d->bx ? d->ax : d->bx; *x1 = d->ax < d->bx ? d->bx : d->ax;
+  *y0 = d->ay < d->by ? d->ay : d->by; *y1 = d->ay < d->by ? d->by : d->ay;
+}
+/* the outline of the shape being dragged out, for the overlay (call with the overlay hidden) */
+static void prev_make(struct Data *d)
+{
+  Doc *doc = cur_doc();
+  ShapeParams sp;
+  Path *p;
+  double x0, y0, x1, y1;
+  poly_free(&d->prev); poly_init(&d->prev);
+  if (!doc || !d->prev_on) return;
+  drag_box(d, &x0, &y0, &x1, &y1);
+  if (tool != TL_LINE && (x1 - x0 < 1 || y1 - y0 < 1)) return;
+  shape_params_for(&sp, tool, x0, y0, x1, y1, doc->fg);
+  if (tool == TL_CUSTOMSHAPE) p = custom_path(doc, x0, y0, x1, y1);
+  else if ((p = path_new()) && !shape_make_path(&sp, p)) { path_free(p); p = NULL; }
+  if (p) { path_flatten(p, 0.7 / d->z, &d->prev); path_free(p); }
+}
+/* the shape dragged out made: a shape layer, or (Pixels) filled and stroked on the active layer */
+static void shape_make(struct Data *d, Object *obj, Doc *doc)
+{
+  ShapeParams sp;
+  Path *cust = NULL, *p;
+  double x0, y0, x1, y1;
+  drag_box(d, &x0, &y0, &x1, &y1);
+  shape_params_for(&sp, tool, x0, y0, x1, y1, doc->fg);
+  if (tool == TL_CUSTOMSHAPE && !(cust = custom_path(doc, x0, y0, x1, y1))) return;
+  if (!opt.shape_mode) {
+    if (doc_new_shape(doc, &sp, cust, NULL) < 0) ask("OK", "%s", tr("There isn't enough memory for that."));
+  } else if ((p = cust ? cust : path_new())) {
+    if (cust || shape_make_path(&sp, p)) {
+      doc_begin(doc, tool_names[tool]);
+      if (sp.fill_on) path_fill(doc, p, sp.fill_color, 100, BM_NORMAL, 1);
+      if (sp.stroke_on && sp.kind != SH_LINE) path_stroke_simple(doc, p, sp.stroke_width, sp.stroke_color, 100, BM_NORMAL);
+      doc_end(doc);
+    }
+    if (p != cust) path_free(p);
+  }
+  path_free(cust);
+  changed(d, obj);
+  comp_free(d);
+  draw_all(d, obj);
+}
+
+/* ------------------------------------------------------------------ 0.9: live layers moved */
+/* layer i's rendering's box (worked out now if need be) */
+static Box live_box(Doc *doc, int i)
+{
+  Layer *l = doc->lay[i];
+  if (!l->live) return box_make(0, 0, 0, 0);
+  if (!l->live_ok) live_render(doc, l);
+  return l->live_ok && l->livepx ? l->livebox : box_make(0, 0, 0, 0);
+}
+/* live layer i moved by the forward map m (an undo step) and the canvas brought up to date */
+static int live_move(struct Data *d, Object *obj, Doc *doc, int i, const double *m)
+{
+  Box old = live_box(doc, i);
+  if (!doc_live_transform(doc, i, m)) { ask("OK", "%s", tr("The layer is locked.")); return 0; }
+  changed(d, obj);
+  update_box(d, obj, box_union(old, live_box(doc, i)));
+  return 1;
+}
+/* is there something (alpha > 16) at image pixel x, y of layer l? */
+static int layer_has(Doc *doc, Layer *l, i32 x, i32 y)
+{
+  if (l->px) return l->px[((long)y * doc->w + x) * 4 + 3] > 16;
+  if (l->live) {
+    Box b;
+    if (!l->live_ok) live_render(doc, l);
+    b = l->livebox;
+    if (!l->livepx || x < b.x0 || y < b.y0 || x >= b.x1 || y >= b.y1) return 0;
+    return l->livepx[((long)(y - b.y0) * (b.x1 - b.x0) + (x - b.x0)) * 4 + 3] > 16;
+  }
+  return 0;
+}
+
 /* the mouse button down at window mx, my (inside the area) */
 static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULONG secs, ULONG micros)
 {
@@ -963,7 +1802,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   d->modifiers = qual;
   if (d->spring_code) d->spring_used = 1;               /* (0.8: the spring-loaded tool used) */
   /* 0.4: snapping (guides, grid, edges) for the tools that drag out shapes */
-  if (doc && doc->guides.snap && (t == TL_MARQUEE || t == TL_EMARQUEE || t == TL_RECT || t == TL_ELLIPSE || t == TL_LINE || t == TL_GRADIENT || t == TL_CROP)) {
+  if (doc && doc->guides.snap && (t == TL_MARQUEE || t == TL_EMARQUEE || SHAPE_TOOL(t) || t == TL_GRADIENT || t == TL_CROP || t == TL_PEN)) {
     doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
     snap_point(doc, &x, &y, SNAP_DOC);
   }
@@ -992,7 +1831,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
       /* the topmost visible layer with something at the pointer */
       int i;
       for (i = doc->nlay - 1; i >= 0; i--)
-        if (doc->lay[i]->visible && doc->lay[i]->px && doc->lay[i]->px[((long)(i32)y * doc->w + (i32)x) * 4 + 3] > 16) break;
+        if (doc->lay[i]->visible && layer_has(doc, doc->lay[i], (i32)x, (i32)y)) break;
       if (i >= 0 && i != doc->active) { doc->active = i; changed(d, obj); tell_changed(d, obj); }
     }
     d->drag = DR_MOVE;
@@ -1071,11 +1910,11 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     d->drag = DR_SAMPLE;
     set(obj, MUIA_Canvas_Pointer, TRUE);
     break; }
-  case TL_LASSO: d->drag = DR_LASSO; d->npoly = 0; poly_add(d, x, y); break;
+  case TL_LASSO: d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); break;
   case TL_PLASSO:
-    if (!d->poly_on) { d->poly_on = 1; d->npoly = 0; poly_add(d, x, y); }
+    if (!d->poly_on) { d->poly_on = 1; d->npoly = 0; lasso_add(d, x, y); }
     else if (dbl || (d->npoly >= 3 && fabs(to_sx(d, obj, d->poly[0]) - mx) < 6 && fabs(to_sy(d, obj, d->poly[1]) - my) < 6)) { poly_finish(d, obj, 1); return; }
-    else poly_add(d, x, y);
+    else lasso_add(d, x, y);
     break;
   case TL_WAND:
     if (x >= 0 && y >= 0 && x < doc->w && y < doc->h) { sel_wand_ex(doc, (i32)x, (i32)y, opt.tolerance, opt.contiguous, opt.all_layers, sel_op_of(qual), opt.sel_antialias); changed(d, obj); }
@@ -1097,16 +1936,25 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
       tell_changed(d, obj);
     }
     break;
-  case TL_GRADIENT: case TL_LINE: d->drag = DR_LINE; break;
-  case TL_RECT: case TL_ELLIPSE: d->drag = DR_SHAPE; break;
+  case TL_GRADIENT: d->drag = DR_LINE; d->prev_on = 0; break;
+  /* 0.9: the shape tools (a shape layer, or pixels); the Custom Shape is the active path's */
+  case TL_LINE: d->drag = DR_LINE; d->prev_on = !opt.shape_mode; poly_free(&d->prev); poly_init(&d->prev); break;
+  case TL_RECT: case TL_ELLIPSE: case TL_ROUNDRECT: case TL_POLYGON: case TL_CUSTOMSHAPE:
+    if (t == TL_CUSTOMSHAPE && (!cur_path(doc, 0) || !cur_path(doc, 0)->na)) { ov_show(d, obj); ask("OK", "%s", tr("The Custom Shape tool draws the active path as a shape: draw a path with the Pen tool, or choose one in the Paths panel, first.")); return; }
+    d->drag = DR_SHAPE; d->prev_on = t == TL_ROUNDRECT || t == TL_POLYGON || t == TL_CUSTOMSHAPE;
+    poly_free(&d->prev); poly_init(&d->prev);
+    break;
+  case TL_TEXT: case TL_VTEXT: case TL_TYPEMASK: ty_press(d, obj, doc, x, y, shift, dbl); break;
+  case TL_PEN: case TL_ADDANCHOR: case TL_DELANCHOR: case TL_CONVERT: case TL_PATHSEL: case TL_DIRECTSEL:
+    path_press(d, obj, doc, mx, my, x, y, shift, alt);
+    break;
   /* 1.0: the Red Eye tool drags a box (or clicks); the Patch tool draws round the area like the
      Lasso, then drags it to where the patch comes from */
-  case TL_REDEYE: d->drag = DR_SHAPE; break;
+  case TL_REDEYE: d->drag = DR_SHAPE; d->prev_on = 0; break;
   case TL_PATCH:
     if (doc->sel && x >= 0 && y >= 0 && x < doc->w && y < doc->h && sel_at(doc, (i32)x, (i32)y) > 0) d->drag = DR_MOVE;
-    else { d->drag = DR_LASSO; d->npoly = 0; poly_add(d, x, y); }
+    else { d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); }
     break;
-  case TL_TEXT: ov_show(d, obj); place_text(d, obj, x, y); return;
   case TL_CROP:
     if (d->crop_on) {
       int h = crop_hit(d, obj, mx, my);
@@ -1188,7 +2036,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break;
   case DR_LASSO:
     ov_hide(d, obj);
-    if (fabs(to_sx(d, obj, d->poly[d->npoly * 2 - 2]) - mx) + fabs(to_sy(d, obj, d->poly[d->npoly * 2 - 1]) - my) >= 2) poly_add(d, x, y);
+    if (fabs(to_sx(d, obj, d->poly[d->npoly * 2 - 2]) - mx) + fabs(to_sy(d, obj, d->poly[d->npoly * 2 - 1]) - my) >= 2) lasso_add(d, x, y);
     ov_show(d, obj);
     break;
   case DR_XFORM:
@@ -1221,6 +2069,18 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     d->mbox = mq_box(d, x, y);
     ov_show(d, obj);
     break;
+  case DR_TYPEBOX:
+    ov_hide(d, obj); d->bx = x; d->by = y; ov_show(d, obj);
+    break;
+  case DR_TYPESEL:
+    if (type_editing && ty.tl) { ov_hide(d, obj); ty.caret = text_hit(ty.tl, x, y); ov_show(d, obj); }
+    break;
+  case DR_PATH:
+    ov_hide(d, obj);
+    if (doc->guides.snap && tool == TL_PEN) snap_point(doc, &x, &y, SNAP_DOC);
+    path_motion(d, obj, x, y);
+    ov_show(d, obj);
+    break;
   case DR_SHAPE: case DR_LINE: case DR_MOVE:
     ov_hide(d, obj);
     if (doc->guides.snap && d->drag != DR_MOVE) snap_point(doc, &x, &y, SNAP_DOC);
@@ -1238,6 +2098,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
         else { double s = (fabs(dx) + fabs(dy)) / 2; d->bx = d->ax + (dx < 0 ? -s : s); d->by = d->ay + (dy < 0 ? -s : s); }
       }
     }
+    if (d->prev_on) prev_make(d);
     ov_show(d, obj);
     break;
   case DR_CROP: {
@@ -1316,7 +2177,12 @@ static void release(struct Data *d, Object *obj)
       tell_changed(d, obj);
       break;
     }
-    if (dx || dy) {
+    if ((dx || dy) && doc->lay[doc->active]->live && !(d->modifiers & QALT)) {
+      /* 0.9: a type or shape layer: its settings moved (it stays sharp) */
+      double m[6];
+      m[0] = 1; m[1] = 0; m[2] = d->bx - d->ax; m[3] = 0; m[4] = 1; m[5] = d->by - d->ay;
+      live_move(d, obj, doc, doc->active, m);
+    } else if (dx || dy) {
       /* 0.7: Alt-drag moves a copy (of the selected pixels, or of the whole layer) */
       if ((d->modifiers & QALT) && doc->lay[doc->active]->kind != LK_GROUP) ch = move_selection_copy(doc, dx, dy);
       else ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx, dy) : move_layer(doc, dx, dy);
@@ -1338,9 +2204,10 @@ static void release(struct Data *d, Object *obj)
         g.fg = doc->fg; g.bg = doc->bg;
         ch = fill_gradient_ex(doc, d->ax, d->ay, d->bx, d->by, opt.grad_kind, &g, opt.grad_reverse, opt.grad_dither, opt.opacity[TL_GRADIENT], opt.mode[TL_GRADIENT]);
       }
-      else ch = shape_line(doc, d->ax, d->ay, d->bx, d->by, opt.line_width, doc->fg, opt.opacity[TL_LINE]);
+      else { shape_make(d, obj, doc); ch = box_make(0, 0, 0, 0); }
       if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
     }
+    d->prev_on = 0;
     tell_changed(d, obj);
     break;
   case DR_SHAPE:
@@ -1357,13 +2224,25 @@ static void release(struct Data *d, Object *obj)
       tell_changed(d, obj);
       break;
     }
-    if (fabs(d->bx - d->ax) >= 1 && fabs(d->by - d->ay) >= 1) {
-      double x0 = d->ax < d->bx ? d->ax : d->bx, x1 = d->ax < d->bx ? d->bx : d->ax, y0 = d->ay < d->by ? d->ay : d->by, y1 = d->ay < d->by ? d->by : d->ay;
-      if (tool == TL_ELLIPSE) ch = shape_ellipse(doc, x0, y0, x1, y1, doc->fg, opt.opacity[TL_ELLIPSE]);
-      else ch = shape_rect(doc, x0, y0, x1, y1, opt.shape_fill_radius, doc->fg, opt.opacity[TL_RECT]);
-      if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
-    }
+    if (fabs(d->bx - d->ax) >= 1 && fabs(d->by - d->ay) >= 1) shape_make(d, obj, doc);
+    d->prev_on = 0;
     tell_changed(d, obj);
+    break;
+  case DR_TYPEBOX:
+    /* a click: point text there; a drag: a paragraph in the box */
+    d->drag = DR_TYPEBOX; ov_hide(d, obj); d->drag = DR_NONE;
+    if (fabs(d->bx - d->ax) * d->z >= 6 && fabs(d->by - d->ay) * d->z >= 6)
+      ty_new(doc, d->ax < d->bx ? d->ax : d->bx, d->ay < d->by ? d->ay : d->by, 1, fabs(d->bx - d->ax), fabs(d->by - d->ay));
+    else ty_new(doc, d->ax, d->ay, 0, 0, 0);
+    changed(d, obj);
+    comp_free(d);
+    draw_all(d, obj);
+    tell_changed(d, obj);
+    break;
+  case DR_TYPESEL: tell_changed(d, obj); break;          /* (the Layers panel shows the layer being edited) */
+  case DR_PATH:
+    d->drag = DR_PATH; ov_hide(d, obj); d->drag = DR_NONE;
+    path_release(d, obj);
     break;
   case DR_XFORM: xf_info(d); DoMethod(optbar, MUIM_Opts_Refresh); break;
   case DR_RULER:
@@ -1406,6 +2285,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   Doc *doc = cur_doc();
   DocView *v = cur_view();
   int c, i, shift = (q & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
+  if (type_editing && doc && ty.doc == doc && ty_index() >= 0 && ty_key(d, obj, im)) return 1;    /* 0.9: typing */
   if (q & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) return 0;      /* the menus' shortcuts */
   if (code == 0x40 || code == (0x40 | IECODE_UP_PREFIX)) {
     /* space: the hand while it is held */
@@ -1453,12 +2333,14 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     if (d->ml) { ml_finish(d, obj, 1); return 1; }
     if (d->poly_on) { poly_finish(d, obj, 1); return 1; }
     if (d->crop_on) { crop_apply(d, obj, 1); return 1; }
+    if (d->pen_on) { ov_hide(d, obj); d->pen_on = 0; path_clear_sel(cur_path(doc, 0)); d->path_dirty = 1; ov_show(d, obj); return 1; }   /* 0.9: the Pen's path finished */
     return 0;
   case 0x45:                                    /* Esc */
     if (d->xf_on) { xf_finish(d, obj, 0); return 1; }
     if (d->ml) { ml_finish(d, obj, 0); return 1; }
     if (d->poly_on) { poly_finish(d, obj, 0); return 1; }
     if (d->crop_on) { ov_hide(d, obj); d->crop_on = 0; crop_pending = 0; ov_show(d, obj); return 1; }
+    if (d->pen_on) { ov_hide(d, obj); d->pen_on = 0; path_clear_sel(cur_path(doc, 0)); d->path_dirty = 1; ov_show(d, obj); return 1; }
     return 0;
   case 0x46: case 0x41:                         /* Del, Backspace (Alt: fill with the foreground, Ctrl: the background) */
     if (d->ml) {
@@ -1470,12 +2352,17 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
       return 1;
     }
     if (d->xf_on) return 1;
+    if (PATH_TOOL(tool) && path_delete_sel(d, obj)) return 1;          /* 0.9: the chosen anchors deleted */
     DoMethod(_app(obj), MUIM_Application_ReturnID, (q & IEQUALIFIER_CONTROL) ? ID_FILLBG : (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? ID_FILLFG : ID_CLEAR);
     return 1;
   case 0x4C: case 0x4D: case 0x4E: case 0x4F: {  /* the arrows: nudge (move tool) or scroll */
     LONG dx = code == 0x4E ? 1 : code == 0x4F ? -1 : 0, dy = code == 0x4D ? 1 : code == 0x4C ? -1 : 0;
     if (d->xf_on) { ov_hide(d, obj); xform_translate(&d->xf, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1)); xf_info(d); ov_show(d, obj); DoMethod(optbar, MUIM_Opts_Refresh); }
-    else if (tool == TL_MOVE) {
+    else if (tool == TL_MOVE && doc->lay[doc->active]->live) {
+      double m[6];
+      m[0] = 1; m[1] = 0; m[2] = dx * (shift ? 10 : 1); m[3] = 0; m[4] = 1; m[5] = dy * (shift ? 10 : 1);
+      if (live_move(d, obj, doc, doc->active, m)) tell_changed(d, obj);
+    } else if (tool == TL_MOVE) {
       Box ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1))
                                                       : move_layer(doc, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1));
       if (!box_empty(ch)) { changed(d, obj); if (doc->sel) edges_make(d); update_box(d, obj, ch); if (doc->sel) selection_changed(d, obj); tell_changed(d, obj); }
@@ -1638,6 +2525,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
     d->obj = obj; d->z = 1;
+    poly_init(&d->prev); poly_init(&d->pp); d->path_dirty = 1;
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = EV;
     d->ihn.ihn_Object = obj; d->ihn.ihn_Flags = MUIIHNF_TIMER; d->ihn.ihn_Method = MUIM_Canvas_Tick;
     d->ihn.ihn_stuff.ihn_timer.ihn_millis = 250;
@@ -1651,6 +2539,8 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     if (d->xmap) FreeVec(d->xmap);
     free(d->edges); free(d->poly);
     if (d->ml) maglasso_free(d->ml);
+    poly_free(&d->prev); poly_free(&d->pp); free(d->pa);
+    if (type_editing) ty_free();
     break;
   case OM_SET:
     mset(INST_DATA(cl, obj), obj, (struct opSet *)msg);
@@ -1729,7 +2619,11 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     d = INST_DATA(cl, obj);
     stroke_timer_off(d, obj);
     if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; }
+    pe_end(d);
     d->drag = DR_NONE;
+    d->path_dirty = 1; d->prev_on = 0;
+    if (type_editing && ty_index() < 0) ty_free();        /* 0.9: the layer being typed in has gone */
+    if (d->pen_on && d->pen_doc != cur_doc()) d->pen_on = 0;
     comp_free(d);
     d->edges_ok = 0;
     if (!cur_doc()) { d->crop_on = 0; d->poly_on = 0; crop_pending = 0; }
@@ -1767,14 +2661,30 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     return 0; }
   case MUIM_Canvas_Commit:
     d = INST_DATA(cl, obj);
-    if (d->xf_on) xf_finish(d, obj, 1);
+    if (type_editing) ty_end(d, obj, 1);
+    else if (d->xf_on) xf_finish(d, obj, 1);
     else if (d->ml) ml_finish(d, obj, 1);
     else if (d->poly_on) poly_finish(d, obj, 1);
     else if (d->crop_on) crop_apply(d, obj, 1);
     return 0;
-  case MUIM_Canvas_Cancel: case MUIM_Canvas_Tool:
+  case MUIM_Canvas_TypeCmd: {
+    struct MUIP_Canvas_TypeCmd *m = (struct MUIP_Canvas_TypeCmd *)msg;
+    d = INST_DATA(cl, obj);
+    if (m->code == TC_COMMIT && m->arg < 0) { if (type_editing) { ov_hide(d, obj); ty_end(d, obj, -1); ov_show(d, obj); } return 0; }
+    ty_cmd(d, obj, (int)m->code, (int)m->arg);
+    return 0; }
+  case MUIM_Canvas_Paths:
     d = INST_DATA(cl, obj);
     ov_hide(d, obj);
+    d->path_dirty = 1;
+    if (d->pen_on && (!cur_path(cur_doc(), 0) || d->pen_doc != cur_doc())) d->pen_on = 0;
+    ov_show(d, obj);
+    return 0;
+  case MUIM_Canvas_Cancel: case MUIM_Canvas_Tool:
+    d = INST_DATA(cl, obj);
+    if (type_editing) ty_end(d, obj, 1);                  /* 0.9: Esc or another tool: the typing kept */
+    ov_hide(d, obj);
+    if (!PATH_TOOL(tool) || msg->MethodID == MUIM_Canvas_Cancel) d->pen_on = 0;
     if (d->poly_on) { d->poly_on = 0; d->npoly = 0; }
     if (d->crop_on && (msg->MethodID == MUIM_Canvas_Cancel || tool != TL_CROP)) { d->crop_on = 0; crop_pending = 0; }
     if (d->xf_on) { d->xf_on = 0; xform_pending = 0; DoMethod(optbar, MUIM_Opts_Refresh); }

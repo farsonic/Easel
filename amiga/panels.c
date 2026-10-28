@@ -22,6 +22,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "../core/layers.h"
+#include "../core/live.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -394,6 +395,39 @@ static void fill_thumb(struct LData *d, struct RastPort *rp, struct Screen *scr,
   draw_rgb(rp, scr, d->buf, THUMB * 3, x, y, THUMB, THUMB);
   theme_rect(rp, x - 1, y - 1, x + THUMB, y + THUMB, tpen(T_BORDER2));
 }
+/* 0.9: a type layer's thumbnail (a T on white, as PhotoCraft shows it), or a shape layer's: its
+   rendering over the checkerboard, fitted as the picture is */
+static void live_thumb(struct LData *d, struct RastPort *rp, struct Screen *scr, Doc *doc, Layer *ly, LONG x, LONG y, int lit)
+{
+  double sc;
+  LONG tw, th, xx, yy;
+  Box b;
+  if (ly->kind == LK_TEXT) {
+    theme_fill(rp, x, y, x + THUMB - 1, y + THUMB - 1, tpen(T_WHITE));
+    theme_rect(rp, x - 1, y - 1, x + THUMB, y + THUMB, tpen(lit ? T_ACCENT : T_BORDER2));
+    theme_icon(rp, IC_T_TEXT, x + (THUMB - 20) / 2, y + (THUMB - 20) / 2, 20, 0);
+    return;
+  }
+  if (!d->buf && !(d->buf = (UBYTE *)AllocVec(THUMB * THUMB * 3, MEMF_ANY))) return;
+  if (!ly->live_ok) live_render(doc, ly);
+  b = ly->livebox;
+  sc = (double)(doc->w > doc->h ? doc->w : doc->h) / THUMB;
+  tw = (LONG)(doc->w / sc); th = (LONG)(doc->h / sc);
+  if (tw < 1) tw = 1;
+  if (th < 1) th = 1;
+  for (yy = 0; yy < th; yy++) for (xx = 0; xx < tw; xx++) {
+    LONG ix = (LONG)((xx + 0.5) * sc), iy = (LONG)((yy + 0.5) * sc);
+    UBYTE *o = d->buf + (yy * tw + xx) * 3;
+    int c = (((xx >> 2) + (yy >> 2)) & 1) ? 0xCC : 0xFF, a = 0;
+    const u8 *p = NULL;
+    if (ly->live_ok && ly->livepx && ix >= b.x0 && iy >= b.y0 && ix < b.x1 && iy < b.y1) { p = ly->livepx + ((long)(iy - b.y0) * (b.x1 - b.x0) + (ix - b.x0)) * 4; a = p[3]; }
+    if (!p) { o[0] = o[1] = o[2] = (UBYTE)c; continue; }
+    o[0] = (UBYTE)((p[0] * a + c * (255 - a)) / 255); o[1] = (UBYTE)((p[1] * a + c * (255 - a)) / 255); o[2] = (UBYTE)((p[2] * a + c * (255 - a)) / 255);
+  }
+  x += (THUMB - tw) / 2; y += (THUMB - th) / 2;
+  draw_rgb(rp, scr, d->buf, tw * 3, x, y, tw, th);
+  theme_rect(rp, x - 1, y - 1, x + tw, y + th, tpen(lit ? T_ACCENT : T_BORDER2));
+}
 static void lay_draw(struct LData *d, Object *obj)
 {
   struct RastPort *rp = _rp(obj);
@@ -471,6 +505,7 @@ static void lay_draw(struct LData *d, Object *obj)
     if (ly->kind == LK_GROUP) theme_icon(rp, IC_FOLDER, tx + (THUMB - 20) / 2, ty + (THUMB - 20) / 2, 20, 0);
     else if (ly->kind == LK_ADJUST) theme_icon(rp, IC_ADJLAYER, tx + (THUMB - 20) / 2, ty + (THUMB - 20) / 2, 20, 0);
     else if (ly->kind == LK_FILL) fill_thumb(d, rp, scr, ly, tx, ty);
+    else if (ly->kind == LK_TEXT || ly->kind == LK_SHAPE) live_thumb(d, rp, scr, doc, ly, tx, ty, li == doc->active && ly->mask && !ly->edit_mask);
     else if (ly->px) thumb_draw(d, rp, scr, doc, ly->px, NULL, tx, ty, li == doc->active && ly->mask && !ly->edit_mask);
     if (ly->mask) {
       thumb_draw(d, rp, scr, doc, NULL, ly->mask, mask_x(obj, ly), ty, li == doc->active && ly->edit_mask);
@@ -605,6 +640,8 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     if (doc->lay[li]->kind == LK_GROUP) return (ULONG)theme_bubble(tr("Group"), tr("Click the triangle to open or close the group. Drag layers onto it to put them in; double-click for its settings."));
     if (doc->lay[li]->kind == LK_ADJUST) return (ULONG)theme_bubble(tr("Adjustment Layer"), tr("Adjusts what is below it. Double-click to change its settings."));
     if (doc->lay[li]->kind == LK_FILL) return (ULONG)theme_bubble(tr("Fill Layer"), tr("A colour or gradient filling the canvas. Double-click to change it."));
+    if (doc->lay[li]->kind == LK_TEXT) return (ULONG)theme_bubble(tr("Type Layer"), tr("Text you can edit: double-click its thumbnail to edit the text, elsewhere for the layer's settings. Layer > Type has more."));
+    if (doc->lay[li]->kind == LK_SHAPE) return (ULONG)theme_bubble(tr("Shape Layer"), tr("A shape that stays sharp: double-click its thumbnail to change its fill, stroke and size (Layer > Shape Properties)."));
     return (ULONG)theme_bubble(tr("Layer"), tr("Click to work on this layer (Shift-click for several in a row, Ctrl-click to add one), drag it to change the order (onto a group to put it in), or double-click for its settings."));
   }
   case MUIM_DeleteShortHelp: return 0;
@@ -764,7 +801,9 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
       if (mx >= tx && mx < tx + THUMB && ly->edit_mask) ly->edit_mask = 0;
       if (li == d->lastrow && !shift && !ctrl && DoubleClick(d->secs, d->micros, im->Seconds, im->Micros)) {
         d->lastrow = -1;
-        DoMethod(_app(obj), MUIM_Application_ReturnID, ID_LAYERPROPS);
+        /* 0.9: a type layer's thumbnail edits its text, a shape layer's opens its properties */
+        DoMethod(_app(obj), MUIM_Application_ReturnID, ly->kind == LK_TEXT && mx >= tx && mx < tx + THUMB ? ID_EDITTYPE :
+                 ly->kind == LK_SHAPE && mx >= tx && mx < tx + THUMB ? ID_SHAPEPROPS : ID_LAYERPROPS);
         return MUI_EventHandlerRC_Eat;
       }
       d->lastrow = li; d->secs = im->Seconds; d->micros = im->Micros;
@@ -932,6 +971,35 @@ struct MUI_CustomClass *history_class(void)
 
 /* ================================================================== a panel's title strip */
 struct PHData { struct MUI_EventHandlerNode ehn; int shown, active, n; const char *const *labels; };
+/* 0.9: tab i's label: "Long|Short" gives the short one when the long ones don't all fit (into buf) */
+static const char *head_label(struct PHData *d, int i, int brief, char *buf)
+{
+  const char *l = tr(d->labels[i]), *bar = strchr(l, '|');
+  size_t n;
+  if (!bar) return l;
+  if (brief) return bar + 1;
+  n = (size_t)(bar - l) < 39 ? (size_t)(bar - l) : 39;
+  memcpy(buf, l, n); buf[n] = 0;
+  return buf;
+}
+/* the tabs' widths: the long labels with room round them if they fit, else the short ones, closer
+   together if need be (w[i] each tab's width; *brief set when the short labels are used) */
+static void head_widths(struct PHData *d, Object *obj, LONG *w, int *brief)
+{
+  struct RastPort *rp = _rp(obj);
+  char buf[40];
+  LONG tot, pad;
+  int i, b;
+  for (b = 0; b < 2; b++) {
+    for (tot = 0, i = 0; i < d->n; i++) tot += theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), head_label(d, i, b, buf));
+    if (tot + 20 * d->n <= _mwidth(obj) || b == 1) break;
+  }
+  pad = (_mwidth(obj) - tot) / (d->n ? d->n : 1);
+  if (pad > 20) pad = 20;
+  if (pad < 6) pad = 6;
+  for (i = 0; i < d->n; i++) w[i] = theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), head_label(d, i, b, buf)) + pad;
+  *brief = b;
+}
 static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct PHData *d;
@@ -970,11 +1038,19 @@ static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     if (!(((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE))) return 0;
     theme_fill(rp, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj), tpen(T_TABSTRIP));
     x = _mleft(obj);
-    for (i = 0; i < d->n; i++) {
-      LONG w = theme_textlen(rp, i == d->active ? theme_bold() : theme_font(), d->labels[i]) + 20;
-      if (i == d->active) theme_fill(rp, x, _mtop(obj) + 1, x + w - 1, _mbottom(obj), tpen(T_PANEL));
-      theme_text(rp, i == d->active ? theme_bold() : theme_font(), x + 10, _mtop(obj) + 4, d->labels[i], tpen(i == d->active ? T_TEXT : T_DIM));
-      x += w;
+    {
+      LONG ws[8];
+      int brief;
+      char buf[40];
+      head_widths(d, obj, ws, &brief);
+      for (i = 0; i < d->n && i < 8; i++) {
+        LONG w = ws[i];
+        if (i == d->active) theme_fill(rp, x, _mtop(obj) + 1, x + w - 1, _mbottom(obj), tpen(T_PANEL));
+        const char *lab = head_label(d, i, brief, buf);
+        struct TextFont *tf = i == d->active ? theme_bold() : theme_font();
+        theme_text(rp, tf, x + (w - theme_textlen(rp, tf, lab)) / 2, _mtop(obj) + 4, lab, tpen(i == d->active ? T_TEXT : T_DIM));
+        x += w;
+      }
     }
     SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj), _mtop(obj)); Draw(rp, _mright(obj), _mtop(obj));
     return 0;
@@ -986,10 +1062,15 @@ static ULONG headdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     d = INST_DATA(cl, obj);
     if (!im || !d->shown || im->Code != SELECTDOWN || im->MouseY < _mtop(obj) || im->MouseY > _mbottom(obj)) return 0;
     x = _mleft(obj);
-    for (i = 0; i < d->n; i++) {
-      LONG w = theme_textlen(_rp(obj), i == d->active ? theme_bold() : theme_font(), d->labels[i]) + 20;
-      if (im->MouseX >= x && im->MouseX < x + w) { if (i != d->active) SetAttrs(obj, MUIA_Head_Active, i, TAG_DONE); return MUI_EventHandlerRC_Eat; }
-      x += w;
+    {
+      LONG ws[8];
+      int brief;
+      head_widths(d, obj, ws, &brief);
+      for (i = 0; i < d->n && i < 8; i++) {
+        LONG w = ws[i];
+        if (im->MouseX >= x && im->MouseX < x + w) { if (i != d->active) SetAttrs(obj, MUIA_Head_Active, i, TAG_DONE); return MUI_EventHandlerRC_Eat; }
+        x += w;
+      }
     }
     return 0;
   }

@@ -1057,6 +1057,21 @@ static const char *const icons[IC_N] = {
   /* T_PATCH: patch: a dashed area and the patch stitched over it */ "cd L 1 1 3 1 L 5 1 7 1 L 1 1 1 3 L 1 5 1 7 ca F 5 5 14 14 ci R 4 4 15 15 cw L 6 7 7 7 L 9 7 10 7 L 12 7 13 7 L 6 12 7 12 L 9 12 10 12 L 12 12 13 12",
   /* T_REDEYE: red eye: an eye with a red pupil */ "ci P 9 1 8 4 4 8 3 12 4 15 8 12 12 8 13 4 12 1 8 cr E 8 8 2 cw F 9 7 9 7",
   /* CAMERA: a history snapshot: a camera */ "ci R 1 4 14 13 F 5 2 10 4 O 8 8 3 ca E 8 8 1 ci F 12 6 13 6",
+  /* T_TYPEMASK: type mask: a dashed T */ "ci L 2 2 3 2 L 6 2 9 2 L 12 2 13 2 L 2 2 2 4 L 13 2 13 4 L 7 4 7 6 L 8 4 8 6 L 7 9 7 11 L 8 9 8 11 L 5 14 10 14",
+  /* T_VTEXT: vertical type: a T and an arrow down */ "ci F 1 2 9 3 F 5 2 6 13 L 3 13 8 13 ca L 13 2 13 14 L 11 12 13 14 L 15 12 13 14",
+  /* T_PEN: pen: a nib */ "ci P 6 8 1 13 7 11 12 5 12 3 7 8 1 L 8 1 8 8 E 8 9 1 F 5 13 11 15",
+  /* T_ADDANCHOR: add anchor point: a small nib and a plus */ "ci P 6 6 1 10 5 9 9 3 9 2 5 6 1 L 6 1 6 6 F 3 10 9 11 ca L 12 9 12 15 L 9 12 15 12",
+  /* T_DELANCHOR: delete anchor point: a small nib and a minus */ "ci P 6 6 1 10 5 9 9 3 9 2 5 6 1 L 6 1 6 6 F 3 10 9 11 ca L 9 12 15 12 L 9 13 15 13",
+  /* T_CONVERT: convert point: a corner and its handles */ "ci L 1 14 8 4 L 8 4 15 14 F 7 3 9 5 ca L 2 4 14 4 E 2 4 1 E 14 4 1",
+  /* T_PATHSEL: path selection: a solid arrow */ "ci P 8 3 1 3 13 6 10 9 15 11 14 8 9 12 9 3 1 F 4 4 5 11 F 5 6 6 10 F 6 7 7 10 F 7 8 9 8",
+  /* T_DIRECTSEL: direct selection: a hollow arrow */ "ci P 8 3 1 3 13 6 10 9 15 11 14 8 9 12 9 3 1 cw F 4 5 4 10 F 5 7 6 9 F 6 8 8 8",
+  /* T_ROUNDRECT: rounded rectangle */ "ci L 4 3 12 3 L 4 13 12 13 L 2 5 2 11 L 14 5 14 11 L 2 5 4 3 L 12 3 14 5 L 14 11 12 13 L 4 13 2 11 cl F 3 5 13 11 F 4 4 12 12",
+  /* T_POLYGON: polygon: a hexagon */ "ci P 7 8 1 14 5 14 11 8 15 2 11 2 5 8 1 cl F 3 6 13 10 F 5 4 11 12 F 7 3 9 13",
+  /* T_CUSTOMSHAPE: custom shape: a heart */ "ci P 11 8 4 10 2 13 2 15 5 14 9 8 14 2 9 1 5 3 2 6 2 8 4 cl F 3 4 6 8 F 10 4 13 8 F 4 8 12 9 F 6 10 10 11 F 7 12 9 12",
+  /* PATHFILL: fill path: a disc in the foreground colour */ "ci O 8 8 6 ca E 8 8 5",
+  /* PATHSTROKE: stroke path: a thick ring */ "ci O 8 8 6 O 8 8 5 O 8 8 4",
+  /* PATHFROMSEL: work path from the selection: a dashed box becoming a path */ "cd L 1 1 3 1 L 6 1 8 1 L 1 1 1 3 L 1 6 1 8 ci L 5 13 13 5 L 4 14 5 13 ca F 3 12 5 14 F 12 3 14 5",
+  /* WARP: warp text: a T over an arched line */ "ci F 3 2 12 3 F 7 2 8 10 ca P 5 1 14 4 12 8 11 12 12 15 14",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

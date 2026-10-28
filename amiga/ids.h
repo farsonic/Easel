@@ -49,6 +49,9 @@ enum {
   ID_PASTEINTO, ID_SELFROMMASK,
   /* 0.7: Layer > Matting */
   ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE,
+  /* 0.9: Layer > Type and Rasterize, shape properties; the Type tool's Character and Paragraph windows */
+  ID_TYPEWORKPATH, ID_RASTERTYPE, ID_RASTERSHAPE, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_SHAPEPROPS, ID_EDITTYPE,
+  ID_TYPECHAR, ID_TYPEPARA, ID_RASTERTYPE2,
   /* New Adjustment Layer: ID_NEWADJ0 + AK_ */
   ID_NEWADJ0 = 470,
   /* Select */
@@ -87,6 +90,9 @@ enum {
   ID_PANELTAB,
   /* 0.8: the Color Sampler's Clear; the History panel's snapshots */
   ID_SAMPCLEAR, ID_HISTSNAP, ID_HISTNEWDOC, ID_HISTSNAPDEL, ID_HISTSNAPGO,
+  /* 0.9: the Paths panel's commands; an options bar setting changed; its colour swatches */
+  ID_PATHFILL, ID_PATHSTROKE, ID_PATHMKSEL, ID_PATHFROMSEL, ID_PATHNEW, ID_PATHDEL, ID_PATHRENAME, ID_PATHSCHG, ID_PATHDUP,
+  ID_OPTCHG, ID_TEXTCOLOR, ID_STROKECOLOR,
   /* dialogs */
   ID_DLGOK = 1000, ID_DLGCANCEL, ID_DLGCHANGE, ID_DLGRESET, ID_DLGAUTO,
   ID_DLGBTN0 = 1010                   /* 1.0: .. ID_DLGBTN0 + 7: a dialog's own buttons */
