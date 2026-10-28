@@ -1048,6 +1048,8 @@ static const char *const icons[IC_N] = {
   /* T_REPLACE: colour replacement: a brush between two colours */ "ci L 3 14 10 7 L 4 14 11 7 F 2 13 4 15 R 10 1 14 5 ca F 11 2 13 4 F 1 1 5 5",
   /* T_BGERASE: background eraser: an eraser and a dotted edge */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 10 1 10 2 L 12 2 12 3 L 14 4 14 5",
   /* T_MAGICERASE: magic eraser: an eraser and a sparkle */ "ci P 1 10 7 4 12 9 6 15 1 10 L 4 7 9 12 ca L 13 0 13 6 L 10 3 16 3 L 11 1 15 5 L 15 1 11 5",
+  /* T_MAGLASSO: magnetic lasso: a loop with its tail and a magnet */ "ci P 8 7 1 11 2 13 5 11 8 7 9 3 8 1 5 3 2 7 1 P 3 4 8 3 11 5 13 cr F 9 10 10 14 F 13 10 14 14 F 9 14 14 15 cw F 9 10 10 11 F 13 10 14 11",
+  /* T_RULER: ruler: a slanted rule with its marks */ "ci P 5 1 11 11 1 15 5 5 15 1 11 L 3 9 5 11 L 5 7 6 8 L 7 5 9 7 L 9 3 10 4",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

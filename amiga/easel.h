@@ -51,9 +51,11 @@ enum {
   TL_CLONE, TL_BRUSH, TL_PENCIL, TL_ERASER, TL_BUCKET, TL_GRADIENT, TL_BLUR, TL_SHARPEN, TL_SMUDGE,
   TL_DODGE, TL_BURN, TL_SPONGE, TL_TEXT, TL_RECT, TL_ELLIPSE, TL_LINE, TL_HAND, TL_ZOOM,
   /* 0.5 */
-  TL_PATTERN, TL_HISTORY, TL_REPLACE, TL_BGERASE, TL_MAGICERASE, TL_N
+  TL_PATTERN, TL_HISTORY, TL_REPLACE, TL_BGERASE, TL_MAGICERASE,
+  /* 0.7 */
+  TL_MAGLASSO, TL_RULER, TL_N
 };
-/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's after the rest */
+/* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's) after the rest */
 #define TOOL_ICON(t) ((t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 typedef struct {
   /* brush-like tools (brush, pencil, eraser, clone, blur ... sponge): each its own */
@@ -76,7 +78,15 @@ typedef struct {
   int replace_mode, limits, sampling; /* colour replacement and background eraser: RPL_, LIM_, SMP_ */
   int protect_fg;                     /* background eraser */
   int grad_preset;                    /* gradient: the preset (grad_names), the last one "Custom" (cur_grad) */
+  /* 0.7 */
+  int sel_antialias;                  /* lassos, elliptical marquee, wand: Anti-alias */
+  int mq_style, mq_w, mq_h;           /* marquee: MQS_, and the ratio or size */
+  int ml_width, ml_contrast, ml_freq; /* magnetic lasso: pixels, per cent, 0-100 */
+  int crop_preset, crop_swap;         /* crop: crop_presets[], width and height swapped */
+  int ruler_image;                    /* ruler: Straighten turns the whole picture (and crops) */
 } Opts;
+/* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
+enum { MQS_NORMAL, MQS_RATIO, MQS_SIZE, MQS_ROW, MQS_COL };
 /* 0.5: the gradient and pattern the tools use (main.c) */
 #define MAXNAMES 64
 extern Gradient cur_grad;             /* the edited ("Custom") gradient */
@@ -116,6 +126,9 @@ struct MUIP_Canvas_Zoom { ULONG MethodID; LONG permille; LONG how; };  /* how: 0
 #define MUIM_Canvas_StrokeTick (QTAG + 0x107) /* (timer, 0.5) airbrush build-up and smoothing while the button is held */
 #define MUIM_Canvas_ScrollTo (QTAG + 0x108) /* (0.6) struct MUIP_Canvas_ScrollTo: the view centred on an image point */
 struct MUIP_Canvas_ScrollTo { ULONG MethodID; LONG x, y; };
+#define MUIM_Canvas_Transform (QTAG + 0x109) /* (0.7) struct MUIP_Canvas_Transform: Free Transform's handles put up */
+struct MUIP_Canvas_Transform { ULONG MethodID; LONG mode; LONG selection; };   /* mode: XM_; selection: Transform Selection */
+enum { XM_FREE, XM_SCALE, XM_ROTATE, XM_SKEW, XM_DISTORT, XM_PERSPECTIVE };
 /* 0.6: where the pointer is over the picture, and the colour there (for the Info panel) */
 typedef struct { LONG x, y; int in, has_rgb; int rgba[4]; } CanvasPoint;
 extern CanvasPoint canvas_pt;
@@ -132,6 +145,19 @@ void canvas_class_free(void);
 /* the pointer's place in the image and the colour there, for the status bar ("" when outside) */
 extern char canvas_info[96];
 extern int crop_pending;               /* a crop box is up (Return applies it) */
+/* 0.7: Free Transform's handles are up (the options bar shows its numbers and Commit/Cancel) */
+extern int xform_pending;
+extern char xform_info[80];            /* W%, H% and the angle, for the options bar */
+/* the Ruler's line (image pixels) while there is one, and what it measures for the options bar */
+extern int ruler_on;
+extern double ruler_xy[4];
+extern char ruler_info[96];
+/* the Channels panel (panels2.c): a row for each alpha channel, the buttons along the bottom.
+   What it asks for comes to main.c as ID_CHANLOAD (chan_pick, chan_op), ID_CHANRENAME, ID_SAVESEL,
+   ID_LOADSEL and ID_CHANDEL */
+#define MUIM_Channels_Refresh (QTAG + 0x342)
+struct MUI_CustomClass *channels_class(void);
+extern int chan_pick, chan_op;
 
 /* ------------------------------------------------------------------ toolbox, options bar (toolbox.c) */
 #define MUIM_Tools_Refresh  (QTAG + 0x200) /* the tool or the colours changed */
@@ -226,6 +252,9 @@ ULONG adj_menu_id(int kind);         /* the Image > Adjustments item for an AK_ 
 void dlg_fill(void);
 void dlg_stroke(void);
 void dlg_select(ULONG id);           /* Select > Modify ..., Color Range */
+void dlg_color_range(void);          /* (0.7) Select > Color Range */
+void dlg_save_selection(void);       /* (0.7) Select > Save Selection */
+void dlg_load_selection(void);       /* (0.7) Select > Load Selection */
 void dlg_export(int fmt);            /* JPEG quality, ILBM colours... then saved */
 int  dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg);   /* (main.c's New) */
 

@@ -2,7 +2,7 @@
  * dialogs.c - Easel's dialogs: New, Image Size, Canvas Size, Rotate, the adjustments and filters
  * (each shown on the picture as its sliders move, and taken back on Cancel), Levels with its
  * histogram, the Curves editor, Layer Properties, Fill, Stroke, the selection's Modify items and
- * the JPEG quality asked for on export.
+ * the JPEG quality asked for on export; (0.7) Color Range with its preview, Save and Load Selection.
  */
 #include <string.h>
 #include <stdio.h>
@@ -22,6 +22,9 @@
 #include "lang.h"
 #include "ids.h"
 #include "../core/codec.h"
+#include "../core/selx.h"
+#include "../core/channels.h"
+#include "../core/util.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -1043,6 +1046,175 @@ void dlg_select(ULONG id)
   }
   set(app, MUIA_Application_Sleep, FALSE);
 }
+/* ------------------------------------------------------------------ 0.7: Color Range, Save and Load Selection */
+/* the Color Range preview: the mask it would make, small and grey (mv_rgb, mv_w x mv_h) */
+static UBYTE *mv_rgb;
+static LONG mv_w, mv_h;
+static struct MUI_CustomClass *mvcls;
+static ULONG mvdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
+{
+  switch (msg->MethodID) {
+  case MUIM_AskMinMax: {
+    struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
+    DoSuperMethodA(cl, obj, msg);
+    m->MinMaxInfo->MinWidth += mv_w; m->MinMaxInfo->DefWidth += mv_w; m->MinMaxInfo->MaxWidth += mv_w;
+    m->MinMaxInfo->MinHeight += mv_h; m->MinMaxInfo->DefHeight += mv_h; m->MinMaxInfo->MaxHeight += mv_h;
+    return 0; }
+  case MUIM_Draw:
+    DoSuperMethodA(cl, obj, msg);
+    if ((((struct MUIP_Draw *)msg)->flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)) && mv_rgb)
+      draw_rgb(_rp(obj), _screen(obj), mv_rgb, mv_w * 3, _mleft(obj), _mtop(obj), mv_w, mv_h);
+    return 0;
+  }
+  return DoSuperMethodA(cl, obj, msg);
+}
+/* the preview made again from Color Range's settings */
+static void mv_make(Doc *d, const ColorRange *cr)
+{
+  u8 *m = color_range_mask(d, cr);
+  LONG x, y;
+  if (!m || !mv_rgb) { free(m); return; }
+  for (y = 0; y < mv_h; y++)
+    for (x = 0; x < mv_w; x++) {
+      UBYTE v = m[(long)(y * d->h / mv_h) * d->w + (long)(x * d->w / mv_w)];
+      mv_rgb[(y * mv_w + x) * 3] = mv_rgb[(y * mv_w + x) * 3 + 1] = mv_rgb[(y * mv_w + x) * 3 + 2] = v;
+    }
+  free(m);
+}
+static Object *cr_sel, *cr_fuzz, *cr_range, *cr_inv, *cr_view;
+static ColorRange cr_set;
+static int cr_dirty;
+/* the dialog's settings read into cr_set */
+static void cr_read(void)
+{
+  cr_set.preset = (int)xget(cr_sel, MUIA_Cycle_Active);
+  cr_set.fuzziness = (int)xget(cr_fuzz, MUIA_Numeric_Value);
+  cr_set.range = (int)xget(cr_range, MUIA_Numeric_Value);
+  cr_set.invert = (int)xget(cr_inv, MUIA_Selected);
+}
+/* (run_modal's) a change marks the preview out of date; when idle it is made again */
+static void cr_each(ULONG id)
+{
+  if (id == ID_DLGCHANGE) { cr_dirty = 1; return; }
+  if (id || !cr_dirty) return;
+  cr_dirty = 0;
+  cr_read();
+  mv_make(cur_doc(), &cr_set);
+  if (cr_view) MUI_Redraw(cr_view, MADF_DRAWOBJECT);
+}
+/* Select > Color Range: the colours like the sampled one (the foreground colour) or a range of
+   colours or tones, with fuzziness, made the selection; a preview shows what would be selected */
+void dlg_color_range(void)
+{
+  Doc *d = cur_doc();
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  static const char *names[CR_N + 1];
+  static int last_preset, last_fuzz = 40, last_range = 50, last_inv;
+  char note[120];
+  Object *w;
+  int i, ok;
+  if (!d) return;
+  for (i = 0; i < CR_N; i++) names[i] = color_range_names[i];
+  names[CR_N] = NULL;
+  /* the preview fitted into 160 x 120 */
+  if ((long)d->w * 120 > (long)d->h * 160) { mv_w = 160; mv_h = (LONG)((long)d->h * 160 / d->w); }
+  else { mv_h = 120; mv_w = (LONG)((long)d->w * 120 / d->h); }
+  if (mv_w < 1) mv_w = 1;
+  if (mv_h < 1) mv_h = 1;
+  mv_rgb = (UBYTE *)calloc((size_t)mv_w * mv_h, 3);
+  if (!mvcls) mvcls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, 4, (APTR)mvdispatch);
+  memset(&cr_set, 0, sizeof cr_set);
+  cr_set.colors[0] = d->fg; cr_set.ncolors = 1; cr_set.all_layers = 1;
+  sprintf(note, tr("Sampled Colors: from the foreground colour, #%06lX\n(pick it with the Eyedropper first)"), (unsigned long)(d->fg & 0xFFFFFF));
+  cr_view = mvcls && mv_rgb ? NewObject(mvcls->mcc_Class, NULL, TextFrame, MUIA_FillArea, FALSE, TAG_DONE) : NULL;
+  w = dialog_window("Color Range", VGroup,
+        Child, ColGroup(2),
+          Child, QLabel(tr("Select:"), MUIO_Label_Centered), Child, cr_sel = cycle(names, last_preset),
+          Child, QLabel(tr("Fuzziness:"), MUIO_Label_Centered), Child, cr_fuzz = slider(0, 200, last_fuzz),
+          Child, QLabel(tr("Range (%):"), MUIO_Label_Centered), Child, cr_range = slider(1, 100, last_range),
+          Child, QLabel(tr("Invert"), MUIO_Label_Centered), Child, HGroup, Child, cr_inv = check(last_inv), Child, HSpace(0), End,
+        End,
+        Child, TextObject, MUIA_Text_Contents, (ULONG)note, End,
+        Child, HGroup, Child, HSpace(0), Child, cr_view ? cr_view : HSpace(0), Child, HSpace(0), End,
+      End, NULL);
+  if (!w) { free(mv_rgb); mv_rgb = NULL; return; }
+  notify_change(cr_sel, MUIA_Cycle_Active); notify_change(cr_fuzz, MUIA_Numeric_Value); notify_change(cr_range, MUIA_Numeric_Value); notify_change(cr_inv, MUIA_Selected);
+  cr_dirty = 1;
+  ok = run_modal(w, ends, cr_each) == ID_DLGOK;
+  cr_read();
+  last_preset = cr_set.preset; last_fuzz = cr_set.fuzziness; last_range = cr_set.range; last_inv = cr_set.invert;
+  MUI_DisposeObject(w);
+  cr_view = NULL;
+  free(mv_rgb); mv_rgb = NULL;
+  if (!ok) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  sel_color_range_ex(d, &cr_set, SEL_REPLACE);
+  set(app, MUIA_Application_Sleep, FALSE);
+}
+/* the channels' names in Latin-1 for a cycle gadget, after first (when not NULL); NULL ended */
+static const char **chan_labels(Doc *d, const char *first, char names[][40])
+{
+  static const char *labels[MAXCHANNELS + 2];
+  int i, n = 0;
+  if (first) labels[n++] = first;
+  for (i = 0; i < d->nchan; i++) { utf8_to_latin1(d->chan_name[i], strlen(d->chan_name[i]), names[i], 40); labels[n++] = names[i]; }
+  labels[n] = NULL;
+  return labels;
+}
+/* Select > Save Selection: as a new channel (named), or into one there combined by an operation */
+void dlg_save_selection(void)
+{
+  Doc *d = cur_doc();
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  static const char *const ops[] = { "Replace Channel", "Add to Channel", "Subtract from Channel", "Intersect with Channel", NULL };
+  static char names[MAXCHANNELS][40];
+  char name[40], u[64];
+  Object *w, *ch, *nm, *op;
+  int ok, into, how, r;
+  if (!d) return;
+  sprintf(name, "Alpha %d", d->nchan + 1);
+  w = dialog_window("Save Selection", ColGroup(2),
+        Child, QLabel(tr("Channel:"), MUIO_Label_Centered), Child, ch = cycle(chan_labels(d, tr("New"), names), 0),
+        Child, QLabel(tr("Name:"), MUIO_Label_SingleFrame), Child, nm = StringObject, StringFrame, MUIA_String_Contents, (ULONG)name, MUIA_String_MaxLen, 31, MUIA_CycleChain, 1, End,
+        Child, QLabel(tr("Operation:"), MUIO_Label_Centered), Child, op = cycle(ops, 0),
+        Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("The name is for a new channel; the operation for one already there.\nWith nothing selected, everything is saved."), End,
+      End, NULL);
+  if (!w) return;
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  into = (int)xget(ch, MUIA_Cycle_Active) - 1; how = (int)xget(op, MUIA_Cycle_Active);
+  latin1_utf8((const char *)xget(nm, MUIA_String_Contents), u, sizeof u);
+  u[31] = 0;
+  MUI_DisposeObject(w);
+  if (!ok) return;
+  r = into < 0 ? chan_save_selection(d, -1, SEL_REPLACE, u) : chan_save_selection(d, into, how, NULL);
+  if (r < 0) ask("OK", "%s", into < 0 && d->nchan >= MAXCHANNELS ? tr("A picture can keep 24 channels: delete one first.") : tr("There isn't enough memory for that."));
+  else chan_pick = r;
+}
+/* Select > Load Selection: a channel (inverted or not) made the selection by an operation */
+void dlg_load_selection(void)
+{
+  Doc *d = cur_doc();
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  static const char *const ops[] = { "New Selection", "Add to Selection", "Subtract from Selection", "Intersect with Selection", NULL };
+  static char names[MAXCHANNELS][40];
+  Object *w, *ch, *inv, *op;
+  int ok, which, how, invert;
+  if (!d) return;
+  if (!d->nchan) { ask("OK", "%s", tr("There are no saved selections: Select > Save Selection keeps one as a channel.")); return; }
+  w = dialog_window("Load Selection", ColGroup(2),
+        Child, QLabel(tr("Channel:"), MUIO_Label_Centered), Child, ch = cycle(chan_labels(d, NULL, names), chan_pick >= 0 && chan_pick < d->nchan ? chan_pick : 0),
+        Child, QLabel(tr("Invert"), MUIO_Label_Centered), Child, HGroup, Child, inv = check(0), Child, HSpace(0), End,
+        Child, QLabel(tr("Operation:"), MUIO_Label_Centered), Child, op = cycle(ops, d->sel ? 0 : 0),
+      End, "Load");
+  if (!w) return;
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  which = (int)xget(ch, MUIA_Cycle_Active); how = (int)xget(op, MUIA_Cycle_Active); invert = (int)xget(inv, MUIA_Selected);
+  MUI_DisposeObject(w);
+  if (!ok) return;
+  chan_load_selection(d, which, how, invert);
+  chan_pick = which;
+}
+
 extern int export_quality;
 void dlg_export(int fmt)
 {

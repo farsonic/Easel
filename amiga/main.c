@@ -51,6 +51,11 @@
 #include "dtload.h"
 #include "appdrop.h"
 #include "../core/iconwrite.h"
+#include "../core/channels.h"
+#include "../core/xform.h"
+#include "../core/crop.h"
+#include "../core/matte.h"
+#include "../core/util.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -80,6 +85,7 @@ Opts opt;
 int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
 static Object *navpanel, *infopanel;     /* (0.6) the Navigator and Info panels */
+static Object *chanpanel;                /* (0.7) the Channels panel */
 static Object *rightcol;                 /* the panels' column (Tab hides it) */
 static Doc *toggled;                     /* Toggle Last State: the picture just stepped back */
 static int fonts_assigned;
@@ -91,10 +97,11 @@ const char *const tool_names[TL_N] = {
   "Crop Tool", "Eyedropper Tool", "Clone Stamp Tool", "Brush Tool", "Pencil Tool", "Eraser Tool", "Paint Bucket Tool",
   "Gradient Tool", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool", "Text Tool",
   "Rectangle Tool", "Ellipse Tool", "Line Tool", "Hand Tool", "Zoom Tool",
-  "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool"
+  "Pattern Stamp Tool", "History Brush Tool", "Color Replacement Tool", "Background Eraser Tool", "Magic Eraser Tool",
+  "Magnetic Lasso Tool", "Ruler Tool"
 };
 const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
-  'S', 'Y', 'B', 'E', 'E' };
+  'S', 'Y', 'B', 'E', 'E', 'L', 'I' };
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -124,8 +131,9 @@ static struct NewMenu menus[] = {
   I("Paste Into", 0, ID_PASTEINTO), I("Paste from Amiga Clipboard", 0, ID_PASTEAMIGA), I("Clear", 0, ID_CLEAR), BAR,
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
   I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN), BAR,
-  I("Free Transform...", "T", ID_FREETRANSFORM),
-  H("Transform"), S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
+  I("Free Transform", "T", ID_FREETRANSFORM), I("Numeric Transform...", 0, ID_NUMTRANSFORM),
+  H("Transform"), S("Again", 0, ID_XF_AGAIN), SBAR, S("Scale", 0, ID_XF_SCALE), S("Rotate", 0, ID_XF_ROTATE), S("Skew", 0, ID_XF_SKEW),
+  S("Distort", 0, ID_XF_DISTORT), S("Perspective", 0, ID_XF_PERSPECTIVE), SBAR, S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE), BAR,
   I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF),
@@ -158,7 +166,8 @@ static struct NewMenu menus[] = {
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
   I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
-  I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP), I("Rasterize Layer", 0, ID_RASTERIZE), BAR,
+  I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP), I("Rasterize Layer", 0, ID_RASTERIZE),
+  H("Matting"), S("Defringe...", 0, ID_DEFRINGE), S("Remove Black Matte", 0, ID_BLACKMATTE), S("Remove White Matte", 0, ID_WHITEMATTE), BAR,
   H("Arrange"), S("Bring to Front", "}", ID_TOFRONT), S("Bring Forward", "]", ID_RAISE), S("Send Backward", "[", ID_LOWER), S("Send to Back", "{", ID_TOBACK),
   H("Align"), S("Left Edges", 0, ID_AL_LEFT), S("Horizontal Centers", 0, ID_AL_HCENTER), S("Right Edges", 0, ID_AL_RIGHT), SBAR,
   S("Top Edges", 0, ID_AL_TOP), S("Vertical Centers", 0, ID_AL_VCENTER), S("Bottom Edges", 0, ID_AL_BOTTOM), SBAR,
@@ -170,7 +179,9 @@ static struct NewMenu menus[] = {
   I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
   I("Color Range...", 0, ID_COLORRANGE), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
-  I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR),
+  I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR), BAR,
+  I("Transform Selection", 0, ID_XFSEL), T("Edit in Quick Mask Mode", 0, ID_QUICKMASK), BAR,
+  I("Load Selection...", 0, ID_LOADSEL), I("Save Selection...", 0, ID_SAVESEL),
   M("Filter"),
   I("Last Filter", "F", ID_F_AGAIN), BAR,
   H("Blur"), S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
@@ -410,6 +421,9 @@ static void opts_defaults(void)
   opt.size[TL_DODGE] = opt.size[TL_BURN] = opt.size[TL_SPONGE] = 50; opt.hardness[TL_DODGE] = opt.hardness[TL_BURN] = opt.hardness[TL_SPONGE] = 0;
   opt.tolerance = 32; opt.contiguous = 1; opt.antialias = 1; opt.fill_opacity = 100;
   opt.line_width = 3; opt.text_size = 48; opt.sample = 0;
+  /* 0.7 */
+  opt.sel_antialias = 1; opt.mq_w = 4; opt.mq_h = 3;
+  opt.ml_width = 10; opt.ml_contrast = 10; opt.ml_freq = 57;
 }
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
 static signed char key_tool[26];
@@ -459,13 +473,22 @@ static void update_menus(void)
     ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V, ID_RESELECT, ID_GROWSIM, ID_SIMILAR,
     ID_F_AGAIN, ID_MODE_RGB, ID_MODE_GRAY, ID_MODE_INDEXED, ID_MODE_BITMAP, ID_COLORTABLE, ID_SCREENMODE, ID_EXPGIF, ID_EXPILBMOPT,
     ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_DEFBRUSH, ID_PICKUPBRUSH, ID_DEFPATTERN,
-    ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, ID_FADE, ID_TOGGLELAST, 0 };
+    ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, ID_FADE, ID_TOGGLELAST,
+    ID_NUMTRANSFORM, ID_XF_SCALE, ID_XF_ROTATE, ID_XF_SKEW, ID_XF_DISTORT, ID_XF_PERSPECTIVE, ID_XF_AGAIN, ID_ROTATE180, ID_ROTATE90R,
+    ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK, 0 };
+  /* 0.7: what works on the selection, greyed out while it is being edited as a Quick Mask */
+  static const ULONG needsel[] = { ID_SELALL, ID_DESELECT, ID_RESELECT, ID_INVERSE, ID_COLORRANGE, ID_SELALPHA, ID_FEATHER, ID_EXPAND,
+    ID_CONTRACT, ID_BORDER, ID_SMOOTH, ID_GROWSIM, ID_SIMILAR, ID_SAVESEL, ID_LOADSEL, ID_XFSEL, 0 };
+  int qm = d && quickmask_active(d);
   static const ULONG needmask[] = { ID_MASK_DELETE, ID_MASK_APPLY, ID_MASK_ENABLE, ID_MASK_LINK, ID_MASK_INVERT, ID_MASK_EDIT, ID_SELFROMMASK, 0 };
   Layer *al = has ? d->lay[d->active] : NULL;
   int i;
   if (!win) return;
   for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, has);
   for (i = 0; needmask[i]; i++) menu_set(needmask[i], MUIA_Menuitem_Enabled, al && al->mask);
+  for (i = 0; needsel[i]; i++) menu_set(needsel[i], MUIA_Menuitem_Enabled, has && !qm);
+  menu_set(ID_SELFROMMASK, MUIA_Menuitem_Enabled, al && al->mask && !qm);
+  menu_set(ID_QUICKMASK, MUIA_Menuitem_Checked, qm);
   menu_set(ID_UNGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
   menu_set(ID_MERGEGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
   menu_set(ID_FILLSETTINGS, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_ADJUST));
@@ -505,6 +528,7 @@ void refresh_panels(void)
   DoMethod(historypanel, MUIM_History_Refresh);
   DoMethod(navpanel, MUIM_Navigator_Refresh, 1);
   DoMethod(infopanel, MUIM_Info_Refresh, 1);
+  DoMethod(chanpanel, MUIM_Channels_Refresh);
   DoMethod(colorpanel, MUIM_Color_Refresh);
   DoMethod(toolbox, MUIM_Tools_Refresh);
   DoMethod(doctabs, MUIM_DocTabs_Refresh);
@@ -1369,6 +1393,7 @@ static void command(ULONG id)
   case ID_SWAPCOLORS: if (d) { u32 t = d->fg; d->fg = d->bg; d->bg = t; refresh_panels(); } return;
   case ID_DEFCOLORS: if (d) { d->fg = 0; d->bg = 0xFFFFFF; refresh_panels(); } return;
   case ID_COMMIT: DoMethod(canvas, MUIM_Canvas_Commit); return;
+  case ID_CROPSWAP: opt.crop_swap = !opt.crop_swap; DoMethod(optbar, MUIM_Opts_Refresh); return;
   case ID_CANCEL: DoMethod(canvas, MUIM_Canvas_Cancel); return;
   case ID_ZOOMIN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 1); refresh_panels(); return;
   case ID_ZOOMOUT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, -1); refresh_panels(); return;
@@ -1477,21 +1502,64 @@ static void command(ULONG id)
   case ID_FILLFG: fill_selection(d, d->fg, 100, BM_NORMAL); break;
   case ID_FILLBG: fill_selection(d, d->bg, 100, BM_NORMAL); break;
   case ID_STROKE: dlg_stroke(); break;
-  case ID_FREETRANSFORM: transform_dialog(); break;
-  case ID_ROTATE180: { double m[6] = { -1, 0, d->w - 1, 0, -1, d->h - 1 }; Box b; if (sel_bounds(d, &b)) { m[2] = b.x0 + b.x1 - 1; m[5] = b.y0 + b.y1 - 1; } transform_layer(d, m); break; }
-  case ID_ROTATE90R: case ID_ROTATE90L: {
-    Box b;
-    double cx, cy, m[6];
-    if (!sel_bounds(d, &b)) b = doc_box(d);
-    cx = (b.x0 + b.x1) / 2.0; cy = (b.y0 + b.y1) / 2.0;
-    /* old = R^-1 (new - c) + c */
-    if (id == ID_ROTATE90R) { m[0] = 0; m[1] = 1; m[3] = -1; m[4] = 0; }
-    else { m[0] = 0; m[1] = -1; m[3] = 1; m[4] = 0; }
-    m[2] = cx - m[0] * cx - m[1] * cy - 0.5 * (m[0] + m[1]) + 0.5; m[5] = cy - m[3] * cx - m[4] * cy - 0.5 * (m[3] + m[4]) + 0.5;
-    transform_layer(d, m);
+  /* 0.7: Free Transform on the canvas (its handles' mode from Edit > Transform), the numbers as before */
+  case ID_FREETRANSFORM: case ID_XF_SCALE: case ID_XF_ROTATE: case ID_XF_SKEW: case ID_XF_DISTORT: case ID_XF_PERSPECTIVE:
+    DoMethod(canvas, MUIM_Canvas_Transform, id == ID_XF_SCALE ? XM_SCALE : id == ID_XF_ROTATE ? XM_ROTATE : id == ID_XF_SKEW ? XM_SKEW :
+             id == ID_XF_DISTORT ? XM_DISTORT : id == ID_XF_PERSPECTIVE ? XM_PERSPECTIVE : XM_FREE, 0);
+    return;
+  case ID_XFSEL:
+    if (!d->sel) { ask("OK", "%s", tr("Make a selection first: Transform Selection changes its outline.")); return; }
+    DoMethod(canvas, MUIM_Canvas_Transform, XM_FREE, 1);
+    return;
+  case ID_NUMTRANSFORM: transform_dialog(); break;
+  case ID_XF_AGAIN:
+    if (box_empty(xform_again(d, d->active, RS_BICUBIC))) ask("OK", "%s", tr("There is no transform to do again, or the layer can't be changed."));
+    break;
+  /* (exact, and only the selected part when there is a selection) */
+  case ID_ROTATE180: xform_rotate90(d, d->active, 2); break;
+  case ID_ROTATE90R: xform_rotate90(d, d->active, 1); break;
+  case ID_ROTATE90L: xform_rotate90(d, d->active, 3); break;
+  case ID_FLIPLH: xform_flip(d, d->active, 0); break;
+  case ID_FLIPLV: xform_flip(d, d->active, 1); break;
+  /* 0.7: Layer > Matting */
+  case ID_DEFRINGE: {
+    static LONG width = 1;
+    if (!ask_number("Defringe", "Width (px):", &width, 1, 200)) return;
+    if (box_empty(layer_defringe(d, (int)width))) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
     break; }
-  case ID_FLIPLH: flip_layer(d, 0); break;
-  case ID_FLIPLV: flip_layer(d, 1); break;
+  case ID_BLACKMATTE: case ID_WHITEMATTE:
+    if (box_empty(id == ID_BLACKMATTE ? layer_remove_black_matte(d) : layer_remove_white_matte(d))) ask("OK", "%s", tr("The layer can't be changed (it is locked, or has no pixels)."));
+    break;
+  /* 0.7: the Ruler's Straighten (the active layer, or with the tick the whole picture, cropped) */
+  case ID_STRAIGHTEN: {
+    int ok;
+    if (!ruler_on) { ask("OK", "%s", tr("Drag the Ruler along something that should be level (or upright) first.")); return; }
+    ok = opt.ruler_image ? image_straighten(d, ruler_xy[0], ruler_xy[1], ruler_xy[2], ruler_xy[3])
+                         : layer_straighten(d, ruler_xy[0], ruler_xy[1], ruler_xy[2], ruler_xy[3], RS_BICUBIC);
+    if (!ok) { ask("OK", "%s", tr("The line is level already, too short, or the layer can't be changed.")); return; }
+    ruler_on = 0; ruler_info[0] = 0;
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    break; }
+  case ID_RULERCLEAR: ruler_on = 0; ruler_info[0] = 0; DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); return;
+  /* 0.7: channels and Quick Mask */
+  case ID_QUICKMASK:
+    if (quickmask_active(d)) quickmask_leave(d);
+    else if (!quickmask_enter(d)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break;
+  case ID_SAVESEL: dlg_save_selection(); break;
+  case ID_LOADSEL: dlg_load_selection(); break;
+  case ID_CHANLOAD: if (!quickmask_active(d)) chan_load_selection(d, chan_pick, chan_op, 0); break;
+  case ID_CHANDEL: if (chan_pick >= 0 && chan_pick < d->nchan) { chan_delete(d, chan_pick); if (chan_pick >= d->nchan) chan_pick = d->nchan - 1; } break;
+  case ID_CHANRENAME: {
+    char buf[40], u[64];
+    size_t i, o = 0;
+    if (chan_pick < 0 || chan_pick >= d->nchan) return;
+    utf8_to_latin1(d->chan_name[chan_pick], strlen(d->chan_name[chan_pick]), buf, sizeof buf);
+    if (!ask_string("Channel Name", "Name:", buf, 32) || !buf[0]) return;
+    for (i = 0; buf[i] && o + 4 < 32; i++) o += (size_t)utf8_put(u + o, (UBYTE)buf[i]);
+    u[o] = 0;
+    chan_rename(d, chan_pick, u);
+    break; }
   case ID_AUTOTONE: adj_auto_tone(d); break;
   case ID_AUTOCONTRAST: adj_auto_contrast(d); break;
   case ID_AUTOCOLOR: adj_auto_color(d); break;
@@ -1601,7 +1669,8 @@ static void command(ULONG id)
   case ID_DESELECT: sel_deselect(d); break;
   case ID_INVERSE: sel_invert(d); break;
   case ID_SELALPHA: sel_from_alpha(d, d->active); break;
-  case ID_COLORRANGE: case ID_FEATHER: case ID_EXPAND: case ID_CONTRACT: case ID_BORDER: case ID_SMOOTH: dlg_select(id); break;
+  case ID_COLORRANGE: dlg_color_range(); break;
+  case ID_FEATHER: case ID_EXPAND: case ID_CONTRACT: case ID_BORDER: case ID_SMOOTH: dlg_select(id); break;
   default: return;
   }
   refresh_all();
@@ -1633,7 +1702,7 @@ static void brush_picked(const Brush *b)
   DoMethod(optbar, MUIM_Opts_Refresh);
 }
 static void brush_changed(void) { DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); }
-static const char *const head_layers[] = { "Layers", "Navigator", "Info", NULL };
+static const char *const head_layers[] = { "Layers", "Channels", "Navigator", "Info", NULL };
 static Object *lowpages, *lowhead;
 static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
@@ -1677,6 +1746,7 @@ static int win_make(void)
           Child, lowhead = head(head_layers),
           Child, lowpages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 300,
             Child, layerpanel = NewObject(layers_class()->mcc_Class, NULL, MUIA_VertWeight, 300, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+            Child, chanpanel = NewObject(channels_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
             Child, navpanel = NewObject(navigator_class()->mcc_Class, NULL, TAG_DONE),
             Child, infopanel = NewObject(info_class()->mcc_Class, NULL, TAG_DONE),
           End,
@@ -1879,7 +1949,7 @@ int main(int argc, char **argv)
   sysfonts_scan(&fonts, scan_step);
   splash_step(45, tr("Preparing"));
   if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
-      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
+      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class() || !channels_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
   /* 0.5: brushes, swatches, patterns, gradients (before the window, which shows their panels) */
   swatch_palette_hooks();
   brushwin_init();
@@ -1920,7 +1990,7 @@ int main(int argc, char **argv)
     ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
     if (id) LOG("id %lu", (unsigned long)id);
     if (id == MUIV_Application_ReturnID_Quit || id == ID_QUIT) { if (close_all()) break; }
-    else if (id == ID_CANVASCHG || id == ID_LAYERSCHG || id == ID_HISTCHG) {
+    else if (id == ID_CANVASCHG || id == ID_LAYERSCHG || id == ID_HISTCHG || id == ID_CHANSCHG) {
       if (id != ID_CANVASCHG) DoMethod(canvas, MUIM_Canvas_Refresh);
       refresh_panels();
     }
