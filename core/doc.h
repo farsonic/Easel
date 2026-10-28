@@ -17,21 +17,69 @@
 
 enum { BM_NORMAL, BM_MULTIPLY, BM_SCREEN, BM_OVERLAY, BM_DARKEN, BM_LIGHTEN, BM_DIFFERENCE, BM_ADD,
        BM_SUBTRACT, BM_DODGE, BM_BURN, BM_SOFTLIGHT, BM_HARDLIGHT, BM_EXCLUSION, BM_HUE, BM_SATURATION,
-       BM_COLOR, BM_LUMINOSITY, BM_N };
+       BM_COLOR, BM_LUMINOSITY,
+       /* 0.2.1: the rest of PhotoCraft's modes */
+       BM_DISSOLVE, BM_LINEARBURN, BM_DARKERCOLOR, BM_LIGHTERCOLOR, BM_VIVIDLIGHT,
+       BM_LINEARLIGHT, BM_PINLIGHT, BM_HARDMIX, BM_DIVIDE,
+       BM_N,
+       BM_PASS = 255 };                   /* a group's Pass Through (not a pixel blend) */
 extern const char *const blend_names[BM_N];
 
 typedef struct { i32 x0, y0, x1, y1; } Box;      /* x1, y1 exclusive; empty when x1 <= x0 */
 
+/* what a layer is (0.3): pixels; a group, whose members are the layers just below it with a greater
+   depth; an adjustment applied to what is below it; or a fill (solid colour or gradient) */
+enum { LK_PIXEL, LK_GROUP, LK_ADJUST, LK_FILL };
+
+/* an adjustment layer's settings (0.3): kind is one of AK_ (adjust.h), the numbers its settings in
+   the order that adjustment's function takes them; curves and the gradient map keep their points */
+typedef struct {
+  u8 kind;
+  int v[12];
+  int npts; int pts[2 * 32];          /* curves: (x, y) pairs; gradient map: stops as (position, 0xRRGGBB) */
+} AdjParams;
+
+/* a fill layer's settings (0.3): solid colour, or a gradient (paint.h's GR_ kinds) across the canvas */
+typedef struct {
+  u8 kind;                            /* 0 solid, 1 gradient */
+  u32 c0, c1;
+  int gkind, angle, scale, reverse;   /* gradient: GR_, degrees, per cent, reversed */
+} FillParams;
+
 typedef struct {
   char name[64];                      /* UTF-8 */
-  u8 *px;                             /* w * h * 4 */
+  u8 *px;                             /* w * h * 4 (NULL for a group, adjustment or fill layer) */
   u8 opacity;                         /* 0-255 */
-  u8 blend;                           /* BM_ */
+  u8 blend;                           /* BM_ (BM_PASS for a group passes its members' modes through) */
   u8 visible, locked;                 /* locked: pixels can't be painted */
   u8 alpha_lock;                      /* painting keeps the layer's transparency */
+  /* 0.3: live layers */
+  u8 kind;                            /* LK_ */
+  u8 depth;                           /* nesting: 0 at the top level, members of a group one more than it */
+  u8 collapsed;                       /* a group shown closed in the Layers panel */
+  u8 lock_pos, lock_all;              /* can't be moved; can't be changed at all */
+  u8 fill;                            /* fill opacity 0-255: like opacity, but leaves layer effects alone */
+  u8 clip;                            /* clipped to the layer below (the base of a clipping group) */
+  u8 *mask;                           /* layer mask w * h, 255 shows, 0 hides; NULL for none */
+  u8 mask_on, mask_linked;            /* the mask is used; moves with the layer */
+  u8 mask_density;                    /* 0-255: how strongly the mask hides */
+  u16 mask_feather;                   /* pixels, applied when compositing */
+  u8 blendif[4];                      /* Blend If on grey: this layer's black, white; the underlying black, white */
+  AdjParams adj;                      /* LK_ADJUST */
+  FillParams fillp;                   /* LK_FILL */
+  /* 0.4: indexed documents */
+  u8 *idx;                            /* w * h palette indices when the document is indexed, else NULL */
 } Layer;
 
 typedef struct UndoStep UndoStep;
+
+/* document colour modes (0.4) */
+enum { MODE_RGB, MODE_INDEXED, MODE_GRAY, MODE_BITMAP };
+
+/* a colour-cycling range (0.4: IFF CRNG/CCRT/DRNG): palette entries lo..hi rotated rate times a
+   second (rate in 1/16384ths of 60 Hz steps, as CRNG keeps it), forward or back */
+typedef struct { u8 lo, hi, active, reverse; u16 rate; } CycleRange;
+#define MAXCYCLES 16
 
 typedef struct {
   i32 w, h;
@@ -46,6 +94,14 @@ typedef struct {
   int undo_depth;
   long undo_bytes;                    /* kept within UNDO_BUDGET by forgetting the oldest steps */
   char last_action[64];               /* for the History panel and the Undo menu item */
+  /* 0.4: colour mode, palette and the Amiga picture's display settings */
+  u8 mode;                            /* MODE_ */
+  int npal;                           /* entries used in pal (indexed), 2-256 */
+  u8 pal[256 * 3];
+  u8 pal_lock[256];                   /* 1: this entry is kept when the palette is remade */
+  CycleRange cycle[MAXCYCLES]; int ncycle;
+  u32 modeid;                         /* Amiga display ModeID (CAMG), 0 for none chosen */
+  u8 aspect_x, aspect_y;              /* pixel aspect ratio (1:1 square); IFF BMHD's x/yAspect */
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)

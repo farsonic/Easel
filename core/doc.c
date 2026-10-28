@@ -12,7 +12,8 @@
 #include "doc.h"
 
 const char *const blend_names[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Linear Dodge (Add)",
-  "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity" };
+  "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
 
 /* ------------------------------------------------------------------ boxes */
 Box box_make(i32 x0, i32 y0, i32 x1, i32 y1) { Box b; b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; return b; }
@@ -50,6 +51,8 @@ void layer_free(Layer *l)
 {
   if (!l) return;
   free(l->px);
+  free(l->mask);
+  free(l->idx);
   free(l);
 }
 Layer *layer_copy(const Layer *l, i32 w, i32 h)
@@ -57,8 +60,12 @@ Layer *layer_copy(const Layer *l, i32 w, i32 h)
   Layer *c = (Layer *)malloc(sizeof *c);
   if (!c) return NULL;
   *c = *l;
-  if (!(c->px = (u8 *)malloc((size_t)w * h * 4))) { free(c); return NULL; }
-  memcpy(c->px, l->px, (size_t)w * h * 4);
+  c->px = c->mask = c->idx = NULL;
+  if (l->px && !(c->px = (u8 *)malloc((size_t)w * h * 4))) { free(c); return NULL; }
+  if (l->px) memcpy(c->px, l->px, (size_t)w * h * 4);
+  if (l->mask && (c->mask = (u8 *)malloc((size_t)w * h)) != NULL) memcpy(c->mask, l->mask, (size_t)w * h);
+  if (l->idx && (c->idx = (u8 *)malloc((size_t)w * h)) != NULL) memcpy(c->idx, l->idx, (size_t)w * h);
+  if ((l->mask && !c->mask) || (l->idx && !c->idx)) { layer_free(c); return NULL; }
   return c;
 }
 Doc *doc_new(i32 w, i32 h, u32 fill, int transparent)
@@ -68,7 +75,7 @@ Doc *doc_new(i32 w, i32 h, u32 fill, int transparent)
   long i;
   if (w < 1 || h < 1 || w > MAXDIM || h > MAXDIM) return NULL;
   if (!(d = (Doc *)calloc(1, sizeof *d))) return NULL;
-  d->w = w; d->h = h; d->fg = 0x000000; d->bg = 0xFFFFFF; d->dpi = 72;
+  d->w = w; d->h = h; d->fg = 0x000000; d->bg = 0xFFFFFF; d->dpi = 72; d->aspect_x = d->aspect_y = 1;
   if (!(l = layer_new(d, transparent ? "Layer 1" : "Background"))) { free(d); return NULL; }
   if (!transparent)
     for (i = 0; i < (long)w * h; i++) { u8 *p = l->px + i * 4; p[0] = (u8)(fill >> 16); p[1] = (u8)(fill >> 8); p[2] = (u8)fill; p[3] = 255; }
@@ -82,7 +89,7 @@ Doc *doc_adopt(i32 w, i32 h, u8 *px)
   if (w < 1 || h < 1 || w > MAXDIM || h > MAXDIM || !px) return NULL;
   if (!(d = (Doc *)calloc(1, sizeof *d))) return NULL;
   if (!(l = (Layer *)calloc(1, sizeof *l))) { free(d); return NULL; }
-  d->w = w; d->h = h; d->fg = 0x000000; d->bg = 0xFFFFFF; d->dpi = 72;
+  d->w = w; d->h = h; d->fg = 0x000000; d->bg = 0xFFFFFF; d->dpi = 72; d->aspect_x = d->aspect_y = 1;
   l->px = px;
   strcpy(l->name, "Background");
   l->opacity = 255; l->visible = 1;

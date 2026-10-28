@@ -7,6 +7,12 @@
 
 #include "doc.h"
 
+/* the adjustments an adjustment layer can be (0.3; Layer.adj.kind). Each one's AdjParams.v holds its
+   settings in the order its adj_ function below takes them */
+enum { AK_BRIGHTNESS, AK_LEVELS, AK_CURVES, AK_EXPOSURE, AK_VIBRANCE, AK_HUESAT, AK_COLORBALANCE,
+       AK_BLACKWHITE, AK_PHOTOFILTER, AK_CHANNELMIXER, AK_INVERT, AK_POSTERIZE, AK_THRESHOLD,
+       AK_GRADIENTMAP, AK_SELECTIVECOLOR, AK_N };
+
 /* adjustments */
 int adj_brightness_contrast(Doc *d, int brightness, int contrast);        /* -150..150, -50..100 */
 int adj_levels(Doc *d, int channel, int in_black, int in_white, double gamma, int out_black, int out_white);   /* channel: 0 RGB, 1 R, 2 G, 3 B */

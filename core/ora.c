@@ -23,7 +23,9 @@
 /* the blend modes by BM_ value; svg:subtract doesn't exist, Krita calls it krita:subtract */
 static const char *const op_names[BM_N] = { "svg:src-over", "svg:multiply", "svg:screen", "svg:overlay", "svg:darken", "svg:lighten",
   "svg:difference", "svg:plus", "krita:subtract", "svg:color-dodge", "svg:color-burn", "svg:soft-light", "svg:hard-light",
-  "svg:exclusion", "svg:hue", "svg:saturation", "svg:color", "svg:luminosity" };
+  "svg:exclusion", "svg:hue", "svg:saturation", "svg:color", "svg:luminosity",
+  "krita:dissolve", "krita:linear_burn", "krita:darker color", "krita:lighter color", "krita:vivid_light",
+  "krita:linear light", "krita:pin_light", "krita:hard mix", "krita:divide" };
 const char *ora_op_name(int mode) { return mode >= 0 && mode < BM_N ? op_names[mode] : op_names[0]; }
 int ora_op_mode(const char *name)
 {

@@ -308,8 +308,8 @@ struct MUI_CustomClass *color_class(void)
 
 /* ================================================================== the Layers panel */
 #define THUMB 28
-static const char *const blendnames[] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
-  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity" };
+static const char *const blendnames[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
+  "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
 struct LData {
   struct MUI_EventHandlerNode ehn;
   int shown, first, drag, dragfrom, dragto, scrub, moved; LONG grabx; int grabv, grabv2;
