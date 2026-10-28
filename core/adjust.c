@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include "adjust.h"
+#include "adjust10.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -934,6 +935,7 @@ struct AdjProg {
   u8 lut[768];
   u8 *cube;                         /* 33^3 * 3 */
   AdjParams p;
+  Adj10Fn fn; double a[48];         /* 1.0: applied to each pixel exactly (Replace Color) */
 };
 
 /* channel mixer: rows R, G, B each (r, g, b, constant) in per cent; v[12] monochrome (row R used) */
@@ -1006,13 +1008,22 @@ AdjProg *adj_prog_make(const AdjParams *p)
   AdjProg *g = (AdjProg *)calloc(1, sizeof *g);
   int i, c;
   PixFn fn = NULL;
-  double a[40];
+  double a[48];
+  int exact = 0, r10;
+  Adj10Fn fn10;
   if (!g) return NULL;
   g->kind = p->kind; g->p = *p;
   memset(a, 0, sizeof a);
   for (i = 0; i < 768; i++) g->lut[i] = (u8)(i & 255);
   g->haslut = 1;
-  switch (p->kind) {
+  /* 1.0: Hue/Saturation's ranges, six-colour Black & White, Replace Color, four-curve Curves */
+  r10 = adj10_pixfn(p, &fn10, a, &exact);
+  if (r10 == 2) { /* (they change nothing: the tables as they are) */ }
+  else if (r10) {
+    fn = (PixFn)fn10;
+    if (exact) { g->haslut = 0; g->fn = fn10; memcpy(g->a, a, sizeof g->a); return g; }
+  } else if (p->kind == AK_CURVES && p->v[1] == 1) adj10_curves_lut(p, g->lut);
+  else switch (p->kind) {
   case AK_BRIGHTNESS: {
     int br = p->v[0], ct = p->v[1];
     double cc = ct >= 0 ? 1 + ct / 50.0 * (ct > 0 ? 1.5 : 1) : 1 + ct / 100.0;
@@ -1127,6 +1138,8 @@ void adj_prog_row(const AdjProg *g, u8 *px, int n)
     for (i = 0; i < n; i++, px += 4) if (px[3]) { px[0] = g->lut[px[0]]; px[1] = g->lut[256 + px[1]]; px[2] = g->lut[512 + px[2]]; }
   } else if (g->cube) {
     for (i = 0; i < n; i++, px += 4) if (px[3]) cube_px(g->cube, px);
+  } else if (g->fn) {
+    for (i = 0; i < n; i++, px += 4) if (px[3]) g->fn(px, g->a);
   }
 }
 /* any adjustment applied to the active layer (Image > Adjustments with AdjParams) */
@@ -1185,9 +1198,11 @@ void adj_defaults(int kind, AdjParams *p)
   case AK_GRADIENTMAP: p->npts = 2; p->pts[0] = 0; p->pts[1] = 0x000000; p->pts[2] = 255; p->pts[3] = 0xFFFFFF; break;
   default: break;
   }
+  adj10_defaults(kind, p);           /* 1.0 */
 }
 const char *const adj_names[AK_N] = { "Brightness/Contrast", "Levels", "Curves", "Exposure", "Vibrance", "Hue/Saturation",
-  "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Invert", "Posterize", "Threshold", "Gradient Map", "Selective Color" };
+  "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Invert", "Posterize", "Threshold", "Gradient Map", "Selective Color",
+  "Replace Color" };
 /* adjustment layers: doc.c's compositor reaches the programs through these hooks */
 static void *hook_make(const AdjParams *p) { return adj_prog_make(p); }
 static void hook_free(void *g) { adj_prog_free((AdjProg *)g); }
