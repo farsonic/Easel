@@ -902,6 +902,7 @@ static void recovery_offer(void)
   refresh_all();
 }
 static int save_as(void);
+static void hsnaps_free(DocView *v);
 static void icon_for(Doc *d, const char *path);
 static void paste_amiga(Doc *d);
 static int save(void)
@@ -1214,6 +1215,7 @@ static int doc_close(int i)
   palwin_stop();
   if (curdoc == i) palwin_set_doc(NULL);
   recovery_drop(&docs[i]);
+  hsnaps_free(&docs[i]);
   snapshot_free(docs[i].snap);
   doc_free(docs[i].doc);
   memmove(&docs[i], &docs[i + 1], (size_t)(ndocs - i - 1) * sizeof docs[0]);
@@ -1270,6 +1272,52 @@ static void place_file(void)
   refresh_all();
   /* 0.6: then its size and angle, as Place goes into Free Transform */
   transform_dialog();
+}
+
+/* ------------------------------------------------------------------ 0.8: History snapshots */
+/* a whole copy of a picture as it is now (layers, selection, channels, palette; no undo), or NULL */
+static Doc *state_copy(Doc *d)
+{
+  Doc *c = (Doc *)malloc(sizeof *c);
+  size_t n = (size_t)d->w * d->h;
+  int i, ok = 1;
+  if (!c) return NULL;
+  *c = *d;
+  c->undo = c->redo = NULL; c->undo_depth = 0; c->undo_bytes = 0;
+  c->sel = c->lastsel = c->qmask = NULL; c->nlay = 0; c->nchan = 0;
+  for (i = 0; i < d->nlay && ok; i++) if ((c->lay[i] = layer_copy(d->lay[i], d->w, d->h)) != NULL) c->nlay++; else ok = 0;
+  for (i = 0; i < d->nchan && ok; i++) if ((c->chan[i] = (u8 *)malloc(n)) != NULL) { memcpy(c->chan[i], d->chan[i], n); c->nchan++; } else ok = 0;
+  if (ok && d->sel && (c->sel = (u8 *)malloc(n)) != NULL) memcpy(c->sel, d->sel, n);
+  else if (d->sel) ok = 0;
+  if (!ok) { doc_free(c); return NULL; }
+  return c;
+}
+/* the picture made as snapshot s was, as one step that can be undone */
+static int state_restore(Doc *d, Doc *s, const char *name)
+{
+  Doc *c = state_copy(s);
+  int i;
+  if (!c) return 0;
+  doc_begin(d, name);
+  doc_note_all(d);
+  for (i = 0; i < d->nlay; i++) layer_free(d->lay[i]);
+  for (i = 0; i < d->nchan; i++) free(d->chan[i]);
+  free(d->sel); free(d->qmask);
+  memcpy(d->lay, c->lay, sizeof d->lay); d->nlay = c->nlay; d->active = c->active;
+  memcpy(d->chan, c->chan, sizeof d->chan); memcpy(d->chan_name, c->chan_name, sizeof d->chan_name); d->nchan = c->nchan;
+  d->sel = c->sel; d->selbox = c->selbox; d->qmask = NULL;
+  d->w = c->w; d->h = c->h;
+  d->mode = c->mode; d->npal = c->npal; memcpy(d->pal, c->pal, sizeof d->pal); memcpy(d->pal_lock, c->pal_lock, sizeof d->pal_lock);
+  memcpy(d->cycle, c->cycle, sizeof d->cycle); d->ncycle = c->ncycle; d->modeid = c->modeid;
+  doc_end(d);
+  free(c);                              /* (its buffers are the picture's now) */
+  return 1;
+}
+static void hsnaps_free(DocView *v)
+{
+  int i;
+  for (i = 0; i < v->nhsnap; i++) doc_free(v->hsnap[i]);
+  v->nhsnap = 0;
 }
 
 /* ------------------------------------------------------------------ commands */
@@ -1566,6 +1614,45 @@ static void command(ULONG id)
     ruler_on = 0; ruler_info[0] = 0;
     DoMethod(optbar, MUIM_Opts_Refresh);
     break; }
+  /* 0.8: the History panel's snapshots */
+  case ID_HISTSNAP: {
+    DocView *v = cur_view();
+    Doc *c;
+    static int nsnap;
+    if (!v) return;
+    if (v->nhsnap >= MAXHSNAP) { ask("OK", "%s", tr("There can be eight snapshots: delete one first.")); return; }
+    if (!(c = state_copy(v->doc))) { ask("OK", "%s", tr("There isn't enough memory for a snapshot.")); return; }
+    v->hsnap[v->nhsnap] = c;
+    sprintf(v->hsnap_name[v->nhsnap], "%s %d", tr("Snapshot"), ++nsnap);
+    hist_pick = v->nhsnap++;
+    refresh_panels();
+    return; }
+  case ID_HISTSNAPDEL: {
+    DocView *v = cur_view();
+    int k = hist_pick;
+    if (!v || k < 0 || k >= v->nhsnap) return;
+    doc_free(v->hsnap[k]);
+    memmove(&v->hsnap[k], &v->hsnap[k + 1], (size_t)(v->nhsnap - k - 1) * sizeof v->hsnap[0]);
+    memmove(v->hsnap_name[k], v->hsnap_name[k + 1], (size_t)(v->nhsnap - k - 1) * sizeof v->hsnap_name[0]);
+    v->nhsnap--;
+    hist_pick = -1;
+    refresh_panels();
+    return; }
+  case ID_HISTSNAPGO: {
+    DocView *v = cur_view();
+    if (!v || hist_pick < 0 || hist_pick >= v->nhsnap) return;
+    DoMethod(canvas, MUIM_Canvas_Cancel);
+    if (!state_restore(v->doc, v->hsnap[hist_pick], v->hsnap_name[hist_pick])) ask("OK", "%s", tr("There isn't enough memory for that."));
+    refresh_all();
+    return; }
+  case ID_HISTNEWDOC: {
+    DocView *v = cur_view();
+    Doc *c;
+    if (!v) return;
+    if (!(c = state_copy(v->doc))) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+    c->dirty = 1;
+    doc_show(c, "", FMT_ORA);
+    return; }
   case ID_SAMPCLEAR: { DocView *v = cur_view(); v->nsamp = 0; DoMethod(canvas, MUIM_Canvas_Refresh); refresh_panels(); return; }
   case ID_RULERCLEAR: ruler_on = 0; ruler_info[0] = 0; DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); return;
   /* 0.7: channels and Quick Mask */
@@ -2053,7 +2140,7 @@ int main(int argc, char **argv)
   rc = 0;
 done:
   palwin_stop();
-  for (i = 0; i < ndocs; i++) { snapshot_free(docs[i].snap); doc_free(docs[i].doc); }
+  for (i = 0; i < ndocs; i++) { hsnaps_free(&docs[i]); snapshot_free(docs[i].snap); doc_free(docs[i].doc); }
   ndocs = 0; curdoc = -1;
   palwin_dispose();
   clip_free(clip); clip = NULL;

@@ -784,40 +784,74 @@ struct MUI_CustomClass *layers_class(void)
 }
 
 /* ================================================================== the History panel */
+/* 0.8: the snapshots first (each a whole copy of the picture), then the steps; along the bottom the
+   buttons: a new snapshot, a new picture from the state shown, and delete the snapshot picked */
 struct HData { struct MUI_EventHandlerNode ehn; int shown, first; };
 #define MAXHIST 120
+int hist_pick = -1;
+static const int hist_buttons[] = { IC_NEW, IC_CAMERA, IC_TRASH };
+static const ULONG hist_ids[] = { ID_HISTNEWDOC, ID_HISTSNAP, ID_HISTSNAPDEL };
+#define NHB 3
 static LONG hrow(void) { return fh() + 6; }
-/* the rows: the document's start, the steps done (oldest first), then those undone */
-static int hist_list(Doc *doc, const char **names, int *ndone)
+static LONG hist_bottom(Object *obj) { return _mbottom(obj) - 26; }
+/* the rows: the snapshots, the document's start, the steps done (oldest first), then those undone;
+   *nsnap the snapshots' rows, *ndone the rows up to the state in effect (after the snapshots) */
+static int hist_list(Doc *doc, const char **names, int *ndone, int *nsnap)
 {
-  int n = doc_history(doc, names + 1, MAXHIST - 1), m;
-  names[0] = cur_view() && cur_view()->path[0] ? "Open" : "New";
+  DocView *v = cur_view();
+  int s = 0, n, m, i;
+  for (i = 0; v && i < v->nhsnap && s < MAXHIST / 2; i++) names[s++] = v->hsnap_name[i];
+  *nsnap = s;
+  n = doc_history(doc, names + s + 1, MAXHIST - s - 1);
+  names[s] = v && v->path[0] ? "Open" : "New";
   *ndone = n + 1;
-  m = doc_redo_history(doc, names + 1 + n, MAXHIST - 1 - n);
-  return n + 1 + m;
+  m = doc_redo_history(doc, names + s + 1 + n, MAXHIST - s - 1 - n);
+  return s + n + 1 + m;
 }
 static void hist_draw(struct HData *d, Object *obj)
 {
   struct RastPort *rp = _rp(obj);
   Doc *doc = cur_doc();
   const char *names[MAXHIST];
-  int n, done, i, rows;
-  theme_fill(rp, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj), tpen(T_PANEL));
+  int n, done, ns, i, rows, cur;
+  LONG r = _mright(obj);
+  theme_fill(rp, _mleft(obj), _mtop(obj), r, _mbottom(obj), tpen(T_PANEL));
   if (!doc) return;
-  n = hist_list(doc, names, &done);
-  rows = (int)(_mheight(obj) / hrow());
+  n = hist_list(doc, names, &done, &ns);
+  if (hist_pick >= ns) hist_pick = ns - 1;
+  rows = (int)((hist_bottom(obj) - _mtop(obj)) / hrow());
+  cur = ns + done - 1;
   /* the current step kept in view */
-  if (done - 1 < d->first) d->first = done - 1;
-  if (done - 1 >= d->first + rows) d->first = done - rows;
+  if (cur < d->first) d->first = cur;
+  if (cur >= d->first + rows) d->first = cur - rows + 1;
   if (d->first > n - rows) d->first = n - rows;
   if (d->first < 0) d->first = 0;
   for (i = 0; i < rows && d->first + i < n; i++) {
     int k = d->first + i;
     LONG y = _mtop(obj) + i * hrow();
-    if (k == done - 1) theme_fill(rp, _mleft(obj), y, _mright(obj), y + hrow() - 1, tpen(T_SELECTION));
-    theme_icon(rp, k == 0 ? IC_NEW : IC_HISTSTEP, _mleft(obj) + 6, y + (hrow() - 12) / 2, 12, k >= done);
-    text_fit(rp, theme_font(), _mleft(obj) + 24, y + 3, tr(names[k]), _mwidth(obj) - 28, tpen(k >= done ? T_DISABLED : T_TEXT));
+    if (k < ns) {
+      /* a snapshot (the one picked lit faintly), with a line under the last */
+      if (k == hist_pick) theme_fill(rp, _mleft(obj), y, r, y + hrow() - 1, tpen(T_PRESSED));
+      theme_icon(rp, IC_CAMERA, _mleft(obj) + 6, y + (hrow() - 12) / 2, 12, 0);
+      text_fit(rp, theme_font(), _mleft(obj) + 24, y + 3, names[k], _mwidth(obj) - 28, tpen(T_TEXT));
+      if (k == ns - 1) { SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj), y + hrow() - 1); Draw(rp, r, y + hrow() - 1); }
+      continue;
+    }
+    if (k == cur) theme_fill(rp, _mleft(obj), y, r, y + hrow() - 1, tpen(T_SELECTION));
+    theme_icon(rp, k == ns ? IC_NEW : IC_HISTSTEP, _mleft(obj) + 6, y + (hrow() - 12) / 2, 12, k > cur);
+    text_fit(rp, theme_font(), _mleft(obj) + 24, y + 3, tr(names[k]), _mwidth(obj) - 28, tpen(k > cur ? T_DISABLED : T_TEXT));
   }
+  /* the buttons */
+  SetAPen(rp, tpen(T_BORDER)); Move(rp, _mleft(obj), hist_bottom(obj)); Draw(rp, r, hist_bottom(obj));
+  for (i = 0; i < NHB; i++) theme_icon(rp, hist_buttons[i], r - (NHB - i) * 24, hist_bottom(obj) + 5, 16, i == 2 && hist_pick < 0);
+}
+/* the button at window x, y along the bottom (-1 none) */
+static int hist_button_at(Object *obj, LONG mx, LONG my)
+{
+  int i;
+  if (my < hist_bottom(obj) || my > _mbottom(obj)) return -1;
+  for (i = 0; i < NHB; i++) { LONG bx = _mright(obj) - (NHB - i) * 24; if (mx >= bx - 4 && mx < bx + 20) return i; }
+  return -1;
 }
 static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
@@ -836,7 +870,7 @@ static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
     DoSuperMethodA(cl, obj, msg);
     m->MinMaxInfo->MinWidth += 200; m->MinMaxInfo->DefWidth += 240; m->MinMaxInfo->MaxWidth += 320;
-    m->MinMaxInfo->MinHeight += 2 * hrow(); m->MinMaxInfo->DefHeight += 6 * hrow(); m->MinMaxInfo->MaxHeight += MUI_MAXMAX;
+    m->MinMaxInfo->MinHeight += 2 * hrow() + 26; m->MinMaxInfo->DefHeight += 6 * hrow() + 26; m->MinMaxInfo->MaxHeight += MUI_MAXMAX;
     return 0;
   }
   PANEL_COMMON(struct HData)
@@ -847,20 +881,40 @@ static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
   case MUIM_History_Refresh:
     if (((struct HData *)INST_DATA(cl, obj))->shown) MUI_Redraw(obj, MADF_DRAWOBJECT);
     return 0;
-  case MUIM_CreateShortHelp:
-    return cur_doc() ? (ULONG)theme_bubble(tr("History"), tr("Each change you have made, oldest first. Click a step to go back to it; click a later (dimmed) one to go forward again.")) : 0;
+  case MUIM_CreateShortHelp: {
+    static const char *const bn[NHB] = { "New Document from State", "New Snapshot", "Delete Snapshot" };
+    static const char *const bb[NHB] = { "A new picture, a copy of this one as it is now.", "Keeps a copy of the whole picture as it is now, at the top of the list. Click it later to go back to it (as a step you can undo).",
+      "Deletes the snapshot you clicked last." };
+    struct MUIP_CreateShortHelp *m = (struct MUIP_CreateShortHelp *)msg;
+    int b = hist_button_at(obj, m->mx, m->my);
+    if (!cur_doc()) return 0;
+    if (b >= 0) return (ULONG)theme_bubble(tr(bn[b]), tr(bb[b]));
+    return (ULONG)theme_bubble(tr("History"), tr("Snapshots at the top, then each change you have made, oldest first. Click a step to go back to it; click a later (dimmed) one to go forward again; click a snapshot to go back to it."));
+  }
   case MUIM_DeleteShortHelp: return 0;
   case MUIM_HandleEvent: {
     struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
     Doc *doc = cur_doc();
     const char *names[MAXHIST];
-    int n, done, k;
+    int n, done, ns, k, b;
     d = INST_DATA(cl, obj);
     if (!im || !d->shown || !doc || im->Class != IDCMP_MOUSEBUTTONS || im->Code != SELECTDOWN) return 0;
     if (im->MouseX < _mleft(obj) || im->MouseX > _mright(obj) || im->MouseY < _mtop(obj) || im->MouseY > _mbottom(obj)) return 0;
-    n = hist_list(doc, names, &done);
+    if ((b = hist_button_at(obj, im->MouseX, im->MouseY)) >= 0) {
+      if (b != 2 || hist_pick >= 0) DoMethod(_app(obj), MUIM_Application_ReturnID, hist_ids[b]);
+      return MUI_EventHandlerRC_Eat;
+    }
+    if (im->MouseY >= hist_bottom(obj)) return MUI_EventHandlerRC_Eat;
+    n = hist_list(doc, names, &done, &ns);
     k = d->first + (int)((im->MouseY - _mtop(obj)) / hrow());
     if (k >= n) return MUI_EventHandlerRC_Eat;
+    if (k < ns) {
+      /* a snapshot: picked, and the picture taken back to it (in main.c, as an undoable step) */
+      hist_pick = k;
+      DoMethod(_app(obj), MUIM_Application_ReturnID, ID_HISTSNAPGO);
+      return MUI_EventHandlerRC_Eat;
+    }
+    k -= ns;
     /* back (or forward) to that step */
     while (done - 1 > k && doc_undo(doc)) done--;
     while (done - 1 < k && doc_redo(doc)) done++;

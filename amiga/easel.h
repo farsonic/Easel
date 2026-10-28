@@ -40,7 +40,11 @@ typedef struct {
   char recov[160]; ULONG asig;        /* 0.6: its autosaved copy in PROGDIR:Recovery, and the state it holds */
   /* 0.8: the Color Sampler tool's points (image pixels), shown on the canvas and in the Info panel */
   LONG samp_x[4], samp_y[4]; int nsamp;
+  /* 0.8: the History panel's snapshots: whole copies of the picture as it was, and their names */
+  Doc *hsnap[8]; char hsnap_name[8][24]; int nhsnap;
 } DocView;
+#define MAXHSNAP 8
+extern int hist_pick;                 /* (panels.c) the snapshot clicked last in the History panel, -1 none */
 #define MAXDOCS 12
 extern DocView docs[MAXDOCS];
 extern int ndocs, curdoc;
