@@ -201,7 +201,7 @@ static int build_settings(PItem *it)
   SCRUB("Tolerance", b->tolerance, 0, 255, "");
   CHECK("Protect Foreground Color", b->protect_fg);
   CHOICE("Replace Mode", b->replace_mode, rpl_list, 4);
-  SCRUB("Seed", ui_seed, 0, 99999, "");
+  SCRUB("Seed (0: new each stroke)", ui_seed, 0, 99999, "");
   BUTTONS(b_seed, 1, C_NEWSEED);
   return n;
 }
@@ -434,7 +434,7 @@ static void command(int cmd)
   switch (cmd) {
   case C_ROUNDTIP: brushui.b.tip = NULL; brushui.current = -1; break;
   case C_SYMCENTRE: brushui.b.dyn.sym_center_set = 0; break;
-  case C_NEWSEED: brushui.b.dyn.seed = (u32)(brush_hash(brushui.b.dyn.seed, 1, 99) % 100000UL); break;
+  case C_NEWSEED: brushui.b.dyn.seed = (u32)(brush_hash(brushui.b.dyn.seed, 1, 99) % 99999UL) + 1; break;
   case C_PICKUP: if (brushui.request) brushui.request(BWR_PICKUP); return;
   case C_PICKUPSEL: if (brushui.request) brushui.request(BWR_PICKUP_SEL); return;
   case C_RELEASE: cbrush_free(brushui.custom); brushui.custom = NULL; brushui.use_custom = 0; break;
@@ -916,7 +916,7 @@ void brushwin_init(void)
   brushui.current = -1;
   brushui.b.tool = PT_BRUSH; brushui.b.size = 20; brushui.b.hardness = 100; brushui.b.opacity = 100; brushui.b.flow = 100;
   brushui.b.spacing = 25; brushui.b.strength = 50; brushui.b.tolerance = 32; brushui.b.bg = 0xFFFFFF;
-  brushui.b.dyn.sym_segments = 6; brushui.b.dyn.buildup_rate = 20; brushui.b.dyn.count = 1; brushui.b.dyn.seed = 1;
+  brushui.b.dyn.sym_segments = 6; brushui.b.dyn.buildup_rate = 20; brushui.b.dyn.count = 1; brushui.b.dyn.seed = 0;
   brushui.pick_key = 1;
 }
 void brushwin_free(void)
@@ -938,6 +938,8 @@ void brushwin_apply(Brush *b)
   b->angle = s->angle; b->roundness = s->roundness; b->flip_x = s->flip_x; b->flip_y = s->flip_y; b->square = s->square;
   b->tip = s->tip; b->spacing = s->spacing > 0 ? s->spacing : 25;
   b->dyn = s->dyn;
+  /* seed 0: every stroke its own jitter (a fixed seed replays the same stroke) */
+  if (!s->dyn.seed) { static u32 strokes; b->dyn.seed = brush_hash(0x45534C, ++strokes, (u32)(size_t)b) | 1; }
   b->eraser_mode = s->eraser_mode; b->auto_erase = s->auto_erase; b->sample_all = s->sample_all; b->pattern_aligned = s->pattern_aligned;
   b->sampling = s->sampling; b->limits = s->limits; b->tolerance = s->tolerance; b->protect_fg = s->protect_fg; b->replace_mode = s->replace_mode;
   b->custom_mode = s->custom_mode;
