@@ -1379,6 +1379,11 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     return 1;
   }
   if (code & IECODE_UP_PREFIX) return 0;
+  if (!(q & IEQUALIFIER_REPEAT)) {
+    /* 0.8: a command's extra key (Edit > Keyboard Shortcuts) */
+    ULONG id = keys_extra(key_char(im), code, q);
+    if (id) { DoMethod(_app(obj), MUIM_Application_ReturnID, id); return 1; }
+  }
   if (!doc || !v) return 0;
   if (shift && (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT))) {
     /* Shift-Alt and a letter: a blend mode, as Photoshop's keys (the painting tool's, or with the

@@ -107,7 +107,7 @@ const Pattern *tool_pattern(void);    /* the pattern chosen, or NULL */
 extern Opts opt;
 extern int tool;                      /* TL_ */
 extern const char *const tool_names[TL_N];
-extern const char tool_keys[TL_N];
+extern char tool_keys[TL_N];           /* (0.8: Edit > Keyboard Shortcuts changes them) */
 void set_tool(int t);                 /* (main.c) the tool chosen: canvas, toolbox and options bar told */
 int  tool_for_key(int c);             /* the tool a letter (upper case) chooses, -1 none */
 Brush tool_brush(int t);              /* the settings as a core Brush */
@@ -243,6 +243,12 @@ typedef struct {
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;
 extern const char *const unit_names[UN_N + 1];
+/* 0.8: Edit > Keyboard Shortcuts (keys.c): the commands gathered from the menu table (before the
+   window is made) and Easel.keys read; the command an extra key pressed on the canvas gives (0 none) */
+struct NewMenu;
+void  keys_init(struct NewMenu *menus);
+ULONG keys_extra(int c, UWORD code, UWORD qual);
+void  dlg_keys(void);
 void prefs_defaults(void);
 int  prefs_line(const char *line);    /* a line of Easel.prefs taken, if it is one of prefs' */
 void prefs_write(FILE *f);

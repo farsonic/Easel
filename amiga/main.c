@@ -101,7 +101,7 @@ const char *const tool_names[TL_N] = {
   "Magnetic Lasso Tool", "Ruler Tool",
   "Color Sampler Tool"
 };
-const char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
+char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
   'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I' };
 
 /* ------------------------------------------------------------------ the menus */
@@ -450,13 +450,14 @@ int tool_for_key(int c)
   if (c < 'A' || c > 'Z') return -1;
   if (key_tool[c - 'A']) return key_tool[c - 'A'] - 1;
   for (i = 0; i < (int)(sizeof first / sizeof first[0]); i++) if (tool_keys[first[i]] == c) return first[i];
+  for (i = 0; i < TL_N; i++) if (tool_keys[i] == c) return i;          /* (0.8: a letter given in Keyboard Shortcuts) */
   return -1;
 }
 void set_tool(int t)
 {
   if (t < 0 || t >= TL_N) return;
   tool = t;
-  key_tool[tool_keys[t] - 'A'] = (signed char)(t + 1);
+  if (tool_keys[t] >= 'A' && tool_keys[t] <= 'Z') key_tool[tool_keys[t] - 'A'] = (signed char)(t + 1);
   if (canvas) DoMethod(canvas, MUIM_Canvas_Tool);
   if (toolbox) DoMethod(toolbox, MUIM_Tools_Refresh);
   if (optbar) DoMethod(optbar, MUIM_Opts_Refresh);
@@ -1469,6 +1470,7 @@ static void command(ULONG id)
     pref_dark = !pref_dark;
     win_reopen();
     return;
+  case ID_KEYS: dlg_keys(); memset(key_tool, 0, sizeof key_tool); return;
   case ID_PREFS: {
     int reopen = 0;
     if (dlg_preferences(&reopen)) {
@@ -2119,6 +2121,7 @@ int main(int argc, char **argv)
   End;
   if (!app) { printf("Easel: the application could not be made (MUI classes missing?)\n"); goto done; }
   splash_step(75, tr("Opening the window"));
+  keys_init(menus);                      /* 0.8: the shortcuts in Easel.keys, before the menus are made */
   if (!win_make()) { printf("Easel: the window could not be made\n"); goto done; }
   palwin_create(app);
   appdrop_attach(win, app, open_path);
