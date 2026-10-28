@@ -49,7 +49,7 @@ enum {
   ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE,
   /* 0.9: Layer > Type and Rasterize, shape properties; the Type tool's Character and Paragraph windows */
   ID_TYPEWORKPATH, ID_RASTERTYPE, ID_RASTERSHAPE, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_SHAPEPROPS, ID_EDITTYPE,
-  ID_TYPECHAR, ID_TYPEPARA,
+  ID_TYPECHAR, ID_TYPEPARA, ID_RASTERTYPE2,
   /* New Adjustment Layer: ID_NEWADJ0 + AK_ */
   ID_NEWADJ0 = 470,
   /* Select */

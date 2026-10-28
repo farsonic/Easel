@@ -92,6 +92,7 @@ int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
 static Object *navpanel, *infopanel;     /* (0.6) the Navigator and Info panels */
 static Object *chanpanel;                /* (0.7) the Channels panel */
+static Object *pathpanel;                /* (0.9) the Paths panel */
 static Object *rightcol;                 /* the panels' column (Tab hides it) */
 static Doc *toggled;                     /* Toggle Last State: the picture just stepped back */
 static int fonts_assigned;
@@ -172,12 +173,16 @@ static struct NewMenu menus[] = {
   S("Channel Mixer...", 0, ID_NEWADJ0 + AK_CHANNELMIXER), SBAR, S("Invert", 0, ID_NEWADJ0 + AK_INVERT), S("Posterize...", 0, ID_NEWADJ0 + AK_POSTERIZE),
   S("Threshold...", 0, ID_NEWADJ0 + AK_THRESHOLD), S("Gradient Map...", 0, ID_NEWADJ0 + AK_GRADIENTMAP), S("Selective Color...", 0, ID_NEWADJ0 + AK_SELECTIVECOLOR),
   H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
-  I("Layer Content Options...", 0, ID_FILLSETTINGS), BAR,
+  I("Layer Content Options...", 0, ID_FILLSETTINGS),
+  H("Type"), S("Edit Type", 0, ID_EDITTYPE), S("Character...", 0, ID_TYPECHAR), S("Paragraph...", 0, ID_TYPEPARA), SBAR, S("Create Work Path", 0, ID_TYPEWORKPATH),
+  S("Warp Text...", 0, ID_WARPTEXT), SBAR, S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
+  I("Shape Properties...", 0, ID_SHAPEPROPS), BAR,
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
   I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
-  I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP), I("Rasterize Layer", 0, ID_RASTERIZE),
+  I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP),
+  H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE),
   H("Matting"), S("Defringe...", 0, ID_DEFRINGE), S("Remove Black Matte", 0, ID_BLACKMATTE), S("Remove White Matte", 0, ID_WHITEMATTE), BAR,
   H("Arrange"), S("Bring to Front", "}", ID_TOFRONT), S("Bring Forward", "]", ID_RAISE), S("Send Backward", "[", ID_LOWER), S("Send to Back", "{", ID_TOBACK),
   H("Align"), S("Left Edges", 0, ID_AL_LEFT), S("Horizontal Centers", 0, ID_AL_HCENTER), S("Right Edges", 0, ID_AL_RIGHT), SBAR,
@@ -593,7 +598,15 @@ static void update_menus(void)
   menu_set(ID_UNGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
   menu_set(ID_MERGEGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
   menu_set(ID_FILLSETTINGS, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_ADJUST));
-  menu_set(ID_RASTERIZE, MUIA_Menuitem_Enabled, al && al->kind == LK_FILL);
+  menu_set(ID_RASTERIZE, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_TEXT || al->kind == LK_SHAPE));
+  /* 0.9: type and shape layers' items */
+  {
+    static const ULONG needtype[] = { ID_EDITTYPE, ID_TYPECHAR, ID_TYPEPARA, ID_TYPEWORKPATH, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_RASTERTYPE, ID_RASTERTYPE2, 0 };
+    int ist = al && al->kind == LK_TEXT;
+    for (i = 0; needtype[i]; i++) menu_set(needtype[i], MUIA_Menuitem_Enabled, ist || (type_editing && (needtype[i] == ID_TYPECHAR || needtype[i] == ID_TYPEPARA || needtype[i] == ID_WARPTEXT)));
+    menu_set(ID_SHAPEPROPS, MUIA_Menuitem_Enabled, al && al->kind == LK_SHAPE);
+    menu_set(ID_RASTERSHAPE, MUIA_Menuitem_Enabled, al && al->kind == LK_SHAPE);
+  }
   menu_set(ID_PASTEINTO, MUIA_Menuitem_Enabled, has && clip != NULL && d->sel != NULL);
   menu_set(ID_PASTE, MUIA_Menuitem_Enabled, has && clip != NULL);
   menu_set(ID_PASTEINPLACE, MUIA_Menuitem_Enabled, has && clip != NULL);
@@ -634,6 +647,7 @@ void refresh_panels(void)
   DoMethod(navpanel, MUIM_Navigator_Refresh, 1);
   DoMethod(infopanel, MUIM_Info_Refresh, 1);
   DoMethod(chanpanel, MUIM_Channels_Refresh);
+  DoMethod(pathpanel, MUIM_Paths_Refresh);
   DoMethod(colorpanel, MUIM_Color_Refresh);
   DoMethod(toolbox, MUIM_Tools_Refresh);
   DoMethod(doctabs, MUIM_DocTabs_Refresh);
@@ -1543,7 +1557,97 @@ static void transform_dialog(void)
   /* new to old: undo the turn, then the scale, about the middle */
   m[0] = c * 100 / sx; m[1] = -s * 100 / sx; m[3] = s * 100 / sy; m[4] = c * 100 / sy;
   m[2] = cx - m[0] * cx - m[1] * cy; m[5] = cy - m[3] * cx - m[4] * cy;
+  if (d->lay[d->active]->live) {
+    /* 0.9: a type or shape layer takes the forward map: the inverse of this one */
+    double f[6], det = m[0] * m[4] - m[1] * m[3];
+    if (fabs(det) < 1e-12) return;
+    f[0] = m[4] / det; f[1] = -m[1] / det; f[3] = -m[3] / det; f[4] = m[0] / det;
+    f[2] = -(f[0] * m[2] + f[1] * m[5]); f[5] = -(f[3] * m[2] + f[4] * m[5]);
+    doc_live_transform(d, d->active, f);
+    return;
+  }
   transform_layer(d, m);
+}
+/* ------------------------------------------------------------------ 0.9: type and shape layers, paths */
+/* a live (type or shape) layer's extent, worked out if need be */
+static Box live_extent(Doc *d, int i)
+{
+  Layer *l = d->lay[i];
+  const TextParams *tp = layer_text(l);
+  if (tp) return text_bounds(tp);
+  if (!l->live_ok) live_render(d, l);
+  return l->live_ok && l->livepx ? l->livebox : box_make(0, 0, 0, 0);
+}
+/* Edit > Transform's quarter turns and flips of a live layer, about its middle: how 1, 2, 3
+   quarter turns clockwise, 4 flipped across, 5 down; 1 if done */
+static int live_turn(Doc *d, int how)
+{
+  Box b = live_extent(d, d->active);
+  double cx = (b.x0 + b.x1) / 2.0, cy = (b.y0 + b.y1) / 2.0, m[6];
+  memset(m, 0, sizeof m);
+  switch (how) {
+  case 1: m[1] = -1; m[2] = cx + cy; m[3] = 1; m[5] = cy - cx; break;
+  case 2: m[0] = -1; m[2] = 2 * cx; m[4] = -1; m[5] = 2 * cy; break;
+  case 3: m[1] = 1; m[2] = cx - cy; m[3] = -1; m[5] = cy + cx; break;
+  case 4: m[0] = -1; m[2] = 2 * cx; m[4] = 1; break;
+  default: m[0] = 1; m[4] = -1; m[5] = 2 * cy; break;
+  }
+  if (!doc_live_transform(d, d->active, m)) { ask("OK", "%s", tr("The layer is locked.")); return 0; }
+  return 1;
+}
+/* Layer > Shape Properties (and a double-click on a shape layer) */
+static void shape_props(Doc *d)
+{
+  const ShapeParams *cur = layer_shape(d->lay[d->active]);
+  ShapeParams sp;
+  if (!cur) return;
+  sp = *cur;
+  if (dlg_shape(&sp) && memcmp(&sp, cur, sizeof sp) && !doc_set_shape(d, d->active, &sp, NULL)) ask("OK", "%s", tr("There isn't enough memory for that."));
+}
+/* Latin-1 typed in a dialog to UTF-8 */
+static void latin1_utf8(const char *s, char *u, size_t cap)
+{
+  size_t o = 0;
+  for (; *s && o + 3 < cap; s++) {
+    UBYTE c = (UBYTE)*s;
+    if (c < 0x80) u[o++] = (char)c; else { u[o++] = (char)(0xC0 | (c >> 6)); u[o++] = (char)(0x80 | (c & 63)); }
+  }
+  u[o] = 0;
+}
+/* the Paths panel's double-click: the Work Path saved under a name, or a saved path renamed */
+static void path_rename(Doc *d)
+{
+  char name[40], u[80];
+  int k;
+  if (d->path_active < 0 && d->workpath) {
+    sprintf(name, "%s %d", tr("Path"), d->npaths + 1);
+    if (!ask_string("Save Path", "Name:", name, sizeof name) || !name[0]) return;
+    latin1_utf8(name, u, sizeof u);
+    if ((k = doc_path_save_work(d, u)) >= 0) d->path_active = k + 1;
+  } else if (d->path_active > 0 && d->path_active <= d->npaths) {
+    k = d->path_active - 1;
+    utf8_to_latin1(d->path_name[k], (u32)strlen(d->path_name[k]), name, sizeof name);
+    if (!ask_string("Rename Path", "Name:", name, sizeof name) || !name[0]) return;
+    latin1_utf8(name, u, sizeof u);
+    doc_path_rename(d, k, u);
+  }
+}
+/* the path the Paths panel's buttons and the path tools' options work on; NULL (said) if none */
+static Path *path_for_command(Doc *d)
+{
+  Path *p = active_path(d);
+  if (!p || !p->na) { ask("OK", "%s", tr("Choose a path in the Paths panel first (or draw one with the Pen tool).")); return NULL; }
+  return p;
+}
+/* the commands that leave the text being typed alone (the rest end the typing first) */
+static int type_keeps(ULONG id)
+{
+  static const ULONG keep[] = { ID_TEXTCOLOR, ID_TYPECHAR, ID_TYPEPARA, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_ZOOMIN, ID_ZOOMOUT, ID_FIT,
+    ID_ACTUAL, ID_ZOOM200, ID_ZOOM50, ID_AUTOSAVE, ID_POINTER, ID_ZOOMED, ID_COLORCLICK, ID_PICKED, ID_COLORCHG, ID_SWAPCOLORS,
+    ID_DEFCOLORS, ID_TOGGLEPANELS, ID_TOGGLERIGHT, ID_STROKECOLOR, ID_PANELTAB, ID_CANVASCHG, ID_PATHSCHG, 0 };
+  int i;
+  for (i = 0; keep[i]; i++) if (keep[i] == id) return 1;
+  return 0;
 }
 static void command(ULONG id)
 {
@@ -1791,11 +1895,71 @@ static void command(ULONG id)
     if (box_empty(xform_again(d, d->active, RS_BICUBIC)) && !progress_aborted) ask("OK", "%s", tr("There is no transform to do again, or the layer can't be changed."));
     break;
   /* (exact, and only the selected part when there is a selection) */
-  case ID_ROTATE180: xform_rotate90(d, d->active, 2); break;
-  case ID_ROTATE90R: xform_rotate90(d, d->active, 1); break;
-  case ID_ROTATE90L: xform_rotate90(d, d->active, 3); break;
-  case ID_FLIPLH: xform_flip(d, d->active, 0); break;
-  case ID_FLIPLV: xform_flip(d, d->active, 1); break;
+  case ID_ROTATE180: if (d->lay[d->active]->live) live_turn(d, 2); else xform_rotate90(d, d->active, 2); break;
+  case ID_ROTATE90R: if (d->lay[d->active]->live) live_turn(d, 1); else xform_rotate90(d, d->active, 1); break;
+  case ID_ROTATE90L: if (d->lay[d->active]->live) live_turn(d, 3); else xform_rotate90(d, d->active, 3); break;
+  case ID_FLIPLH: if (d->lay[d->active]->live) live_turn(d, 4); else xform_flip(d, d->active, 0); break;
+  case ID_FLIPLV: if (d->lay[d->active]->live) live_turn(d, 5); else xform_flip(d, d->active, 1); break;
+  /* 0.9: Layer > Type, Rasterize, Shape Properties */
+  case ID_EDITTYPE:
+    if (!layer_text(d->lay[d->active])) return;
+    if (tool != TL_TEXT && tool != TL_VTEXT) set_tool(layer_text(d->lay[d->active])->vertical ? TL_VTEXT : TL_TEXT);
+    DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_EDIT, 0);
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    refresh_panels();
+    return;
+  case ID_TYPECHAR: DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_CHARACTER, 0); refresh_panels(); return;
+  case ID_TYPEPARA: DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_PARAGRAPH, 0); refresh_panels(); return;
+  case ID_WARPTEXT: DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_WARP, 0); refresh_panels(); return;
+  case ID_TYPEHORIZ: case ID_TYPEVERT: DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_ORIENT, id == ID_TYPEVERT); refresh_panels(); return;
+  case ID_TEXTCOLOR: {
+    LONG c = colorpick_run("Color Picker (Text Color)", d->fg);
+    if (c >= 0) { d->fg = (u32)c; DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_COLOR, 0); }
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    refresh_panels();
+    return; }
+  case ID_STROKECOLOR: {
+    LONG c = colorpick_run("Color Picker (Stroke Color)", (ULONG)opt.stroke_color);
+    if (c >= 0) opt.stroke_color = (int)c;
+    DoMethod(optbar, MUIM_Opts_Refresh);
+    return; }
+  case ID_TYPEWORKPATH: {
+    const TextParams *tp = layer_text(d->lay[d->active]);
+    Path *p = tp ? text_to_path(tp) : NULL;
+    if (!p) return;
+    if (doc_path_set(d, -1, p, "Create Work Path")) d->path_active = -1;
+    path_free(p);
+    break; }
+  case ID_RASTERTYPE: case ID_RASTERTYPE2: if (d->lay[d->active]->kind == LK_TEXT) doc_rasterize(d, d->active); break;
+  case ID_RASTERSHAPE: if (d->lay[d->active]->kind == LK_SHAPE) doc_rasterize(d, d->active); break;
+  case ID_SHAPEPROPS: shape_props(d); break;
+  /* 0.9: the Paths panel */
+  case ID_PATHSCHG: DoMethod(canvas, MUIM_Canvas_Paths); DoMethod(pathpanel, MUIM_Paths_Refresh); return;
+  case ID_PATHFILL: {
+    Path *p = path_for_command(d);
+    if (p && box_empty(path_fill(d, p, d->fg, 100, BM_NORMAL, 1)) && !progress_aborted) ask("OK", "%s", tr("The layer can't be painted: choose a pixel layer that isn't locked or hidden."));
+    break; }
+  case ID_PATHSTROKE: {
+    Path *p = path_for_command(d);
+    Brush b = tool_brush(TL_BRUSH);
+    if (p && box_empty(path_stroke(d, p, &b, d->fg, 0)) && !progress_aborted) ask("OK", "%s", tr("The layer can't be painted: choose a pixel layer that isn't locked or hidden."));
+    break; }
+  case ID_PATHMKSEL: { Path *p = path_for_command(d); if (p) path_to_selection(d, p, SEL_REPLACE, 0, 1); break; }
+  case ID_PATHFROMSEL: {
+    Path *p;
+    if (!d->sel) { ask("OK", "%s", tr("Make a selection first: its outline becomes the Work Path.")); return; }
+    if (!(p = path_from_selection(d, 2.0))) { if (!progress_aborted) ask("OK", "%s", tr("Nothing is selected.")); return; }
+    if (doc_path_set(d, -1, p, "Make Work Path")) d->path_active = -1;
+    path_free(p);
+    break; }
+  case ID_PATHNEW: { int k = doc_path_new(d, NULL); if (k >= 0) d->path_active = k + 1; break; }
+  case ID_PATHDUP: if (d->path_active > 0) { int k = doc_path_duplicate(d, d->path_active - 1); if (k >= 0) d->path_active = k + 1; } break;
+  case ID_PATHDEL:
+    if (!d->path_active) return;
+    doc_path_delete(d, d->path_active < 0 ? -1 : d->path_active - 1);
+    d->path_active = 0;
+    break;
+  case ID_PATHRENAME: path_rename(d); break;
   /* 0.7: Layer > Matting */
   case ID_DEFRINGE: {
     static LONG width = 1;
@@ -1913,6 +2077,7 @@ static void command(ULONG id)
   case ID_LAYERPROPS:
     /* an adjustment or fill layer's own settings; otherwise its name, opacity, mode and the rest */
     if (d->lay[d->active]->kind == LK_ADJUST) dlg_adjust(adj_menu_id(d->lay[d->active]->adj.kind));
+    else if (d->lay[d->active]->kind == LK_SHAPE) shape_props(d);
     else if (d->lay[d->active]->kind == LK_FILL) dlg_fill_layer(-1);
     else dlg_layer_props();
     break;
@@ -2017,7 +2182,7 @@ static void brush_picked(const Brush *b)
   DoMethod(optbar, MUIM_Opts_Refresh);
 }
 static void brush_changed(void) { DoMethod(optbar, MUIM_Opts_Refresh); DoMethod(canvas, MUIM_Canvas_Refresh); }
-static const char *const head_layers[] = { "Layers", "Channels", "Navigator", "Info", NULL };
+static const char *const head_layers[] = { "Layers", "Channels", "Paths", "Navigator", "Info", NULL };
 static Object *lowpages, *lowhead;
 static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class, NULL, MUIA_FlatScroll_Horiz, horiz, TAG_DONE); }
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
@@ -2067,6 +2232,7 @@ static int win_make(void)
           Child, lowpages = VGroup, MUIA_Group_PageMode, TRUE, InnerSpacing(0, 0), MUIA_VertWeight, 300,
             Child, layerpanel = NewObject(layers_class()->mcc_Class, NULL, MUIA_VertWeight, 300, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
             Child, chanpanel = NewObject(channels_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
+            Child, pathpanel = NewObject(paths_class()->mcc_Class, NULL, MUIA_ShortHelp, (ULONG)" ", TAG_DONE),
             Child, navpanel = NewObject(navigator_class()->mcc_Class, NULL, TAG_DONE),
             Child, infopanel = NewObject(info_class()->mcc_Class, NULL, TAG_DONE),
           End,
@@ -2283,7 +2449,7 @@ int main(int argc, char **argv)
   text_amifont_lookup = ami_lookup;
   splash_step(45, tr("Preparing"));
   if (!canvas_class() || !toolbox_class() || !optbar_class() || !color_class() || !layers_class() || !history_class() || !head_class() ||
-      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class() || !channels_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
+      !doctabs_class() || !status_class() || !flatscroll_class() || !qbutton_class() || !navigator_class() || !info_class() || !channels_class() || !paths_class()) { printf("Easel: MUI couldn't make its classes\n"); goto done; }
   /* 0.5: brushes, swatches, patterns, gradients (before the window, which shows their panels) */
   swatch_palette_hooks();
   brushwin_init();
@@ -2326,11 +2492,15 @@ int main(int argc, char **argv)
     ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
     if (id) LOG("id %lu", (unsigned long)id);
     if (id == MUIV_Application_ReturnID_Quit || id == ID_QUIT) { if (close_all()) break; }
+    else if (id == ID_OPTCHG) DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_OPTS, 0);    /* 0.9: the Type tool takes the options bar's change */
     else if (id == ID_CANVASCHG || id == ID_LAYERSCHG || id == ID_HISTCHG || id == ID_CHANSCHG) {
+      /* 0.9: the text being typed: kept when the Layers panel changes something, forgotten when
+         the History panel has gone back over it */
+      if (type_editing && id != ID_CANVASCHG) DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_COMMIT, id == ID_HISTCHG ? -1 : 0);
       if (id != ID_CANVASCHG) DoMethod(canvas, MUIM_Canvas_Refresh);
       refresh_panels();
     }
-    else if (id == ID_PICKED || id == ID_COLORCHG) { DoMethod(colorpanel, MUIM_Color_Refresh); DoMethod(toolbox, MUIM_Tools_Refresh); }
+    else if (id == ID_PICKED || id == ID_COLORCHG) { DoMethod(colorpanel, MUIM_Color_Refresh); DoMethod(toolbox, MUIM_Tools_Refresh); if (TYPE_TOOL(tool)) DoMethod(optbar, MUIM_Opts_Refresh); }
     else if (id == ID_ZOOMED) { DoMethod(doctabs, MUIM_DocTabs_Refresh); DoMethod(statusbar, MUIM_Status_Refresh); DoMethod(navpanel, MUIM_Navigator_Refresh, 0); }
     else if (id == ID_TOOLPICK) set_tool((int)xget(toolbox, MUIA_Tools_Pick));
     else if (id == ID_COLORCLICK) {
@@ -2346,6 +2516,7 @@ int main(int argc, char **argv)
     else if (id == ID_DOCCLOSE) doc_close((int)xget(doctabs, MUIA_DocTabs_Close));
     else if (id) {
       /* (0.8: as a job, so a long operation shows its progress and can be aborted) */
+      if (type_editing && !type_keeps(id)) DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_COMMIT, 0);   /* (0.9) */
       set(app, MUIA_Application_Sleep, TRUE);
       job_begin(cur_doc(), menu_label(id));
       command(id);
@@ -2378,6 +2549,7 @@ done:
   toolbox_free();
   panels_free();
   panels2_free();
+  paths_free();
   jobs_free();
   popup_free();
   qbutton_class_free();
