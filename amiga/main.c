@@ -292,6 +292,7 @@ ULONG run_modal(Object *w, const ULONG *ends, void (*each)(ULONG id))
   DoMethod(app, OM_REMMEMBER, (ULONG)w);
   redraw_window();
   progress_hook = hook;
+  job_timer_reset();
   return id;
 }
 Object *dialog_window(const char *t, Object *contents, const char *oklabel)
@@ -2010,6 +2011,7 @@ int main(int argc, char **argv)
   for (i = 0; i < font_count(); i++) if (!strcmp(font_name(i), "Liberation Sans")) opt.text_font = i;
   set_tool(TL_BRUSH);
   refresh_all();
+  jobs_window = 1;
   if (start_cmd) DoMethod(app, MUIM_Application_ReturnID, start_cmd);   /* (through the loop: as a job) */
   if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel."));
   for (;;) {
@@ -2067,6 +2069,7 @@ done:
   toolbox_free();
   panels_free();
   panels2_free();
+  jobs_free();
   popup_free();
   qbutton_class_free();
   fonts_free(&fonts);

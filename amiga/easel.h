@@ -269,6 +269,9 @@ int  dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg);   /* (main.c's New) *
 void job_begin(Doc *d, const char *name);
 int  job_end(void);
 int  job_running(void);
+void jobs_free(void);
+void job_timer_reset(void);            /* (after a dialog) the half second counted afresh */
+extern int jobs_window;                /* the progress window may open (not while starting up) */
 
 /* ------------------------------------------------------------------ shared bits */
 /* the public screen Easel's windows open on ("": the default one); QWindowObject is a window on it */

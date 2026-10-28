@@ -12,6 +12,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <dos/dos.h>
+#include <exec/io.h>
+#include <devices/keyboard.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
@@ -27,11 +29,38 @@ static struct { Doc *doc; void *top; int (*hook)(long, long); } jobs[MAXJOBS];
 static int njobs;
 static Object *pwin, *pgauge, *ptext;
 static LONG abort_flag;
-static LONG started, lastcall;           /* when the operation now running began, and last told its progress */
+static LONG started;                     /* when the operation now running began */
 static char what[80];                    /* its name, for the window's text */
 int jobs_shown;                          /* (for testing) how many times the window has opened */
+int jobs_window = 0;                     /* the window may open (set once Easel is up: not under the splash) */
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
+/* Esc held down, read straight from the keyboard's matrix (whichever window is active) */
+static struct MsgPort *kport;
+static struct IOStdReq *kreq;
+static int kopen;
+static int esc_down(void)
+{
+  UBYTE matrix[16];
+  if (!kopen) {
+    kopen = -1;
+    if ((kport = CreateMsgPort()) && (kreq = (struct IOStdReq *)CreateIORequest(kport, sizeof *kreq)) &&
+        !OpenDevice((STRPTR)"keyboard.device", 0, (struct IORequest *)kreq, 0)) kopen = 1;
+  }
+  if (kopen < 0) return 0;
+  memset(matrix, 0, sizeof matrix);
+  kreq->io_Command = KBD_READMATRIX; kreq->io_Data = matrix; kreq->io_Length = sizeof matrix;
+  if (DoIO((struct IORequest *)kreq)) return 0;
+  return (matrix[0x45 >> 3] >> (0x45 & 7)) & 1;
+}
+/* (at the end) the keyboard let go */
+void jobs_free(void)
+{
+  if (kopen > 0) CloseDevice((struct IORequest *)kreq);
+  if (kreq) DeleteIORequest((struct IORequest *)kreq);
+  if (kport) DeleteMsgPort(kport);
+  kreq = NULL; kport = NULL; kopen = 0;
+}
 /* the time in fiftieths of a second */
 static LONG now_ticks(void)
 {
@@ -57,7 +86,9 @@ static void pwin_open(void)
   DoMethod(app, OM_ADDMEMBER, (ULONG)pwin);
   DoMethod(abort, MUIM_Notify, MUIA_Pressed, FALSE, MUIV_Notify_Application, 3, MUIM_WriteLong, 1, (ULONG)&abort_flag);
   DoMethod(pwin, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, MUIV_Notify_Application, 3, MUIM_WriteLong, 1, (ULONG)&abort_flag);
+  DoMethod(pwin, MUIM_Notify, MUIA_Window_InputEvent, (ULONG)"esc", MUIV_Notify_Application, 3, MUIM_WriteLong, 1, (ULONG)&abort_flag);
   set(pwin, MUIA_Window_Open, TRUE);
+  set(pwin, MUIA_Window_Activate, TRUE);
   /* the application is asleep while a command runs: this window alone woken */
   for (i = 0; i < 8 && xget(pwin, MUIA_Window_Sleep); i++) set(pwin, MUIA_Window_Sleep, FALSE);
   jobs_shown++;
@@ -83,12 +114,9 @@ static int hook(long done, long total)
   int pc;
   if (!app) return 0;
   t = now_ticks();
-  /* (a pause since the last call, such as a dialog, and this is another operation: timed afresh) */
-  if (!pwin && t - lastcall > 10) started = t;
-  lastcall = t;
   t -= started;
   if (!pwin) {
-    if (t < 25) return abort_flag != 0;
+    if (t < 25 || !jobs_window) return abort_flag != 0;
     pwin_open();
     shown_at = -100; shown_pc = -1;
   }
@@ -103,6 +131,7 @@ static int hook(long done, long total)
     set(ptext, MUIA_Text_Contents, (ULONG)buf);
   }
   DoMethod(app, MUIM_Application_InputBuffered);
+  if (esc_down()) abort_flag = 1;
   return abort_flag != 0;
 }
 /* (see easel.h) a job begun: d's undo step on top noted, the hook set */
@@ -119,7 +148,7 @@ void job_begin(Doc *d, const char *name)
   }
   else if (njobs == 1) strcpy(what, tr("Working..."));
   if (ptext) set(ptext, MUIA_Text_Contents, (ULONG)what);
-  started = lastcall = now_ticks();
+  started = now_ticks();
   progress_hook = hook;
 }
 /* (see easel.h) the job ended: if Abort was pressed, its undo step taken back; 1 if it was aborted */
@@ -144,3 +173,6 @@ int job_end(void)
   return aborted;
 }
 int job_running(void) { return njobs > 0; }
+/* (see easel.h) the time an operation has taken counted afresh (after a dialog: what follows is
+   another operation) */
+void job_timer_reset(void) { started = now_ticks(); }

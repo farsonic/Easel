@@ -275,8 +275,9 @@ int file_write(const char *path, const void *data, size_t len)
 int (*progress_hook)(long done, long total);
 int progress_aborted;
 static long prog_last = -1, prog_lo = 0, prog_hi = 1000;
+static int prog_same;
 /* (see util.h) done of total mapped into the part of the whole set by progress_push, in
-   thousandths; the hook told only when that has moved on */
+   thousandths; the hook told when that has moved on, and every 16th call anyway */
 int progress(long done, long total)
 {
   long pm;
@@ -285,8 +286,8 @@ int progress(long done, long total)
   if (done < 0) done = 0;
   if (done > total) done = total;
   pm = prog_lo + (long)((double)done * (double)(prog_hi - prog_lo) / (double)total);
-  if (pm == prog_last) return 0;
-  prog_last = pm;
+  if (pm == prog_last && ++prog_same < 16) return 0;      /* (but at least every 16th call, for Abort) */
+  prog_last = pm; prog_same = 0;
   if (progress_hook(pm, 1000)) progress_aborted = 1;
   return progress_aborted;
 }
