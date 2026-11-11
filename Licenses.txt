@@ -1,7 +1,8 @@
 Easel - credits and licences
 ============================
 
-Easel's own code is by its author. Easel also contains work by other people, used under the
+Easel's own code is by its author, under the GNU General Public License, version 2
+(GPL-2.0-only; the text is in LICENSE). Easel also contains work by other people, used under the
 licences below. Every one of them allows Easel to be given away, sold, or supported by
 donations. What they ask in return is that their copyright notices and licence texts travel with
 Easel, which is what this file is for. Thank you to all of them.

@@ -403,6 +403,8 @@ animated brushes and drawing guides by dragging from the rulers may come later.
 
 ## Credits and licences
 
+Easel itself is under the GNU General Public License, version 2 (GPL-2.0-only); see `LICENSE`.
+
 Easel includes other people's work: dav1d by VideoLAN and the dav1d authors (BSD licence),
 which decodes AVIF; picture readers ported from PhotoCraft by the ArtCraft Team and the
 PhotoCraft contributors (MIT licence); and the Liberation, Carlito and Caladea fonts (SIL Open
