@@ -1,5 +1,7 @@
 # Easel 1.0
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-farsonic-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/farsonic)
+
 Easel is a picture editor for the Amiga, laid out the way PhotoCraft is. The options bar runs
 along the top, the tools down the left, and open pictures are tabs over the canvas. The Color,
 Swatches, Brushes, History and Layers panels sit down the right, the status bar along the bottom, and the menus
