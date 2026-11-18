@@ -820,17 +820,19 @@ int package_links(Doc *d, const char *drawer)
     while (base > src && base[-1] != '/' && base[-1] != ':') base--;
     snprintf(name, sizeof name, "%s", base);
     path_join(dst, sizeof dst, drawer, name);
+    if (!strcmp(dst, src)) { n++; continue; }
+    if (!(data = file_read(src, &len))) return -1;
     for (k = 2; k < 100; k++) {
-      /* a different source under the same name: numbered */
-      FILE *f = fopen(dst, "rb");
-      if (!f || !strcmp(dst, src)) { if (f) fclose(f); break; }
-      fclose(f);
+      /* a different file there under the same name: numbered (the same one is used as it is) */
+      size_t ol;
+      u8 *old = file_read(dst, &ol);
+      int same = old && ol == len && !memcmp(old, data, len);
+      free(old);
+      if (!old || same || !strcmp(dst, src)) { if (same) len = 0; break; }
       snprintf(name, sizeof name, "%d-%s", k, base);
       path_join(dst, sizeof dst, drawer, name);
     }
-    if (!strcmp(dst, src)) { n++; continue; }
-    if (!(data = file_read(src, &len))) return -1;
-    if (!file_write(dst, data, len)) { free(data); return -1; }
+    if (len && !file_write(dst, data, len)) { free(data); return -1; }
     free(data);
     if (!doc_smart_relink(d, i, dst)) return -1;
     n++;
