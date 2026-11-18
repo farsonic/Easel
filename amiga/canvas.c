@@ -2374,6 +2374,19 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     ov_show(d, obj);
     return;
   }
+  if (brushlike(t) && alt && shift && x >= 0 && y >= 0 && x < doc->w && y < doc->h) {
+    /* r3: Shift-Alt-click with a painting tool places a colour sampler (PhotoCraft #12245) */
+    DocView *v = cur_view();
+    if (v && v->nsamp >= 4) { ov_show(d, obj); ask("OK", "%s", tr("There can be four colour samplers: drag one somewhere else, or Alt-click one to remove it.")); return; }
+    if (v) {
+      v->samp_x[v->nsamp] = (LONG)x; v->samp_y[v->nsamp] = (LONG)y;
+      d->samp_drag = v->nsamp++;
+      d->drag = DR_SAMPLE;
+      set(obj, MUIA_Canvas_Pointer, TRUE);
+      ov_show(d, obj);
+      return;
+    }
+  }
   if (brushlike(t) && alt && t != TL_CLONE && t != TL_HEAL && t != TL_ERASER) t = TL_EYEDROPPER;    /* (Alt: the eyedropper for a moment) */
   if (t2_press(d, obj, doc, t, mx, my, x, y, qual, dbl)) { ov_show(d, obj); return; }   /* 1.2 */
   switch (t) {

@@ -838,7 +838,7 @@ Rechecked 2026-11-18 against Easel 1.1.
 | Pattern library: built-ins, Define Pattern, .pat (`pattern_cmds.rs`) | **Have**: built-ins, Define Pattern, IFF pattern sets (0.5); 1.2 reads Photoshop .pat (grey, indexed and RGB, raw or PackBits, with transparency) and writes it (`pat_read`, `pat_write`; Edit › Presets) | Done | — |
 | Colour picker dialog: HSB/RGB/Lab/CMYK/hex, web colours only, sampling the screen (`docs/color-picker.md`) | **Have**: HSB, RGB, Lab and hex (0.5, `E:amiga/colorpick.c`); round 3 adds CMYK fields (the plain device conversion, `rgb_to_cmyk100` in `E:core/colr3.c`) and Only Web Colors (the 216 web-safe colours, `web_safe`); the screen is sampled by dragging the Eyedropper outside the picture (1.1, `E:amiga/screenpick.c`) rather than from the picker itself | Done | — |
 | Deterministic, replayable strokes (`BrushSettings::seed`) | **Have** (0.5: `BrushDynamics.seed`, counter-based `brush_hash`) | Done | — |
-| *upstream* Painting tools: Shift+Alt+click adds a colour sampler (#12245) | **Missing** | Easy | P3 |
+| *upstream* Painting tools: Shift+Alt+click adds a colour sampler (#12245) | **Have** (r3): with a painting tool, Shift-Alt-click places one of the four colour samplers (dragged into place before letting go), as the Color Sampler tool does (`press` in `E:amiga/canvas.c`) | Done | — |
 | *upstream* Brush: the reference's alerts when it can't paint (#12254) | **Have**: locked, hidden, no pixels, no snapshot or pattern (`press`, `E:amiga/canvas.c`) | Done | — |
 | DPaint stencil and grid snap for painting (Easel extra, section 21) | **Have** (1.1: `Brush.stencil`, `grid_snap_paint`) | Done | — |
 
