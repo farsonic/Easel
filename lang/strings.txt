@@ -2880,3 +2880,9 @@ Rotation:	Drehung:	Rotation :	Rotación:	Rotazione:
 Blur Focal Distance:	Weichzeichner-Fokusentfernung:	Distance focale du flou :	Distancia focal de desenfoque:	Distanza focale sfocatura:
 Depth Map:	Tiefenkarte:	Carte de profondeur :	Mapa de profundidad:	Mappa di profondità:
 With a depth map the blur grows with the distance from the\nfocal distance; without one everything is blurred alike.	Mit einer Tiefenkarte wächst die Unschärfe mit dem Abstand von der\nFokusentfernung; ohne sie wird alles gleich weichgezeichnet.	Avec une carte de profondeur, le flou croît avec l'écart à la\ndistance focale ; sans elle, tout est flouté de même.	Con un mapa de profundidad el desenfoque crece con la distancia a la\ndistancia focal; sin él todo se desenfoca igual.	Con una mappa di profondità la sfocatura cresce con la distanza dalla\ndistanza focale; senza, tutto è sfocato allo stesso modo.
+Path Blur...	Pfad-Weichzeichnung...	Flou de tracé...	Desenfoque de trazado...	Sfocatura tracciato...
+Speed (px):	Geschwindigkeit (px):	Vitesse (px) :	Velocidad (px):	Velocità (px):
+Taper (%):	Verjüngung (%):	Effilement (%) :	Afilar (%):	Rastremazione (%):
+Path Blur	Pfad-Weichzeichnung	Flou de tracé	Desenfoque de trazado	Sfocatura tracciato
+Centered Blur	Zentrierte Weichzeichnung	Flou centré	Desenfoque centrado	Sfocatura centrata
+The picture is smeared along the path chosen in the Paths panel,\nwhere the path passes nearest.	Das Bild wird entlang des im Pfade-Bedienfeld gewählten Pfades\nverwischt, wo der Pfad am nächsten verläuft.	L'image est étalée le long du tracé choisi dans le panneau Tracés,\nlà où le tracé passe le plus près.	La imagen se difumina a lo largo del trazado elegido en el panel\nTrazados, donde el trazado pasa más cerca.	L'immagine viene sfumata lungo il tracciato scelto nel pannello\nTracciati, dove il tracciato passa più vicino.

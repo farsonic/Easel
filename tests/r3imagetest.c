@@ -1072,6 +1072,43 @@ static void test_lens_blur(void)
   doc_free(d);
 }
 
+static void test_path_blur(void)
+{
+  Doc *d = doc_new(120, 90, 0xFFFFFF, 0);
+  Path *p = path_new();
+  long n = 120L * 90 * 4;
+  u8 *orig = (u8 *)malloc((size_t)n);
+  double rx = 0, rx0 = 0, gy = 0, gy0 = 0;
+  i32 x, y;
+  /* red in upright stripes, green in level ones */
+  for (y = 0; y < 90; y++) for (x = 0; x < 120; x++) put(d->lay[0]->px + ((long)y * 120 + x) * 4, (x / 2) & 1 ? 220 : 20, (y / 2) & 1 ? 220 : 20, 100);
+  memcpy(orig, d->lay[0]->px, (size_t)n);
+  CHECK(flt_path_blur(d, NULL, 10, 0, 1) == 0, "no path: nothing");
+  /* a level path: smeared across, so the upright stripes melt and the level ones stay */
+  path_move_to(p, 0, 45); path_line_to(p, 120, 45);
+  CHECK(flt_path_blur(d, p, 12, 0, 1) == 1, "path blur");
+  for (y = 10; y < 80; y++) for (x = 10; x < 110; x++) {
+    const u8 *q = d->lay[0]->px + ((long)y * 120 + x) * 4, *o = orig + ((long)y * 120 + x) * 4;
+    rx += abs(q[0] - q[4]); rx0 += abs(o[0] - o[4]);
+    gy += abs(q[1] - q[481]); gy0 += abs(o[1] - o[481]);
+  }
+  CHECK(rx < rx0 * 0.2 && gy > gy0 * 0.95, "smoothed along the path, kept across it");
+  doc_undo(d);
+  CHECK(!memcmp(orig, d->lay[0]->px, (size_t)n), "undo");
+  /* an upright path: the other way round */
+  path_clear(p); path_move_to(p, 60, 0); path_line_to(p, 60, 90);
+  flt_path_blur(d, p, 12, 50, 0);
+  rx = gy = 0;
+  for (y = 10; y < 80; y++) for (x = 10; x < 110; x++) {
+    const u8 *q = d->lay[0]->px + ((long)y * 120 + x) * 4;
+    rx += abs(q[0] - q[4]); gy += abs(q[1] - q[481]);
+  }
+  CHECK(gy < gy0 * 0.3 && rx > rx0 * 0.95, "an upright path smears up and down");
+  path_free(p);
+  free(orig);
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -1086,6 +1123,7 @@ int main(int argc, char **argv)
   test_render();
   test_lens();
   test_lens_blur();
+  test_path_blur();
   test_liquify();
   test_sky();
   test_subject();

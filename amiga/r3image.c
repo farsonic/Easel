@@ -200,6 +200,24 @@ static void lens_blur(Doc *d)
               TextObject, MUIA_Text_Contents, (ULONG)tr("With a depth map the blur grows with the distance from the\nfocal distance; without one everything is blurred alike."), MUIA_Font, MUIV_Font_Tiny, End, 1);
 }
 
+/* Blur Gallery > Path Blur: along the active path */
+static void f_pathblur(Doc *d, const LONG *v, int c, int t)
+{
+  Path *p = active_path(d);
+  (void)c;
+  if (p) apply_result(flt_path_blur(d, p, (int)v[0], (int)v[1], t));
+}
+static void path_blur(Doc *d)
+{
+  static const DlgParam ps[2] = { { "Speed (px):", 1, 500, 30 }, { "Taper (%):", 0, 100, 0 } };
+  Path *p = active_path(d);
+  if (!need_pixels(d)) return;
+  if (!p || p->na < 2) { ask("OK", "%s", tr("Choose a path in the Paths panel first (or draw one with the Pen tool).")); return; }
+  if (!mem_ok(r3_memory(d, R3M_BAND, 502) + (long)(d->w / 4 + 1) * (d->h / 4 + 1) * 8)) return;
+  dlg_sliders("Path Blur", ps, 2, NULL, NULL, 0, NULL, NULL, 0, "Centered Blur", 1, NULL, f_pathblur,
+              TextObject, MUIA_Text_Contents, (ULONG)tr("The picture is smeared along the path chosen in the Paths panel,\nwhere the path passes nearest."), MUIA_Font, MUIV_Font_Tiny, End, 1);
+}
+
 /* Render > Flame: along the active path (or a line across the lower part) */
 static void f_flame(Doc *d, const LONG *v, int c, int t)
 {
@@ -400,6 +418,7 @@ int r3_command(Doc *d, ULONG id)
   if (id >= ID_COMBINE0 && id < ID_COMBINE0 + CS_N) { combine_shapes(d, (int)(id - ID_COMBINE0)); return 1; }
   switch (id) {
   case ID_FIELDBLUR: field_blur(d); break;
+  case ID_PATHBLUR: path_blur(d); break;
   case ID_HDRTONING: hdr_toning(d); break;
   case ID_FLAME: flame(d); break;
   case ID_TREE: tree(d); break;

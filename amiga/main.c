@@ -296,7 +296,7 @@ static struct NewMenu menus[] = {
   S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
   S("Spin Blur...", 0, ID_F_SPINBLUR), S("Lens Blur...", 0, ID_F_LENSBLUR), S("Shape Blur...", 0, ID_F_SHAPEBLUR), S("Smart Blur...", 0, ID_F_SMARTBLUR),
   S("Surface Blur...", 0, ID_F_SURFACEBLUR),
-  H("Blur Gallery"), S("Field Blur...", 0, ID_FIELDBLUR), S("Iris Blur...", 0, ID_F_IRIS), S("Tilt-Shift...", 0, ID_F_TILTSHIFT),
+  H("Blur Gallery"), S("Field Blur...", 0, ID_FIELDBLUR), S("Iris Blur...", 0, ID_F_IRIS), S("Tilt-Shift...", 0, ID_F_TILTSHIFT), S("Path Blur...", 0, ID_PATHBLUR),
   H("Sharpen"), S("Smart Sharpen...", 0, ID_F_SMARTSHARPEN), S("Unsharp Mask...", 0, ID_F_UNSHARP), SBAR, S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen Edges", 0, ID_F_SHARPENEDGES), S("Sharpen More", 0, ID_F_SHARPENMORE),
   H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Dust & Scratches...", 0, ID_F_DUST), S("Median...", 0, ID_F_MEDIAN), S("Reduce Noise...", 0, ID_F_REDUCENOISE),
   S("Despeckle", 0, ID_F_DESPECKLE),

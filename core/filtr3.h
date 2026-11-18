@@ -51,6 +51,12 @@ int  flt_lens_blur_ex(Doc *d, const LensBlurParams *p);
 /* the iris's rows: for each dy in -r..r, the run lo..hi it covers (2r + 1 entries each) */
 void lens_iris_runs(int r, int blades, int rotation, int *lo, int *hi);
 
+/* ------------------------------------------------------------------ Path Blur */
+/* motion blur along a path: each pixel smeared along the path's direction where the path passes
+   nearest, speed pixels long (centred on the pixel, or behind it only), tapering 0-100 % towards
+   the ends of the smear */
+int  flt_path_blur(Doc *d, const Path *path, int speed, int taper, int centered);
+
 /* ------------------------------------------------------------------ HDR Toning */
 typedef struct {
   int radius;                         /* 1-500 px: how far the local adaptation looks */

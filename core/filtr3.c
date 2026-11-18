@@ -363,6 +363,84 @@ int flt_lens_blur_ex(Doc *d, const LensBlurParams *pin)
   return r;
 }
 
+/* ------------------------------------------------------------------ Path Blur */
+#define PB_CELL 4
+typedef struct { i32 gw, gh; float *dir; int speed, taper, centered; } PbCtx;
+static int pb_band(void *vc, Doc *d, const u8 *in, Box ib, u8 *out, Box ob)
+{
+  PbCtx *pc = (PbCtx *)vc;
+  i32 iw = ib.x1 - ib.x0, ih = ib.y1 - ib.y0, ow = ob.x1 - ob.x0, x, y;
+  int n = pc->speed, k, c;
+  (void)d;
+  for (y = ob.y0; y < ob.y1; y++) {
+    if (progress(y - ob.y0, ob.y1 - ob.y0)) return 1;
+    for (x = ob.x0; x < ob.x1; x++) {
+      long gi = (long)(y / PB_CELL < pc->gh ? y / PB_CELL : pc->gh - 1) * pc->gw + (x / PB_CELL < pc->gw ? x / PB_CELL : pc->gw - 1);
+      double tx = pc->dir[gi * 2], ty = pc->dir[gi * 2 + 1], acc[4] = { 0, 0, 0, 0 }, ws = 0;
+      u8 *o = out + ((long)(y - ob.y0) * ow + (x - ob.x0)) * 4;
+      for (k = 0; k <= n; k++) {
+        /* the samples along the direction: centred on the pixel, or behind it */
+        double t = pc->centered ? k - n / 2.0 : -(double)k, w = 1 - pc->taper / 100.0 * fabs(t) / (n > 0 ? (pc->centered ? n / 2.0 : n) : 1);
+        double sx = x - ib.x0 + tx * t, sy = y - ib.y0 + ty * t, fx, fy;
+        i32 x0, y0;
+        if (w <= 0) continue;
+        sx = clampd(sx, 0, iw - 1); sy = clampd(sy, 0, ih - 1);
+        x0 = (i32)sx; y0 = (i32)sy; fx = sx - x0; fy = sy - y0;
+        {
+          i32 x1 = x0 + 1 < iw ? x0 + 1 : iw - 1, y1 = y0 + 1 < ih ? y0 + 1 : ih - 1;
+          const u8 *q00 = in + ((long)y0 * iw + x0) * 4, *q10 = in + ((long)y0 * iw + x1) * 4, *q01 = in + ((long)y1 * iw + x0) * 4, *q11 = in + ((long)y1 * iw + x1) * 4;
+          double w00 = (1 - fx) * (1 - fy) * w, w10 = fx * (1 - fy) * w, w01 = (1 - fx) * fy * w, w11 = fx * fy * w;
+          for (c = 0; c < 3; c++) acc[c] += (q00[c] * q00[3] * w00 + q10[c] * q10[3] * w10 + q01[c] * q01[3] * w01 + q11[c] * q11[3] * w11) / 255.0;
+          acc[3] += q00[3] * w00 + q10[3] * w10 + q01[3] * w01 + q11[3] * w11;
+        }
+        ws += w;
+      }
+      if (ws <= 0) { memcpy(o, in + ((long)(y - ib.y0) * iw + (x - ib.x0)) * 4, 4); continue; }
+      o[3] = (u8)clamp255(acc[3] / ws);
+      for (c = 0; c < 3; c++) o[c] = acc[3] > 0.5 ? (u8)clamp255(acc[c] * 255 / acc[3]) : 0;
+    }
+  }
+  return 1;
+}
+int flt_path_blur(Doc *d, const Path *path, int speed, int taper, int centered)
+{
+  PbCtx pc;
+  Poly pl;
+  i32 gx, gy;
+  int r;
+  if (!path || path->na < 2 || speed < 1) return 0;
+  pc.speed = clampi(speed, 1, 500); pc.taper = clampi(taper, 0, 100); pc.centered = centered != 0;
+  pc.gw = (d->w + PB_CELL - 1) / PB_CELL; pc.gh = (d->h + PB_CELL - 1) / PB_CELL;
+  poly_init(&pl);
+  if (!path_flatten(path, 0.5, &pl) || pl.n < 2) { poly_free(&pl); return 0; }
+  if (!(pc.dir = (float *)malloc((size_t)pc.gw * pc.gh * 2 * sizeof(float)))) { poly_free(&pl); return -1; }
+  /* the direction field: each cell takes the tangent of the path's nearest segment */
+  for (gy = 0; gy < pc.gh; gy++) {
+    if (progress(gy, pc.gh * 4L)) break;
+    for (gx = 0; gx < pc.gw; gx++) {
+      double x = (gx + 0.5) * PB_CELL, y = (gy + 0.5) * PB_CELL, best = 1e300, tx = 1, ty = 0;
+      i32 ci, s0 = 0, i;
+      for (ci = 0; ci < pl.nc; s0 = pl.end[ci], ci++) {
+        i32 m = pl.end[ci] - s0, segs = pl.closed[ci] ? m : m - 1;
+        for (i = 0; i < segs; i++) {
+          const double *a = pl.xy + 2 * (s0 + i), *b = pl.xy + 2 * (s0 + (i + 1) % m);
+          double vx = b[0] - a[0], vy = b[1] - a[1], L2 = vx * vx + vy * vy, t, px, py, dd;
+          if (L2 <= 0) continue;
+          t = clampd(((x - a[0]) * vx + (y - a[1]) * vy) / L2, 0, 1);
+          px = a[0] + vx * t - x; py = a[1] + vy * t - y; dd = px * px + py * py;
+          if (dd < best) { best = dd; tx = vx / sqrt(L2); ty = vy / sqrt(L2); }
+        }
+      }
+      pc.dir[((long)gy * pc.gw + gx) * 2] = (float)tx; pc.dir[((long)gy * pc.gw + gx) * 2 + 1] = (float)ty;
+    }
+  }
+  poly_free(&pl);
+  if (progress_aborted) { free(pc.dir); return 0; }
+  r = band_run(d, "Path Blur", pc.speed + 2, pb_band, &pc);
+  free(pc.dir);
+  return r;
+}
+
 /* ------------------------------------------------------------------ HDR Toning */
 void hdr_defaults(HdrParams *p)
 {

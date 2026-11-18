@@ -13,6 +13,7 @@
 #define ID_TREE         7713
 #define ID_HDRTONING    7714
 #define ID_LIQUIFY      7715
+#define ID_PATHBLUR     7716
 #define ID_SELSUBJECT   7720
 #define ID_SELSKY       7721
 #define ID_TYPEONPATH   7740

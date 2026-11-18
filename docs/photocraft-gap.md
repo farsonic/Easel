@@ -702,7 +702,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Blur Gallery › Field Blur… | **Have** (r3): up to four pins, each placed (per cent of the picture) and with its own blur; between them the blur follows the pins inversely to the square of the distance (`flt_field_blur` in `E:core/filtr3.c`, worked out in bands); one pin matches Pillow's Gaussian blur (`E:tests/check_r3.py`). The pins are set by numbers, not dragged on the canvas | Done | — |
 | Blur Gallery › Iris Blur… | **Have**: `flt_iris_blur` (one ellipse, set by numbers) | Done | — |
 | Blur Gallery › Tilt-Shift… | **Have**: `flt_tilt_shift` | Done | — |
-| Blur Gallery › Path Blur… | **Missing** | Hard | P3 |
+| Blur Gallery › Path Blur… | **Have** (r3): the picture smeared along the path chosen in the Paths panel (each pixel along the direction of the path where it passes nearest: a field of tangents a quarter of the picture's size), Speed, Taper, Centered Blur (`flt_path_blur` in `E:core/filtr3.c`, in bands). Photoshop's several paths with their own end speeds, strobe flashes and Final Effect blur shapes are left out | Done | — |
 | Blur Gallery › Spin Blur… | **Have**: `flt_spin_blur` (one centre) | Done | — |
 | Distort › Displace… (displacement map file) | **Have**: `flt_displace` (stretch or tile, wrap or repeat) | Done | — |
 | Distort › Pinch… | **Have** | Done | — |
