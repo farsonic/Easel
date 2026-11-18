@@ -21,6 +21,26 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New after 1.2 (round 3): other programs' files, export and the timeline
+
+- Opening other programs' documents with their layers: GIMP (.xcf and .xcf.gz, any precision, groups,
+  masks, channels and the selection), Krita (.kra, .krz) and Paint.NET (.pdn, with its own blend
+  modes). Layered TIFF files (Photoshop's layers in the TIFF) open with their layers and a TIFF of
+  several pages opens a layer a page; a picture with layers saved as TIFF keeps them.
+- Camera raw files (DNG, CR2, CR3, NEF, ARW, PEF, ORF, RW2, RAF and more) open from the full-size
+  JPEG the camera keeps in them. OpenEXR's tiled files and the PXR24, B44 and B44A compressions are
+  read. Color Lookup reads SpeedGrade .look files. Photoshop's large documents (.psb) are saved.
+- File > Open As reads a file with the reader you choose, whatever it looks like.
+- EXIF is kept: a JPEG, PNG or WebP's camera data goes back into the JPEG or PNG you save.
+- Preferences > Export: Quick Export's format, where it writes, its metadata and sRGB, and lossy
+  WebP's quality. JPEG Options shows how big the file will be. Exports start in the drawer the last
+  one went to. General: always make placed pictures smart objects, and a beep when a long job is done.
+- Image > Mode > Indexed Color has Photoshop's Matte and Transparency. Edit > Color Settings loads the
+  monitor's ICC profile, which the picture is then shown through.
+- Window > Timeline (the frames with their times; new, delete, tween, reverse, frame times, play),
+  Window > Notes and Window > Measurement Log (the Ruler, the selection's area, perimeter and grey
+  values, the Count tool; exported as text).
+
 ## New in 1.2: colour management, more formats and type
 
 - Colour management: ICC profiles (v2 and v4; matrix, grey and LUT profiles) are kept when a picture
@@ -581,6 +601,9 @@ Mode; Edit has the brush and pattern commands).
 | SVG | as shape layers (paths and basic shapes, groups, transforms, fill, stroke) | the paths and shape layers |
 | Workbench icons (.info) | classic (1.x, 2.x and MagicWB colours), NewIcons, GlowIcons, PNG icons | — |
 | Sun raster, SGI, Degas, NEOchrome | every common kind | — |
+| GIMP (.xcf, .xcf.gz), Krita (.kra, .krz), Paint.NET (.pdn) | layers, groups, masks, blend modes, opacity, visibility (GIMP: channels and the selection too) | — |
+| Camera raw (DNG, CR2, CR3, NEF, ARW, PEF, ORF, RW2, RAF...) | the full-size JPEG the camera keeps in the file | — |
+| Layered TIFF, Photoshop PSB | layers | layers |
 
 Saving a picture with layers in a flat format offers to save it as .ora instead, or to flatten
 it. File > Export always writes a flat copy and leaves the picture's own file alone.
