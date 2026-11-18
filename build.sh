@@ -9,7 +9,7 @@ MUI=${MUI:-/opt/amiga/mui/include}
 cd "$(dirname "$0")"
 CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/channels.c core/xform.c core/selx.c core/maglasso.c core/crop.c core/matte.c core/path.c core/pathops.c core/shape.c core/type.c core/live.c core/amifont.c core/adjust10.c core/filters10.c core/retouch.c core/xwrite.c core/frames.c core/scripts.c core/svg.c core/gallery.c core/adjustx.c core/selmask.c core/resample.c core/fx.c core/layerops.c"
 CORE="$CORE core/toolopts.c"     # 1.1: tool options
-CORE="$CORE core/aspect.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c"   # 1.2: pixel aspect, colour management, colour models
+CORE="$CORE core/aspect.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c"   # 1.2: pixel aspect, colour management, colour models
 if [ "$1" != "fast" ]; then
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
@@ -65,6 +65,6 @@ ls -l Easel
 # 0.6: EaselConvert, the Shell command for batch conversion (the core's codecs, datatypes as a last resort)
 # (the core files it needs: the codecs, the document, resizing and its dependencies; if a link
 # fails for an undefined symbol, add the core file that defines it here)
-CONVERT_CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/brush.c core/gradient.c core/adjust.c core/adjust10.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/path.c core/live.c core/type.c core/shape.c core/fonts.c core/ttraster.c core/amifont.c core/text.c core/xwrite.c core/resample.c core/fx.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c"
+CONVERT_CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/brush.c core/gradient.c core/adjust.c core/adjust10.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/path.c core/live.c core/type.c core/shape.c core/fonts.c core/ttraster.c core/amifont.c core/text.c core/xwrite.c core/resample.c core/fx.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c"
 vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$NDK" amiga/convert.c amiga/dtload.c amiga/bigstack.s $CONVERT_CORE av1/obj/*.o -o EaselConvert -lamiga -lm040
 ls -l EaselConvert

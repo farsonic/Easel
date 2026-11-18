@@ -18,6 +18,8 @@
 #include "core/xwrite.h"
 #include "core/colorx.h"
 #include "core/xread2.h"
+#include "core/type.h"
+#include "core/fonts.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -563,6 +565,155 @@ static void test_cineon_hdr_dicom(void)
   }
 }
 
+/* ------------------------------------------------------------------ type: case, position, OpenType */
+static FILE *gsub_out;
+static TextLayout *lay(const char *family, const char *text, u16 ot, double size)
+{
+  static TextParams tp;
+  text_params_init(&tp, family, size, 0, 10, 100);
+  text_set_string(&tp, text);
+  tp.run[0].ot = ot;
+  return text_layout(&tp);
+}
+/* the glyphs drawn for text with ot, written for check_colour.py: font path, tag, text, glyph ids */
+static void note(const char *path, const char *tag, const char *text, const TextLayout *tl)
+{
+  i32 i;
+  if (!gsub_out) return;
+  fprintf(gsub_out, "%s %s %s", path, tag, text);
+  for (i = 0; i < tl->ng; i++) fprintf(gsub_out, " %d", tl->g[i].dead ? -1 : (int)tl->g[i].glyph);
+  fprintf(gsub_out, "\n");
+}
+static void test_type(void)
+{
+  static const char *const carlito = "/usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf";
+  static const char *const freeserif = "/usr/share/fonts/truetype/freefont/FreeSerif.ttf";
+  static const char *const liberation = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf";
+  FontSet *fs = (FontSet *)calloc(1, sizeof *fs);
+  Face *c, *f, *l;
+  TextLayout *tl, *t2;
+  FILE *fp;
+  char path[512];
+  CHECK(text_upper('a') == 'A' && text_upper(0xE9) == 0xC9 && text_upper(0xF7) == 0xF7 && text_upper(0x101) == 0x100 && text_upper(0x17E) == 0x17D && text_upper('1') == '1', "capitals");
+  if (!(fp = fopen(carlito, "rb"))) { printf("Carlito isn't installed: the OpenType tests are skipped\n"); free(fs); return; }
+  fclose(fp);
+  fonts_add(fs, carlito, "Carlito", 0, 0);
+  if ((fp = fopen(freeserif, "rb")) != NULL) { fclose(fp); fonts_add(fs, freeserif, "FreeSerif", 0, 0); }
+  if ((fp = fopen(liberation, "rb")) != NULL) { fclose(fp); fonts_add(fs, liberation, "Liberation", 0, 0); }
+  text_fonts = fs;
+  c = fonts_face(fs, "Carlito", 0, 0); f = fonts_face(fs, "FreeSerif", 0, 0); l = fonts_face(fs, "Liberation", 0, 0);
+  CHECK(c && ttf_load(c), "Carlito loads");
+  if (outdir) { snprintf(path, sizeof path, "%s/gsub.txt", outdir); gsub_out = fopen(path, "w"); }
+  /* standard ligatures: fi becomes one glyph, its second part dead */
+  tl = lay("Carlito", "fi", TO_LIGA, 40);
+  CHECK(tl && tl->ng == 2 && !tl->g[0].dead && tl->g[1].dead && tl->g[0].glyph != ttf_glyph(c, 'f') && tl->g[1].adv == 0, "fi ligature");
+  if (tl) note(carlito, "liga", "fi", tl);
+  t2 = lay("Carlito", "fi", 0, 40);
+  CHECK(t2 && !t2->g[1].dead && t2->g[0].glyph == ttf_glyph(c, 'f'), "no ligature when it is off");
+  CHECK(tl && t2 && tl->bx1 < t2->bx1, "the ligature is narrower");
+  text_layout_free(tl); text_layout_free(t2);
+  tl = lay("Carlito", "ffl", TO_LIGA, 40);
+  if (tl) note(carlito, "liga", "ffl", tl);
+  text_layout_free(tl);
+  tl = lay("Carlito", "0123", TO_ONUM, 40);
+  CHECK(tl && tl->g[1].glyph != ttf_glyph(c, '1'), "oldstyle figures");
+  if (tl) note(carlito, "onum", "0123", tl);
+  text_layout_free(tl);
+  tl = lay("Carlito", "Th", TO_DLIG, 40);
+  if (tl) note(carlito, "dlig", "Th", tl);
+  text_layout_free(tl);
+  tl = lay("Carlito", "ag", TO_SALT, 40);
+  if (tl) note(carlito, "salt", "ag", tl);
+  text_layout_free(tl);
+  tl = lay("Carlito", "1a", TO_ORDN, 40);
+  if (tl) note(carlito, "ordn", "1a", tl);
+  text_layout_free(tl);
+  /* all caps */
+  tl = lay("Carlito", "abc", TO_ALLCAPS, 40);
+  CHECK(tl && tl->g[0].glyph == ttf_glyph(c, 'A') && tl->g[2].glyph == ttf_glyph(c, 'C') && tl->g[0].scale == 1, "All Caps");
+  text_layout_free(tl);
+  /* small caps: synthesized in a font without smcp, the font's own where it has them */
+  if (l) {
+    tl = lay("Liberation", "Ab", TO_SMALLCAPS, 40);
+    CHECK(tl && tl->g[0].scale == 1 && tl->g[1].scale == 0.75 && tl->g[1].glyph == ttf_glyph(l, 'B'), "Small Caps synthesized (75% capitals)");
+    text_layout_free(tl);
+  }
+  if (f && ttf_load(f)) {
+    tl = lay("FreeSerif", "Ab", TO_SMALLCAPS, 40);
+    CHECK(tl && tl->g[1].scale == 1 && tl->g[1].glyph != ttf_glyph(f, 'b') && tl->g[1].glyph != ttf_glyph(f, 'B'), "Small Caps from the font's smcp");
+    if (tl) note(freeserif, "smcp", "Ab", tl);
+    text_layout_free(tl);
+  }
+  /* superscript and subscript */
+  tl = lay("Carlito", "x2", 0, 60);
+  t2 = lay("Carlito", "x2", TO_SUPER, 60);
+  CHECK(tl && t2 && fabs(t2->g[0].scale - 0.583) < 1e-9 && fabs((tl->g[0].y - t2->g[0].y) - 60 * 0.333) < 1e-6, "superscript: smaller and raised");
+  CHECK(tl && t2 && t2->g[1].x - t2->g[0].x < tl->g[1].x - tl->g[0].x, "and narrower");
+  text_layout_free(t2);
+  t2 = lay("Carlito", "x2", TO_SUB, 60);
+  CHECK(tl && t2 && fabs((t2->g[0].y - tl->g[0].y) - 60 * 0.333) < 1e-6, "subscript: lowered");
+  text_layout_free(tl); text_layout_free(t2);
+  /* drawing at the smaller size: less ink */
+  {
+    TextParams tp;
+    Box b1, b2;
+    u8 *p1, *p2;
+    text_params_init(&tp, "Carlito", 60, 0, 10, 100); text_set_string(&tp, "H");
+    p1 = p2 = NULL;
+    text_render(&tp, 400, 300, &p1, &b1);
+    tp.run[0].ot = TO_SUPER;
+    text_render(&tp, 400, 300, &p2, &b2);
+    CHECK(p1 && p2 && (b2.y1 - b2.y0) < (b1.y1 - b1.y0) && b2.y1 < b1.y1, "superscript drawn smaller and higher");
+    free(p1); free(p2);
+  }
+  /* paragraphs: last line centred or right, left and right indents */
+  {
+    TextParams tp;
+    TextLayout *a;
+    text_params_init(&tp, "Carlito", 20, 0, 0, 0);
+    text_set_string(&tp, "one two three four five six seven eight nine ten eleven");
+    tp.box = 1; tp.bw = 200; tp.bh = 300;
+    tp.align = TA_JUSTIFY_RIGHT;
+    a = text_layout(&tp);
+    CHECK(a && a->nl >= 2 && fabs(a->ln[a->nl - 1].x1 - 200) < 1.5 && a->ln[a->nl - 1].x0 > 1, "Justify Last Right");
+    CHECK(a && fabs(a->ln[0].x0) < 1e-6 && fabs(a->ln[0].x1 - 200) < 1.5, "the other lines justified");
+    text_layout_free(a);
+    tp.align = TA_JUSTIFY_CENTER;
+    a = text_layout(&tp);
+    CHECK(a && fabs((a->ln[a->nl - 1].x0 + a->ln[a->nl - 1].x1) / 2 - 100) < 1.5, "Justify Last Centered");
+    text_layout_free(a);
+    tp.align = TA_LEFT; tp.indent_left = 30; tp.indent_right = 50;
+    a = text_layout(&tp);
+    CHECK(a && fabs(a->ln[0].x0 - 30) < 1e-6 && a->ln[0].x1 <= 150 + 1e-6, "left and right indents");
+    text_layout_free(a);
+  }
+  /* a type layer's case, position, features and indents kept through OpenRaster */
+  {
+    Doc *d = doc_new(100, 60, 0xFFFFFF, 0), *e;
+    TextParams tp;
+    u8 *f2;
+    size_t n;
+    char err[100];
+    text_params_init(&tp, "Carlito", 20, 0, 5, 30); text_set_string(&tp, "fi 1st");
+    tp.run[0].ot = TO_LIGA | TO_ONUM | TO_SMALLCAPS | TO_SUPER;
+    tp.indent_left = 3; tp.indent_right = 4; tp.align = TA_JUSTIFY_CENTER;
+    doc_new_text(d, &tp, "T");
+    f2 = ora_write(d, &n);
+    e = f2 ? ora_read(f2, n, err, sizeof err) : NULL;
+    {
+      const TextParams *q = e && e->nlay > 1 && e->lay[1]->kind == LK_TEXT ? (const TextParams *)e->lay[1]->live : NULL;
+      CHECK(q && q->run[0].ot == tp.run[0].ot && q->indent_left == 3 && q->indent_right == 4 && q->align == TA_JUSTIFY_CENTER, "kept in OpenRaster");
+    }
+    doc_free(d); doc_free(e); free(f2);
+  }
+  if (gsub_out) fclose(gsub_out);
+  gsub_out = NULL;
+  text_cache_flush();
+  text_fonts = NULL;
+  fonts_free(fs);
+  free(fs);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -578,6 +729,7 @@ int main(int argc, char **argv)
   test_open_modes();
   test_exr();
   test_cineon_hdr_dicom();
+  test_type();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

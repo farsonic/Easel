@@ -1,7 +1,8 @@
 /*
  * colorids.h - the menu IDs of Easel 1.2's colour and view additions (colorui.c): View > Pixel
  * Aspect Ratio and its correction, Proof Colors, Gamut Warning and Proof Setup; Edit > Color
- * Settings, Assign Profile and Convert to Profile; Image > Mode > CMYK Color and Lab Color. Kept
+ * Settings, Assign Profile and Convert to Profile; Image > Mode > CMYK Color and Lab Color; Layer >
+ * Type's OpenType features. Kept
  * apart from ids.h, in a range of their own (5000-5099).
  */
 #ifndef EASEL_COLORIDS_H
@@ -20,5 +21,6 @@
 #define ID_CONVERTPROF  5064
 #define ID_MODE_CMYK    5065
 #define ID_MODE_LAB     5066
+#define ID_OT0          5070           /* + 0..TO_NFEAT-1: Layer > Type's OpenType features (type.h's TO_LIGA << k) */
 #define ID_CU_LAST      5099
 #endif

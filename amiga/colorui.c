@@ -19,6 +19,7 @@
 #include "colorui.h"
 #include "../core/aspect.h"
 #include "../core/colorx.h"
+#include "../core/type.h"
 
 ViewSpec view_spec = { PRF_CMYK, 0, 0, CI_RELATIVE, 1, 0, NULL };
 int view_spec_gen;
@@ -179,6 +180,7 @@ int colorui_command(Doc *d, ULONG id)
     colorx_convert_model(d, CM_LAB, NULL);
     break;
   default:
+    if (id >= ID_OT0 && id < ID_OT0 + TO_NFEAT) { if (d) DoMethod(canvas, MUIM_Canvas_TypeCmd, TC_OT, (ULONG)(TO_LIGA << (id - ID_OT0))); refresh_panels(); return 1; }
     if (id >= ID_PROOFSET0 + PRF_CMYK && id <= ID_PROOFSET0 + PRF_DEUTAN) { view_spec.proof = (int)(id - ID_PROOFSET0); view_spec.on = 1; changed(); }
     break;
   }
@@ -196,6 +198,15 @@ void colorui_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
   menu_set(ID_GAMUT, MUIA_Menuitem_Checked, view_spec.gamut);
   for (i = PRF_CMYK; i <= PRF_DEUTAN; i++) menu_set(ID_PROOFSET0 + i, MUIA_Menuitem_Checked, view_spec.proof == i);
   menu_set(ID_PRESSCMYK, MUIA_Menuitem_Checked, work_cmyk == NULL);
+  {
+    /* the active type layer's features (its first run's) */
+    Layer *al = d && d->active >= 0 && d->active < d->nlay ? d->lay[d->active] : NULL;
+    const TextParams *tp = al && al->kind == LK_TEXT ? (const TextParams *)al->live : NULL;
+    for (i = 0; i < TO_NFEAT; i++) {
+      menu_set(ID_OT0 + i, MUIA_Menuitem_Checked, tp && (tp->run[0].ot & (TO_LIGA << i)));
+      menu_set(ID_OT0 + i, MUIA_Menuitem_Enabled, tp != NULL || type_editing);
+    }
+  }
   menu_set(ID_ASSIGNPROF, MUIA_Menuitem_Enabled, d != NULL);
   menu_set(ID_CONVERTPROF, MUIA_Menuitem_Enabled, d != NULL);
   menu_set(ID_MODE_CMYK, MUIA_Menuitem_Enabled, d != NULL);

@@ -103,5 +103,67 @@ if shutil.which("identify"):
     for name, want in (("cmyk.jpg", ("CMYK",)), ("cmyk.tif", ("CMYK",)), ("lab.tif", ("Lab", "CIELab"))):
         out = subprocess.run(["identify", "-format", "%[colorspace]", os.path.join(d, name)], capture_output=True, text=True).stdout
         check(out.strip() in want, "ImageMagick: %s is %s (%s)" % (name, want[0], out.strip()))
+# OpenType substitutions: the glyphs Easel drew for each feature against fontTools' reading of the
+# same GSUB lookups (the feature's lookups for Latin, in order: single, alternate, ligature)
+gpath = os.path.join(d, "gsub.txt")
+if os.path.exists(gpath):
+    try:
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        TTFont = None
+    if TTFont:
+        fonts = {}
+        for line in open(gpath):
+            parts = line.split()
+            path, tag, text, got = parts[0], parts[1], parts[2], [int(v) for v in parts[3:]]
+            if path not in fonts:
+                fonts[path] = TTFont(path)
+            f = fonts[path]
+            gsub = f["GSUB"].table
+            cmap = f.getBestCmap()
+            names = [cmap[ord(ch)] for ch in text]
+            if tag == "smcp":
+                pass
+            script = None
+            for sr in gsub.ScriptList.ScriptRecord:
+                if sr.ScriptTag == "latn":
+                    script = sr.Script
+            if script is None:
+                script = gsub.ScriptList.ScriptRecord[0].Script
+            ls = script.DefaultLangSys or script.LangSysRecord[0].LangSys
+            lookups = set()
+            for fi in ls.FeatureIndex:
+                fr = gsub.FeatureList.FeatureRecord[fi]
+                if fr.FeatureTag == tag:
+                    lookups.update(fr.Feature.LookupListIndex)
+            seq = [[n, False] for n in names]
+            for li in sorted(lookups):
+                lk = gsub.LookupList.Lookup[li]
+                for i in range(len(seq)):
+                    if seq[i][1]:
+                        continue
+                    for st in lk.SubTable:
+                        t = lk.LookupType
+                        if t == 7:
+                            t, st = st.ExtensionLookupType, st.ExtSubTable
+                        done = False
+                        if t == 1 and seq[i][0] in st.mapping:
+                            seq[i][0] = st.mapping[seq[i][0]]; done = True
+                        elif t == 3 and seq[i][0] in st.alternates:
+                            seq[i][0] = st.alternates[seq[i][0]][0]; done = True
+                        elif t == 4 and seq[i][0] in st.ligatures:
+                            for lig in st.ligatures[seq[i][0]]:
+                                rest = [j for j in range(i + 1, len(seq)) if not seq[j][1]][:len(lig.Component)]
+                                if len(rest) == len(lig.Component) and [seq[j][0] for j in rest] == lig.Component:
+                                    seq[i][0] = lig.LigGlyph
+                                    for j in rest:
+                                        seq[j][1] = True
+                                    done = True
+                                    break
+                        if done:
+                            break
+            want = [-1 if dead else f.getGlyphID(n) for n, dead in seq]
+            check(want == got, "%s %s %r: Easel %s, fontTools %s" % (os.path.basename(path), tag, text, got, want))
+
 print("%d checks, %d failed" % (checks, fails))
 sys.exit(1 if fails else 0)

@@ -26,7 +26,9 @@
 
 /* alignments: text.h's TA_LEFT, TA_CENTER, TA_RIGHT, and */
 enum { TA_JUSTIFY = 3,                 /* justified, the last line of each paragraph left */
-       TA_JUSTIFY_ALL = 4 };           /* every line justified */
+       TA_JUSTIFY_ALL = 4,             /* every line justified */
+       TA_JUSTIFY_CENTER = 5,          /* 1.2: justified, the last line centred */
+       TA_JUSTIFY_RIGHT = 6 };         /* 1.2: justified, the last line right */
 enum { TAA_NONE, TAA_SHARP, TAA_SMOOTH };   /* anti-aliasing: none, sharp (hinted), smooth */
 enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST,
        TW_ARCLOWER, TW_ARCUPPER, TW_SHELLLOWER, TW_SHELLUPPER, TW_FISHEYE, TW_INFLATE,   /* 1.1 */
@@ -39,7 +41,7 @@ typedef struct {
   u8 bold, italic;                    /* the face asked for */
   u8 faux_bold, faux_italic;
   u8 underline, strike;
-  u8 pad[2];
+  u16 ot;                             /* 1.2: case, position and OpenType features (TO_) */
   u32 color;                          /* 0xRRGGBB */
   double size;                        /* pixels to the em (1-2000) */
   double tracking;                    /* thousandths of an em added after each character */
@@ -47,7 +49,33 @@ typedef struct {
 } TextRun;
 /* which fields text_style sets */
 enum { TS_FAMILY = 1, TS_BOLD = 2, TS_ITALIC = 4, TS_FAUXBOLD = 8, TS_FAUXITALIC = 16, TS_UNDERLINE = 32,
-       TS_STRIKE = 64, TS_COLOR = 128, TS_SIZE = 256, TS_TRACKING = 512, TS_BASELINE = 1024, TS_ALL = 2047 };
+       TS_STRIKE = 64, TS_COLOR = 128, TS_SIZE = 256, TS_TRACKING = 512, TS_BASELINE = 1024,
+       TS_OT = 2048,                  /* 1.2: the run's ot */
+       TS_ALL = 4095 };
+/* 1.2: TextRun's ot. Case: All Caps (letters drawn as capitals) or Small Caps (the font's small
+   capitals where it has them, OpenType smcp, else capitals at 75%); position: superscript or
+   subscript (58.3% of the size, 33.3% of it up or down, as Photoshop's defaults); and the OpenType
+   features (gsub.h) the run asks for */
+#define TO_CASE      3                /* the case bits: 0 as typed, */
+#define TO_ALLCAPS   1
+#define TO_SMALLCAPS 2
+#define TO_POS       12               /* the position bits: 0 normal, */
+#define TO_SUPER     4
+#define TO_SUB       8
+#define TO_LIGA      (1 << 4)         /* Standard Ligatures (liga) */
+#define TO_DLIG      (1 << 5)         /* Discretionary Ligatures (dlig) */
+#define TO_SWSH      (1 << 6)         /* Swash (swsh) */
+#define TO_ONUM      (1 << 7)         /* Oldstyle (onum) */
+#define TO_SALT      (1 << 8)         /* Stylistic Alternates (salt) */
+#define TO_TITL      (1 << 9)         /* Titling Alternates (titl) */
+#define TO_ORNM      (1 << 10)        /* Ornaments (ornm) */
+#define TO_ORDN      (1 << 11)        /* Ordinals (ordn) */
+#define TO_FRAC      (1 << 12)        /* Fractions (frac) */
+#define TO_CALT      (1 << 13)        /* Contextual Alternates (calt: kept, but its lookups are contextual and not applied) */
+#define TO_NFEAT     10
+extern const char *const text_ot_tags[TO_NFEAT];  /* "liga" ... "calt", in the TO_ order */
+extern const char *const text_ot_names[TO_NFEAT]; /* "Standard Ligatures" ... */
+u32  text_upper(u32 cp);                          /* a letter's capital (as All Caps draws it) */
 
 typedef struct TextParams {
   double x, y;                        /* point text: the first line's baseline starts here (the
@@ -67,6 +95,7 @@ typedef struct TextParams {
   double space_before, space_after;   /* around each paragraph, pixels */
   double warp_bend, warp_h, warp_v;   /* -100..100 per cent */
   double xf[6];                       /* drawn through x' = xf0 x + xf1 y + xf2, y' = xf3 x + xf4 y + xf5 (Free Transform) */
+  double indent_left, indent_right;   /* 1.2: paragraph text's left and right indents, pixels */
   i32 nruns;
   i32 pad2;
   TextRun run[TP_MAXRUNS];
@@ -95,7 +124,9 @@ int  text_insert(TextParams *tp, int at, const char *utf8, int len);
 int  text_delete(TextParams *tp, int from, int to);
 /* the fields of st named by mask (TS_) set on the text from..to (to > from) */
 int  text_style(TextParams *tp, int from, int to, const TextRun *st, u32 mask);
-int  text_run_at(const TextParams *tp, int at);                  /* the run byte at is in (the one before for the caret) */
+int  text_run_at(const TextParams *tp, int at);
+/* 1.2: the bits of each run's ot set to value's on from..to (all of the text when from >= to) */
+int  text_ot_set(TextParams *tp, int from, int to, u16 bits, u16 value);                  /* the run byte at is in (the one before for the caret) */
 
 /* ------------------------------------------------------------------ layout */
 typedef struct {
@@ -105,6 +136,8 @@ typedef struct {
   i32 line;
   double x, y;                        /* its pen position (baseline), layout space (before warp and xf) */
   double adv;                         /* how far it moves the pen (along the line) */
+  double scale;                       /* 1.2: its size against its run's (small caps, superscript, subscript) */
+  u8 dead;                            /* 1.2: part of a ligature drawn by the glyph before it: not drawn */
 } TGlyph;
 typedef struct {
   i32 start, end;                     /* its text: start..end (end before the newline, if any) */

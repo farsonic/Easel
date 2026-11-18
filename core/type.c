@@ -12,6 +12,7 @@
 #include "ttraster.h"
 #include "amifont.h"
 #include "live.h"
+#include "gsub.h"                      /* 1.2: OpenType features */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,7 +37,7 @@ struct AmiFont *(*text_amifont_lookup)(const char *family, int size);
 /* font files kept open between renderings, and each face's kerning tables */
 #define NCACHE 6
 typedef struct { Face *face; int hint, ok; TTRaster r; unsigned use; } RasterCache;
-typedef struct { Face *face; u8 *kern, *gpos; u32 lkern, lgpos; unsigned use; } KernCache;
+typedef struct { Face *face; u8 *kern, *gpos, *gsub; u32 lkern, lgpos, lgsub; unsigned use; } KernCache;   /* (1.2: and GSUB) */
 static RasterCache rcache[NCACHE];
 static KernCache kcache[NCACHE];
 static unsigned use_clock;
@@ -45,7 +46,7 @@ void text_cache_flush(void)
   int i;
   for (i = 0; i < NCACHE; i++) {
     if (rcache[i].face) ttr_close(&rcache[i].r);
-    free(kcache[i].kern); free(kcache[i].gpos);
+    free(kcache[i].kern); free(kcache[i].gpos); free(kcache[i].gsub);
   }
   memset(rcache, 0, sizeof rcache);
   memset(kcache, 0, sizeof kcache);
@@ -95,11 +96,12 @@ static KernCache *kern_for(Face *f)
   int i, lru = 0;
   for (i = 0; i < NCACHE; i++) if (kcache[i].face == f) { kcache[i].use = ++use_clock; return &kcache[i]; }
   for (i = 1; i < NCACHE; i++) if (kcache[i].use < kcache[lru].use) lru = i;
-  free(kcache[lru].kern); free(kcache[lru].gpos);
+  free(kcache[lru].kern); free(kcache[lru].gpos); free(kcache[lru].gsub);
   memset(&kcache[lru], 0, sizeof kcache[lru]);
   kcache[lru].face = f; kcache[lru].use = ++use_clock;
   kcache[lru].gpos = read_table(f, "GPOS", &kcache[lru].lgpos);
   kcache[lru].kern = read_table(f, "kern", &kcache[lru].lkern);
+  kcache[lru].gsub = read_table(f, "GSUB", &kcache[lru].lgsub);
   return &kcache[lru];
 }
 /* GPOS: a glyph's index in a Coverage table, -1 if it isn't covered */
@@ -264,7 +266,9 @@ static void sanitize(TextParams *tp)
     if (!(fabs(r->baseline) <= 10000)) r->baseline = 0;
     r->color &= 0xFFFFFF;
   }
-  if (tp->align > TA_JUSTIFY_ALL) tp->align = TA_LEFT;
+  if (tp->align > TA_JUSTIFY_RIGHT) tp->align = TA_LEFT;
+  if (!(tp->indent_left >= 0 && tp->indent_left < 100000)) tp->indent_left = 0;      /* (1.2) */
+  if (!(tp->indent_right >= 0 && tp->indent_right < 100000)) tp->indent_right = 0;
   if (tp->warp >= TW_N) tp->warp = TW_NONE;
   if (!(tp->bw >= 0)) tp->bw = 0;
   if (!(tp->bh >= 0)) tp->bh = 0;
@@ -280,6 +284,7 @@ void text_params_init(TextParams *tp, const char *family, double size, u32 color
   if (family) { strncpy(tp->run[0].family, family, sizeof tp->run[0].family - 1); }
   tp->run[0].size = size > 0 ? size : 24;
   tp->run[0].color = color & 0xFFFFFF;
+  tp->run[0].ot = TO_LIGA;                 /* (1.2: standard ligatures on, as PhotoCraft has them) */
 }
 int text_set_string(TextParams *tp, const char *s)
 {
@@ -305,7 +310,7 @@ static int same_style(const TextRun *a, const TextRun *b)
 {
   return !strcmp(a->family, b->family) && a->bold == b->bold && a->italic == b->italic && a->faux_bold == b->faux_bold &&
          a->faux_italic == b->faux_italic && a->underline == b->underline && a->strike == b->strike && a->color == b->color &&
-         a->size == b->size && a->tracking == b->tracking && a->baseline == b->baseline;
+         a->size == b->size && a->tracking == b->tracking && a->baseline == b->baseline && a->ot == b->ot;
 }
 static void tidy_runs(TextParams *tp)
 {
@@ -371,6 +376,24 @@ static int split_at(TextParams *tp, i32 at)
   tp->nruns++;
   return r + 1;
 }
+/* 1.2: bits of the runs' ot set (on) or cleared on from..to; the whole text when from >= to */
+int text_ot_set(TextParams *tp, int from, int to, u16 bits, u16 value)
+{
+  i32 n = (i32)strlen(tp->text), i;
+  if (from >= to) { from = 0; to = n; }
+  if (from < 0) from = 0;
+  if (to > n) to = n;
+  if (n == 0) { tp->run[0].ot = (u16)((tp->run[0].ot & ~bits) | (value & bits)); return 1; }
+  if (to <= from || split_at(tp, from) < 0 || (to < n && split_at(tp, to) < 0)) return 0;
+  for (i = 0; i < tp->nruns; i++) {
+    TextRun *r = &tp->run[i];
+    if (r->start < from || r->start >= to) continue;
+    r->ot = (u16)((r->ot & ~bits) | (value & bits));
+  }
+  tidy_runs(tp);
+  sanitize(tp);
+  return 1;
+}
 int text_style(TextParams *tp, int from, int to, const TextRun *st, u32 m)
 {
   i32 n = (i32)strlen(tp->text), i;
@@ -396,6 +419,7 @@ int text_style(TextParams *tp, int from, int to, const TextRun *st, u32 m)
     if (m & TS_SIZE) r->size = st->size;
     if (m & TS_TRACKING) r->tracking = st->tracking;
     if (m & TS_BASELINE) r->baseline = st->baseline;
+    if (m & TS_OT) r->ot = st->ot;                       /* 1.2 */
   }
   (void)a; (void)b;
   tidy_runs(tp);
@@ -441,6 +465,56 @@ static double hadv(const RunFont *f, u16 g)
   return f->size * 0.5;
 }
 static int is_space(u32 c) { return c == ' ' || c == '\t' || c == 0xA0 || c == 0x3000; }
+/* ---- 1.2: case, position and OpenType features ---- */
+const char *const text_ot_tags[TO_NFEAT] = { "liga", "dlig", "swsh", "onum", "salt", "titl", "ornm", "ordn", "frac", "calt" };
+const char *const text_ot_names[TO_NFEAT] = { "Standard Ligatures", "Discretionary Ligatures", "Swash", "Oldstyle", "Stylistic Alternates",
+  "Titling Alternates", "Ornaments", "Ordinals", "Fractions", "Contextual Alternates" };
+/* a letter's capital (Latin-1, Latin Extended-A's pairs, Greek and Cyrillic's basic letters) */
+u32 text_upper(u32 c)
+{
+  if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7)) return c - 32;
+  if (c == 0xFF) return 0x178;
+  if (c >= 0x100 && c <= 0x17F && c != 0x131 && c != 0x138 && c != 0x149 && c != 0x17F) {
+    /* pairs: the capital first (0x139-0x148 and 0x179-0x17E the other way round) */
+    if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) return (c & 1) ? c : c - 1;
+    return (c & 1) ? c - 1 : c;
+  }
+  if (c >= 0x3B1 && c <= 0x3C9 && c != 0x3C2) return c - 32;
+  if (c >= 0x430 && c <= 0x44F) return c - 32;
+  if (c >= 0x450 && c <= 0x45F) return c - 80;
+  return c;
+}
+static double glyph_rise(const TextRun *r)
+{
+  int p = r->ot & TO_POS;
+  return p == TO_SUPER ? r->size * 0.333 : p == TO_SUB ? -r->size * 0.333 : 0;
+}
+/* 1 if the face has true small capitals (smcp) */
+static int small_caps_of(Face *f)
+{
+  KernCache *k = kern_for(f);
+  return k->gsub && gsub_has(k->gsub, k->lgsub, "smcp");
+}
+/* the run's features applied to its glyphs */
+static void ot_apply(Face *f, const TextRun *run, TGlyph *g, i32 n)
+{
+  KernCache *k = kern_for(f);
+  const char *tags[TO_NFEAT + 1];
+  int nt = 0, b;
+  u16 gl[256];
+  u8 dead[256];
+  i32 at, m;
+  if (!k->gsub) return;
+  for (b = 0; b < TO_NFEAT; b++) if (run->ot & (TO_LIGA << b)) tags[nt++] = text_ot_tags[b];
+  if ((run->ot & TO_CASE) == TO_SMALLCAPS) tags[nt++] = "smcp";
+  if (!nt) return;
+  for (at = 0; at < n; at += 256) {
+    i32 c = n - at < 256 ? n - at : 256;
+    for (m = 0; m < c; m++) { gl[m] = g[at + m].glyph; dead[m] = g[at + m].dead; }
+    gsub_apply(k->gsub, k->lgsub, tags, nt, gl, dead, (int)c);
+    for (m = 0; m < c; m++) { g[at + m].glyph = gl[m]; g[at + m].dead = dead[m]; }
+  }
+}
 
 TextLayout *text_layout(const TextParams *tpin)
 {
@@ -471,25 +545,50 @@ TextLayout *text_layout(const TextParams *tpin)
     i32 pe = ps, g0 = tl->ng, i, k;
     double avail;
     while (pe < n && tp->text[pe] != '\n') pe++;
-    /* the paragraph's glyphs, kerned */
+    /* the paragraph's glyphs: 1.2: their case and size (caps, small caps, super- and subscript),
+       the OpenType features of each run, then their advances and kerning */
     for (i = ps; i < pe; ) {
-      int used, r;
+      int used, r, cs;
       TGlyph *g = &tl->g[tl->ng];
-      u32 cp = utf8_get(tp->text + i, (size_t)(pe - i), &used);
+      u32 cp = utf8_get(tp->text + i, (size_t)(pe - i), &used), shown;
       for (r = tp->nruns - 1; r > 0 && tp->run[r].start > i; r--) ;
-      g->byte = i; g->cp = cp; g->run = (u16)r;
-      g->glyph = glyph_of(&rf[r], cp == '\t' ? ' ' : cp);
-      if (tp->vertical) g->adv = rf[r].asc + rf[r].desc + tp->run[r].tracking * tp->run[r].size / 1000;
-      else {
-        g->adv = hadv(&rf[r], g->glyph) * (cp == '\t' ? 4 : 1) + tp->run[r].tracking * tp->run[r].size / 1000;
-        if (tp->kern && tl->ng > g0) {
-          TGlyph *pg = g - 1;
-          if (pg->run == g->run && rf[r].face && rf[r].face->upm)
-            pg->adv += (double)text_kern(rf[r].face, pg->glyph, g->glyph) * rf[r].size / rf[r].face->upm;
-        }
+      g->byte = i; g->cp = cp; g->run = (u16)r; g->scale = 1; g->dead = 0;
+      cs = tp->run[r].ot & TO_CASE;
+      shown = cs ? text_upper(cp) : cp;
+      if (cs == TO_SMALLCAPS && shown != cp) {
+        /* the font's small capitals if it has them, else a capital at 75% */
+        if (rf[r].face && small_caps_of(rf[r].face)) shown = cp;
+        else g->scale = 0.75;
       }
+      if (tp->run[r].ot & TO_POS) g->scale *= 0.583;
+      g->glyph = glyph_of(&rf[r], shown == '\t' ? ' ' : shown);
       tl->ng++;
       i += used;
+    }
+    for (i = g0; i < tl->ng; ) {
+      /* a stretch of one run: its features through GSUB */
+      i32 e = i;
+      int r = tl->g[i].run;
+      while (e < tl->ng && tl->g[e].run == r) e++;
+      if (rf[r].face) ot_apply(rf[r].face, &tp->run[r], tl->g + i, e - i);
+      i = e;
+    }
+    for (i = g0; i < tl->ng; i++) {
+      TGlyph *g = &tl->g[i];
+      int r = g->run;
+      if (g->dead) { g->adv = 0; continue; }
+      if (tp->vertical) g->adv = (rf[r].asc + rf[r].desc) * g->scale + tp->run[r].tracking * tp->run[r].size / 1000;
+      else {
+        g->adv = hadv(&rf[r], g->glyph) * g->scale * (g->cp == '\t' ? 4 : 1) + tp->run[r].tracking * tp->run[r].size / 1000;
+        if (tp->kern && i > g0) {
+          i32 pi = i - 1;
+          TGlyph *pg;
+          while (pi > g0 && tl->g[pi].dead) pi--;
+          pg = &tl->g[pi];
+          if (!pg->dead && pg->run == g->run && pg->scale == g->scale && rf[r].face && rf[r].face->upm)
+            pg->adv += (double)text_kern(rf[r].face, pg->glyph, g->glyph) * rf[r].size * g->scale / rf[r].face->upm;
+        }
+      }
     }
     /* lines */
     k = g0;
@@ -498,7 +597,7 @@ TextLayout *text_layout(const TextParams *tpin)
       double w = 0, asc = 0, desc = 0, lead = 0, start, lw, extra = 0;
       int nsp = 0, last_of_par;
       TLine *L = &tl->ln[tl->nl];
-      avail = tp->box ? (tp->vertical ? tp->bh : tp->bw - (k == g0 ? tp->indent : 0)) : 1e30;
+      avail = tp->box ? (tp->vertical ? tp->bh : tp->bw - tp->indent_left - tp->indent_right - (k == g0 ? tp->indent : 0)) : 1e30;
       while (j < tl->ng) {
         TGlyph *g = &tl->g[j];
         if (w + g->adv > avail + 1e-9 && j > k && !is_space(g->cp)) { if (brk > k) j = brk; break; }
@@ -530,11 +629,14 @@ TextLayout *text_layout(const TextParams *tpin)
       for (i = j - 1; i >= k && is_space(tl->g[i].cp); i--) nsp--;
       /* where it starts */
       if (tp->box) {
-        double lo = tp->vertical ? tp->y : tp->x + (k == g0 ? tp->indent : 0), room = avail - lw;
+        double lo = tp->vertical ? tp->y : tp->x + tp->indent_left + (k == g0 ? tp->indent : 0), room = avail - lw;
+        int al = tp->align;
         start = lo;
-        if (tp->align == TA_CENTER) start = lo + room / 2;
-        else if (tp->align == TA_RIGHT) start = lo + room;
-        else if ((tp->align == TA_JUSTIFY && !last_of_par) || tp->align == TA_JUSTIFY_ALL) { if (nsp > 0 && room > 0) extra = room / nsp; }
+        /* 1.2: a justified paragraph's last line left, centred or right */
+        if (last_of_par && (al == TA_JUSTIFY_CENTER || al == TA_JUSTIFY_RIGHT)) al = al == TA_JUSTIFY_CENTER ? TA_CENTER : TA_RIGHT;
+        if (al == TA_CENTER) start = lo + room / 2;
+        else if (al == TA_RIGHT) start = lo + room;
+        else if (((al == TA_JUSTIFY || al == TA_JUSTIFY_CENTER || al == TA_JUSTIFY_RIGHT) && !last_of_par) || al == TA_JUSTIFY_ALL) { if (nsp > 0 && room > 0) extra = room / nsp; }
       } else {
         double at = tp->vertical ? tp->y : tp->x;
         start = tp->align == TA_CENTER ? at - lw / 2 : tp->align == TA_RIGHT ? at - lw : at;
@@ -567,7 +669,7 @@ TextLayout *text_layout(const TextParams *tpin)
           }
           g->line = li;
           if (tp->vertical) { g->x = base; g->y = pen; }
-          else { g->x = pen; g->y = base - tp->run[g->run].baseline; }
+          else { g->x = pen; g->y = base - tp->run[g->run].baseline - glyph_rise(&tp->run[g->run]); }
           pen += g->adv;
         }
         L->x0 = start; L->x1 = start + (lw + extra * nsp);
@@ -990,12 +1092,13 @@ static void draw_glyph(Render *R, const TGlyph *g)
   int bold = bold_radius(run), aa = tp->aa != TAA_NONE;
   u32 col = run->color;
   double ox = g->x, oy = g->y;                             /* the glyph's origin (pen on the baseline) */
-  if (is_space(g->cp) || g->cp < 32) return;
-  if (tp->vertical) { ox = g->x - hadv(f, g->glyph) / 2; oy = g->y + f->asc; }
+  double size = run->size * (g->scale > 0 ? g->scale : 1);   /* (1.2: small caps, super- and subscript) */
+  if (is_space(g->cp) || g->cp < 32 || g->dead) return;
+  if (tp->vertical) { ox = g->x - hadv(f, g->glyph) * g->scale / 2; oy = g->y + f->asc * g->scale; }
   if (f->ami) {
     /* an Amiga bitmap font: its glyph scaled (nearest), placed as it lies */
     int adv, kern, w, sw, sh, x, y, top;
-    double s = run->size / f->ami->ysize;
+    double s = size / f->ami->ysize;
     u8 *cov, *sc;
     if (R->collect) return;
     amifont_char(f->ami, g->glyph, &adv, &kern, &w, NULL);
@@ -1023,7 +1126,7 @@ static void draw_glyph(Render *R, const TGlyph *g)
     i32 gx, gy;
     if (!r) return;
     memset(&bm, 0, sizeof bm);
-    if (ttr_glyph(r, g->glyph, (i32)floor(run->size * 64 + 0.5), &bm) && bm.w > 0 && bm.cov) {
+    if (ttr_glyph(r, g->glyph, (i32)floor(size * 64 + 0.5), &bm) && bm.w > 0 && bm.cov) {
       if (tp->aa == TAA_NONE) ttr_dropout(&bm, 128);
       gx = (i32)floor(ox + R->ox) + bm.left; gy = (i32)floor(oy + R->oy + 0.5) - bm.top;
       if (bold) { u8 *d = dilate(bm.cov, bm.w, bm.h, bold); if (d) cv_put(&R->cv, gx - bold, gy - bold, bm.w + 2 * bold, bm.h + 2 * bold, d, col, aa); free(d); }
@@ -1035,14 +1138,14 @@ static void draw_glyph(Render *R, const TGlyph *g)
   {
     /* through the outline: at a size the rasteriser reads well, scaled, sheared, warped */
     TTRaster *r = raster_for(f->face, 0);
-    double ext = run->size * xf_scale(tp), k, shear = run->faux_italic ? 0.2126 : 0;   /* (tan 12 degrees) */
+    double ext = size * xf_scale(tp), k, shear = run->faux_italic ? 0.2126 : 0;   /* (tan 12 degrees) */
     i32 *seg = NULL;
     u32 ns = 0, i;
     Poly pl;
     if (!r) return;
     if (ext < 64) ext = 64;
     if (ext > 400) ext = 400;
-    k = run->size / ext / 64;
+    k = size / ext / 64;
     if (!ttr_outline(r, g->glyph, (i32)floor(ext * 64 + 0.5), &seg, &ns) || !ns) { free(seg); return; }
     poly_init(&pl);
     for (i = 0; i < ns; i++) {

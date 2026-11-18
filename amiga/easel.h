@@ -179,7 +179,8 @@ enum { XM_FREE, XM_SCALE, XM_ROTATE, XM_SKEW, XM_DISTORT, XM_PERSPECTIVE };
 /* 0.9: the Type tool's work, from the options bar, menus and panels: struct MUIP_Canvas_TypeCmd */
 #define MUIM_Canvas_TypeCmd (QTAG + 0x10A)
 struct MUIP_Canvas_TypeCmd { ULONG MethodID; LONG code; LONG arg; };
-enum { TC_OPTS, TC_CHARACTER, TC_PARAGRAPH, TC_WARP, TC_EDIT, TC_COMMIT, TC_ORIENT, TC_COLOR };
+enum { TC_OPTS, TC_CHARACTER, TC_PARAGRAPH, TC_WARP, TC_EDIT, TC_COMMIT, TC_ORIENT, TC_COLOR,
+       TC_OT };                       /* 1.2: an OpenType feature (arg its TO_ bit) turned on or off */
 extern int type_editing;               /* text is being typed on the canvas */
 /* 0.9: the paths changed from outside the canvas (the Paths panel): drawn again */
 #define MUIM_Canvas_Paths   (QTAG + 0x10B)

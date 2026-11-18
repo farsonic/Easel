@@ -1547,6 +1547,11 @@ static void ty_cmd(struct Data *d, Object *obj, int code, int arg)
   case TC_PARAGRAPH: ok = dlg_paragraph(tp); break;
   case TC_WARP: ok = dlg_warp(tp); break;
   case TC_ORIENT: tp->vertical = (u8)(arg != 0); break;
+  case TC_OT: {                                          /* 1.2: on if the first character hasn't it, else off */
+    const TextRun *r0 = &tp->run[text_run_at(tp, from < to ? from + 1 : from)];
+    u16 bit = (u16)arg;
+    ok = text_ot_set(tp, from, to, bit, (u16)((r0->ot & bit) ? 0 : bit));
+    break; }
   case TC_COLOR: {
     TextRun r;
     memset(&r, 0, sizeof r);
