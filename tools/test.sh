@@ -34,69 +34,72 @@ CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation addit
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }
-  t coretest;     $T/easel_coretest | tail -2
-  t codectest;    $T/easel_codectest | tail -2
-  t rasterstest;  $T/easel_rasterstest 20 | tail -2
-  t amigafmttest; $T/easel_amigafmttest | tail -2
-  t layertest;    $T/easel_layertest | tail -2
-  t quicktest;    $T/easel_quicktest | tail -1
+  # r N CMD...: run CMD, print its last N lines, and stop with its output if it failed (a pipe into
+  # tail would hide the exit status)
+  r() { n=$1; shift; s=0; "$@" > $T/easel_run.txt || s=$?; tail -$n $T/easel_run.txt; [ $s -eq 0 ] || { echo "FAILED (exit $s): $*"; cat $T/easel_run.txt; exit 1; }; }
+  t coretest;     r 2 $T/easel_coretest
+  t codectest;    r 2 $T/easel_codectest
+  t rasterstest;  r 2 $T/easel_rasterstest 20
+  t amigafmttest; r 2 $T/easel_amigafmttest
+  t layertest;    r 2 $T/easel_layertest
+  t quicktest;    r 1 $T/easel_quicktest
   # 0.4: palettes, indexed documents and the Amiga writers, then their independent checks (Pillow)
-  t palettetest;  $T/easel_palettetest | tail -2
-  python3 tests/check_palette.py | tail -2
+  t palettetest;  r 2 $T/easel_palettetest
+  r 2 python3 tests/check_palette.py
   # 0.5: brushes, strokes, gradients, patterns, presets
-  t brushtest;    $T/easel_brushtest | tail -2
+  t brushtest;    r 2 $T/easel_brushtest
   # 0.6: Workbench icons (each read back by the icon reader) and batch conversion
-  t icontest;     $T/easel_icontest | tail -2
+  t icontest;     r 2 $T/easel_icontest
   # 0.6: exchange - TIFF and Targa writing, PSD layers, EXIF orientation, File Info; then Pillow
   # (and psd-tools and ImageMagick where installed) check the files it wrote
-  t exchangetest; $T/easel_exchangetest | tail -2
-  python3 tests/check_exchange.py | tail -2
+  t exchangetest; r 2 $T/easel_exchangetest
+  r 2 python3 tests/check_exchange.py
   # 0.7: selections and transforms
-  t selxtest;     $T/easel_selxtest | tail -2
+  t selxtest;     r 2 $T/easel_selxtest
   # 0.9: type and vectors
-  t typetest;     $T/easel_typetest | tail -2
-  t pathtest;     $T/easel_pathtest | tail -2
+  t typetest;     r 2 $T/easel_typetest
+  t pathtest;     r 2 $T/easel_pathtest
   # 0.8: workspace and safety - the undo scratch drawer, undo levels, progress and Abort
-  t safetytest;   $T/easel_safetytest | tail -2
+  t safetytest;   r 2 $T/easel_safetytest
   # 1.0: filters, adjustments and retouching
-  t filter10test; $T/easel_filter10test | tail -2
+  t filter10test; r 2 $T/easel_filter10test
   # 1.1: tool options (tones, sampling, crop overlays, eraser to history, the Move tool's group)
-  t tooltest;     $T/easel_tooltest | tail -2
+  t tooltest;     r 2 $T/easel_tooltest
   # 1.1: more writers (WebP lossless, PDF, Netpbm, QOI, ICO, DDS, DPX, FITS), read back, fuzzed, then
   # checked by Pillow (and ImageMagick and poppler where installed)
-  t xwritetest;   $T/easel_xwritetest $T/easel_xwrite_out | tail -2
-  python3 tests/check_xwrite.py $T/easel_xwrite_out | tail -2
+  t xwritetest;   r 2 $T/easel_xwritetest $T/easel_xwrite_out
+  r 2 python3 tests/check_xwrite.py $T/easel_xwrite_out
   # 1.1: animations - layers to animated GIF and IFF ANIM (op 5) and every frame read back; Pillow checks the GIFs
-  t frametest;    $T/easel_frametest $T/easel_frames_out | tail -2
-  python3 tests/check_frames.py $T/easel_frames_out | tail -2
+  t frametest;    r 2 $T/easel_frametest $T/easel_frames_out
+  r 2 python3 tests/check_frames.py $T/easel_frames_out
   # filter gallery effects and stacks, Color Lookup, Equalize and Black & White Auto, Focus Area, Select and Mask
-  t gallerytest;  $T/easel_gallerytest $T | tail -2
-  python3 tests/check_fx.py $T | tail -1
+  t gallerytest;  r 2 $T/easel_gallerytest $T
+  r 1 python3 tests/check_fx.py $T
   # 1.1: layer styles, colour labels, more blend modes and layer commands
-  t fxtest;       $T/easel_fxtest | tail -1
+  t fxtest;       r 1 $T/easel_fxtest
   # 1.2: layer extras (vector masks, linked layers, pattern fills and overlays, smart objects, artboards, frames)
-  t layerxtest;   $T/easel_layerxtest $T | tail -1
+  t layerxtest;   r 1 $T/easel_layerxtest $T
   # 1.2: brush extras (Texture, Dual Brush, Noise, Wet Edges, Brush Pose, Mixer, Art History, healing, tablets, files)
-  t brushxtest;   $T/easel_brushxtest | tail -1
+  t brushxtest;   r 1 $T/easel_brushxtest
   # 1.2: content-aware fill (PatchMatch), Remove, Patch, Content-Aware Move; Quick and Object Selection
-  t smarttest;    $T/easel_smarttest | tail -1
+  t smarttest;    r 1 $T/easel_smarttest
   # 1.2: Perspective Crop, notes, counts, slices, Rotate View, history log; Amiga-era extras
-  t toolsxtest;   $T/easel_toolsxtest $T | tail -1
+  t toolsxtest;   r 1 $T/easel_toolsxtest $T
   # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
-  t menutest;     $T/easel_menutest | tail -1
+  t menutest;     r 1 $T/easel_menutest
   # 1.3: Save for Web, Image Processor, New presets, Contact Sheet, Statistics, Image Assets, Find and
   # Replace Text, Apply Image, Calculations, Analysis, Open As, snapping to layers ...
-  t menu3test;    $T/easel_menu3test $T | tail -1
+  t menu3test;    r 1 $T/easel_menu3test $T
   # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
   # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
   # LittleCMS and ImageMagick check the files and colours
-  t colourtest;   $T/easel_colourtest $T/easel_colour_out | tail -1
-  python3 tests/check_colour.py $T/easel_colour_out | tail -1
+  t colourtest;   r 1 $T/easel_colourtest $T/easel_colour_out
+  r 1 python3 tests/check_colour.py $T/easel_colour_out
   # r3-image: shape fills and combining, the new filters, Sky and Subject, type extras
-  t r3imagetest;  $T/easel_r3imagetest $T | tail -1
-  python3 tests/check_r3.py $T | tail -1
+  t r3imagetest;  r 1 $T/easel_r3imagetest $T
+  r 1 python3 tests/check_r3.py $T
   # round 3: other programs' layered files (GIMP, Krita, Paint.NET; written from their descriptions by
   # make_foreign.py), .look LUTs, EXIF kept, PSB and layered TIFF, ...; ImageMagick, Pillow and psd-tools check
   python3 tests/make_foreign.py $T/easel_foreign > /dev/null
-  t filestest;    $T/easel_filestest $T/easel_foreign | tail -1
-  python3 tests/check_files.py $T/easel_foreign | tail -1
+  t filestest;    r 1 $T/easel_filestest $T/easel_foreign
+  r 1 python3 tests/check_files.py $T/easel_foreign

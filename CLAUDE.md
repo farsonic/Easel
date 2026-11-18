@@ -70,11 +70,13 @@ reference. RTG (15-32 bit) and AGA (dithered, 256 colours or fewer) screens both
 ## Where work stands
 
 Easel 1.0 is released (filters, adjustments and retouching; before that type and vectors, workspace and
-safety, selections and transforms, exchange formats, brushes, palettes, live layers). All feature
-branches are merged into `main`. What is still missing is listed area by area in
-`docs/photocraft-gap.md`; its coverage summary (section 23) was counted before the 0.9/1.0 work and
-should be recounted. The README's "Not included" lists what may come next (clipboard export to other
-programs, animated brushes, guides dragged from the rulers).
+safety, selections and transforms, exchange formats, brushes, palettes, live layers). Since then, not
+released yet: 1.1 and 1.2 (tool options, layers, brushes, colour management, formats) and round 3
+(1.3: file formats, menus, tools and shortcuts, filters, selection, type and vectors; README "New in
+1.3"). All branches are merged into `main`. `docs/photocraft-gap.md` lists what is still missing area
+by area; its summary (section 23, counted with `python3 tools/gapcount.py docs/photocraft-gap.md`)
+stands at 661 Have, 78 Partial, 69 Missing, 34 Excluded of PhotoCraft `c337d6e` (about 87%). None of
+round 3's interface has been run in an emulator or on an Amiga yet; that check comes before 1.3 ships.
 
 The interface is in English, German, French, Spanish and Italian (`lang/strings.txt`, Photoshop's terms
 in each language). The translations have been checked for fit with `tools/langfit.py`, not yet read on

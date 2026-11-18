@@ -1557,47 +1557,40 @@ and Lab, ICC, 16-bit, and the Hard content-aware and AI-substitute features.
 
 | Area | Have | Partial | Missing | Excluded | Rated rows | Coverage |
 |---|---|---|---|---|---|---|
-| 1. Tools | 1 | 25 | 42 | 0 | 68 | 20% |
-| 2. Menus (File, Edit, Image, Layer, View, Window) | 51 | 18 | 125 | 4 | 194 | 31% |
-| 3. Layers | 3 | 2 | 75 | 0 | 80 | 5% |
-| 4. Blend modes | 18 | 1 | 16 | 0 | 35 | 53% |
-| 5. Adjustments | 10 | 4 | 8 | 0 | 22 | 55% |
-| 6. Filters | 24 | 3 | 57 | 0 | 84 | 30% |
-| 7. Selection | 10 | 2 | 16 | 0 | 28 | 39% |
-| 8. Painting and brushes | 4 | 3 | 22 | 0 | 29 | 19% |
-| 9. Type and text | 2 | 2 | 27 | 0 | 31 | 10% |
-| 10. Vector paths and shapes | 1 | 0 | 10 | 0 | 11 | 9% |
-| 11. Colour management, modes, depths | 2 | 1 | 18 | 0 | 21 | 12% |
-| 12. History and undo | 3 | 1 | 6 | 0 | 10 | 35% |
-| 13. File formats (read, write, presets) | 20 | 6 | 38 | 0 | 64 | 36% |
-| 14. Import and export options | 3 | 2 | 11 | 0 | 16 | 25% |
-| 15. Panels | 5 | 5 | 25 | 0 | 35 | 21% |
-| 16. Shortcuts | 12 | 1 | 10 | 0 | 23 | 54% |
-| 17. Preferences | 0 | 5 | 12 | 1 | 17 | 15% |
-| 18. Automation and actions | 0 | 0 | 3 | 3 | 3 | 0% |
-| 19. Plug-ins | 0 | 0 | 5 | 0 | 5 | 0% |
-| 20. Anything else | 1 | 3 | 8 | 0 | 12 | 21% |
-| **All areas** | **170** | **84** | **534** | **8** | **788** | **26.9%** |
+| 1. Tools | 54 | 18 | 2 | 0 | 74 | 85% |
+| 2. Menus (File, Edit, Image, Layer, View, Window) | 154 | 10 | 31 | 8 | 195 | 82% |
+| 3. Layers | 69 | 10 | 5 | 1 | 84 | 88% |
+| 4. Blend modes | 35 | 0 | 1 | 0 | 36 | 97% |
+| 5. Adjustments | 21 | 2 | 2 | 0 | 25 | 88% |
+| 6. Filters | 78 | 1 | 5 | 1 | 84 | 93% |
+| 7. Selection | 22 | 4 | 2 | 0 | 28 | 86% |
+| 8. Painting and brushes | 32 | 0 | 0 | 0 | 32 | 100% |
+| 9. Type and text | 26 | 4 | 4 | 0 | 34 | 82% |
+| 10. Vector paths and shapes | 13 | 1 | 0 | 0 | 14 | 96% |
+| 11. Colour management, modes, depths | 18 | 0 | 3 | 2 | 21 | 86% |
+| 12. History and undo | 11 | 2 | 0 | 0 | 13 | 92% |
+| 13. File formats (read, write, presets) | 52 | 3 | 4 | 6 | 59 | 91% |
+| 14. Import and export options | 19 | 1 | 0 | 0 | 20 | 98% |
+| 15. Panels | 20 | 10 | 6 | 0 | 36 | 69% |
+| 16. Shortcuts | 24 | 1 | 1 | 0 | 26 | 94% |
+| 17. Preferences | 7 | 6 | 3 | 4 | 16 | 62% |
+| 18. Automation and actions | 0 | 3 | 0 | 3 | 3 | 50% |
+| 19. Plug-ins | 1 | 0 | 0 | 4 | 1 | 100% |
+| 20. Anything else | 5 | 2 | 0 | 5 | 7 | 86% |
+| **All areas** | **661** | **78** | **69** | **34** | **808** | **86.6%** |
 
-**Overall:**
+**Overall** (recounted 2026-11-18 after round 3, Easel 1.3; when this summary was first counted, before 0.9, it was 26.9%):
 
-- **Coverage:** about 27% (26.9%).
-- **Fully had:** 170 of 788 rated rows (21.6%).
-- **At least partly had:** 254 rows (32.2%).
+- **Coverage:** about 87% (86.6%).
+- **Fully had:** 661 of 808 rated rows (81.8%).
+- **At least partly had:** 739 rows (91.5%).
 
-**Legacy extras (section 21):** 0 Have, 6 Partial, 48 Missing, 2 Excluded. Easel reads nearly
-every Amiga format, but it writes almost none of the Amiga-specific ones yet. The exceptions are
-24-bit and 8-plane ILBM.
+**Legacy extras (section 21):** 45 Have, 7 Partial, 2 Missing, 2 Excluded. What is left there is
+listed in section 21.
 
-**Where Easel is strongest and weakest:**
-
-- **Strongest:** the core adjustments (55%), shortcuts (54%) and blend modes (53%). File reading
-  is ahead of PhotoCraft for AVIF and every Amiga or Atari format.
-- **Weakest:**
-  - layers (5%): no groups, masks, clipping, effects, adjustment or fill layers, or smart objects;
-  - vectors (9%) and type (10%): no paths or shape layers, and type isn't editable;
-  - colour modes (12%): RGB 8-bit only, no indexed mode, no CMS;
-  - plug-ins and automation: none.
+**Where Easel is weakest now:** preferences (section 17), panels (15: docking and workspaces), and the
+heavy PhotoCraft features that are hard on a 68040 (Camera Raw, Vanishing Point, Puppet and
+Perspective Warp, Content-Aware Scale, Photomerge); see the Missing rows of each section.
 
 **How the 0.3-1.2 roadmap would change this.** Closing all of its P1 and P2 rows (283 of them) would bring coverage to
 about 59%. Most of the rest is P3: work that is Hard or Not sensible on a 68040, such as
