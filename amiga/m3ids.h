@@ -26,7 +26,7 @@ void m3_command(Doc *d, ULONG id);
 void m3_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val));
 void m3_new_doc(void);                 /* File > New (the presets, units, modes, pixel aspect) */
 void m3_doc_closed(Doc *d);            /* (main.c) its measurement scale forgotten */
-extern int m3_pixelart;                /* View > Pixel Art Preview: whole zoom steps, the pixel grid from 400 % */
+extern int m3_pixelart;                /* View > Pixel Art Preview: whole zoom steps, the pixel grid from 800 % */
 extern int m3_flip;                    /* View > Flip Horizontal: the view mirrored (the picture unchanged) */
 extern int m3_slices_locked;           /* View > Lock Slices */
 /* main.c's services */

@@ -52,6 +52,7 @@ int filesui_open_as_format(const char *file, int current)
 #include "../core/timeline.h"
 #include "../core/toolsx.h"
 #include "../core/measure.h"
+#include "../core/menu3.h"                /* (r4: the measurement scale) */
 
 #define FU_ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (ULONG)(d))
 typedef struct { Object *win, *list, *info; } LWin;
@@ -197,6 +198,7 @@ static void record(Doc *d, const char *name)
   if (ruler_on) measure_ruler(ruler_xy[0], ruler_xy[1], ruler_xy[2], ruler_xy[3], &m);
   else if (!d->sel && a && a->nmark) measure_count(d, &m);
   else if (!measure_selection(d, &m)) { ask("OK", "%s", tr("Nothing is selected to measure.")); return; }
+  { MeasureScale s; measure_scale_get(d, &s); measure_set_scale(&m, s.px, s.len, s.unit); }   /* (r4: in the picture's scale) */
   if (mlog_add(&mlog, &m, name) < 0) { ask("OK", "%s", tr("The Measurement Log is full: delete some rows.")); return; }
   if (!mlw.win) filesui_command(ID_WIN_MLOG);
   else show(&mlw);

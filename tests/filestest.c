@@ -20,6 +20,7 @@
 #include "core/timeline.h"
 #include "core/legacy.h"
 #include "core/measure.h"
+#include "core/menu3.h"
 #include "core/toolsx.h"
 #include "core/gradient.h"
 #include "core/brushx.h"
@@ -764,6 +765,38 @@ static void test_measure(void)
   free(t);
   mlog_delete(&lg, 0);
   CHECK(lg.n == 2 && lg.r[0].source == MS_RULER, "a row deleted");
+  /* r4: an integrated density past what a 32-bit long holds times 100 (it showed as 21474836.47) */
+  memset(&m, 0, sizeof m);
+  m.source = MS_SELECTION; m.area = 448000; m.perimeter = 2720; m.mean = 108.23; m.density = 108.23 * 448000;
+  mlog_line(&m, 0, "Selection", line, sizeof line);
+  CHECK(strstr(line, "448000 px\xB2  2720 px  108.23 (48487040)") != NULL, "a big density written whole");
+  m.density = 12345678901.25;
+  mlog_line(&m, 0, "Selection", line, sizeof line);
+  CHECK(strstr(line, "(12345678901.25)") != NULL, "past four thousand million too");
+  m.density = -0.004; m.mean = -2.5;
+  mlog_line(&m, 0, "Selection", line, sizeof line);
+  CHECK(strstr(line, "-2.50 (0)") != NULL, "small and negative values");
+  /* r4: the picture's measurement scale: 50 pixels = 2 cm */
+  {
+    MeasureScale s = { 50, 2, "cm" };
+    measure_scale_set(d, &s);
+    measure_scale_get(d, &s);
+    measure_ruler(0, 0, 30, 40, &m);
+    measure_set_scale(&m, s.px, s.len, s.unit);
+    mlog_line(&m, 0, "Ruler Tool", line, sizeof line);
+    CHECK(strstr(line, "2 cm") != NULL, "the ruler's 50 pixels as 2 cm");
+    CHECK(measure_selection(d, &m), "the selection measured");
+    measure_set_scale(&m, s.px, s.len, s.unit);
+    mlog_line(&m, 0, "Selection", line, sizeof line);
+    CHECK(strstr(line, "0.04 cm\xB2  0.80 cm") != NULL, "24 px\xB2 as 0.04 cm\xB2 (0.0384), 20 px round as 0.8 cm");
+    lg.n = 0; mlog_add(&lg, &m, "Test");
+    t = mlog_text(&lg);
+    CHECK(t && strstr(t, "Scale Units\tScale Factor\n") && strstr(t, "\t0.80\t0.24\t0.16\t") && strstr(t, "\tcm\t0.040000\n"), "the export in cm with the scale's columns");
+    free(t);
+    measure_set_scale(&m, 1, 1, "pixels");
+    CHECK(m.unit[0] == 0, "pixels: no scale");
+    measure_forget(d);
+  }
   doc_free(d);
 }
 

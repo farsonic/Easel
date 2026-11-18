@@ -236,7 +236,8 @@ static void sfw_each(ULONG id)
   set(app, MUIA_Application_Sleep, FALSE);
   if (!file) { set(sw.tb, MUIA_Text_Contents, (ULONG)tr("Not enough memory")); return; }
   size_text(sz, len);
-  snprintf(sb, sizeof sb, "%s %s, %ld s (14.4k), %ld s (56k)", sfw_names[sw.o.fmt], sz, sfw_seconds(len, 14400), sfw_seconds(len, 57600));
+  /* (r4: one modem speed only - with both, the line ran past the pane's 140 pixels on a 640 screen) */
+  snprintf(sb, sizeof sb, "%s %s, %ld s @ 56k", sfw_names[sw.o.fmt], sz, sfw_seconds(len, 57600));
   set(sw.tb, MUIA_Text_Contents, (ULONG)sb);
   set(sw.pb, MUIA_M3Pic_Image, (ULONG)&sw.opt);
 }
@@ -454,12 +455,12 @@ static void image_processor(void)
   w = dialog_window("Image Processor", VGroup,
         Child, HGroup, Child, label("Save in drawer:"), Child, ds = textstr(dest, 500), End,
         Child, QTitleObject(tr("File Type")),
-        Child, ColGroup(7),
-          Child, jc = check(o.jpeg), Child, QLabel(tr("JPEG, quality"), 0), Child, jq = numstr(o.jpeg_quality), Child, jr = check(o.jpeg_resize), Child, label("Fit in:"), Child, jw = numstr(o.jpeg_w), Child, jh = numstr(o.jpeg_h),
-          Child, pc = check(o.psd), Child, QLabel(tr("PSD"), 0), Child, HSpace(0), Child, pr = check(o.psd_resize), Child, label("Fit in:"), Child, pw = numstr(o.psd_w), Child, ph = numstr(o.psd_h),
-          Child, tc = check(o.tiff), Child, QLabel(tr("TIFF"), 0), Child, HSpace(0), Child, tr_ = check(o.tiff_resize), Child, label("Fit in:"), Child, tw = numstr(o.tiff_w), Child, th = numstr(o.tiff_h),
-          Child, gc = check(o.png), Child, QLabel(tr("PNG"), 0), Child, HSpace(0), Child, gr = check(o.png_resize), Child, label("Fit in:"), Child, gw = numstr(o.png_w), Child, gh = numstr(o.png_h),
-          Child, ic = check(o.ilbm), Child, QLabel(tr("IFF ILBM, colours"), 0), Child, icc = numstr(o.ilbm_colors), Child, ir = check(o.ilbm_resize), Child, label("Fit in:"), Child, iw = numstr(o.ilbm_w), Child, ih = numstr(o.ilbm_h),
+        Child, ColGroup(7),                /* (r4: the format names at the left of their column, not centred) */
+          Child, jc = check(o.jpeg), Child, HGroup, Child, QLabel(tr("JPEG, quality"), 0), Child, HSpace(0), End, Child, jq = numstr(o.jpeg_quality), Child, jr = check(o.jpeg_resize), Child, label("Fit in:"), Child, jw = numstr(o.jpeg_w), Child, jh = numstr(o.jpeg_h),
+          Child, pc = check(o.psd), Child, HGroup, Child, QLabel(tr("PSD"), 0), Child, HSpace(0), End, Child, HSpace(0), Child, pr = check(o.psd_resize), Child, label("Fit in:"), Child, pw = numstr(o.psd_w), Child, ph = numstr(o.psd_h),
+          Child, tc = check(o.tiff), Child, HGroup, Child, QLabel(tr("TIFF"), 0), Child, HSpace(0), End, Child, HSpace(0), Child, tr_ = check(o.tiff_resize), Child, label("Fit in:"), Child, tw = numstr(o.tiff_w), Child, th = numstr(o.tiff_h),
+          Child, gc = check(o.png), Child, HGroup, Child, QLabel(tr("PNG"), 0), Child, HSpace(0), End, Child, HSpace(0), Child, gr = check(o.png_resize), Child, label("Fit in:"), Child, gw = numstr(o.png_w), Child, gh = numstr(o.png_h),
+          Child, ic = check(o.ilbm), Child, HGroup, Child, QLabel(tr("IFF ILBM, colours"), 0), Child, HSpace(0), End, Child, icc = numstr(o.ilbm_colors), Child, ir = check(o.ilbm_resize), Child, label("Fit in:"), Child, iw = numstr(o.ilbm_w), Child, ih = numstr(o.ilbm_h),
         End,
         Child, QTitleObject(tr("Preferences")),
         Child, HGroup, Child, sc = check(o.to_srgb), Child, QLabel(tr("Convert Profile to sRGB"), 0), Child, HSpace(8),
@@ -590,7 +591,7 @@ static void grab_screen(void)
   ULONG ilock;
   LONG w, h;
   Doc *d = NULL;
-  int k = ask("Now|In 5 Seconds|Cancel", "%s", tr("Grab the frontmost screen as a new picture? (Bring the screen to the front in the time given.)"));
+  int k = ask("Now|In 5 Seconds|Cancel", "%s", tr("Grab the frontmost screen as a new picture?\n(Bring the screen to the front in the time given.)"));
   if (!k) return;
   if (k == 2) Delay(250);
   ilock = LockIBase(0);

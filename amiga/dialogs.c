@@ -325,8 +325,10 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
                                          MUIA_Numeric_Default, p[i].def, MUIA_CycleChain, 1, MUIA_FixWidthTxt, (ULONG)"MMMMMMMMMMMMMMMMMMMMMM", End));
   }
   if (ticklabel) {
-    DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.chk = check(sd_init_tick >= 0 ? sd_init_tick : tickdef)));
+    /* (r4: the label in the labels' column and the box at the left of the sliders' column, as MUI
+       lays out a check box; the box under the labels and its text centred looked misplaced on Zune) */
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(ticklabel), MUIO_Label_Centered));
+    DoMethod(grp, OM_ADDMEMBER, (ULONG)HGroup, Child, (ULONG)(sd.chk = check(sd_init_tick >= 0 ? sd_init_tick : tickdef)), Child, (ULONG)HSpace(0), End);
   }
   w = dialog_window(title, VGroup,
         Child, extra ? extra : (Object *)HVSpace,

@@ -327,22 +327,33 @@ static void liquify(Doc *d)
   if (!(lq.m = liquify_new(d->w, d->h)) || !(lq.orig = (u8 *)malloc((size_t)bytes))) { liquify_free(lq.m); out_of_memory(); return; }
   memcpy(lq.orig, l->px, (size_t)bytes);
   lq.d = d;
-  grp = ColGroup(2),
+  grp = VGroup, Child, ColGroup(2),
     Child, Label1(tr("Tool:")), Child, lq.tool = CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list(tl), MUIA_Cycle_Active, last[0], MUIA_CycleChain, 1, End,
     Child, Label1(tr("Brush Size (px):")), Child, lq.size = SliderObject, MUIA_Numeric_Min, 2, MUIA_Numeric_Max, 1500, MUIA_Numeric_Value, last[1], MUIA_CycleChain, 1, End,
     Child, Label1(tr("Brush Density:")), Child, lq.dens = SliderObject, MUIA_Numeric_Min, 0, MUIA_Numeric_Max, 100, MUIA_Numeric_Value, last[2], MUIA_CycleChain, 1, End,
     Child, Label1(tr("Brush Pressure:")), Child, lq.pres = SliderObject, MUIA_Numeric_Min, 1, MUIA_Numeric_Max, 100, MUIA_Numeric_Value, last[3], MUIA_CycleChain, 1, End,
     Child, Label1(tr("Brush Rate:")), Child, lq.rate = SliderObject, MUIA_Numeric_Min, 1, MUIA_Numeric_Max, 100, MUIA_Numeric_Value, last[4], MUIA_CycleChain, 1, End,
     Child, HSpace(0), Child, restore = QButton(tr("Restore All")),
-    Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Drag on the picture with the brush; OK applies the warp."), MUIA_Font, MUIV_Font_Tiny, End,
+    End,
+    Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Drag on the picture with the brush;\nOK applies the warp."), MUIA_Font, MUIV_Font_Tiny, End,
   End;
+  /* (r4: two lines of hint and no fixed slider widths keep the window narrow; it opens in the screen's
+     bottom right corner, over the panels, so the picture stays free for the brush - in the emulator at
+     640x480 it opened in the middle, over the picture) */
   if (!grp || !(w = dialog_window("Liquify", grp, NULL))) { liquify_free(lq.m); free(lq.orig); memset(&lq, 0, sizeof lq); return; }
   DoMethod(restore, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_LQRESTORE);
   /* (like run_modal, but the picture stays awake for the brush; other commands wait) */
   DoMethod(app, OM_ADDMEMBER, (ULONG)w);
   DoMethod(w, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCANCEL);
   canvas_brush_hook = lq_brush;
+  /* (r4: main.c's loop puts the application to sleep while a command runs; the picture must be awake
+     for the brush - in the emulator it showed the busy pointer and took no strokes) */
+  set(app, MUIA_Application_Sleep, FALSE);
   set(w, MUIA_Window_Open, TRUE);
+  {
+    struct Window *iw = (struct Window *)xget(w, MUIA_Window_Window);
+    if (iw && iw->WScreen) MoveWindow(iw, iw->WScreen->Width - iw->Width - iw->LeftEdge, iw->WScreen->Height - iw->Height - iw->TopEdge);
+  }
   while (!done) {
     id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
     if (id == ID_DLGCANCEL || id == MUIV_Application_ReturnID_Quit) { id = ID_DLGCANCEL; break; }
@@ -352,6 +363,7 @@ static void liquify(Doc *d)
     if (sigs) sigs = Wait(sigs | SIGBREAKF_CTRL_C);
   }
   canvas_brush_hook = NULL;
+  set(app, MUIA_Application_Sleep, TRUE);
   last[0] = (LONG)xget(lq.tool, MUIA_Cycle_Active); last[1] = (LONG)xget(lq.size, MUIA_Numeric_Value); last[2] = (LONG)xget(lq.dens, MUIA_Numeric_Value);
   last[3] = (LONG)xget(lq.pres, MUIA_Numeric_Value); last[4] = (LONG)xget(lq.rate, MUIA_Numeric_Value);
   set(w, MUIA_Window_Open, FALSE);

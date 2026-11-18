@@ -80,23 +80,42 @@ void mlog_delete(MeasureLog *l, int i)
   memmove(l->r + i, l->r + i + 1, sizeof l->r[0] * (size_t)(l->n - i - 1));
   l->n--;
 }
-/* a number with up to two decimals, without the C library's floating point printf (the Amiga's) */
+/* a number with up to two decimals, without the C library's floating point printf (the Amiga's).
+   (r4: in two parts, so that a value past 21,474,836 - an integrated density - doesn't overflow a
+   32-bit long when multiplied by 100; seen as "21474836.47" in the emulator) */
 static void num(char *o, size_t cap, double v)
 {
-  long t = (long)(v * 100 + (v < 0 ? -0.5 : 0.5));
-  if (t % 100 == 0) snprintf(o, cap, "%ld", t / 100);
-  else snprintf(o, cap, "%s%ld.%02ld", t < 0 ? "-" : "", labs(t) / 100, labs(t) % 100);
+  double a = v < 0 ? -v : v, ip = floor(a), hi;
+  long frac = (long)((a - ip) * 100 + 0.5), lo;
+  const char *sg = v < 0 && (ip > 0 || frac > 0) ? "-" : "";
+  if (frac >= 100) { ip += 1; frac -= 100; }
+  if (ip >= 1e18) { snprintf(o, cap, "%s999999999999999999", sg); return; }
+  hi = floor(ip / 1e9); lo = (long)(ip - hi * 1e9);
+  if (hi > 0) {
+    if (frac) snprintf(o, cap, "%s%ld%09ld.%02ld", sg, (long)hi, lo, frac);
+    else snprintf(o, cap, "%s%ld%09ld", sg, (long)hi, lo);
+  } else if (frac) snprintf(o, cap, "%s%ld.%02ld", sg, lo, frac);
+  else snprintf(o, cap, "%s%ld", sg, lo);
 }
+void measure_set_scale(MeasureRec *m, double px, double len, const char *unit)
+{
+  if (px <= 0 || len <= 0 || !unit || !unit[0] || !strcmp(unit, "pixels")) { m->sf = 1; m->unit[0] = 0; return; }
+  m->sf = len / px;
+  strncpy(m->unit, unit, sizeof m->unit - 1); m->unit[sizeof m->unit - 1] = 0;
+}
+static double sc(const MeasureRec *m) { return m->unit[0] && m->sf > 0 ? m->sf : 1; }
+static const char *un(const MeasureRec *m) { return m->unit[0] ? m->unit : "px"; }
 void mlog_line(const MeasureRec *m, int row, const char *src, char *out, size_t cap)
 {
-  char a[24], b[24], c[24], e[24];
+  char a[32], b[32], c[32], e[32];
+  double f = sc(m);
   if (m->source == MS_RULER) {
-    num(a, sizeof a, m->length); num(b, sizeof b, m->angle);
-    snprintf(out, cap, "%d  %s  %s px  %s\xB0", row + 1, src, a, b);
+    num(a, sizeof a, m->length * f); num(b, sizeof b, m->angle);
+    snprintf(out, cap, "%d  %s  %s %s  %s\xB0", row + 1, src, a, un(m), b);
   } else if (m->source == MS_COUNT) snprintf(out, cap, "%d  %s  %ld", row + 1, src, m->count);
   else {
-    num(a, sizeof a, m->area); num(b, sizeof b, m->perimeter); num(c, sizeof c, m->mean); num(e, sizeof e, m->density);
-    snprintf(out, cap, "%d  %s  %s px\xB2  %s px  %s (%s)", row + 1, src, a, b, c, e);
+    num(a, sizeof a, m->area * f * f); num(b, sizeof b, m->perimeter * f); num(c, sizeof c, m->mean); num(e, sizeof e, m->density * f * f);
+    snprintf(out, cap, "%d  %s  %s %s\xB2  %s %s  %s (%s)", row + 1, src, a, un(m), b, un(m), c, e);
   }
 }
 char *mlog_text(const MeasureLog *l)
@@ -104,15 +123,18 @@ char *mlog_text(const MeasureLog *l)
   Buf b;
   int i;
   buf_init(&b);
-  buf_adds(&b, "Label\tDocument\tSource\tCount\tArea\tPerimeter\tWidth\tHeight\tLength\tAngle\tMean Gray Value\tMinimum Gray Value\tMaximum Gray Value\tIntegrated Density\n");
+  buf_adds(&b, "Label\tDocument\tSource\tCount\tArea\tPerimeter\tWidth\tHeight\tLength\tAngle\tMean Gray Value\tMinimum Gray Value\tMaximum Gray Value\tIntegrated Density\tScale Units\tScale Factor\n");
   for (i = 0; i < l->n; i++) {
     const MeasureRec *m = &l->r[i];
-    char v[10][24];
-    num(v[0], 24, m->area); num(v[1], 24, m->perimeter); num(v[2], 24, m->w); num(v[3], 24, m->h);
-    num(v[4], 24, m->length); num(v[5], 24, m->angle); num(v[6], 24, m->mean); num(v[7], 24, m->minv);
-    num(v[8], 24, m->maxv); num(v[9], 24, m->density);
-    buf_printf(&b, "Measurement %d\t%s\t%s\t%ld\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", i + 1, m->doc, measure_sources[m->source], m->count,
-               v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]);
+    char v[11][32];
+    double f = sc(m);
+    num(v[0], 32, m->area * f * f); num(v[1], 32, m->perimeter * f); num(v[2], 32, m->w * f); num(v[3], 32, m->h * f);
+    num(v[4], 32, m->length * f); num(v[5], 32, m->angle); num(v[6], 32, m->mean); num(v[7], 32, m->minv);
+    num(v[8], 32, m->maxv); num(v[9], 32, m->density * f * f);
+    if (m->unit[0] && f >= 1000) num(v[10], 32, f);
+    else if (m->unit[0]) { long t = (long)(f * 1e6 + 0.5); snprintf(v[10], 32, "%ld.%06ld", t / 1000000, t % 1000000); } else strcpy(v[10], "1");
+    buf_printf(&b, "Measurement %d\t%s\t%s\t%ld\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", i + 1, m->doc, measure_sources[m->source], m->count,
+               v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], m->unit[0] ? m->unit : "pixels", v[10]);
   }
   if (b.oom) { buf_free(&b); return NULL; }
   return buf_take(&b);

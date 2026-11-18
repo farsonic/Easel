@@ -18,6 +18,8 @@ typedef struct {
   double w, h;                        /* the selection's box, or the ruler's width and height */
   double length, angle;               /* the Ruler's */
   double mean, minv, maxv, density;   /* grey (luminosity 0-255) inside the selection; mean times area */
+  double sf;                          /* r4: the scale, units a pixel (0 or 1 with "pixels": none) */
+  char unit[16];                      /* r4: the scale's units ("" for pixels) */
 } MeasureRec;
 #define MLOG_MAX 500
 typedef struct { MeasureRec r[MLOG_MAX]; int n; } MeasureLog;
@@ -28,7 +30,10 @@ void measure_ruler(double x0, double y0, double x1, double y1, MeasureRec *m);
 void measure_count(const Doc *d, MeasureRec *m);
 int  mlog_add(MeasureLog *l, const MeasureRec *m, const char *docname);   /* its row, -1 if full */
 void mlog_delete(MeasureLog *l, int i);
-/* a row as the window shows it (into out, cap bytes; src the source's name, translated) */
+/* r4: the picture's measurement scale (Image > Analysis > Set Measurement Scale) kept in a row, so its
+   lengths and areas show in the scale's units */
+void measure_set_scale(MeasureRec *m, double px, double len, const char *unit);
+/* a row as the window shows it (lengths in the row's scale) (into out, cap bytes; src the source's name, translated) */
 void mlog_line(const MeasureRec *m, int row, const char *src, char *out, size_t cap);
 /* the log as tab-separated text with a header line (malloc'd) */
 char *mlog_text(const MeasureLog *l);

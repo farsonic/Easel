@@ -379,7 +379,7 @@ interface and icons. None of the icons are copied from any other program.
 - Pictures no format of Easel's reads are opened through the system's datatypes.
 - Drop pictures onto Easel's window (or its icon while iconified) to open them.
 - Saving writes a Workbench icon (a GlowIcon showing the picture) beside a picture that has none;
-  Edit > Save Icons with Pictures turns this off.
+  Preferences > General > Save icons with pictures turns this off.
 - File: Open Recent (the last ten), Save a Copy, Export As (scaled by a percentage), Layers to
   Files, Load Files into Stack, and Place now goes on into Free Transform.
 - Autosave: changed pictures are saved every five minutes (Edit > Autosave sets how often) to the

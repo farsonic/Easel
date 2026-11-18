@@ -3383,9 +3383,22 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
   case MUIM_HandleEvent:
     return handle(cl, obj, (struct MUIP_HandleEvent *)msg);
   case MUIM_Canvas_Tick: {
+    extern char cmd_file[256];         /* (main.c) CMDFILE=: menu commands for testing */
     static ULONG ticks;
     /* (once a minute: time for main.c to see whether an autosave is due) */
     if (++ticks % 240 == 0) DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)_app(obj), 2, MUIM_Application_ReturnID, ID_AUTOSAVE);
+    /* (testing: CMDFILE=<file> - once a second, a menu command number found in the file is run and
+       the file deleted, so an emulator run can be driven without the mouse) */
+    if (cmd_file[0] && ticks % 4 == 0) {
+      FILE *cf = fopen(cmd_file, "r");
+      if (cf) {
+        long n = 0;
+        if (fscanf(cf, "%ld", &n) != 1) n = 0;
+        fclose(cf);
+        remove(cmd_file);
+        if (n > 0) DoMethod(_app(obj), MUIM_Application_PushMethod, (ULONG)_app(obj), 2, MUIM_Application_ReturnID, (ULONG)n);
+      }
+    }
     }
     d = INST_DATA(cl, obj);
     if (d->shown && d->nedges && d->nedges < 6000 && !d->drag && d->view) {

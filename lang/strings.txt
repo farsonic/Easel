@@ -1003,8 +1003,6 @@ Purge	Entleeren	Purger	Purgar	Svuota
 Undo History	Protokoll	Historiques	Historias	Storia
 Clipboard	Zwischenablage	Presse-papiers	Portapapeles	Appunti
 All	Alles	Tout	Todo	Tutto
-Autosave...	Automatisch speichern...	Enregistrement automatique...	Guardado automático...	Salvataggio automatico...
-Save Icons with Pictures	Symbole mit Bildern speichern	Enregistrer les icônes avec les images	Guardar iconos con las imágenes	Salva icone con le immagini
 Keyboard Shortcuts...	Tastaturbefehle...	Raccourcis clavier...	Métodos abreviados de teclado...	Scelte rapide da tastiera...
 Preferences...	Voreinstellungen...	Préférences...	Preferencias...	Preferenze...
 Image	Bild	Image	Imagen	Immagine
@@ -2825,7 +2823,7 @@ Brush Density:	Pinseldichte:	Densité de l'outil :	Densidad del pincel:	Densità
 Brush Pressure:	Pinseldruck:	Pression de l'outil :	Presión del pincel:	Pressione pennello:
 Brush Rate:	Pinselrate:	Vitesse de l'outil :	Velocidad del pincel:	Velocità pennello:
 Restore All	Alles wiederherstellen	Tout restaurer	Restaurar todo	Ripristina tutto
-Drag on the picture with the brush; OK applies the warp.	Ziehen Sie mit dem Pinsel im Bild; OK wendet die Verformung an.	Faites glisser l'outil sur l'image ; OK applique la déformation.	Arrastre el pincel sobre la imagen; OK aplica la deformación.	Trascinare il pennello sull'immagine; OK applica la deformazione.
+Drag on the picture with the brush;\nOK applies the warp.	Ziehen Sie mit dem Pinsel im Bild;\nOK wendet die Verformung an.	Faites glisser l'outil sur l'image ;\nOK applique la déformation.	Arrastre el pincel sobre la imagen;\nOK aplica la deformación.	Trascinare il pennello sull'immagine;\nOK applica la deformazione.
 Liquify	Verflüssigen	Fluidité	Licuar	Fluidifica
 Oak	Eiche	Chêne	Roble	Quercia
 Pine	Kiefer	Pin	Pino	Pino
@@ -2973,7 +2971,7 @@ Flatten All Layers	Alle Ebenen reduzieren	Aplatir tous les calques	Acoplar todas
 The sheet needs about %ld KB of memory.	Der Abzug braucht etwa %ld KB Speicher.	La planche demande environ %ld Ko de mémoire.	La hoja necesita unos %ld KB de memoria.	Il provino richiede circa %ld KB di memoria.
 Contact Sheet II: the pictures	Kontaktabzug II: die Bilder	Planche contact II : les images	Hoja de contactos II: las imágenes	Provino II: le immagini
 Now|In 5 Seconds|Cancel	Jetzt|In 5 Sekunden|Abbrechen	Maintenant|Dans 5 secondes|Annuler	Ahora|En 5 segundos|Cancelar	Ora|Tra 5 secondi|Annulla
-Grab the frontmost screen as a new picture? (Bring the screen to the front in the time given.)	Den vordersten Bildschirm als neues Bild aufnehmen? (Holen Sie ihn in der Zeit nach vorn.)	Capturer l'écran au premier plan comme nouvelle image ? (Amenez l'écran devant dans le délai.)	¿Capturar la pantalla delantera como imagen nueva? (Traiga la pantalla al frente en ese tiempo.)	Catturare lo schermo in primo piano come nuova immagine? (Porta lo schermo davanti nel tempo dato.)
+Grab the frontmost screen as a new picture?\n(Bring the screen to the front in the time given.)	Den vordersten Bildschirm als neues Bild aufnehmen?\n(Holen Sie ihn in der Zeit nach vorn.)	Capturer l'écran au premier plan comme nouvelle image ?\n(Amenez l'écran devant dans le délai.)	¿Capturar la pantalla delantera como imagen nueva?\n(Traiga la pantalla al frente en ese tiempo.)	Catturare lo schermo in primo piano come nuova immagine?\n(Porta lo schermo davanti nel tempo dato.)
 The screen couldn't be read (not enough memory?).	Der Bildschirm konnte nicht gelesen werden (nicht genug Speicher?).	L'écran n'a pas pu être lu (mémoire insuffisante ?).	No se ha podido leer la pantalla (¿falta memoria?).	Impossibile leggere lo schermo (memoria insufficiente?).
 Find and Replace Text	Text suchen und ersetzen	Rechercher et remplacer le texte	Buscar y reemplazar texto	Trova e sostituisci testo
 Find What:	Suchen nach:	Rechercher :	Buscar:	Trova:

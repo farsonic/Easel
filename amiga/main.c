@@ -108,6 +108,7 @@ struct Library *MUIMasterBase, *LayersBase, *DiskfontBase, *KeymapBase, *Utility
 extern struct WBStartup *_WBenchMsg;
 
 FILE *qlog;
+char cmd_file[256];                      /* CMDFILE=: a file polled for menu commands (testing) */
 char pub_screen[64];
 Object *app, *win, *canvas, *toolbox, *optbar, *colorpanel, *layerpanel, *historypanel, *statusbar, *doctabs;
 static Object *vscroll, *hscroll;
@@ -205,7 +206,8 @@ static struct NewMenu menus[] = {
   S("Distort", 0, ID_XF_DISTORT), S("Perspective", 0, ID_XF_PERSPECTIVE), SBAR, S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("History Options...", 0, ID_HISTOPTS), I("Rename Snapshot...", 0, ID_SNAPRENAME), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
-  I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
+  /* (r4: Autosave... and Save Icons with Pictures left the Edit menu, which ran past the bottom of a 480
+     line screen in the emulator; both are on Preferences' General page) */
   I("Color Settings...", 0, ID_COLORSET), I("Assign Profile...", 0, ID_ASSIGNPROF), I("Convert to Profile...", 0, ID_CONVERTPROF), BAR,   /* 1.2 */
   I("Reset Tool", 0, ID_RESETTOOL), I("Reset All Tools", 0, ID_RESETALLTOOLS),             /* 1.3 */
   I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
@@ -420,9 +422,37 @@ void redraw_window(void)
   get(win, MUIA_Window_RootObject, &root);
   if (root && DoMethod(root, MUIM_Group_InitChange)) DoMethod(root, MUIM_Group_ExitChange);
 }
+/* r4: a requester's text with its %s filled in and every line longer than ASK_WRAP letters broken at
+   a space (the requester has no wrapping of its own, and on a 640 pixel screen a long sentence ran
+   off the edge: seen in the emulator with Grab Screen's question) */
+#define ASK_WRAP 72
+void ask_wrap(char *out, int cap, const char *fmt, const char *arg)
+{
+  int o = 0, col = 0, lastsp = -1;
+  const char *f;
+  for (f = fmt; *f && o < cap - 1; f++) {
+    const char *ins = NULL;
+    char one[2];
+    if (f[0] == '%' && f[1] == 's') { ins = arg ? arg : ""; f++; }
+    else if (f[0] == '%' && f[1] == '%') { one[0] = '%'; one[1] = 0; ins = one; f++; }
+    else { one[0] = *f; one[1] = 0; ins = one; }
+    for (; *ins && o < cap - 1; ins++) {
+      char c = *ins;
+      out[o] = c;
+      if (c == '\n') { col = 0; lastsp = -1; o++; continue; }
+      if (c == ' ') lastsp = o;
+      o++; col++;
+      if (col > ASK_WRAP && lastsp >= 0) { out[lastsp] = '\n'; col = o - lastsp - 1; lastsp = -1; }
+    }
+  }
+  out[o] = 0;
+}
 int ask(const char *gadgets, const char *fmt, const char *arg)
 {
-  int r = (int)MUI_Request(app, win, 0, (STRPTR)"Easel", (STRPTR)tr(gadgets), (STRPTR)tr(fmt), arg);
+  static char text[2048];
+  int r;
+  ask_wrap(text, sizeof text, tr(fmt), arg);
+  r = (int)MUI_Request(app, win, 0, (STRPTR)"Easel", (STRPTR)tr(gadgets), (STRPTR)"%s", (ULONG)text);
   redraw_window();
   return r;
 }
@@ -3070,6 +3100,7 @@ int main(int argc, char **argv)
   char start[8][512];
   int nstart = 0;
   char arg_screen[64] = "";
+  int start_lang = -1;                   /* LANG=en|de|fr|es|it: the interface language for this run (testing) */
   ULONG start_cmd = 0;                   /* CMD=n: a menu command run once the pictures are open (for testing) */
   if (!(IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39)) ||
       !(GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39)) ||
@@ -3086,6 +3117,11 @@ int main(int argc, char **argv)
     if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");
     else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"PUBSCREEN=", 10)) { strncpy(arg_screen, argv[i] + 10, sizeof arg_screen - 1); }
     else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"CMD=", 4)) start_cmd = (ULONG)atol(argv[i] + 4);
+    else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"LANG=", 5)) {
+      static const char *codes[] = { "en", "de", "fr", "es", "it" };
+      int k; for (k = 0; k < 5; k++) if (!Strnicmp((STRPTR)argv[i] + 5, (STRPTR)codes[k], 2)) start_lang = k;
+    }
+    else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"CMDFILE=", 8)) { strncpy(cmd_file, argv[i] + 8, sizeof cmd_file - 1); }
     else if (nstart < 8) { strncpy(start[nstart], argv[i], 511); start[nstart++][511] = 0; }
   }
   if (argc == 0 && _WBenchMsg) {
@@ -3109,7 +3145,7 @@ int main(int argc, char **argv)
   if (prefs.screen_mode != SM_WINDOW && !arg_screen[0]) { if (own_open()) strcpy(pub_screen, OWN_NAME); else prefs.screen_mode = SM_WINDOW; }
   else if (arg_screen[0]) prefs.screen_mode = SM_WINDOW;
   LOG("Easel starting, cybergraphics %p", (void *)CyberGfxBase);
-  lang_set(prefs.language >= 0 && prefs.language < UI_NLANG ? prefs.language : lang_system());   /* (1.1) */
+  lang_set(start_lang >= 0 && start_lang < UI_NLANG ? start_lang : prefs.language >= 0 && prefs.language < UI_NLANG ? prefs.language : lang_system());   /* (1.1) */
   theme_set_dark(pref_dark);
   opts_defaults();
   splash_open(pub_screen, "Easel 1.0");
