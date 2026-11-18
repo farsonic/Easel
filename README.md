@@ -34,11 +34,12 @@ interface and icons. None of the icons are copied from any other program.
   lines and polygons, with their groups, transforms, fill and stroke); File > Export > Paths to SVG
   writes the paths and shape layers.
 - File: Close Others, Quick Export as PNG, and Scripts: Delete All Empty Layers, Flatten All Masks
-  and Fit Image.
+  and Fit Image. Edit > Purge: Undo History, Clipboard and All (every picture's history).
 - Saving an opened JPEG keeps the quality it was saved at; the JPEG Options remember the last
   quality.
 - Warp Text has six more styles: Arc Lower, Arc Upper, Shell Lower, Shell Upper, Fisheye and
-  Inflate. Layer > Type > Paste Lorem Ipsum fills a type layer with placeholder text.
+  Inflate. Layer > Type > Paste Lorem Ipsum fills a type layer with placeholder text, and Convert to
+  Paragraph Text and Convert to Point Text change its kind, the text staying where it is.
 - View > Snap To chooses what snaps (guides, grid, the picture's edges, its centre lines, whole
   pixels); View > Lock Guides.
 

@@ -379,6 +379,31 @@ static void test_caret(void)
   free(tp);
 }
 
+/* 1.1: Convert to Paragraph Text and back to Point Text leave the text where it was */
+static void test_convert(void)
+{
+  TextParams *tp = newtp("Two lines\nof point text", 24, 0x000000, 30, 60);
+  Box b0 = text_bounds(tp), b1;
+  int nl = 0;
+  const char *c;
+  CHECK(text_to_paragraph(tp) && tp->box && !text_to_paragraph(tp), "to paragraph");
+  b1 = text_bounds(tp);
+  CHECK(abs(b1.x0 - b0.x0) <= 2 && abs(b1.y0 - b0.y0) <= 2 && abs(b1.x1 - b0.x1) <= 2 && abs(b1.y1 - b0.y1) <= 2, "to paragraph keeps the text in place");
+  CHECK(text_to_point(tp) && !tp->box && !text_to_point(tp), "to point");
+  b1 = text_bounds(tp);
+  CHECK(abs(b1.x0 - b0.x0) <= 2 && abs(b1.y0 - b0.y0) <= 2 && abs(b1.y1 - b0.y1) <= 2, "back to point keeps it in place");
+  free(tp);
+  /* a wrapped paragraph becomes lines */
+  tp = newtp("The quick brown fox jumps over the lazy dog again and again", 20, 0x000000, 10, 10);
+  tp->box = 1; tp->bw = 150; tp->bh = 300; tp->align = TA_CENTER;
+  b0 = text_bounds(tp);
+  CHECK(text_to_point(tp), "wrapped to point");
+  for (c = tp->text; *c; c++) nl += *c == '\n';
+  b1 = text_bounds(tp);
+  CHECK(nl >= 2 && !strstr(tp->text, " \n") && abs(b1.y0 - b0.y0) <= 2 && abs(b1.y1 - b0.y1) <= 2 && abs((b1.x0 + b1.x1) - (b0.x0 + b0.x1)) <= 4 && tp->x == 85, "wrapped lines kept, centred");
+  free(tp);
+}
+
 static void test_warp(void)
 {
   TextParams *tp = newtp("Warped text here", 30, 0x000000, 20, 100);
@@ -679,6 +704,7 @@ int main(void)
       test_runs();
       test_caret();
       test_warp();
+      test_convert();
       test_layer_ops();
     }
     text_cache_flush();

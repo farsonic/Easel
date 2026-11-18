@@ -1224,3 +1224,46 @@ int doc_set_text(Doc *d, int i, const TextParams *tp)
   doc_end(d);
   return 1;
 }
+
+/* ------------------------------------------------------------------ 1.1: Convert to Paragraph / Point Text */
+int text_to_paragraph(TextParams *tp)
+{
+  TextLayout *tl;
+  double lead;
+  if (tp->box || tp->vertical) return 0;
+  if (!(tl = text_layout(tp))) return 0;
+  /* the box round the text as it is laid out, with a little room to spare so nothing wraps anew */
+  lead = tl->nl ? tl->ln[0].ascent + tl->ln[0].descent : tp->run[0].size;
+  tp->x = floor(tl->bx0); tp->y = floor(tl->by0);
+  tp->bw = ceil(tl->bx1 - tp->x) + tp->run[0].size * 0.5 + 1;
+  tp->bh = ceil(tl->by1 - tp->y) + lead;
+  tp->box = 1;
+  text_layout_free(tl);
+  return 1;
+}
+int text_to_point(TextParams *tp)
+{
+  TextLayout *tl;
+  int k;
+  double bx, bw;
+  if (!tp->box || tp->vertical) return 0;
+  if (!(tl = text_layout(tp))) return 0;
+  bx = tp->x; bw = tp->bw;
+  /* a line break where each line wraps (in place of the space it wrapped at), from the end back */
+  for (k = tl->nl - 2; k >= 0; k--) {
+    i32 e = tl->ln[k].end;
+    if (e < (i32)strlen(tp->text) && tp->text[e] == '\n') continue;
+    if (tl->ln[k].hidden) continue;
+    if (e > 0 && tp->text[e - 1] == ' ') tp->text[e - 1] = '\n';
+    else if (e < (i32)strlen(tp->text) && tp->text[e] == ' ') tp->text[e] = '\n';
+    else text_insert(tp, e, "\n", 1);
+  }
+  /* the first baseline, at the alignment point the lines keep */
+  tp->y = tl->nl ? tl->ln[0].base : tp->y + tp->run[0].size;
+  if (tp->align == TA_CENTER) tp->x = bx + bw / 2;
+  else if (tp->align == TA_RIGHT) tp->x = bx + bw;
+  else { tp->x = bx; if (tp->align > TA_RIGHT) tp->align = TA_LEFT; }
+  tp->box = 0;
+  text_layout_free(tl);
+  return 1;
+}

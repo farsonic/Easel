@@ -157,7 +157,7 @@ static struct NewMenu menus[] = {
   H("Transform"), S("Again", 0, ID_XF_AGAIN), SBAR, S("Scale", 0, ID_XF_SCALE), S("Rotate", 0, ID_XF_ROTATE), S("Skew", 0, ID_XF_SKEW),
   S("Distort", 0, ID_XF_DISTORT), S("Perspective", 0, ID_XF_PERSPECTIVE), SBAR, S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
-  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("Purge Undo History", 0, ID_PURGE), BAR,
+  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
   I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
   I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
   M("Image"),
@@ -188,7 +188,7 @@ static struct NewMenu menus[] = {
   H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
   I("Layer Content Options...", 0, ID_FILLSETTINGS),
   H("Type"), S("Edit Type", 0, ID_EDITTYPE), S("Character...", 0, ID_TYPECHAR), S("Paragraph...", 0, ID_TYPEPARA), SBAR, S("Create Work Path", 0, ID_TYPEWORKPATH),
-  S("Warp Text...", 0, ID_WARPTEXT), S("Paste Lorem Ipsum", 0, ID_LOREM), SBAR, S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
+  S("Warp Text...", 0, ID_WARPTEXT), S("Paste Lorem Ipsum", 0, ID_LOREM), SBAR, S("Convert to Paragraph Text", 0, ID_TOPARA), S("Convert to Point Text", 0, ID_TOPOINT), S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
   I("Shape Properties...", 0, ID_SHAPEPROPS), BAR,
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
@@ -610,7 +610,7 @@ static void update_menus(void)
     /* 1.1 (files) */
     ID_EXPXW0, ID_EXPXW0 + 1, ID_EXPXW0 + 2, ID_EXPXW0 + 3, ID_EXPXW0 + 4, ID_EXPXW0 + 5, ID_EXPXW0 + 6, ID_EXPXW0 + 7, ID_EXPANIMGIF, ID_EXPANIM,
     ID_CLOSEOTHERS, ID_QUICKPNG, ID_DELEMPTY, ID_FLATMASKS, ID_FITIMAGE, ID_LOREM, ID_EXPSVG, ID_LOCKGUIDES,
-    ID_SNAPTO0, ID_SNAPTO0 + 1, ID_SNAPTO0 + 2, ID_SNAPTO0 + 3, ID_SNAPTO0 + 4,
+    ID_SNAPTO0, ID_SNAPTO0 + 1, ID_SNAPTO0 + 2, ID_SNAPTO0 + 3, ID_SNAPTO0 + 4, ID_TOPARA, ID_TOPOINT,
     /* 1.0 */
     ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
     ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
@@ -1970,6 +1970,15 @@ static void command(ULONG id)
     break;
   case ID_REDO: case ID_STEPFWD: doc_redo(d); break;
   case ID_PURGE: doc_forget_undo(d); break;
+  /* 1.1: Edit > Purge > Clipboard (Easel's own) and All (every picture's history and the clipboard) */
+  case ID_PURGECLIP: clip_free(clip); clip = NULL; break;
+  case ID_PURGEALL: {
+    int k;
+    if (!ask("Purge|Cancel", "%s", tr("Forget the undo history of every open picture, and what Easel has copied? This can't be undone."))) break;
+    for (k = 0; k < ndocs; k++) doc_forget_undo(docs[k].doc);
+    clip_free(clip); clip = NULL;
+    break;
+  }
   /* 0.4: modes, the palette, the Amiga screen mode */
   case ID_MODE_RGB: palwin_stop(); if (d->mode != MODE_RGB) doc_to_rgb(d); break;
   case ID_MODE_GRAY: palwin_stop(); if (d->mode != MODE_GRAY && !doc_to_gray(d)) ask("OK", "%s", tr("There isn't enough memory for that.")); break;
@@ -2125,6 +2134,16 @@ static void command(ULONG id)
     if (!ask_string("Fit Image", "Fit inside (width x height):", buf, sizeof buf)) break;
     if (sscanf(buf, "%ld %*[xX*] %ld", &fw, &fh) != 2 || fw < 1 || fh < 1 || fw > MAXDIM || fh > MAXDIM) { ask("OK", "%s", tr("Give the size as width x height, for example 640 x 512.")); break; }
     if (!doc_fit_image(d, (i32)fw, (i32)fh, 0) && (fw < d->w || fh < d->h)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break;
+  }
+  case ID_TOPARA: case ID_TOPOINT: {
+    const TextParams *cur = layer_text(d->lay[d->active]);
+    TextParams *tp = cur ? (TextParams *)malloc(sizeof *tp) : NULL;
+    if (!cur) { ask("OK", "%s", tr("Choose a type layer first.")); break; }
+    if (!tp) break;
+    *tp = *cur;
+    if (id == ID_TOPARA ? text_to_paragraph(tp) : text_to_point(tp)) doc_set_text(d, d->active, tp);
+    free(tp);
     break;
   }
   case ID_LOREM: {

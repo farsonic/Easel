@@ -295,11 +295,11 @@ Re-checked 2026-11-18 (Easel 1.1).
 | Define Brush Preset… | **Have** (0.5), and Pick Up Brush for DPaint brushes | Done | — |
 | Define Pattern… | **Have** (0.5) | Done | — |
 | Define Custom Shape… | **Partial**: any saved path is drawn by the Custom Shape tool (0.9); there's no shape library to add it to | Easy | P3 |
-| Purge › Undo | **Have**: Purge Undo History | Done | — |
-| Purge › Clipboard | **Missing** | Easy | P3 |
-| Purge › Histories (every document) | **Partial**: only the current document's history can be purged | Easy | P3 |
+| Purge › Undo | **Have**: Edit › Purge › Undo History | Done | — |
+| Purge › Clipboard | **Have** (1.1): Edit › Purge › Clipboard (Easel's own) | Done | — |
+| Purge › Histories (every document) | **Have** (1.1): Edit › Purge › All forgets every open picture's history (with the clipboard); Undo History the current one's | Done | — |
 | Purge › Video Cache | **Left out**: Easel has no video cache | Not sensible | — |
-| Purge › All | **Missing** | Easy | P3 |
+| Purge › All | **Have** (1.1), after asking | Done | — |
 | Presets › Preset Manager… | **Missing** (brushes, gradients, patterns and swatches each load and save their own) | Easy | P3 |
 | Presets › Migrate Presets | **Left out**: it imports from an older desktop install | Not sensible | — |
 | Presets › Export/Import Presets… | **Partial**: each kind loads and saves on its own (0.5, 1.0 adjustment presets) | Easy | P3 |
@@ -827,7 +827,7 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Type › Create Work Path | **Have** (0.9): `text_to_path` | Done | — |
 | Type › Convert to Shape | **Missing** (Create Work Path, then a Custom Shape from it, does the same in two steps) | Easy | P3 |
 | Type › Rasterize Type Layer | **Have** (0.9) | Done | — |
-| Type › Convert to Paragraph Text / Convert to Point Text (2 items) | **Missing** | Easy | P3 |
+| Type › Convert to Paragraph Text / Convert to Point Text (2 items) | **Have** (1.1): Layer › Type, the text left where it was; to point text, a line break where each line wrapped (`text_to_paragraph`, `text_to_point` in `E:core/type.c`) | Done | — |
 | Type › Warp Text… (Arc, Arc Lower and Upper, Arch, Bulge, Shell Lower and Upper, Flag, Wave, Fish, Rise, Fisheye, Inflate, Squeeze, Twist; `TextWarp`) | **Have** (0.9; 1.1 added Arc Lower and Upper, Shell Lower and Upper, Fisheye and Inflate): all 15, with bend and both distortions (`map_pt` in `E:core/type.c`). The Vertical direction is kept but drawn as horizontal | Done | — |
 | Type › Font Preview Size › Small…Huge (5 items) | **Missing** | Easy | P3 |
 | Type › Language Options › Default, East Asian, Middle Eastern, Middle Eastern & South Asian composer (4 items) | **Missing** | Hard: complex shaping and RTL text | P3 |
