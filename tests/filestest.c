@@ -633,6 +633,61 @@ static void test_monitor(void)
   cms_xform_free(x);
 }
 
+/* File > Open As: the reader chosen, whatever the file looks like */
+static void test_open_as(void)
+{
+  Doc *d = layered_doc(), *r;
+  size_t tl, pl, gl;
+  char err[200];
+  u8 *t = tiff_encode_layered(d, TIFFC_LZW, &tl), *png = png_write_doc(d, &pl), *tga = tga_write_doc(d, 0, &gl);
+  int k;
+  for (k = 0; k < OA_N; k++) CHECK(open_as_names[k] && open_as_names[k][0], "every reader named");
+  CHECK(open_as_names[OA_N] == NULL, "the list ends");
+  r = codec_load_as(t, tl, OA_TIFF, err, sizeof err);
+  CHECK(r && r->nlay == d->nlay, "TIFF with its layers");
+  if (r) doc_free(r);
+  r = codec_load_as(t, tl, OA_TIFFFLAT, err, sizeof err);
+  CHECK(r && r->nlay == 1 && r->w == d->w, "TIFF flat: the first page only");
+  if (r) doc_free(r);
+  err[0] = 0;
+  r = codec_load_as(png, pl, OA_JPEG, err, sizeof err);
+  CHECK(!r && err[0], "a PNG isn't a JPEG: refused with a reason");
+  if (r) doc_free(r);
+  r = codec_load_as(tga, gl, OA_TGA, err, sizeof err);
+  CHECK(r && r->w == d->w && r->h == d->h, "Targa as Targa");
+  if (r) doc_free(r);
+  r = codec_load_as(png, pl, OA_PNG, err, sizeof err);
+  CHECK(r && r->w == d->w, "PNG as PNG");
+  if (r) doc_free(r);
+  r = codec_load_as(png, pl, OA_N, err, sizeof err);
+  CHECK(!r, "no such reader");
+  {
+    size_t xl;
+    u8 *x = slurp("v11_gz.xcf.gz", &xl);
+    r = x ? codec_load_as(x, xl, OA_XCF, err, sizeof err) : NULL;
+    CHECK(r && r->nlay == 4, "a gzipped GIMP file as GIMP");
+    if (r) doc_free(r);
+    r = x ? codec_load_as(x, xl, OA_KRA, err, sizeof err) : NULL;
+    CHECK(!r, "and not as Krita");
+    free(x);
+  }
+  /* every reader on every kind of file: refused or read, never past the data */
+  {
+    static const char *const files[] = { "v3_rle.xcf", "rgba8.kra", "layers.pdn", "cam.nef", "tiled_zip.exr", NULL };
+    int f;
+    for (f = 0; files[f]; f++) {
+      size_t xl;
+      u8 *x = slurp(files[f], &xl);
+      for (k = 0; x && k < OA_N; k++) { r = codec_load_as(x, xl, k, err, sizeof err); if (r) doc_free(r); }
+      free(x);
+    }
+    for (k = 0; k < OA_N; k++) { r = codec_load_as(png, pl, k, err, sizeof err); if (r) doc_free(r); r = codec_load_as(t, tl, k, err, sizeof err); if (r) doc_free(r); }
+    CHECK(1, "every reader on every file");
+  }
+  free(t); free(png); free(tga);
+  doc_free(d);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -690,6 +745,7 @@ int main(int argc, char **argv)
   test_jpeg_size();
   test_matte();
   test_monitor();
+  test_open_as();
   test_exif();
   test_layered();
   test_exr2();

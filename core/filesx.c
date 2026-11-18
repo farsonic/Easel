@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <math.h>
 #include "filesx.h"
+#include "rasters.h"
+#include "amigafmt.h"
+#include "xread2.h"
+#include "foreign.h"
+#include "loadx.h"
 #include "zip.h"
 
 static u32 g16(const u8 *p, int le) { return le ? (u32)p[0] | ((u32)p[1] << 8) : ((u32)p[0] << 8) | p[1]; }
@@ -425,4 +430,47 @@ long jpeg_size_estimate(const Rgba *thumb, long w, long h, int quality, int prog
   body = (long)len > head ? (long)len - head : 1;
   k = (double)w * h / ((double)thumb->w * thumb->h);
   return head + (long)(body * k);
+}
+
+/* ------------------------------------------------------------------ File > Open As */
+const char *const open_as_names[OA_N + 1] = {
+  "PNG", "JPEG", "BMP", "GIF", "IFF ILBM", "TIFF (with its layers or pages)", "TIFF (the first page, flat)",
+  "Photoshop (with its layers)", "Photoshop (flattened)", "OpenRaster", "Targa", "PCX", "Netpbm (PBM, PGM, PPM, PAM, PFM)",
+  "XPM", "DDS", "QOI", "Windows Icon", "Radiance HDR", "FITS", "DPX", "WebP", "Sun Raster", "SGI", "Atari Degas", "NEOchrome",
+  "OpenEXR, Cineon or DICOM", "GIMP (.xcf)", "Krita (.kra)", "Paint.NET (.pdn)", "Camera Raw (its JPEG)", NULL };
+typedef int (*FlatReader)(const u8 *, size_t, Rgba *, char *, size_t);
+Doc *codec_load_as(const u8 *d, size_t n, int k, char *err, size_t errcap)
+{
+  static const FlatReader flat[OA_N] = { png_read, jpeg_read, bmp_read, gif_read, ilbm_read, NULL, tiff_read, NULL, psd_read, NULL,
+                                         tga_read, pcx_read, pnm_read, xpm_read, dds_read, qoi_read, ico_read, hdr_read, fits_read,
+                                         dpx_read, webp_read, sunras_read, sgi_read, degas_read, neo_read, xread2_decode, NULL, NULL,
+                                         NULL, camraw_decode };
+  Doc *doc = NULL;
+  Rgba im;
+  int dpi;
+  codec_oom = 0;
+  im.w = im.h = 0; im.px = NULL;
+  if (k < 0 || k >= OA_N || !d || !n) { codec_err(err, errcap, "Not a reader Easel has"); return NULL; }
+  switch (k) {
+  case OA_TIFF:
+    if (!(doc = tiff_read_layers(d, n, err, errcap)) && !codec_oom) { if (!tiff_read(d, n, &im, err, errcap)) return NULL; goto adopt; }
+    break;
+  case OA_PSD: doc = psd_read_doc(d, n, err, errcap); break;
+  case OA_ORA: doc = ora_read(d, n, err, errcap); break;
+  case OA_XCF: doc = foreign_detect(d, n) == FF_XCF ? foreign_load_doc(d, n, err, errcap) : xcf_read_doc(d, n, err, errcap); break;
+  case OA_KRA: doc = kra_read_doc(d, n, err, errcap); break;
+  case OA_PDN: doc = pdn_read_doc(d, n, err, errcap); break;
+  default:
+    if (!flat[k](d, n, &im, err, errcap)) return NULL;       /* (a reader that fails leaves nothing) */
+  adopt:
+    if (!(doc = doc_adopt(im.w, im.h, im.px))) { rgba_free(&im); codec_oom = 1; codec_err(err, errcap, "Not enough memory for the picture"); return NULL; }
+    if ((dpi = codec_dpi(d, n)) > 0 && dpi < 65536) doc->dpi = (u16)dpi;
+  }
+  if (!doc) return NULL;
+  codec_read_info(d, n, &doc->info);
+  codec_load_extras(doc, d, n);
+  filesx_load_extras(doc, d, n);
+  doc_forget_undo(doc);
+  doc->dirty = 0;
+  return doc;
 }

@@ -43,6 +43,15 @@ int  camraw_decode(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap);
 int  jpeg_size_thumb(Doc *d, Rgba *out);
 long jpeg_size_estimate(const Rgba *thumb, long w, long h, int quality, int progressive);
 
+/* File > Open As: a file read by the reader chosen, whatever its first bytes or name say (#14286):
+   open_as_names[k] for k < OA_N, then codec_load_as with k. NULL with a message in err (the reader's,
+   or that the file isn't one) */
+enum { OA_PNG, OA_JPEG, OA_BMP, OA_GIF, OA_ILBM, OA_TIFF, OA_TIFFFLAT, OA_PSD, OA_PSDFLAT, OA_ORA, OA_TGA, OA_PCX, OA_PNM,
+       OA_XPM, OA_DDS, OA_QOI, OA_ICO, OA_HDR, OA_FITS, OA_DPX, OA_WEBP, OA_SUN, OA_SGI, OA_DEGAS, OA_NEO, OA_EXR,
+       OA_XCF, OA_KRA, OA_PDN, OA_RAW, OA_N };
+extern const char *const open_as_names[OA_N + 1];
+Doc *codec_load_as(const u8 *d, size_t n, int kind, char *err, size_t errcap);
+
 /* what codec_load_doc adds from a file: its EXIF */
 void filesx_load_extras(Doc *doc, const u8 *d, size_t n);
 

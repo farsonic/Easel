@@ -51,6 +51,8 @@
 #include "../core/xwrite.h"
 #include "../core/xread2.h"                  /* 1.2: Cineon, HDR */
 #include "../core/filesx.h"                  /* round 3: EXIF, Open As */
+#include "filesui.h"
+#include "filesids.h"
 #include "../core/exportx.h"                 /* 1.2: Export As */
 #include "../core/resample.h"
 #include "../core/frames.h"
@@ -158,7 +160,7 @@ char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 
 #define RC(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT, 0, (APTR)(id) }                /* (1.2: one of a set, ticked) */
 static struct NewMenu menus[] = {
   M("File"),
-  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN),
+  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN), I("Open As...", 0, ID_OPENAS),     /* (round 3) */
   H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
   S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
   S("Clear Recent List", 0, ID_CLEARRECENT),
@@ -1089,6 +1091,39 @@ static void open_path(const char *path)
   d = load(path, &fmt);
   job_end();
   if (d) { doc_show(d, path, fmt); recent_add(path); }
+  strncpy(lastdir, path, sizeof lastdir - 1);
+}
+/* round 3: File > Open As: a file read by the reader chosen, whatever its first bytes say */
+static void open_as(void)
+{
+  static int last = OA_PNG;
+  char path[512], err[160];
+  static char msg[400];
+  const char *name;
+  u8 *data;
+  size_t len = 0;
+  int k, fmt;
+  Doc *d;
+  strcpy(path, lastdir);
+  if (!file_request(0, "Open As", path, sizeof path, NULL)) return;
+  name = (const char *)FilePart((STRPTR)path);
+  if ((k = filesui_open_as_format(name, last)) < 0) return;
+  last = k;
+  if (!(data = read_file(path, &len))) { snprintf(msg, sizeof msg, tr("%s couldn't be read."), name); ask("OK", "%s", msg); return; }
+  job_begin(NULL, "Opening the picture");
+  err[0] = 0;
+  d = codec_load_as(data, len, k, err, sizeof err);
+  job_end();
+  fmt = codec_detect(data, len);
+  free(data);
+  if (!d) {
+    if (progress_aborted) return;
+    snprintf(msg, sizeof msg, tr("%s couldn't be opened as %s:\n%s"), name, tr(open_as_names[k]), err[0] ? err : tr("not enough memory"));
+    ask("OK", "%s", msg);
+    return;
+  }
+  doc_show(d, path, fmt);
+  recent_add(path);
   strncpy(lastdir, path, sizeof lastdir - 1);
 }
 static void open_file(void)
@@ -2147,6 +2182,7 @@ static void command(ULONG id)
   case ID_ICONPREF: pref_icons = !pref_icons; update_menus(); return;
   case ID_PASTEAMIGA: paste_amiga(d); refresh_all(); return;
   case ID_OPEN: open_file(); return;
+  case ID_OPENAS: open_as(); return;                     /* round 3 */
   case ID_PLACE: place_file(); return;
   case ID_CLOSE: doc_close(curdoc); return;
   case ID_CLOSEALL: close_all(); return;
