@@ -628,22 +628,22 @@ static void ob_layout(struct OData *d, Object *obj)
   d->n = fields_for(tool, d->f);
   for (i = 0; i < d->n; i++) {
     Field *f = &d->f[i];
-    LONG lw = f->label[0] ? theme_textlen(rp, theme_font(), f->label) + 5 : 0, vw = 0;
+    LONG lw = f->label[0] ? theme_textlen(rp, theme_font(), tr(f->label)) + 5 : 0, vw = 0;
     d->x0[i] = x;
     switch (f->kind) {
     case F_SCRUB: vw = theme_textlen(rp, theme_font(), "2500px") + 12; break;
     case F_CHOICE: {
       int k;
-      for (k = 0; k < f->nchoices; k++) { LONG w = theme_textlen(rp, theme_font(), f->choices[k]); if (w > vw) vw = w; }
+      for (k = 0; k < f->nchoices; k++) { LONG w = theme_textlen(rp, theme_font(), tr(f->choices[k])); if (w > vw) vw = w; }
       if (vw > (f->choices == fontlist ? 110 : 160)) vw = f->choices == fontlist ? 110 : 160;
       vw += 26;
       break; }
-    case F_CHECK: lw = 0; vw = 16 + theme_textlen(rp, theme_font(), f->label); break;
+    case F_CHECK: lw = 0; vw = 16 + theme_textlen(rp, theme_font(), tr(f->label)); break;
     case F_SELOPS: lw = 0; vw = 4 * 22; break;
-    case F_BUTTON: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 20; break;
-    case F_MENU: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 30; break;
-    case F_TEXT: lw = 0; vw = theme_textlen(rp, theme_font(), f->label); break;
-    case F_SWATCH: lw = 0; vw = 24 + (f->label[0] ? theme_textlen(rp, theme_font(), f->label) + 5 : 0); break;
+    case F_BUTTON: lw = 0; vw = theme_textlen(rp, theme_font(), tr(f->label)) + 20; break;
+    case F_MENU: lw = 0; vw = theme_textlen(rp, theme_font(), tr(f->label)) + 30; break;
+    case F_TEXT: lw = 0; vw = theme_textlen(rp, theme_font(), tr(f->label)); break;
+    case F_SWATCH: lw = 0; vw = 24 + (f->label[0] ? theme_textlen(rp, theme_font(), tr(f->label)) + 5 : 0); break;
     case F_ICON: lw = 0; vw = 22; break;
     }
     d->vx0[i] = x + lw;
@@ -668,7 +668,7 @@ static void ob_draw(struct OData *d, Object *obj)
     LONG x0 = d->vx0[i], x1 = d->x1[i];
     if (x1 > _mright(obj) - 2) break;
     if (f->label[0] && (f->kind == F_SCRUB || f->kind == F_CHOICE))
-      theme_text(rp, theme_font(), d->x0[i], my - fh() / 2, f->label, tpen(d->hot == i && f->kind == F_SCRUB ? T_TEXT : T_DIM));
+      theme_text(rp, theme_font(), d->x0[i], my - fh() / 2, tr(f->label), tpen(d->hot == i && f->kind == F_SCRUB ? T_TEXT : T_DIM));
     switch (f->kind) {
     case F_SCRUB: case F_CHOICE:
       theme_fill(rp, x0, vt, x1, vb, tpen(T_WHITE));
@@ -698,7 +698,7 @@ static void ob_draw(struct OData *d, Object *obj)
         Move(rp, x0 + 2, my); Draw(rp, x0 + 4, my + 2); Draw(rp, x0 + 8, my - 3);
         Move(rp, x0 + 2, my + 1); Draw(rp, x0 + 4, my + 3); Draw(rp, x0 + 8, my - 2);
       }
-      theme_text(rp, theme_font(), x0 + 16, my - fh() / 2, f->label, tpen(T_TEXT));
+      theme_text(rp, theme_font(), x0 + 16, my - fh() / 2, tr(f->label), tpen(T_TEXT));
       break;
     case F_SELOPS: {
       int k;
@@ -712,7 +712,7 @@ static void ob_draw(struct OData *d, Object *obj)
     case F_BUTTON: case F_MENU:
       theme_fill(rp, x0, vt, x1, vb, tpen(d->hot == i ? T_HOVER : T_WHITE));
       theme_rect(rp, x0, vt, x1, vb, tpen(T_BORDER2));
-      theme_text(rp, theme_font(), x0 + 10, my - fh() / 2, f->label, tpen(T_TEXT));
+      theme_text(rp, theme_font(), x0 + 10, my - fh() / 2, tr(f->label), tpen(T_TEXT));
       if (f->kind == F_MENU) {
         LONG ax = x1 - 10, ay = my - 1;
         SetAPen(rp, tpen(T_DIM));
@@ -721,7 +721,7 @@ static void ob_draw(struct OData *d, Object *obj)
       }
       break;
     case F_TEXT:
-      theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_GROUPLABEL));
+      theme_text(rp, theme_font(), x0, my - fh() / 2, tr(f->label), tpen(T_GROUPLABEL));
       break;
     case F_ICON:
       if (d->hot == i) theme_fill(rp, x0, vt, x1, vb, tpen(T_HOVER));
@@ -729,7 +729,7 @@ static void ob_draw(struct OData *d, Object *obj)
       break;
     case F_SWATCH: {
       LONG sx = x0;
-      if (f->label[0]) { theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_DIM)); sx += theme_textlen(rp, theme_font(), f->label) + 5; }
+      if (f->label[0]) { theme_text(rp, theme_font(), x0, my - fh() / 2, tr(f->label), tpen(T_DIM)); sx += theme_textlen(rp, theme_font(), tr(f->label)) + 5; }
       theme_rect(rp, sx, vt, sx + 22, vb, tpen(d->hot == i ? T_ACCENT : T_BORDER2));
       draw_rgb_box(rp, _screen(obj), sx + 2, vt + 2, sx + 20, vb - 2, (ULONG)*f->val & 0xFFFFFF);
       break; }

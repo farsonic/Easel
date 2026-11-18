@@ -445,14 +445,14 @@ static void lay_draw(struct LData *d, Object *obj)
   {
     Layer *a = doc->lay[doc->active];
     /* the blend mode (a list) and the opacity (dragged or typed) */
-    LONG bx1 = r - 54 - theme_textlen(rp, theme_font(), "Opacity:") - 8;
+    LONG bx1 = r - 54 - theme_textlen(rp, theme_font(), tr("Opacity:")) - 8;
     theme_fill(rp, l + 6, y, bx1, y + fh() + 4, tpen(T_WHITE));
     theme_rect(rp, l + 6, y, bx1, y + fh() + 4, tpen(T_BORDER2));
     text_fit(rp, theme_font(), l + 10, y + 2, blend_label(a), bx1 - l - 28, tpen(T_TEXT));
     SetAPen(rp, tpen(T_DIM));
     my = y + (fh() + 4) / 2;
     Move(rp, bx1 - 10, my - 1); Draw(rp, bx1 - 4, my - 1); Move(rp, bx1 - 9, my); Draw(rp, bx1 - 5, my); Move(rp, bx1 - 8, my + 1); Draw(rp, bx1 - 6, my + 1);
-    theme_text(rp, theme_font(), r - 54 - theme_textlen(rp, theme_font(), "Opacity:"), y + 2, tr("Opacity:"), tpen(T_DIM));
+    theme_text(rp, theme_font(), r - 54 - theme_textlen(rp, theme_font(), tr("Opacity:")), y + 2, tr("Opacity:"), tpen(T_DIM));
     sprintf(buf, "%d%%", (a->opacity * 100 + 127) / 255);
     theme_fill(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_WHITE));
     theme_rect(rp, r - 48, y, r - 6, y + fh() + 4, tpen(T_BORDER2));
@@ -623,7 +623,7 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     d = INST_DATA(cl, obj);
     if (!doc) return 0;
     if (my >= y0 && my <= y0 + fh() + 4) {
-      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), "Opacity:") - 8) return (ULONG)theme_bubble(tr("Blend Mode"), tr("How the layer in use mixes with the layers below it. Click for the list. A group's Pass Through lets its layers mix with everything below."));
+      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), tr("Opacity:")) - 8) return (ULONG)theme_bubble(tr("Blend Mode"), tr("How the layer in use mixes with the layers below it. Click for the list. A group's Pass Through lets its layers mix with everything below."));
       return (ULONG)theme_bubble(tr("Opacity"), tr("How solid the layer in use is. Drag left or right to change it, or click to type it."));
     }
     if (my >= y0 + fh() + 9 && my < lay_top(obj) - 2) {
@@ -728,7 +728,7 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     }
     if (im->Code != SELECTDOWN || mx < l || mx > r || my < _mtop(obj) || my > _mbottom(obj)) return 0;
     if (my >= y0 && my <= y0 + fh() + 4) {
-      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), "Opacity:") - 8) {
+      if (mx <= r - 54 - theme_textlen(_rp(obj), theme_font(), tr("Opacity:")) - 8) {
         struct Window *w = _window(obj);
         Layer *a = doc->lay[doc->active];
         popup_list(obj, w->LeftEdge + l + 6, w->TopEdge + y0 + fh() + 5, 115, blendnames, a->kind == LK_GROUP ? BM_N + 1 : BM_N,

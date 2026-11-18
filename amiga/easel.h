@@ -292,6 +292,7 @@ typedef struct {
   int undo_mb, undo_levels;           /* undo's memory and states */
   int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
   int skip_place_xf;                  /* 1.1: Place as Layer doesn't go on into Free Transform */
+  int language;                       /* 1.1: LANG_ (lang.h), or -1: the one Locale prefs prefer */
 } Prefs;
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;
