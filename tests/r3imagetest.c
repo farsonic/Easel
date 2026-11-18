@@ -27,6 +27,7 @@
 #include "core/filters10.h"
 #include "core/codec.h"
 #include "core/util.h"
+#include "core/selr3.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -581,6 +582,102 @@ static void test_liquify(void)
   doc_free(d);
 }
 
+/* ------------------------------------------------------------------ selections */
+static u32 rng_state = 12345;
+static int rnd8(int amp) { rng_state = rng_state * 1103515245u + 12345u; return (int)((rng_state >> 16) % (2 * amp + 1)) - amp; }
+static void put(u8 *p, int r, int g, int b) { p[0] = (u8)(r < 0 ? 0 : r > 255 ? 255 : r); p[1] = (u8)(g < 0 ? 0 : g > 255 ? 255 : g); p[2] = (u8)(b < 0 ? 0 : b > 255 ? 255 : b); p[3] = 255; }
+static void test_sky(void)
+{
+  i32 w = 200, h = 150, x, y;
+  Doc *d = doc_new(w, h, 0xFFFFFF, 0);
+  long sky_in = 0, sky_n = 0, ground_in = 0, ground_n = 0, tower_in = 0;
+  /* a blue sky (lighter at the horizon) over textured ground, a dark tower into the sky */
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++) {
+      u8 *p = d->lay[0]->px + ((long)y * w + x) * 4;
+      if (x >= 130 && x < 150 && y >= 20) put(p, 60 + rnd8(25), 55 + rnd8(25), 50 + rnd8(25));
+      else if (y < 70) put(p, 70 + y, 130 + y / 2, 235 - y / 4);
+      else put(p, 90 + rnd8(40), 120 + rnd8(40), 50 + rnd8(30));
+    }
+  CHECK(sel_sky(d, SEL_REPLACE, 50, 50), "Select Sky found a sky");
+  if (d->sel)
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++) {
+        int s = d->sel[(long)y * w + x] >= 128, tower = x >= 130 && x < 150 && y >= 20;
+        if (tower) { tower_in += s; continue; }
+        if (y < 66) { sky_n++; sky_in += s; }
+        else if (y > 74) { ground_n++; ground_in += s; }
+      }
+  CHECK(sky_in > sky_n * 9 / 10, "most of the sky selected");
+  CHECK(ground_in < ground_n / 50, "the ground not");
+  CHECK(tower_in < 60, "nor the tower standing in it");
+  doc_undo(d);
+  CHECK(!d->sel || !d->sel[0], "undo");
+  /* no sky: nothing found */
+  for (y = 0; y < h; y++) for (x = 0; x < w; x++) put(d->lay[0]->px + ((long)y * w + x) * 4, 90 + rnd8(40), 120 + rnd8(40), 50 + rnd8(30));
+  CHECK(!sel_sky(d, SEL_REPLACE, 50, 50), "a field without sky: none");
+  doc_free(d);
+}
+static void test_subject(void)
+{
+  i32 w = 160, h = 120, x, y;
+  Doc *d = doc_new(w, h, 0xFFFFFF, 0);
+  Box b;
+  long in = 0, in_n = 0, out = 0, out_n = 0;
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++) {
+      u8 *p = d->lay[0]->px + ((long)y * w + x) * 4;
+      int dx = x - 90, dy = y - 55;
+      if (dx * dx * 4 + dy * dy * 3 < 30 * 30 * 3) put(p, 200 + rnd8(15), 40 + rnd8(15), 40 + rnd8(15));
+      else put(p, 190 + rnd8(12), 185 + rnd8(12), 170 + rnd8(12));
+    }
+  CHECK(subject_box(d, &b), "something stands out");
+  CHECK(b.x0 <= 70 && b.x1 >= 110 && b.y0 <= 30 && b.y1 >= 80 && b.x0 > 40 && b.x1 < 140, "the box round the subject");
+  CHECK(sel_subject(d, SEL_REPLACE), "Select Subject");
+  if (d->sel)
+    for (y = 0; y < h; y++)
+      for (x = 0; x < w; x++) {
+        int dx = x - 90, dy = y - 55, e = dx * dx * 4 + dy * dy * 3, s = d->sel[(long)y * w + x] >= 128;
+        if (e < 25 * 25 * 3) { in_n++; in += s; }
+        else if (e > 36 * 36 * 3) { out_n++; out += s; }
+      }
+  CHECK(in > in_n * 9 / 10 && out < out_n / 30, "the subject selected, the background not");
+  /* a flat picture: nothing stands out */
+  for (y = 0; y < h; y++) for (x = 0; x < w; x++) put(d->lay[0]->px + ((long)y * w + x) * 4, 128, 128, 128);
+  CHECK(!subject_box(d, &b), "flat: no subject");
+  doc_free(d);
+}
+static void test_decontaminate(void)
+{
+  i32 w = 60, h = 40, x, y;
+  Doc *d = doc_new(w, h, 0xFFFFFF, 0);
+  Layer *l = d->lay[0];
+  u8 before[4], after[4], inside[4];
+  /* a red square photographed on blue: its edge pixels are purple */
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++) {
+      u8 *p = l->px + ((long)y * w + x) * 4;
+      int t = x < 28 ? 255 : x >= 32 ? 0 : (32 - x) * 255 / 4;
+      put(p, t, 0, 255 - t);
+    }
+  CHECK(doc_mask_add(d, 0, MK_REVEAL_ALL), "a mask");
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++) {
+      int t = x < 28 ? 255 : x >= 32 ? 0 : (32 - x) * 255 / 4;
+      l->mask[(long)y * w + x] = (u8)t;
+    }
+  layer_mask_changed(l);
+  memcpy(before, l->px + (20L * w + 30) * 4, 4);
+  memcpy(inside, l->px + (20L * w + 10) * 4, 4);
+  CHECK(doc_decontaminate(d, 0, 100), "decontaminate");
+  memcpy(after, l->px + (20L * w + 30) * 4, 4);
+  CHECK(after[2] < before[2] / 2 && after[0] > before[0], "the edge's blue taken out, red put in");
+  CHECK(!memcmp(inside, l->px + (20L * w + 10) * 4, 4), "fully shown pixels untouched");
+  doc_undo(d);
+  CHECK(!memcmp(before, l->px + (20L * w + 30) * 4, 4), "undo");
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -595,6 +692,9 @@ int main(int argc, char **argv)
   test_render();
   test_lens();
   test_liquify();
+  test_sky();
+  test_subject();
+  test_decontaminate();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

@@ -2852,3 +2852,10 @@ Twirl Counterclockwise	Strudel gegen den Uhrzeigersinn	Tourbillon antihoraire	Mo
 Pucker	Zusammenziehen	Contraction	Fruncir	Contrazione
 Bloat	Aufblasen	Dilatation	Inflar	Gonfiamento
 Push Left	Nach links schieben	Repousser à gauche	Empujar a la izquierda	Spingi a sinistra
+Decontaminate Amount (%):	Farben dekontaminieren, Stärke (%):	Décontaminer, intensité (%) :	Descontaminar, cantidad (%):	Decontamina, fattore (%):
+Decontaminate Colors (to a new layer)	Farben dekontaminieren (in neue Ebene)	Décontaminer les couleurs (nouveau calque)	Descontaminar colores (capa nueva)	Decontamina colori (nuovo livello)
+Decontaminate Colors	Farben dekontaminieren	Décontaminer les couleurs	Descontaminar colores	Decontamina colori
+Subject	Motiv	Sujet	Sujeto	Soggetto
+Sky	Himmel	Ciel	Cielo	Cielo
+No sky was found in the picture.	Im Bild wurde kein Himmel gefunden.	Aucun ciel n'a été trouvé dans l'image.	No se encontró cielo en la imagen.	Nessun cielo trovato nell'immagine.
+Nothing stands out from the rest of the picture.	Nichts hebt sich vom Rest des Bildes ab.	Rien ne se détache du reste de l'image.	Nada destaca del resto de la imagen.	Nulla risalta dal resto dell'immagine.

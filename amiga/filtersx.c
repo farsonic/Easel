@@ -27,6 +27,7 @@
 #include "../core/selmore.h"
 #include "../core/layers.h"
 #include "../core/filters2.h"
+#include "../core/selr3.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
@@ -258,19 +259,19 @@ static void focus_area(void)
 }
 
 /* ------------------------------------------------------------------ Select and Mask */
-static LONG sm_now[8];
+static LONG sm_now[8]; static int sm_decon;
 static void f_refine(Doc *d, const LONG *v, int c, int t)
 {
   RefineParams r;
-  (void)c; (void)t;
-  memcpy(sm_now, v, sizeof sm_now);
+  (void)c;
+  memcpy(sm_now, v, sizeof sm_now); sm_decon = t;          /* (r3: Decontaminate Colors and its amount, v[5]) */
   r.radius = (int)v[0]; r.smooth = (int)v[1]; r.feather10 = (int)v[2]; r.contrast = (int)v[3]; r.shift = (int)v[4];
   if (!sel_refine(d, &r)) out_of_memory();
 }
 static void select_and_mask(void)
 {
   static const DlgParam p[] = { { "Edge Radius (px):", 0, 250, 0 }, { "Smooth:", 0, 100, 0 }, { "Feather (x0.1 px):", 0, 2500, 0 },
-                                { "Contrast (%):", 0, 100, 0 }, { "Shift Edge (%):", -100, 100, 0 } };
+                                { "Contrast (%):", 0, 100, 0 }, { "Shift Edge (%):", -100, 100, 0 }, { "Decontaminate Amount (%):", 0, 100, 100 } };
   static const char *const outs[] = { "Selection", "Layer Mask", "New Layer with Layer Mask", NULL };
   static LONG last[8];
   static int have, last_out;
@@ -281,7 +282,7 @@ static void select_and_mask(void)
   if (!d->sel) { ask("OK", "%s", tr("Select something first: Select and Mask refines the selection.")); return; }
   if (!mem_ok((long)d->w * d->h * 9)) return;
   outc = CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list(outs), MUIA_Cycle_Active, last_out, MUIA_CycleChain, 1, End;
-  if (!dlg_sliders("Select and Mask", p, 5, NULL, NULL, 0, NULL, NULL, 0, NULL, 0, have ? last : NULL, f_refine,
+  if (!dlg_sliders("Select and Mask", p, 6, NULL, NULL, 0, NULL, NULL, 0, "Decontaminate Colors (to a new layer)", 0, have ? last : NULL, f_refine,
                    VGroup, Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Edge Radius: pixels this near the edge are decided again by their colour.\nThe preview shows the selection's edge."), MUIA_Font, MUIV_Font_Tiny, End,
                      Child, HGroup, Child, QLabel(tr("Output To:"), MUIO_Label_Centered), Child, outc, End, End, 0)) return;
   out = (int)xget(outc, MUIA_Cycle_Active);
@@ -294,6 +295,13 @@ static void select_and_mask(void)
     if (l->mask && !doc_mask_delete(d, d->active, 1)) { out_of_memory(); return; }
     if (!doc_mask_add(d, d->active, MK_REVEAL_SEL)) { out_of_memory(); return; }
     sel_deselect(d);
+    /* r3: the new layer's edge pixels take the colours of the object's own nearby pixels */
+    if (out == 2 && sm_decon && sm_now[5] > 0) {
+      int ok;
+      job_begin(d, tr("Decontaminate Colors"));
+      ok = doc_decontaminate(d, d->active, (int)sm_now[5]);
+      if (!job_end() && !ok) out_of_memory();
+    }
   }
 }
 

@@ -25,6 +25,7 @@
 #include "../core/brush.h"
 #include "../core/filtr3.h"
 #include "../core/layers.h"
+#include "../core/selr3.h"
 
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
 /* enough memory for need bytes? If not, the user is told how much is needed */
@@ -322,6 +323,17 @@ static void liquify(Doc *d)
   DoMethod(canvas, MUIM_Canvas_Refresh);
 }
 
+/* ------------------------------------------------------------------ Select > Subject and Sky */
+static void select_found(Doc *d, int sky)
+{
+  int ok;
+  if (!mem_ok((long)d->w * d->h * 3 + 2000000L)) return;
+  job_begin(d, tr(sky ? "Sky" : "Subject"));
+  ok = sky ? sel_sky(d, SEL_REPLACE, 50, 50) : sel_subject(d, SEL_REPLACE);
+  if (job_end()) return;
+  if (!ok) ask("OK", "%s", tr(sky ? "No sky was found in the picture." : "Nothing stands out from the rest of the picture."));
+}
+
 /* ------------------------------------------------------------------ Combine Shapes */
 static void combine_shapes(Doc *d, int op)
 {
@@ -352,6 +364,8 @@ int r3_command(Doc *d, ULONG id)
   case ID_TREE: tree(d); break;
   case ID_PICFRAME: picture_frame(d); break;
   case ID_LIQUIFY: liquify(d); break;
+  case ID_SELSUBJECT: select_found(d, 0); break;
+  case ID_SELSKY: select_found(d, 1); break;
   default: break;
   }
   return 1;

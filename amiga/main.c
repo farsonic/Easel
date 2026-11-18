@@ -282,7 +282,7 @@ static struct NewMenu menus[] = {
   M("Select"),
   I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
   I("All Layers", 0, ID_FX_ALLLAYERS), I("Deselect Layers", 0, ID_FX_NOLAYERS), BAR,
-  I("Color Range...", 0, ID_COLORRANGE), I("Focus Area...", 0, ID_FX_FOCUS), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
+  I("Color Range...", 0, ID_COLORRANGE), I("Focus Area...", 0, ID_FX_FOCUS), I("Subject", 0, ID_SELSUBJECT), I("Sky", 0, ID_SELSKY), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
   I("Select and Mask...", 0, ID_FX_REFINE),
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
   I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR), BAR,
