@@ -58,6 +58,25 @@ cover_e = easel[..., 3] > 0
 cover_p = pil[..., 3] > 0
 ok("the same area uncovered", (cover_e != cover_p).mean() < 0.02, "%.3f" % (cover_e != cover_p).mean())
 
+# Lens Blur without a depth map: every pixel the mean of the disc of radius 6 round it (the iris's
+# rows as Easel makes them: dx * dx + dy * dy <= r * r + r / 2), edges repeated
+lb = os.path.join(out, "r3_lensblur.png")
+if os.path.exists(lb):
+    srcf = np.asarray(Image.open(os.path.join(out, "r3_field_src.png")).convert("RGB"), dtype=float)
+    r = 6
+    pad = np.pad(srcf, ((r, r), (r, r), (0, 0)), mode="edge")
+    acc = np.zeros_like(srcf)
+    cnt = 0
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy <= r * r + r // 2:
+                acc += pad[r + dy:r + dy + srcf.shape[0], r + dx:r + dx + srcf.shape[1]]
+                cnt += 1
+    ref = acc / cnt
+    got = np.asarray(Image.open(lb).convert("RGB"), dtype=float)
+    d = np.abs(got - ref)
+    ok("Lens Blur's disc matches numpy's", d.max() <= 1.01, "max %.2f" % d.max())
+
 # OpenType contextual lookups (GSUB 5 and 6) as fontTools reads the font: r3_gsub.txt holds the
 # glyphs Easel's layout gave for some text with Contextual Alternates or Fractions; the same lookups
 # are applied here to the glyph names, from fontTools' own reading of the tables

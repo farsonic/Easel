@@ -693,7 +693,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Blur › Blur More | **Have**: `flt_blur_more` | Done | — |
 | Blur › Box Blur… | **Have** | Done | — |
 | Blur › Gaussian Blur… | **Have** | Done | — |
-| Blur › Lens Blur… (depth map, iris, specular) | **Partial**: radius, specular brightness and threshold (`flt_lens_blur`); the depth map and iris shape are missing | Hard | P3 |
+| Blur › Lens Blur… (depth map, iris, specular) | **Have**: round 3 replaces 1.0's version (radius, specular brightness and threshold) with one that has the iris (round, or three to eight blades, turned) and a depth map (the layer's transparency, its mask or an alpha channel, inverted or not) with its blur focal distance: each pixel takes the iris blur at the radius its distance from the focal depth asks, between four levels (`flt_lens_blur_ex` in `E:core/filtr3.c`, in bands); the disc is checked against numpy (`E:tests/check_r3.py`). Noise and the iris's curvature are left out | Done | — |
 | Blur › Motion Blur… | **Have** | Done | — |
 | Blur › Radial Blur… (spin or zoom, movable centre, quality) | **Have**: `flt_radial_blur_ex` (centre and Draft/Good/Best) | Done | — |
 | Blur › Shape Blur… | **Have**: five shapes (`flt_shape_blur`); custom shapes as the kernel are missing | Done | — |

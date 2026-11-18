@@ -175,6 +175,31 @@ static void lens_correction(Doc *d)
   dlg_sliders("Lens Correction", ps, 8, scl, "Scale:", 4, NULL, NULL, 0, NULL, 0, NULL, f_lens3, NULL, 1);
 }
 
+/* Blur > Lens Blur: the iris, a depth map and its focal distance, specular highlights */
+static void f_lensblur(Doc *d, const LONG *v, int c, int t)
+{
+  LensBlurParams p;
+  lens_blur_defaults(&p);
+  p.radius = (int)v[0]; p.blades = v[1] < 3 ? 0 : (int)v[1]; p.rotation = (int)v[2]; p.focal = (int)v[3];
+  p.brightness = (int)v[4]; p.threshold = (int)v[5]; p.invert = t;
+  p.depth = c <= 0 ? LBD_NONE : c == 1 ? LBD_TRANSPARENCY : c == 2 ? LBD_MASK : LBD_CHANNEL; p.channel = c - 3;
+  apply_result(flt_lens_blur_ex(d, &p));
+}
+static void lens_blur(Doc *d)
+{
+  static const DlgParam ps[6] = { { "Radius (px):", 1, 100, 15 }, { "Blades (0 round):", 0, 8, 6 }, { "Rotation:", -180, 180, 0 },
+    { "Blur Focal Distance:", 0, 255, 0 }, { "Specular Brightness:", 0, 100, 0 }, { "Threshold:", 0, 255, 255 } };
+  static const char *src[4 + MAXCHANNELS + 1];
+  static char names[MAXCHANNELS][40];
+  int k, n = 0;
+  if (!need_pixels(d) || !mem_ok(r3_memory(d, R3M_BAND, 101))) return;
+  src[n++] = "None"; src[n++] = "Transparency"; src[n++] = "Layer Mask";
+  for (k = 0; k < d->nchan && k < MAXCHANNELS; k++) { utf8_to_latin1(d->chan_name[k], strlen(d->chan_name[k]), names[k], sizeof names[k]); src[n++] = names[k]; }
+  src[n] = NULL;
+  dlg_sliders("Lens Blur", ps, 6, src, "Depth Map:", 0, NULL, NULL, 0, "Invert", 0, NULL, f_lensblur,
+              TextObject, MUIA_Text_Contents, (ULONG)tr("With a depth map the blur grows with the distance from the\nfocal distance; without one everything is blurred alike."), MUIA_Font, MUIV_Font_Tiny, End, 1);
+}
+
 /* Render > Flame: along the active path (or a line across the lower part) */
 static void f_flame(Doc *d, const LONG *v, int c, int t)
 {
@@ -369,6 +394,7 @@ int r3_command(Doc *d, ULONG id)
   /* (1.0's Oil Paint and Lens Correction items, with round 3's dialogs) */
   if (id == ID_F_OIL) { if (d) oil_paint(d); return 1; }
   if (id == ID_F_LENSCORR) { if (d) lens_correction(d); return 1; }
+  if (id == ID_F_LENSBLUR) { if (d) lens_blur(d); return 1; }
   if (id < ID_R3_FIRST || id > ID_R3_LAST) return 0;
   if (!d) return 1;
   if (id >= ID_COMBINE0 && id < ID_COMBINE0 + CS_N) { combine_shapes(d, (int)(id - ID_COMBINE0)); return 1; }

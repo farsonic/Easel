@@ -225,6 +225,144 @@ int flt_field_blur(Doc *d, const BlurPin *pins, int n)
   return band_run(d, "Field Blur", gauss_reach(fc.rmax / 2.0) + 1, field_band, &fc);
 }
 
+/* ------------------------------------------------------------------ Lens Blur with a depth map */
+void lens_blur_defaults(LensBlurParams *p)
+{
+  memset(p, 0, sizeof *p);
+  p->radius = 15; p->blades = 6; p->depth = LBD_NONE; p->focal = 0; p->brightness = 0; p->threshold = 255;
+}
+void lens_iris_runs(int r, int blades, int rotation, int *lo, int *hi)
+{
+  int dy, dx, k;
+  double rot = rotation * M_PI / 180;
+  for (dy = -r; dy <= r; dy++) {
+    int a = 1, b = 0;
+    for (dx = -r; dx <= r; dx++) {
+      int in;
+      if (!blades) in = dx * dx + dy * dy <= r * r + r / 2;
+      else {
+        /* inside every edge of the regular polygon (its corners on the circle) */
+        double ang = 2 * M_PI / blades, apo = r * cos(ang / 2) + 0.5;
+        in = 1;
+        for (k = 0; k < blades && in; k++) {
+          double t = rot + ang * (k + 0.5);
+          if (dx * cos(t) + dy * sin(t) > apo) in = 0;
+        }
+      }
+      if (in) { if (a > b) a = dx; b = dx; }
+    }
+    if (a > b) { lo[dy + r] = 1; hi[dy + r] = 0; } else { lo[dy + r] = a; hi[dy + r] = b; }
+  }
+}
+#define LB_LEVELS 4
+typedef struct { const LensBlurParams *p; const u8 *depth; int rmax; } LbCtx;
+static int lb_band(void *vc, Doc *d, const u8 *in, Box ib, u8 *out, Box ob)
+{
+  LbCtx *lc = (LbCtx *)vc;
+  const LensBlurParams *p = lc->p;
+  i32 iw = ib.x1 - ib.x0, ow = ob.x1 - ob.x0, oh = ob.y1 - ob.y0, x, y;
+  long npx = (long)ow * oh;
+  double *pre = (double *)malloc((size_t)(iw + 1) * 4 * sizeof(double));
+  float *lv = (float *)malloc((size_t)npx * 4 * LB_LEVELS * sizeof(float));
+  int *lo = (int *)malloc((size_t)(2 * lc->rmax + 1) * 2 * sizeof(int)), *hi, L, c;
+  if (!pre || !lv || !lo) { free(pre); free(lv); free(lo); return 0; }
+  hi = lo + 2 * lc->rmax + 1;
+  /* the levels: the iris at rmax * L / (levels - 1), premultiplied, highlights boosted */
+  for (L = 1; L < LB_LEVELS; L++) {
+    int r = (int)floor(lc->rmax * L / (double)(LB_LEVELS - 1) + 0.5), dy;
+    double cnt = 0;
+    if (r < 1) r = 1;
+    lens_iris_runs(r, p->blades, p->rotation, lo, hi);
+    for (dy = 0; dy <= 2 * r; dy++) if (hi[dy] >= lo[dy]) cnt += hi[dy] - lo[dy] + 1;
+    for (y = ob.y0; y < ob.y1; y++) {
+      float *o = lv + (((long)(L - 1) * oh + (y - ob.y0)) * ow) * 4;
+      memset(o, 0, (size_t)ow * 4 * sizeof(float));
+      for (dy = -r; dy <= r; dy++) {
+        i32 ry = y + dy;
+        const u8 *row;
+        if (hi[dy + r] < lo[dy + r]) continue;
+        if (ry < ib.y0) ry = ib.y0;
+        if (ry >= ib.y1) ry = ib.y1 - 1;
+        row = in + (long)(ry - ib.y0) * iw * 4;
+        for (c = 0; c < 4; c++) pre[c] = 0;
+        for (x = 0; x < iw; x++) {
+          const u8 *q = row + x * 4;
+          double boost = p->brightness > 0 && (q[0] * 77 + q[1] * 150 + q[2] * 29) / 256 >= p->threshold ? 1 + p->brightness / 100.0 : 1;
+          for (c = 0; c < 3; c++) pre[(x + 1) * 4 + c] = pre[x * 4 + c] + q[c] * q[3] / 255.0 * boost;
+          pre[(x + 1) * 4 + 3] = pre[x * 4 + 3] + q[3];
+        }
+        for (x = ob.x0; x < ob.x1; x++) {
+          i32 a = x - ib.x0 + lo[dy + r], b = x - ib.x0 + hi[dy + r] + 1;
+          float *t = o + (x - ob.x0) * 4;
+          /* (past the band's ends the edge pixels repeat) */
+          int extra_l = a < 0 ? -a : 0, extra_r = b > iw ? b - iw : 0;
+          if (a < 0) a = 0;
+          if (b > iw) b = iw;
+          for (c = 0; c < 4; c++) {
+            double v = b > a ? pre[b * 4 + c] - pre[a * 4 + c] : 0;
+            if (extra_l) v += extra_l * (pre[4 + c] - pre[c]);
+            if (extra_r) v += extra_r * (pre[iw * 4 + c] - pre[(iw - 1) * 4 + c]);
+            t[c] += (float)v;
+          }
+        }
+      }
+      for (x = 0; x < ow * 4; x++) o[x] = (float)(o[x] / cnt);
+    }
+    if (progress(L, LB_LEVELS)) break;
+  }
+  /* each pixel: between the levels either side of its depth's blur */
+  for (y = ob.y0; y < ob.y1; y++)
+    for (x = ob.x0; x < ob.x1; x++) {
+      const u8 *q = in + ((long)(y - ib.y0) * iw + (x - ib.x0)) * 4;
+      u8 *o = out + ((long)(y - ob.y0) * ow + (x - ob.x0)) * 4;
+      double dep = lc->depth ? lc->depth[(long)y * d->w + x] : 255, f, a[4], b[4];
+      int lo_l;
+      if (p->invert) dep = 255 - dep;
+      f = lc->depth ? fabs(dep - p->focal) / 255.0 * (LB_LEVELS - 1) : LB_LEVELS - 1;
+      lo_l = (int)floor(f);
+      if (lo_l >= LB_LEVELS - 1) { lo_l = LB_LEVELS - 2; f = LB_LEVELS - 1; }
+      f -= lo_l;
+      for (c = 0; c < 4; c++) {
+        if (lo_l == 0) a[c] = c < 3 ? q[c] * q[3] / 255.0 : q[3];
+        else a[c] = lv[(((long)(lo_l - 1) * oh + (y - ob.y0)) * ow + (x - ob.x0)) * 4 + c];
+        b[c] = lv[(((long)lo_l * oh + (y - ob.y0)) * ow + (x - ob.x0)) * 4 + c];
+      }
+      {
+        double al = a[3] + (b[3] - a[3]) * f;
+        o[3] = (u8)clamp255(al);
+        for (c = 0; c < 3; c++) o[c] = al > 0.5 ? (u8)clamp255((a[c] + (b[c] - a[c]) * f) * 255 / al) : 0;
+      }
+      if (lo_l == 0 && f == 0) memcpy(o, q, 4);
+    }
+  free(pre); free(lv); free(lo);
+  return 1;
+}
+int flt_lens_blur_ex(Doc *d, const LensBlurParams *pin)
+{
+  LensBlurParams p = *pin;
+  LbCtx lc;
+  Layer *l;
+  u8 *alpha = NULL;
+  int r;
+  p.radius = clampi(p.radius, 1, 100); p.blades = p.blades ? clampi(p.blades, 3, 8) : 0;
+  p.focal = clampi(p.focal, 0, 255); p.brightness = clampi(p.brightness, 0, 100); p.threshold = clampi(p.threshold, 0, 255);
+  if (d->active < 0 || d->active >= d->nlay) return 0;
+  l = d->lay[d->active];
+  lc.p = &p; lc.rmax = p.radius; lc.depth = NULL;
+  if (p.depth == LBD_MASK) lc.depth = l->mask;
+  else if (p.depth == LBD_CHANNEL && p.channel >= 0 && p.channel < d->nchan) lc.depth = d->chan[p.channel];
+  else if (p.depth == LBD_TRANSPARENCY && l->px) {
+    long k, n = (long)d->w * d->h;
+    if (!(alpha = (u8 *)malloc((size_t)n))) return -1;
+    for (k = 0; k < n; k++) alpha[k] = l->px[k * 4 + 3];
+    lc.depth = alpha;
+  }
+  if (p.depth != LBD_NONE && !lc.depth) { free(alpha); return 0; }
+  r = band_run(d, "Lens Blur", p.radius + 1, lb_band, &lc);
+  free(alpha);
+  return r;
+}
+
 /* ------------------------------------------------------------------ HDR Toning */
 void hdr_defaults(HdrParams *p)
 {

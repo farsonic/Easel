@@ -1027,6 +1027,51 @@ static void test_path_symmetry(void)
   brush_sym_path = NULL;
 }
 
+static void test_lens_blur(void)
+{
+  Doc *d = test_picture(120, 90);
+  LensBlurParams lp;
+  long n = 120L * 90 * 4;
+  u8 *orig = (u8 *)malloc((size_t)n);
+  int lo[21], hi[21], k, cnt = 0;
+  memcpy(orig, d->lay[0]->px, (size_t)n);
+  lens_iris_runs(10, 6, 0, lo, hi);
+  for (k = 0; k < 21; k++) if (hi[k] >= lo[k]) cnt += hi[k] - lo[k] + 1;
+  CHECK(cnt > 220 && cnt < 300 && hi[10] == 10 && lo[10] == -10, "a hexagon of radius 10 (about 260 pixels)");
+  lens_iris_runs(10, 0, 0, lo, hi);
+  CHECK(hi[0] >= lo[0] && hi[0] - lo[0] < 8 && hi[10] - lo[10] == 20, "a circle");
+  /* no depth map: one blur everywhere (check_r3.py redoes the disc with numpy) */
+  lens_blur_defaults(&lp); lp.radius = 6; lp.blades = 0;
+  CHECK(flt_lens_blur_ex(d, &lp) == 1, "lens blur");
+  save_png(d, "r3_lensblur.png");
+  doc_undo(d);
+  /* the layer mask as the depth: black (focal 0) stays sharp, white is blurred */
+  CHECK(doc_mask_add(d, 0, MK_REVEAL_ALL), "a mask");
+  {
+    i32 x, y;
+    double el = 0, er = 0;
+    for (y = 0; y < 90; y++) for (x = 0; x < 120; x++) d->lay[0]->mask[(long)y * 120 + x] = x < 60 ? 0 : 255;
+    layer_mask_changed(d->lay[0]);
+    lp.depth = LBD_MASK; lp.focal = 0; lp.radius = 8;
+    CHECK(flt_lens_blur_ex(d, &lp) == 1, "with the mask as the depth");
+    CHECK(!memcmp(d->lay[0]->px + (40L * 120 + 20) * 4, orig + (40L * 120 + 20) * 4, 4), "in focus: the pixel itself");
+    for (y = 2; y < 88; y++) {
+      el += abs(d->lay[0]->px[(y * 120L + 11) * 4 + 2] - d->lay[0]->px[(y * 120L + 12) * 4 + 2]);
+      er += abs(d->lay[0]->px[(y * 120L + 107) * 4 + 2] - d->lay[0]->px[(y * 120L + 108) * 4 + 2]);
+    }
+    CHECK(el > 3 * er, "sharp edges at the left, soft at the right");
+    doc_undo(d);
+    lp.invert = 1;
+    flt_lens_blur_ex(d, &lp);
+    CHECK(!memcmp(d->lay[0]->px + (40L * 120 + 100) * 4, orig + (40L * 120 + 100) * 4, 4), "inverted: the right in focus");
+    doc_undo(d);
+  }
+  lp.depth = LBD_CHANNEL; lp.channel = 3;
+  CHECK(flt_lens_blur_ex(d, &lp) == 0, "no such channel: nothing");
+  free(orig);
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -1040,6 +1085,7 @@ int main(int argc, char **argv)
   test_hdr_oil();
   test_render();
   test_lens();
+  test_lens_blur();
   test_liquify();
   test_sky();
   test_subject();

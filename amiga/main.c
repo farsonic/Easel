@@ -2078,7 +2078,7 @@ static void command(ULONG id)
   if (mx_recording) mx_record(id, menu_label(id));   /* 1.2: into the action being recorded (the History Log is t2_log_steps') */
   if (id > ID_T2_FIRST && id < ID_T2_LAST) { if (tools2_command(id)) refresh_all(); return; }   /* 1.2 (tools2.c) */
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
-  if (id == ID_F_OIL || id == ID_F_LENSCORR) { r3_command(d, id); refresh_all(); return; }               /* (r3: their new dialogs) */
+  if (id == ID_F_OIL || id == ID_F_LENSCORR || id == ID_F_LENSBLUR) { r3_command(d, id); refresh_all(); return; }               /* (r3: their new dialogs) */
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }

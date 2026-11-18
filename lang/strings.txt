@@ -2875,3 +2875,8 @@ Type on Active Path	Text auf aktivem Pfad	Texte sur le tracé actif	Texto en el 
 Type off the Path	Text vom Pfad lösen	Détacher le texte du tracé	Separar el texto del trazado	Stacca il testo dal tracciato
 That path is too long to keep with the text.	Dieser Pfad ist zu lang, um ihn mit dem Text zu speichern.	Ce tracé est trop long pour être gardé avec le texte.	Ese trazado es demasiado largo para guardarlo con el texto.	Quel tracciato è troppo lungo da tenere con il testo.
 Type in Active Path	Text in aktivem Pfad	Texte dans le tracé actif	Texto dentro del trazado activo	Testo nel tracciato attivo
+Blades (0 round):	Lamellen (0 rund):	Lamelles (0 ronde) :	Láminas (0 redondo):	Lamelle (0 rotondo):
+Rotation:	Drehung:	Rotation :	Rotación:	Rotazione:
+Blur Focal Distance:	Weichzeichner-Fokusentfernung:	Distance focale du flou :	Distancia focal de desenfoque:	Distanza focale sfocatura:
+Depth Map:	Tiefenkarte:	Carte de profondeur :	Mapa de profundidad:	Mappa di profondità:
+With a depth map the blur grows with the distance from the\nfocal distance; without one everything is blurred alike.	Mit einer Tiefenkarte wächst die Unschärfe mit dem Abstand von der\nFokusentfernung; ohne sie wird alles gleich weichgezeichnet.	Avec une carte de profondeur, le flou croît avec l'écart à la\ndistance focale ; sans elle, tout est flouté de même.	Con un mapa de profundidad el desenfoque crece con la distancia a la\ndistancia focal; sin él todo se desenfoca igual.	Con una mappa di profondità la sfocatura cresce con la distanza dalla\ndistanza focale; senza, tutto è sfocato allo stesso modo.

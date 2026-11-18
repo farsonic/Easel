@@ -884,7 +884,6 @@ static void f_dust(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_
 static void f_rnoise(Doc *d, const LONG *v, int c, int t) { (void)c; flt_reduce_noise(d, (int)v[0], (int)v[1], t); }
 static void f_smart(Doc *d, const LONG *v, int c, int t) { (void)t; flt_smart_blur(d, (int)v[0], (int)v[1], c); }
 static void f_surface(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_surface_blur(d, (int)v[0], (int)v[1]); }
-static void f_lens(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lens_blur(d, (int)v[0], (int)v[1], (int)v[2]); }
 static void f_shape(Doc *d, const LONG *v, int c, int t) { (void)t; flt_shape_blur(d, (int)v[0], c); }
 static void f_spin(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spin_blur(d, (i32)(d->w * v[0] / 100), (i32)(d->h * v[1] / 100), (int)v[2]); }
 static void f_polar(Doc *d, const LONG *v, int c, int t) { (void)v; (void)t; flt_polar_coordinates(d, c == 0); }
@@ -1048,7 +1047,6 @@ void dlg_filter(ULONG id)
   case ID_F_REDUCENOISE: { static const Param p[] = { { "Strength:", 0, 10, 6 }, { "Preserve Details (%):", 0, 100, 60 } }; slider_dialog("Reduce Noise", p, 2, NULL, NULL, "Reduce Colour Noise", 1, f_rnoise, NULL); break; }
   case ID_F_SMARTBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 3 }, { "Threshold:", 1, 100, 25 } }; slider_dialog("Smart Blur", p, 2, smodes, "Mode:", NULL, 0, f_smart, NULL); break; }
   case ID_F_SURFACEBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 5 }, { "Threshold:", 2, 255, 15 } }; slider_dialog("Surface Blur", p, 2, NULL, NULL, NULL, 0, f_surface, NULL); break; }
-  case ID_F_LENSBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 15 }, { "Specular Brightness:", 0, 100, 0 }, { "Threshold:", 0, 255, 255 } }; slider_dialog("Lens Blur", p, 3, NULL, NULL, NULL, 0, f_lens, NULL); break; }
   case ID_F_SHAPEBLUR: { static const Param p[] = { { "Radius (px):", 1, 100, 10 } }; slider_dialog("Shape Blur", p, 1, shapes, "Shape:", NULL, 0, f_shape, NULL); break; }
   case ID_F_SPINBLUR: { static const Param p[] = { { "Centre X (%):", 0, 100, 50 }, { "Centre Y (%):", 0, 100, 50 }, { "Blur Angle:", 1, 360, 15 } }; slider_dialog("Spin Blur", p, 3, NULL, NULL, NULL, 0, f_spin, NULL); break; }
   case ID_F_POLAR: slider_dialog("Polar Coordinates", NULL, 0, polar, "Conversion:", NULL, 0, f_polar, NULL); break;

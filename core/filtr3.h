@@ -32,6 +32,25 @@ int  flt_field_blur(Doc *d, const BlurPin *pins, int n);
 /* the radius Field Blur uses at x, y */
 double field_blur_radius(const BlurPin *pins, int n, double x, double y);
 
+/* ------------------------------------------------------------------ Lens Blur with a depth map */
+enum { LBD_NONE, LBD_TRANSPARENCY, LBD_MASK, LBD_CHANNEL };   /* the depth map: none (all blurred alike),
+                                                                  the layer's transparency, its mask, an alpha channel */
+typedef struct {
+  int radius;                         /* 1-100 px: the blur at the far end of the depth */
+  int blades;                         /* the iris: 0 a circle, else 3-8 blades */
+  int rotation;                       /* degrees the iris turns */
+  int depth;                          /* LBD_ */
+  int channel;                        /* LBD_CHANNEL: which */
+  int focal;                          /* 0-255: the depth that stays sharp */
+  int invert;                         /* the depth map read the other way */
+  int brightness, threshold;          /* specular highlights: 0-100 % brighter at or over the threshold (0-255) */
+} LensBlurParams;
+void lens_blur_defaults(LensBlurParams *p);
+/* each pixel blurred by the iris at radius x |its depth - focal| / 255 (between four levels) */
+int  flt_lens_blur_ex(Doc *d, const LensBlurParams *p);
+/* the iris's rows: for each dy in -r..r, the run lo..hi it covers (2r + 1 entries each) */
+void lens_iris_runs(int r, int blades, int rotation, int *lo, int *hi);
+
 /* ------------------------------------------------------------------ HDR Toning */
 typedef struct {
   int radius;                         /* 1-500 px: how far the local adaptation looks */
