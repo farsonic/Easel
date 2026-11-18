@@ -805,6 +805,39 @@ int layer_to_file(Doc *d, int i, const char *path)
   return ok;
 }
 
+int package_links(Doc *d, const char *drawer)
+{
+  int i, n = 0;
+  for (i = 0; i < d->nlay; i++) {
+    const LayerX *x = layerx_get(d->lay[i]);
+    const char *src, *base;
+    char dst[600], name[160];
+    u8 *data;
+    size_t len;
+    int k;
+    if (!x || !layer_is_smart(d->lay[i]) || !x->so_linked || !(src = layer_smart_path(d->lay[i])) || !src[0]) continue;
+    base = src + strlen(src);
+    while (base > src && base[-1] != '/' && base[-1] != ':') base--;
+    snprintf(name, sizeof name, "%s", base);
+    path_join(dst, sizeof dst, drawer, name);
+    for (k = 2; k < 100; k++) {
+      /* a different source under the same name: numbered */
+      FILE *f = fopen(dst, "rb");
+      if (!f || !strcmp(dst, src)) { if (f) fclose(f); break; }
+      fclose(f);
+      snprintf(name, sizeof name, "%d-%s", k, base);
+      path_join(dst, sizeof dst, drawer, name);
+    }
+    if (!strcmp(dst, src)) { n++; continue; }
+    if (!(data = file_read(src, &len))) return -1;
+    if (!file_write(dst, data, len)) { free(data); return -1; }
+    free(data);
+    if (!doc_smart_relink(d, i, dst)) return -1;
+    n++;
+  }
+  return n;
+}
+
 /* ================================================================== Find and Replace Text */
 static int word_char(int c) { return isalnum(c) || c == '_' || c >= 0x80; }
 static int match_at(const char *s, size_t n, size_t at, const char *find, size_t fl, int match_case, int whole)

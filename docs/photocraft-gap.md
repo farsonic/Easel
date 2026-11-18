@@ -228,7 +228,7 @@ Re-checked 2026-11-18 (Easel 1.1) against `menus[]` in `E:amiga/main.c`.
 | Generate › Image Assets | **Have** (1.3): File › Generate › Image Assets writes every layer or group named like files ("logo.png, 50% logo-small.jpg8, icon.gif": scale, JPEG quality, PNG-8) trimmed into a drawer beside the picture (`assets_parse`, `assets_generate`, `E:core/menu3.c`, `E:tests/menu3test.c`) | Done | — |
 | Place Embedded… `file.placeEmbedded` | **Partial** (0.6): Place as Layer goes on into Free Transform as a pixel layer; smart objects exist since 1.2 (Open as Smart Object, Convert to Smart Object) but Place doesn't make one | Easy | P3 |
 | Place Linked… | **Partial**: Layer › Smart Objects › Convert to Linked (1.2) links a layer to a file; placing straight as a linked smart object isn't offered | Easy | P3 |
-| Package… | **Missing** | Easy | P3 |
+| Package… | **Have** (1.3): File › Package makes a drawer with the picture (OpenRaster) and a copy of every linked smart object's file, the layers relinked to the copies (`package_links`, `E:core/menu3.c`, `E:tests/menu3test.c`) | Done | — |
 | Automate › Batch… | **Have** (1.2): File › Automate › Batch runs a recorded action (Window › Actions) on every picture in a drawer and saves each to another drawer as PNG, JPEG, ILBM, ORA, TIFF, PSD, BMP or GIF (`dlg_batch` in `E:amiga/panelsx.c`); EaselConvert still converts from the Shell | Done | — |
 | Automate › Create Droplet… | **Missing** | Easy. Amiga stand-in: a Workbench tool icon that runs an action on the files dropped on it | P3 |
 | Automate › Crop and Straighten Photos | **Missing** | Moderate (`algo/src/scancrop.rs`) | P3 |

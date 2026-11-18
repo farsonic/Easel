@@ -33,7 +33,7 @@ interface and icons. None of the icons are copied from any other program.
   palette, dither, quality and matte, the original and the result side by side with the file's size
   and download time - Easel's "Save for Screen". Export As says how big the file will be. Picked
   Layers to Files, Color Lookup Tables (.cube, .3dl, from the adjustment layers), Export Preferences
-  (Quick Export's format and place). File > Generate > Image Assets: layers named like files
+  (Quick Export's format and place), File > Package (the picture and its linked files in a drawer). File > Generate > Image Assets: layers named like files
   ("logo.png, 50% logo-small.jpg8") written trimmed into a drawer.
 - File > Scripts > Image Processor (the open pictures or files, to JPEG, PSD, TIFF, PNG and IFF
   ILBM, fitted, with a copyright and icons) and Statistics (the stack modes over files); File >

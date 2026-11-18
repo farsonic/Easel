@@ -472,6 +472,28 @@ static void test_layers_slices(void)
   doc_free(d);
 }
 
+static void test_package(void)
+{
+  Doc *d = doc_new(20, 20, 0xFFFFFF, 0);
+  Layer *l = layer_new(d, "Logo");
+  char src[400], drawer[300];
+  const char *p;
+  rect(l, 20, 2, 2, 12, 12, 0x00FF00, 255);
+  doc_add_layer(d, l, 1);
+  snprintf(smart_drawer, sizeof smart_drawer, "%s", tmp);
+  snprintf(src, sizeof src, "%s/easel_pkg_logo.png", tmp);
+  snprintf(drawer, sizeof drawer, "%s/easel_package", tmp);
+  mkdir(drawer, 0755);
+  CHECK(package_links(d, drawer) == 0, "nothing linked: nothing copied");
+  CHECK(doc_smart_convert(d, 1) && doc_smart_link(d, 1, src), "a linked smart object");
+  CHECK(package_links(d, drawer) == 1, "Package copies it");
+  p = layer_smart_path(d->lay[1]);
+  CHECK(p && strstr(p, "easel_package/easel_pkg_logo.png"), "and relinks the layer to the copy");
+  CHECK(fsize(p) == fsize(src) && fsize(p) > 0, "the same file");
+  CHECK(package_links(d, drawer) == 1, "packaging again keeps it where it is");
+  doc_free(d);
+}
+
 static void test_open_as(void)
 {
   u8 raw[4 * 3 * 2];
@@ -546,6 +568,7 @@ int main(int argc, char **argv)
   test_apply_calc();
   test_analysis();
   test_layers_slices();
+  test_package();
   test_open_as();
   test_bucket_wand_screen();
   printf("%d tests, %d failed\n", tests, fails);

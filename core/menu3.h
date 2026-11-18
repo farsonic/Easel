@@ -166,6 +166,11 @@ int  assets_generate(Doc *d, const char *drawer, char *log, size_t logcap);
    transparent, written in the format path's extension asks (PNG if none); 1 done */
 int  layer_to_file(Doc *d, int i, const char *path);
 
+/* File > Package: every linked smart object's source copied into drawer (under its own name, or
+   with a number when two share one) and the layer relinked to the copy; how many, -1 if one
+   couldn't be copied */
+int  package_links(Doc *d, const char *drawer);
+
 /* ------------------------------------------------------------------ Find and Replace Text */
 /* every type layer's text (only layer `only` when it is >= 0): find replaced by repl (case-sensitive
    or not, whole words only or not, all of them or only the first found); one undo step. How many */

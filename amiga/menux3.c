@@ -380,6 +380,30 @@ int m3_quick_export(Doc *d, const char *docpath, const char *name)
   return 1;
 }
 
+/* ================================================================== File > Package */
+static void package_cmd(Doc *d)
+{
+  DocView *v = cur_view();
+  char drawer[512], path[600], nm[120];
+  int n;
+  if (!v) return;
+  strcpy(drawer, m3dir);
+  snprintf(nm, sizeof nm, "%s", v->name);
+  if (strrchr(nm, '.')) *strrchr(nm, '.') = 0;
+  AddPart((STRPTR)drawer, (STRPTR)nm, sizeof drawer);
+  if (!m3_file_request(1, "Package: the drawer to make (the picture and its linked files go in it)", drawer, sizeof drawer, NULL)) return;
+  if (!make_drawer(drawer)) { sayf("The drawer %s couldn't be made.", drawer); return; }
+  set(app, MUIA_Application_Sleep, TRUE);
+  n = package_links(d, drawer);
+  strncat(nm, ".ora", sizeof nm - 1 - strlen(nm));
+  path_join(path, sizeof path, drawer, nm);
+  if (n >= 0 && !mx_write(d, path)) n = -2;
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (n == -1) say("A linked file couldn't be copied (is it there, and is there room?).");
+  else if (n == -2) sayf("%s couldn't be written (the disk is full or write-protected?).", file_part(path));
+  else sayn("The picture and %ld linked files are in the drawer.", n);
+}
+
 /* ================================================================== Generate > Image Assets */
 static void image_assets(Doc *d)
 {
@@ -938,7 +962,7 @@ void m3_doc_closed(Doc *d) { measure_forget(d); }
 static void tick(void (*menu_set)(ULONG, ULONG, ULONG), ULONG id, int on) { menu_set(id, MUIA_Menuitem_Checked, on ? TRUE : FALSE); }
 void m3_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
 {
-  static const ULONG needdoc[] = { ID_SAVEFORWEB, ID_EXPPICKED, ID_EXPLUT, ID_ASSETS, ID_FINDREPLACE, ID_APPLYIMAGE, ID_CALCULATIONS,
+  static const ULONG needdoc[] = { ID_PACKAGE, ID_SAVEFORWEB, ID_EXPPICKED, ID_EXPLUT, ID_ASSETS, ID_FINDREPLACE, ID_APPLYIMAGE, ID_CALCULATIONS,
     ID_MSCALE, ID_MRECORD, ID_MMARKER, ID_LAYERSLICE, ID_ARTBOARDLAYERS, ID_FRAMELAYERS, ID_FITARTBOARD, ID_SNAPLAYERS, ID_SNAPSLICES, ID_CLEARSLICES, 0 };
   int i;
   for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, d != NULL);
@@ -984,6 +1008,7 @@ void m3_command(Doc *d, ULONG id)
   case ID_EXPPICKED: export_picked(d); return;
   case ID_EXPLUT: export_lut(d); return;
   case ID_ASSETS: image_assets(d); return;
+  case ID_PACKAGE: package_cmd(d); return;
   case ID_FINDREPLACE: find_replace(d); return;
   case ID_APPLYIMAGE: apply_calc(d, 0); return;
   case ID_CALCULATIONS: apply_calc(d, 1); return;
