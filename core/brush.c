@@ -23,7 +23,7 @@
 
 #define MAXTIP 8192
 const char *const cb_mode_names[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle" };
-const char *const ctl_names[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction" };
+const char *const ctl_names[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction", "Pen Tilt" };
 const char *const sym_names[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala" };
 
 static int clamp255(double v) { return v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5); }

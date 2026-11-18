@@ -80,7 +80,7 @@ u8          *ilbm_brush_decode(const u8 *data, size_t n, i32 *w, i32 *h, i32 *hx
 
 /* ------------------------------------------------------------------ dynamics */
 /* what drives a dynamic setting (PhotoCraft's Control) */
-enum { CTL_OFF, CTL_FADE, CTL_PRESSURE, CTL_DIRECTION, CTL_INITIAL, CTL_N };
+enum { CTL_OFF, CTL_FADE, CTL_PRESSURE, CTL_DIRECTION, CTL_INITIAL, CTL_TILT /* 1.2 */, CTL_N };
 extern const char *const ctl_names[CTL_N];
 /* one dynamic setting: random jitter 0-100 % (scatter up to 1000 %), a control, the Fade steps
    (0: 25) and the floor 0-100 % the control and jitter may take it down to */

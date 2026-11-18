@@ -20,6 +20,8 @@ enum { PT_BRUSH, PT_PENCIL, PT_ERASER, PT_CLONE, PT_BLUR, PT_SHARPEN, PT_SMUDGE,
        /* 1.0 (retouch.h) */
        PT_HEAL,                       /* Healing Brush: paints as the Clone Stamp, healed when the stroke ends */
        PT_SPOTHEAL,                   /* Spot Healing Brush: marks the area, filled from round it when the stroke ends */
+       /* 1.2 (brushx.h) */
+       PT_MIXER,                      /* Mixer Brush: paints from a reservoir, picking up the canvas's colour */
        PT_N };
 enum { ER_BRUSH, ER_PENCIL, ER_BLOCK };                    /* the Eraser's modes */
 enum { SMP_CONTINUOUS, SMP_ONCE, SMP_SWATCH };             /* Color Replacement and Background Eraser: what they sample */
@@ -68,6 +70,18 @@ typedef struct {
   int stencil_invert;                 /*   or, inverted, only they are */
   /* (also 1.1: blend is the Clone Stamp's, Blur's, Sharpen's and Smudge's Mode; sample_all takes
      SAMPLE_BELOW, the layers up to the active one) */
+  /* 1.2 (brushx.h); zero is still "as before" */
+  const struct Pattern *texture;      /* Texture: the pattern the dabs are textured with (kept by the caller) */
+  int tex_scale, tex_depth, tex_mode, tex_invert, tex_brightness, tex_contrast;   /* % (0: 100), 0-100 %, TXM_, -150..150, -50..100 */
+  const Tip *dual_tip;                /* Dual Brush: the second tip (NULL: a round one), kept by the caller */
+  int dual_on, dual_size, dual_scatter, dual_count, dual_mode;   /* pixels, % of the size, 1-16, DBM_ */
+  int noise, wet_edges;               /* Noise and Wet Edges: 0 off, else the amount 1-100 */
+  int pose_flags, pose_tilt_x, pose_tilt_y, pose_rotation, pose_pressure;   /* Brush Pose: POSE_ overrides; tilt -100..100, degrees, % */
+  struct MixerState *mixer;           /* PT_MIXER: the paint it carries (kept by the caller, from stroke to stroke) */
+  int mix_wet, mix_load, mix_mix;     /* PT_MIXER: 0-100 */
+  int heal_source;                    /* PT_HEAL: 0 sampled, 1 the pattern (b.pattern) */
+  int heal_diffusion;                 /* PT_HEAL: 1-7 (0: 5), how smoothly the edge's colour spreads in */
+  int spot_type;                      /* PT_SPOTHEAL: SPOT_ */
 } Brush;
 typedef struct Stroke Stroke;
 /* a stroke on the active layer, begun at x, y (an undo step "name" while it lasts); then

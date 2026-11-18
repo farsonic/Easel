@@ -32,6 +32,7 @@
 #include "layers.h"
 #include "retouch.h"
 #include "toolopts.h"
+#include "brushx.h"                    /* 1.2 */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -64,6 +65,7 @@ typedef struct {
   int flow;                           /* 0-255 */
   int ceil;                           /* 0-255: the most this dab may take coverage to */
   u8 col[3];
+  u32 idx;                            /* 1.2: the dab's number (Dual Brush's scatter) */
 } DabParams;
 
 /* a dab placed on the canvas (one symmetry copy). Its pixel i, j shows the dab image's pixel
@@ -100,6 +102,8 @@ struct Stroke {
   int smir[SYM_MAXCOPIES], qmir[SYM_MAXCOPIES];
   u8 gen[SYM_MAXCOPIES];              /* copies that need their own dab image */
   u8 tlut[256];                       /* 1.1: Dodge and Burn's curve at the stroke's exposure */
+  int bx;                             /* 1.2: Texture, Dual Brush or Noise on (brushx_cov per pixel) */
+  double tx, ty;                      /* 1.2: the pen's tilt (stroke_tilt) */
 };
 
 static void dab_free(DabImg *c)
@@ -400,6 +404,7 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   u8 *mp, *tp, p[4], tmp[4], c4[4], before[4];
   const u8 *o;
   if (!a || !(sel = sel_at(d, i, j))) return;
+  if (s->bx && !(a = brushx_cov(&s->b, a, i, j, dp->cx, dp->cy, dp->diam, dp->idx))) return;   /* 1.2 */
   if (!tile_ready(s, i, j)) return;
   if (s->b.nstencil && s->t.bpp == 4) {
     /* 1.1: the stencil: pixels of its colours (as they were before the stroke) kept */
@@ -420,10 +425,11 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   } else if (s->cmode) {
     /* (transfer: each dab its own ceiling) */
     if (dp->ceil > m) { m = m + mul255(mul255(a, dp->flow), dp->ceil - m); *mp = (u8)m; }
-    cov = mul255(*mp, sel);
+    cov = mul255(s->b.wet_edges ? brushx_wet(&s->b, *mp) : *mp, sel);
   } else {
     m = m + mul255(mul255(a, dp->flow), 255 - m);
     if (m > *mp) *mp = (u8)m; else m = *mp;
+    if (s->b.wet_edges) m = brushx_wet(&s->b, m);       /* 1.2 */
     cov = mul255(m * s->b.opacity / 100, sel);
   }
   if (cov <= 0) return;
@@ -708,6 +714,9 @@ static double ctl_value(Stroke *s, const Dynamic *dy, double pressure)
   switch (dy->control) {
   case CTL_FADE: return 1 - clampd((double)s->step / fs, 0, 1);
   case CTL_PRESSURE: return clampd(pressure, 0, 1);
+  case CTL_TILT: {                                         /* 1.2: upright 1, flat 0 */
+    double tx = s->b.pose_flags & POSE_TILT ? s->b.pose_tilt_x / 100.0 : s->tx, ty = s->b.pose_flags & POSE_TILT ? s->b.pose_tilt_y / 100.0 : s->ty;
+    return 1 - clampd(sqrt(tx * tx + ty * ty), 0, 1); }
   default: return 1;
   }
 }
@@ -730,6 +739,9 @@ static double ctl_angle(Stroke *s, const Dynamic *dy, double pressure)
   case CTL_PRESSURE: return 360 * clampd(pressure, 0, 1);
   case CTL_INITIAL: return s->dir0;
   case CTL_DIRECTION: return s->dir;
+  case CTL_TILT: {                                         /* 1.2: the way the pen leans */
+    double tx = s->b.pose_flags & POSE_TILT ? s->b.pose_tilt_x / 100.0 : s->tx, ty = s->b.pose_flags & POSE_TILT ? s->b.pose_tilt_y / 100.0 : s->ty;
+    return tx || ty ? atan2(-ty, tx) * 180 / M_PI : 0; }
   default: return 0;
   }
 }
@@ -845,7 +857,8 @@ static void emit_step(Stroke *s, double x, double y, double pressure, Box *chang
     double radius, opac = 1, flow = s->b.flow / 100.0;
     DabImg *di;
     i32 x0, y0;
-    dp.diam = bd; dp.angle = s->b.angle; dp.round = s->b.roundness > 0 ? clampd(s->b.roundness / 100.0, 0.01, 1) : 1;
+    dp.idx = i;
+    dp.diam = bd; dp.angle = s->b.angle + (s->b.pose_flags & POSE_ROTATION ? s->b.pose_rotation : 0); dp.round = s->b.roundness > 0 ? clampd(s->b.roundness / 100.0, 0.01, 1) : 1;
     dp.fx = s->b.flip_x != 0; dp.fy = s->b.flip_y != 0;
     if (dy->shape_on && !s->b.custom) {
       if (dy->size.jitter > 0) {
@@ -887,6 +900,31 @@ static void emit_step(Stroke *s, double x, double y, double pressure, Box *chang
         memcpy(dp.col, s->scol, 3);
       } else dyn_color(s, i, pressure, dp.col);
     } else memcpy(dp.col, s->col, 3);
+    if (s->b.tool == PT_MIXER && s->b.mixer) {
+      /* 1.2: the Mixer Brush: the canvas's colour under the dab picked up, mixed with the reservoir */
+      double cv[4] = { 0, 0, 0, 0 }, wsum = 0, f;
+      DabImg *dm = get_dab(s, dp.diam, dp.angle, dp.round, dp.fx, dp.fy);
+      if (dm) {
+        i32 x0m = (i32)floor(dp.cx - dm->ox + 0.5), y0m = (i32)floor(dp.cy - dm->oy + 0.5), u, v;
+        int step = dm->w * dm->h > 1024 ? 2 : 1;
+        for (v = 0; v < dm->h; v += step) for (u = 0; u < dm->w; u += step) {
+          i32 cx = x0m + u, cy = y0m + v;
+          int a = dm->a[(long)v * dm->w + u];
+          u8 tmp[4];
+          const u8 *q;
+          if (!a || cx < 0 || cy < 0 || cx >= s->d->w || cy >= s->d->h) continue;
+          if (s->b.mixer->sample_all && s->merged) q = merged_px(s, cx, cy);
+          else { cur_px(s, cx, cy, tmp); q = tmp; }
+          if (!q || !q[3]) continue;
+          wsum += a * q[3] / 255.0;
+          cv[0] += q[0] * a * q[3] / 255.0; cv[1] += q[1] * a * q[3] / 255.0; cv[2] += q[2] * a * q[3] / 255.0;
+        }
+      }
+      if (wsum > 0) { cv[0] /= wsum; cv[1] /= wsum; cv[2] /= wsum; cv[3] = 255; }
+      f = mixer_dab(s->b.mixer, cv, wsum > 0, s->b.mix_wet, s->b.mix_load, s->b.mix_mix, dp.col);
+      dp.flow = clamp255(dp.flow * f);
+      if (!dp.flow) continue;
+    }
     /* the copies */
     np = brush_symmetry(dy, s->d->w, s->d->h, dp.cx, dp.cy, sox, soy, srot, smir);
     brush_symmetry(dy, s->d->w, s->d->h, s->px, s->py, pox, poy, prot, pmir);
@@ -972,7 +1010,7 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
 {
   static const char *const names[PT_N] = { "Brush Tool", "Pencil", "Eraser", "Clone Stamp", "Blur Tool", "Sharpen Tool", "Smudge Tool", "Dodge Tool", "Burn Tool", "Sponge Tool",
                                            "Pattern Stamp", "History Brush", "Color Replacement Tool", "Background Eraser Tool",
-                                           "Healing Brush", "Spot Healing Brush" };
+                                           "Healing Brush", "Spot Healing Brush", "Mixer Brush" };
   Stroke *s;
   long nt;
   if (changed) *changed = box_make(0, 0, 0, 0);
@@ -1005,14 +1043,17 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
   if (s->b.tool == PT_DODGE || s->b.tool == PT_BURN) tone_lut(s->tlut, s->b.tone_range, s->b.tool == PT_BURN, s->b.strength);
   if (s->b.tool == PT_ERASER && s->b.erase_history && (!s->b.snapshot || s->b.snapshot->w != d->w || s->b.snapshot->h != d->h)) s->b.erase_history = 0;
   s->cmode = s->b.dyn.transfer_on || s->b.dyn.pressure_opacity;
+  s->bx = brushx_active(&s->b);                            /* 1.2 */
+  if (s->b.tool == PT_MIXER) { if (!s->b.mixer) s->b.tool = PT_BRUSH; else mixer_begin(s->b.mixer, s->color); }
+  pressure = brushx_pose_pressure(&s->b, pressure);
   s->coarse = s->b.dyn.shape_on && (s->b.dyn.angle.jitter > 0 || s->b.dyn.angle.control != CTL_OFF);
   s->ntx = (d->w + TS - 1) / TS; s->nty = (d->h + TS - 1) / TS;
   nt = (long)s->ntx * s->nty;
   s->mask = (u8 **)calloc((size_t)nt, sizeof(u8 *));
   s->orig = (u8 **)calloc((size_t)nt, sizeof(u8 *));
   if (s->b.sample_all && s->b.sample_all != SAMPLE_ALL && s->b.sample_all != SAMPLE_BELOW) s->b.sample_all = SAMPLE_ALL;
-  if ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all) s->merged = (u8 **)calloc((size_t)nt, sizeof(u8 *));
-  if (!s->mask || !s->orig || ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all && !s->merged) || !get_dab(s, base_diam(s, pressure), s->b.angle, 1, 0, 0)) {
+  if (((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all) || (s->b.tool == PT_MIXER && s->b.mixer->sample_all)) s->merged = (u8 **)calloc((size_t)nt, sizeof(u8 *));
+  if (!s->mask || !s->orig || ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL || (s->b.tool == PT_MIXER && s->b.mixer->sample_all)) && (s->b.sample_all || s->b.tool == PT_MIXER) && !s->merged) || !get_dab(s, base_diam(s, pressure), s->b.angle, 1, 0, 0)) {
     free(s->mask); free(s->orig); free(s->merged); dab_free(&s->cache[0]); free(s);
     return NULL;
   }
@@ -1046,6 +1087,7 @@ void stroke_to_p(Stroke *s, double x, double y, double pressure, Box *changed)
   if (!s) return;
   if (!(pressure >= 0)) pressure = 0;      /* (NaN too) */
   if (pressure > 1) pressure = 1;
+  pressure = brushx_pose_pressure(&s->b, pressure);       /* 1.2 */
   if (!(x > -1e6 && x < 1e6 && y > -1e6 && y < 1e6)) return;
   smooth_to(s, x, y, pressure, changed);
 }
@@ -1069,12 +1111,15 @@ void stroke_tick(Stroke *s, Box *changed)
   if (s->b.dyn.buildup) emit_step(s, s->x, s->y, s->p, changed);
 }
 long stroke_dabs(const Stroke *s) { return s ? s->ndabs : 0; }
+void stroke_tilt(Stroke *s, double tx, double ty) { if (s) { s->tx = clampd(tx, -1, 1); s->ty = clampd(ty, -1, 1); } }   /* 1.2 */
 int stroke_string(const Stroke *s, double *bx, double *by)
 {
   if (!s || s->b.dyn.smoothing <= 0 || (s->x == s->ix && s->y == s->iy)) return 0;
   *bx = s->x; *by = s->y;
   return 1;
 }
+/* 1.2: Spot Healing's Content-Aware type (cafill.c sets it) */
+int (*spot_content_hook)(const u8 *px, i32 w, i32 h, Box b, const u8 *mask, u8 *out);
 /* 1.0: the Healing Brushes: when the stroke ends, the area it covered is healed (retouch.c) from
    the source (Healing Brush) or from round it (Spot Healing Brush) */
 static void stroke_heal(Stroke *s)
@@ -1117,12 +1162,28 @@ static void stroke_heal(Stroke *s)
         memcpy(base + k * 4, s->t.px + ((long)cy * s->t.w + cx) * 4, 4);
         if (!spot) {
           u8 tmp[4];
-          const u8 *c = s->b.sample_all ? merged_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy) : NULL;
-          if (!c) c = orig_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy, tmp);
+          const u8 *c;
+          if (s->b.heal_source == 1 && s->b.pattern && s->b.pattern->px) c = pattern_at(s->b.pattern, cx, cy, 0, 0);   /* 1.2: Source: Pattern */
+          else {
+            c = s->b.sample_all ? merged_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy) : NULL;
+            if (!c) c = orig_px(s, cx + s->b.clone_dx, cy + s->b.clone_dy, tmp);
+          }
           memcpy(src + k * 4, c, 4);
         }
       }
-    ok = spot ? spot_heal_fill(s->t.px, s->t.w, s->t.h, b, mask, out) : heal_blend(out, base, src, mask, bw, bh);
+    if (spot && s->b.spot_type == SPOT_TEXTURE) ok = spot_texture_fill(s->t.px, s->t.w, s->t.h, b, mask, out, s->b.dyn.seed ^ (u32)s->ndabs);   /* 1.2 */
+    else if (spot && s->b.spot_type == SPOT_CONTENT && spot_content_hook) ok = spot_content_hook(s->t.px, s->t.w, s->t.h, b, mask, out);
+    else ok = spot ? spot_heal_fill(s->t.px, s->t.w, s->t.h, b, mask, out) : heal_blend_ex(out, base, src, mask, bw, bh, s->b.heal_diffusion);
+    if (ok && !spot && s->b.blend != BM_NORMAL) {
+      /* 1.2: the Healing Brush's Mode: the healed pixels laid on what was there in that mode */
+      long q;
+      for (q = 0; q < (long)bw * bh; q++) if (mask[q]) {
+        u8 r4[4], h4[4];
+        memcpy(r4, base + q * 4, 4); memcpy(h4, out + q * 4, 3); h4[3] = 255;
+        blend_pixel(r4, h4, 255, s->b.blend);
+        memcpy(out + q * 4, r4, 3);
+      }
+    }
     if (ok) for (y = 0; y < bh; y++) memcpy(s->t.px + ((long)(y + b.y0) * s->t.w + b.x0) * 4, out + (long)y * bw * 4, (size_t)bw * 4);
   }
   free(base); free(src); free(out); free(mask);
@@ -1134,6 +1195,7 @@ void stroke_end(Stroke *s)
   /* (smoothing: the brush finishes where the pointer did) */
   if (s->b.dyn.smoothing > 0 && (s->x != s->ix || s->y != s->iy)) walk(s, s->ix, s->iy, s->ip, NULL);
   if ((s->b.tool == PT_HEAL || s->b.tool == PT_SPOTHEAL) && s->t.bpp == 4) stroke_heal(s);
+  if (s->b.tool == PT_MIXER && s->b.mixer) mixer_end(s->b.mixer, s->color);   /* 1.2: Auto Clean, Auto Load */
   for (i = 0; i < s->ntx * s->nty; i++) { free(s->mask[i]); free(s->orig[i]); if (s->merged) free(s->merged[i]); }
   for (i = 0; i < NCACHE; i++) if (s->cache[i].used) dab_free(&s->cache[i]);
   for (i = 1; i < s->nmip; i++) tip_free(s->mip[i]);
