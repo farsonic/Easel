@@ -943,6 +943,32 @@ static void test_psdfx(void)
   doc_free(d);
 }
 
+/* ------------------------------------------------------------------ progressive JPEG */
+static void test_progressive(void)
+{
+  static const int qs[2] = { 85, 95 }, sizes[3][2] = { { 37, 23 }, { 16, 16 }, { 1, 1 } };
+  int qi, si;
+  for (si = 0; si < 3; si++)
+    for (qi = 0; qi < 2; qi++) {
+      Doc *d = ramp_doc(sizes[si][0] < 2 ? 2 : sizes[si][0], sizes[si][1] < 2 ? 2 : sizes[si][1], 0);
+      Rgba im, a, b;
+      u8 *p1, *p2;
+      size_t l1, l2;
+      char err[80], name[40];
+      im.w = sizes[si][0]; im.h = sizes[si][1]; im.px = d->lay[0]->px;
+      p1 = jpeg_encode(&im, qs[qi], 72, &l1);
+      p2 = jpeg_encode_progressive(&im, qs[qi], 72, &l2);
+      CHECK(p2 && l2 > 4 && p2[0] == 0xFF && p2[1] == 0xD8, "a progressive JPEG written");
+      CHECK(p1 && p2 && jpeg_read(p1, l1, &a, err, sizeof err) && jpeg_read(p2, l2, &b, err, sizeof err), "both read");
+      if (a.px && b.px) CHECK(a.w == b.w && a.h == b.h && !memcmp(a.px, b.px, (size_t)a.w * a.h * 4), "progressive decodes as baseline does (the same coefficients)");
+      { int k, sof2 = 0; for (k = 0; p2 && k + 1 < (int)l2; k++) if (p2[k] == 0xFF && p2[k + 1] == 0xC2) sof2 = 1; CHECK(sof2, "with a SOF2 frame"); }
+      snprintf(name, sizeof name, "prog_%d_%d.jpg", si, qs[qi]); save(name, p2, l2);
+      snprintf(name, sizeof name, "base_%d_%d.jpg", si, qs[qi]); save(name, p1, l1);
+      rgba_free(&a); rgba_free(&b); free(p1); free(p2);
+      doc_free(d);
+    }
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -962,6 +988,7 @@ int main(int argc, char **argv)
   test_export();
   test_anim78();
   test_psdfx();
+  test_progressive();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

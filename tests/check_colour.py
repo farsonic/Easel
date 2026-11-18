@@ -165,6 +165,20 @@ if os.path.exists(gpath):
             want = [-1 if dead else f.getGlyphID(n) for n, dead in seq]
             check(want == got, "%s %s %r: Easel %s, fontTools %s" % (os.path.basename(path), tag, text, got, want))
 
+# progressive JPEGs: Pillow (libjpeg) sees them as progressive and decodes them to exactly the
+# pixels of the baseline JPEG with the same coefficients
+for si, size in ((0, (37, 23)), (1, (16, 16)), (2, (1, 1))):
+    for q in (85, 95):
+        jp = os.path.join(d, "prog_%d_%d.jpg" % (si, q))
+        if not os.path.exists(jp):
+            continue
+        im = Image.open(jp)
+        im.load()
+        ok = im.info.get("progressive") or im.info.get("progression")
+        base = Image.open(os.path.join(d, "base_%d_%d.jpg" % (si, q)))
+        mx, mean = cmp_rgb(im.convert("RGB"), base.convert("RGB"))
+        check(bool(ok) and im.size == size and mx == 0, "Pillow decodes Easel's progressive JPEG %s at %d exactly as its baseline one (max %d)" % (size, q, mx))
+
 # PSD layer styles: psd-tools reads the lfx2 block Easel wrote
 fxp = os.path.join(d, "fx.psd")
 try:

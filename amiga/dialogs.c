@@ -1648,14 +1648,15 @@ extern int export_quality;
 void dlg_export(int fmt)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *q;
+  Object *w, *q, *pr;
   if (fmt != FMT_JPEG) return;
   w = dialog_window("JPEG Options", ColGroup(2),
         Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, prefs.jpeg_quality),
+        Child, pr = check(jpeg_write_progressive), Child, QLabel(tr("Progressive (shown coarse first while it loads)"), 0),   /* 1.2 */
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Low quality makes small files; JPEG keeps no layers\nor transparency (it is laid over white)."), End,
       End, "Save");
   if (!w) return;
-  if (run_modal(w, ends, NULL) == ID_DLGOK) prefs.jpeg_quality = export_quality = (int)xget(q, MUIA_Numeric_Value);   /* (1.1: remembered) */
+  if (run_modal(w, ends, NULL) == ID_DLGOK) { prefs.jpeg_quality = export_quality = (int)xget(q, MUIA_Numeric_Value); jpeg_write_progressive = (int)xget(pr, MUIA_Selected); }   /* (1.1: remembered) */
   else export_quality = 0;
   MUI_DisposeObject(w);
 }

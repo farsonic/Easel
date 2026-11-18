@@ -383,3 +383,146 @@ u8 *jpeg_encode_cmyk(const u8 *cmyk, i32 w, i32 h, int quality, int dpi, size_t 
   free(e);
   return res;
 }
+
+/* ------------------------------------------------------------------ 1.2: progressive JPEG */
+int jpeg_write_progressive;
+/* the quantized coefficients of a block (zigzag order) */
+static void qblock(Enc *e, float *blk, int t, i16 *q)
+{
+  int k;
+  fdct(blk);
+  for (k = 0; k < 64; k++) {
+    float v = blk[zigzag[k]] * e->div[t][zigzag[k]];
+    int iv = (int)(v < 0 ? v - 0.5f : v + 0.5f);
+    q[k] = (i16)(iv < -2047 ? -2047 : iv > 2047 ? 2047 : iv);
+  }
+}
+static void put_dc(Enc *e, int diff, int t)
+{
+  int cat = category(diff);
+  putbits(e, e->dc[t].code[cat], e->dc[t].size[cat]);
+  if (cat) putbits(e, (u32)(diff < 0 ? diff - 1 : diff), cat);
+}
+/* one block's band ss..se, as a first (and only) scan of it: runs, ZRL, an end of band of one */
+static void put_band(Enc *e, const i16 *q, int ss, int se, int t)
+{
+  int k, run = 0;
+  for (k = ss; k <= se; k++) {
+    int v = q[k], cat, sym;
+    if (!v) { run++; continue; }
+    while (run > 15) { putbits(e, e->ac[t].code[0xF0], e->ac[t].size[0xF0]); run -= 16; }
+    cat = category(v);
+    sym = (run << 4) | cat;
+    putbits(e, e->ac[t].code[sym], e->ac[t].size[sym]);
+    putbits(e, (u32)(v < 0 ? v - 1 : v), cat);
+    run = 0;
+  }
+  if (run) putbits(e, e->ac[t].code[0], e->ac[t].size[0]);
+}
+static void flush_bits(Enc *e) { if (e->nbits) putbits(e, 0x7F, 8 - e->nbits); e->bits = 0; e->nbits = 0; }
+/* a progressive JPEG (SOF2) by spectral selection: the DC of all three components, then Y 1-5,
+   Cr 1-63, Cb 1-63 and Y 6-63, each band in one scan (no successive approximation), with the
+   baseline's tables. Memory: the quantized coefficients of the whole picture (about 3 bytes a
+   pixel at 4:2:0, 6 at 4:4:4); NULL if there isn't that much */
+u8 *jpeg_encode_progressive(const Rgba *im, int quality, int dpi, size_t *len)
+{
+  static const double aan[8] = { 1.0, 1.387039845, 1.306562965, 1.175875602, 1.0, 0.785694958, 0.541196100, 0.275899379 };
+  Enc *e;
+  u8 qt[2][64], *res;
+  int sub = quality < 90, mcu = sub ? 16 : 8, i, t, scale, c;
+  i32 mx, my, mcux, mcuy, bw[3], bh[3], nbw[3], nbh[3];
+  float *Y, *Cb, *Cr, blk[64];
+  i16 *coef[3] = { NULL, NULL, NULL };
+  if (!im->px || im->w < 1 || im->h < 1 || im->w > 65535 || im->h > 65535) return NULL;
+  mcux = (im->w + mcu - 1) / mcu; mcuy = (im->h + mcu - 1) / mcu;
+  for (c = 0; c < 3; c++) {
+    int f = c == 0 && sub ? 2 : 1;
+    bw[c] = mcux * f; bh[c] = mcuy * f;                    /* (the blocks the MCUs hold) */
+    nbw[c] = c == 0 || !sub ? (im->w + 7) / 8 : ((im->w + 1) / 2 + 7) / 8;   /* (those a scan of one component codes) */
+    nbh[c] = c == 0 || !sub ? (im->h + 7) / 8 : ((im->h + 1) / 2 + 7) / 8;
+    if (!(coef[c] = (i16 *)malloc((size_t)bw[c] * bh[c] * 64 * sizeof(i16)))) { free(coef[0]); free(coef[1]); free(coef[2]); return NULL; }
+  }
+  if (!(e = (Enc *)calloc(1, sizeof *e)) || !(Y = (float *)malloc(sizeof(float) * 256 * 3))) { free(e); for (c = 0; c < 3; c++) free(coef[c]); return NULL; }
+  Cb = Y + 256; Cr = Y + 512;
+  if (quality < 1) quality = 1;
+  if (quality > 100) quality = 100;
+  scale = quality < 50 ? 5000 / quality : 200 - quality * 2;
+  for (t = 0; t < 2; t++)
+    for (i = 0; i < 64; i++) {
+      long v = ((long)(t ? std_chr_q[i] : std_lum_q[i]) * scale + 50) / 100;
+      qt[t][i] = (u8)(v < 1 ? 1 : v > 255 ? 255 : v);
+      e->div[t][i] = (float)(1.0 / (qt[t][i] * aan[i >> 3] * aan[i & 7] * 8.0));
+    }
+  /* every block transformed and quantized first */
+  for (my = 0; my < mcuy && !progress(my, mcuy * 2); my++)
+    for (mx = 0; mx < mcux; mx++) {
+      int bx, by, x, y;
+      mcu_samples(im, mx * mcu, my * mcu, mcu, Y, Cb, Cr);
+      for (by = 0; by < mcu; by += 8)
+        for (bx = 0; bx < mcu; bx += 8) {
+          i32 gx = mx * (mcu / 8) + bx / 8, gy = my * (mcu / 8) + by / 8;
+          for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) blk[y * 8 + x] = Y[(by + y) * mcu + bx + x];
+          qblock(e, blk, 0, coef[0] + ((size_t)gy * bw[0] + gx) * 64);
+        }
+      for (t = 0; t < 2; t++) {
+        float *cc = t ? Cr : Cb;
+        if (sub) for (y = 0; y < 8; y++) for (x = 0; x < 8; x++)
+          blk[y * 8 + x] = (cc[(2 * y) * 16 + 2 * x] + cc[(2 * y) * 16 + 2 * x + 1] + cc[(2 * y + 1) * 16 + 2 * x] + cc[(2 * y + 1) * 16 + 2 * x + 1]) * 0.25f;
+        else memcpy(blk, cc, sizeof blk);
+        qblock(e, blk, 1, coef[1 + t] + ((size_t)my * bw[1 + t] + mx) * 64);
+      }
+    }
+  free(Y);
+  huff_build(&e->dc[0], dc_lum_bits, dc_vals); huff_build(&e->ac[0], ac_lum_bits, ac_lum_vals);
+  huff_build(&e->dc[1], dc_chr_bits, dc_vals); huff_build(&e->ac[1], ac_chr_bits, ac_chr_vals);
+  buf_init(&e->o);
+  buf_add(&e->o, "\377\330\377\340\000\020JFIF\000\001\001", 13);
+  buf_addc(&e->o, dpi > 0 ? 1 : 0);
+  put16(&e->o, (u32)(dpi > 0 && dpi < 65536 ? dpi : 1)); put16(&e->o, (u32)(dpi > 0 && dpi < 65536 ? dpi : 1));
+  buf_addc(&e->o, 0); buf_addc(&e->o, 0);
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xDB); put16(&e->o, 2 + 65 * 2);
+  for (t = 0; t < 2; t++) { buf_addc(&e->o, t); for (i = 0; i < 64; i++) buf_addc(&e->o, qt[t][zigzag[i]]); }
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xC2); put16(&e->o, 17); buf_addc(&e->o, 8);
+  put16(&e->o, (u32)im->h); put16(&e->o, (u32)im->w); buf_addc(&e->o, 3);
+  buf_addc(&e->o, 1); buf_addc(&e->o, sub ? 0x22 : 0x11); buf_addc(&e->o, 0);
+  buf_addc(&e->o, 2); buf_addc(&e->o, 0x11); buf_addc(&e->o, 1);
+  buf_addc(&e->o, 3); buf_addc(&e->o, 0x11); buf_addc(&e->o, 1);
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xC4); put16(&e->o, 2 + 4 * 17 + 12 * 2 + 162 * 2);
+  dht(&e->o, 0x00, dc_lum_bits, dc_vals); dht(&e->o, 0x10, ac_lum_bits, ac_lum_vals);
+  dht(&e->o, 0x01, dc_chr_bits, dc_vals); dht(&e->o, 0x11, ac_chr_bits, ac_chr_vals);
+  /* the DC scan, all three interleaved */
+  buf_add(&e->o, "\377\332\000\014\003\001\000\002\021\003\021\000\000\000", 14);
+  e->pred[0] = e->pred[1] = e->pred[2] = 0;
+  for (my = 0; my < mcuy; my++)
+    for (mx = 0; mx < mcux; mx++) {
+      int f = sub ? 2 : 1, bx, by;
+      for (by = 0; by < f; by++)
+        for (bx = 0; bx < f; bx++) {
+          const i16 *q = coef[0] + ((size_t)(my * f + by) * bw[0] + mx * f + bx) * 64;
+          put_dc(e, q[0] - e->pred[0], 0); e->pred[0] = q[0];
+        }
+      for (c = 1; c < 3; c++) { const i16 *q = coef[c] + ((size_t)my * bw[c] + mx) * 64; put_dc(e, q[0] - e->pred[c], 1); e->pred[c] = q[0]; }
+    }
+  flush_bits(e);
+  /* the AC bands, one component a scan */
+  {
+    static const int sc[4][3] = { { 0, 1, 5 }, { 2, 1, 63 }, { 1, 1, 63 }, { 0, 6, 63 } };
+    int s;
+    for (s = 0; s < 4; s++) {
+      i32 bx, by;
+      c = sc[s][0];
+      buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xDA); put16(&e->o, 8); buf_addc(&e->o, 1);
+      buf_addc(&e->o, c + 1); buf_addc(&e->o, c ? 0x01 : 0x00); buf_addc(&e->o, sc[s][1]); buf_addc(&e->o, sc[s][2]); buf_addc(&e->o, 0);
+      for (by = 0; by < nbh[c] && !progress(mcuy + (long)s * mcuy / 4 + by * mcuy / 4 / nbh[c], mcuy * 2); by++)
+        for (bx = 0; bx < nbw[c]; bx++) put_band(e, coef[c] + ((size_t)by * bw[c] + bx) * 64, sc[s][1], sc[s][2], c ? 1 : 0);
+      flush_bits(e);
+    }
+  }
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xD9);
+  for (c = 0; c < 3; c++) free(coef[c]);
+  if (e->o.oom) { buf_free(&e->o); free(e); return NULL; }
+  *len = e->o.len;
+  res = (u8 *)buf_take(&e->o);
+  free(e);
+  return res;
+}
