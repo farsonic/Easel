@@ -19,6 +19,9 @@
 #include "core/colorx.h"
 #include "core/xread2.h"
 #include "core/type.h"
+#include "core/exportx.h"
+#include "core/paint.h"
+#include "core/resample.h"
 #include "core/fonts.h"
 
 static int fails, tests;
@@ -714,6 +717,49 @@ static void test_type(void)
   free(fs);
 }
 
+/* ------------------------------------------------------------------ Export As */
+static void test_export(void)
+{
+  Doc *d = ramp_doc(40, 30, 1), *t, *u;
+  ExportOpts o;
+  const u8 *p;
+  strcpy(d->info.title, "Title"); strcpy(d->info.copyright, "(c) Easel test");
+  exportx_defaults(&o);
+  t = exportx_prepare(d, &o);
+  CHECK(t && t->w == 40 && t->h == 30 && !memcmp(t->lay[0]->px + 40 * 4 * 10, d->lay[0]->px + 40 * 4 * 10, 40 * 20 * 4) && !strcmp(t->info.title, "Title"), "Export As: as it is");
+  doc_free(t);
+  o.pct = 50; o.method = RS_NEAREST;
+  t = exportx_prepare(d, &o);
+  o.method = RS_DETAILS;
+  u = exportx_prepare(d, &o);
+  CHECK(t && u && t->w == 20 && t->h == 15 && u->w == 20 && memcmp(t->lay[0]->px, u->lay[0]->px, 20 * 15 * 4), "scaled by the method chosen");
+  doc_free(t); doc_free(u);
+  exportx_defaults(&o);
+  o.canvas_w = 60; o.canvas_h = 20; o.matte = EXM_WHITE; o.metadata = EXD_COPYRIGHT;
+  t = exportx_prepare(d, &o);
+  CHECK(t && t->w == 60 && t->h == 20, "the canvas size");
+  if (t) {
+    p = t->lay[0]->px;
+    CHECK(p[3] == 255 && p[0] == 255 && p[1] == 255, "outside the picture: the white matte");
+    CHECK(!memcmp(p + (5L * 60 + 10) * 4, d->lay[0]->px + (10L * 40 + 0) * 4, 3), "the picture centred (rows 5.. from 10..)");
+    CHECK(!t->info.title[0] && !strcmp(t->info.copyright, "(c) Easel test"), "only the copyright kept");
+  }
+  doc_free(t);
+  exportx_defaults(&o);
+  o.metadata = EXD_NONE; o.matte = EXM_BLACK;
+  t = exportx_prepare(d, &o);
+  CHECK(t && docinfo_empty(&t->info) && t->lay[0]->px[0] == 0 && t->lay[0]->px[3] == 255, "no metadata; the transparent corner over black");
+  doc_free(t);
+  colorx_assign(d, CX_ADOBERGB, NULL, 0);
+  exportx_defaults(&o);
+  o.to_srgb = 1;
+  t = exportx_prepare(d, &o);
+  CHECK(t && t->icc && memcmp(t->lay[0]->px + (20L * 40 + 30) * 4, d->lay[0]->px + (20L * 40 + 30) * 4, 3), "converted to sRGB");
+  if (t) { IccProfile *q = colorx_doc_profile(t); CHECK(q && icc_same(q, icc_srgb()), "and tagged sRGB"); icc_free(q); }
+  doc_free(t);
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -730,6 +776,7 @@ int main(int argc, char **argv)
   test_exr();
   test_cineon_hdr_dicom();
   test_type();
+  test_export();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

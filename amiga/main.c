@@ -47,6 +47,8 @@
 #include "../core/swatch.h"
 #include "../core/xwrite.h"
 #include "../core/xread2.h"                  /* 1.2: Cineon, HDR */
+#include "../core/exportx.h"                 /* 1.2: Export As */
+#include "../core/resample.h"
 #include "../core/frames.h"
 #include "../core/scripts.h"
 #include "../core/svg.h"
@@ -149,7 +151,7 @@ static struct NewMenu menus[] = {
   I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), I("Import Frames to Layers...", 0, ID_IMPFRAMES), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
-  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
+  H("Export"), S("Export As...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
   S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
   S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7),
   S("Cineon...", 0, ID_EXPXW0 + 8), S("Radiance HDR...", 0, ID_EXPXW0 + 9), SBAR,                 /* 1.2 */
@@ -1406,17 +1408,37 @@ static void save_copy(void)
   write_doc(v->doc, path, fmt);
 }
 /* File > Export > Export As: a flat copy, scaled by a percentage, in the format its name asks for */
+/* 1.2: File > Export As: scale and its method, canvas size, matte, metadata, sRGB (core/exportx.c) */
+static ExportOpts xo_last;
+static int xo_set;
+static void xo_take(Doc *d, const LONG *v, int c, int t)
+{
+  static const int methods[6] = { RS_NEAREST, RS_BILINEAR, RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS };
+  (void)d;
+  xo_last.pct = (int)v[0]; xo_last.canvas_w = v[1]; xo_last.canvas_h = v[2]; xo_last.metadata = (int)v[3];
+  xo_last.method = methods[c >= 0 && c < 6 ? c : 2]; xo_last.matte = (int)v[7]; xo_last.to_srgb = t;
+}
 static void export_scaled(void)
 {
+  static const char *const rs[] = { "Nearest Neighbour", "Bilinear", "Bicubic", "Bicubic Smoother", "Bicubic Sharper", "Preserve Details", NULL };
+  static const char *const mt[] = { "None (keep transparency)", "White", "Black", "Foreground Color", "Background Color", NULL };
+  static const char *rsl[7], *mtl[6];
+  static const DlgParam p[4] = { { "Scale (%):", 1, 1000, 100 }, { "Canvas width (px, 0: as scaled):", 0, MAXDIM, 0 },
+                                 { "Canvas height (px, 0: as scaled):", 0, MAXDIM, 0 }, { "Metadata (0 none, 1 copyright, 2 all):", 0, 2, 2 } };
   DocView *v = cur_view();
-  char path[512], buf[16] = "100";
-  int fmt, pct;
-  Rgba im;
+  char path[512];
+  int fmt, i, mi = 2;
+  LONG init[4];
   Doc *t;
   if (!v) return;
-  if (!ask_string("Export As", "Scale (per cent of the picture's size):", buf, sizeof buf)) return;
-  pct = atoi(buf);
-  if (pct < 1 || pct > 1000) { ask("OK", "%s", tr("The scale goes from 1 to 1000 per cent.")); return; }
+  if (!xo_set) { exportx_defaults(&xo_last); xo_set = 1; }
+  for (i = 0; i < 6; i++) rsl[i] = tr(rs[i]);
+  rsl[6] = NULL;
+  for (i = 0; i < 5; i++) mtl[i] = tr(mt[i]);
+  mtl[5] = NULL;
+  { static const int methods[6] = { RS_NEAREST, RS_BILINEAR, RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS }; for (i = 0; i < 6; i++) if (methods[i] == xo_last.method) mi = i; }
+  init[0] = xo_last.pct; init[1] = xo_last.canvas_w; init[2] = xo_last.canvas_h; init[3] = xo_last.metadata;
+  if (!dlg_sliders("Export As", p, 4, rsl, "Resample:", mi, mtl, "Matte:", xo_last.matte, "Convert to sRGB", xo_last.to_srgb, init, xo_take, NULL, 0)) return;
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
   if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, SAVE_PATTERN)) return;
@@ -1424,14 +1446,9 @@ static void export_scaled(void)
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   set(app, MUIA_Application_Sleep, TRUE);
-  t = flat_image(v->doc, &im) ? doc_adopt(im.w, im.h, im.px) : NULL;
-  if (t && pct != 100) {
-    i32 w = (i32)((long)t->w * pct / 100), h = (i32)((long)t->h * pct / 100);
-    if (!image_resize(t, w < 1 ? 1 : w, h < 1 ? 1 : h, RS_BICUBIC)) { doc_free(t); t = NULL; }
-  }
+  t = exportx_prepare(v->doc, &xo_last);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
-  t->dpi = v->doc->dpi;
   write_doc(t, path, fmt);
   doc_free(t);
 }
