@@ -76,6 +76,9 @@ int  doc_set_pattern_fill(Doc *d, int i, const struct Pattern *p, int scale);   
 int  doc_set_pattern_overlay(Doc *d, int i, int on, const struct Pattern *p, int blend, int opacity, int scale);
 /* the pattern pixel a layer's pattern shows at canvas x, y (RGBA), NULL for no pattern */
 const u8 *layerx_pattern_at(const Layer *l, i32 x, i32 y);
+/* r3: layer i's pattern set (p NULL: kept, scale only), its Pattern Overlay as it was; within the
+   caller's undo step. 0 if out of memory or no pattern */
+int  layerx_set_pattern(Doc *d, int i, const struct Pattern *p, int scale);
 
 /* ------------------------------------------------------------------ smart objects */
 /* the drawer smart objects' sources are written to ("" : the current directory); set from undo_scratch */

@@ -34,6 +34,8 @@
 #include "ids.h"
 #include "fxids.h"                    /* 1.1 */
 #include "mxids.h"                    /* 1.2 */
+#include "r3ids.h"                    /* r3-image */
+#include "../core/vecx.h"
 #include "../core/viewx.h"
 #include "../core/fx.h"
 #include "../core/layerops.h"
@@ -244,7 +246,10 @@ static struct NewMenu menus[] = {
   SBAR, ST("Standard Ligatures", ID_OT0), ST("Contextual Alternates", ID_OT0 + 9), ST("Discretionary Ligatures", ID_OT0 + 1), ST("Swash", ID_OT0 + 2),   /* 1.2: OpenType */
   ST("Oldstyle", ID_OT0 + 3), ST("Stylistic Alternates", ID_OT0 + 4), ST("Titling Alternates", ID_OT0 + 5), ST("Ornaments", ID_OT0 + 6), ST("Ordinals", ID_OT0 + 7),
   ST("Fractions", ID_OT0 + 8),
-  I("Shape Properties...", 0, ID_SHAPEPROPS), BAR,
+  I("Shape Properties...", 0, ID_SHAPEPROPS),
+  H("Combine Shapes"), S("Unite Shapes", 0, ID_COMBINE0 + CS_UNITE), S("Subtract Front Shape", 0, ID_COMBINE0 + CS_SUBTRACT),      /* r3 */
+  S("Intersect Shape Areas", 0, ID_COMBINE0 + CS_INTERSECT), S("Exclude Overlapping Shapes", 0, ID_COMBINE0 + CS_EXCLUDE), SBAR,
+  S("Merge Shape Components", 0, ID_COMBINE0 + CS_MERGE), BAR,
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
@@ -1996,7 +2001,13 @@ static void shape_props(Doc *d)
   ShapeParams sp;
   if (!cur) return;
   sp = *cur;
-  if (dlg_shape(&sp) && memcmp(&sp, cur, sizeof sp) && !doc_set_shape(d, d->active, &sp, NULL)) ask("OK", "%s", tr("There isn't enough memory for that."));
+  if (dlg_shape(&sp) && memcmp(&sp, cur, sizeof sp)) {
+    int pat_new = sp.fill_kind == SFILL_PATTERN && (cur->fill_kind != SFILL_PATTERN || !layerx_pattern_at(d->lay[d->active], 0, 0));
+    if (pat_new && !tool_pattern()) { ask("OK", "%s", tr("Choose a pattern first.")); sp.fill_kind = cur->fill_kind; }
+    if (!doc_set_shape(d, d->active, &sp, NULL)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    else if (sp.fill_kind == SFILL_PATTERN && !doc_set_shape_fill(d, d->active, SFILL_PATTERN, NULL, 0, 0, sp.grad_scale, 0, pat_new ? tool_pattern() : NULL))   /* (r3: its pattern) */
+      ask("OK", "%s", tr("There isn't enough memory for that."));
+  }
 }
 /* Latin-1 typed in a dialog to UTF-8 */
 static void latin1_utf8(const char *s, char *u, size_t cap)
@@ -2063,6 +2074,7 @@ static void command(ULONG id)
   if (id >= ID_LS_FIRST && id <= ID_LS_LAST) { if (d) layerstyle_command(d, id); refresh_all(); return; }   /* 1.1 (fxdlg.c) */
   if (id >= ID_CU_FIRST && id <= ID_CU_LAST) { colorui_command(d, id); return; }   /* 1.2 (colorui.c) */
   if (id >= ID_MX_FIRST && id <= ID_MX_LAST && mx_command(d, id)) { refresh_all(); return; }               /* 1.2 (menux.c) */
+  if (id >= ID_R3_FIRST && id <= ID_R3_LAST) { r3_command(d, id); refresh_all(); return; }                  /* r3-image (r3image.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);
@@ -2422,7 +2434,8 @@ static void command(ULONG id)
   case ID_PATHSCHG: DoMethod(canvas, MUIM_Canvas_Paths); DoMethod(pathpanel, MUIM_Paths_Refresh); return;
   case ID_PATHFILL: {
     Path *p = path_for_command(d);
-    if (p && box_empty(path_fill(d, p, d->fg, 100, BM_NORMAL, 1)) && !progress_aborted) ask("OK", "%s", tr("The layer can't be painted: choose a pixel layer that isn't locked or hidden."));
+    if (p && !layer_paintable(d, d->active)) ask("OK", "%s", tr("The layer can't be painted: choose a pixel layer that isn't locked or hidden."));
+    else if (p) r3_fill_path(d, p);                      /* (r3: the colour, a pattern or the history) */
     break; }
   case ID_PATHSTROKE: {
     Path *p = path_for_command(d);

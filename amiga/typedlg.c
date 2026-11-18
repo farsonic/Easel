@@ -261,6 +261,9 @@ int dlg_shape(struct ShapeParams *sp)
   static const char *al[4], *cl[4], *jl[4];
   static const char *const kinds[SH_N] = { "Rectangle", "Rounded Rectangle", "Ellipse", "Triangle", "Polygon", "Line", "Custom Shape" };
   Object *w, *grp, *fon, *fcol, *fop, *son, *sw, *scol, *sop, *sal, *scap, *sjn, *dash, *px, *py, *pw, *ph;
+  static const char *const fkinds[] = { "Color", "Gradient", "Pattern", NULL };          /* r3 */
+  static const char *const gstyles[] = { "Linear", "Radial", "Angle", "Reflected", "Diamond", NULL };
+  Object *fkind, *gsty, *gang, *gsc, *grev, *rad2 = NULL, *rad3 = NULL, *rad4 = NULL;
   Object *rad = NULL, *sides = NULL, *star = NULL, *ind = NULL, *ang = NULL, *lw = NULL, *as = NULL, *ae = NULL;
   char dbuf[64];
   int ok, i;
@@ -273,9 +276,15 @@ int dlg_shape(struct ShapeParams *sp)
         Child, HGroup, Child, px = numfield(sp->kind == SH_LINE ? sp->x0 : x0), Child, py = numfield(sp->kind == SH_LINE ? sp->y0 : y0), Child, HSpace(0), End,
         Child, QLabel(tr(sp->kind == SH_LINE ? "To X, Y (px):" : "Width, Height (px):"), MUIO_Label_SingleFrame),
         Child, HGroup, Child, pw = numfield(sp->kind == SH_LINE ? sp->x1 : fabs(sp->x1 - sp->x0)), Child, ph = numfield(sp->kind == SH_LINE ? sp->y1 : fabs(sp->y1 - sp->y0)), Child, HSpace(0), End,
-        Child, fon = check(sp->fill_on), Child, QLabel(tr("Fill"), 0),
+        Child, fon = check(sp->fill_on),
+        Child, HGroup, Child, QLabel(tr("Fill"), 0), Child, fkind = cycle((const char **)fkinds, sp->fill_kind < SFILL_N ? sp->fill_kind : 0), Child, HSpace(0), End,
         Child, QLabel(tr("Fill Color (hex #):"), MUIO_Label_SingleFrame), Child, HGroup, Child, fcol = hexfield(sp->fill_color), Child, pick_button(ID_DLGRESET), Child, HSpace(0), End,
         Child, QLabel(tr("Fill Opacity (%):"), MUIO_Label_Centered), Child, fop = slider(0, 100, ((255 - sp->fill_alpha) * 100 + 127) / 255),
+        /* r3: the gradient's style, angle, scale (the pattern's scale too) and Reverse */
+        Child, QLabel(tr("Gradient:"), MUIO_Label_SingleFrame),
+        Child, HGroup, Child, gsty = cycle((const char **)gstyles, sp->grad_style <= GR_DIAMOND ? sp->grad_style : 0),
+          Child, gang = numfield(sp->grad_angle), Child, gsc = numfield(sp->grad_scale > 0 ? sp->grad_scale : 100),
+          Child, grev = check(sp->grad_reverse), Child, QLabel(tr("Reverse"), 0), End,
         Child, son = check(sp->stroke_on), Child, QLabel(tr("Stroke"), 0),
         Child, QLabel(tr("Stroke Width (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, sw = numfield(sp->stroke_width), Child, HSpace(0), End,
         Child, QLabel(tr("Stroke Color (hex #):"), MUIO_Label_SingleFrame), Child, HGroup, Child, scol = hexfield(sp->stroke_color), Child, pick_button(ID_DLGAUTO), Child, HSpace(0), End,
@@ -289,7 +298,14 @@ int dlg_shape(struct ShapeParams *sp)
   if (!grp) return 0;
   /* the shape's own settings */
 #define ADD2(lab, o) (DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(lab), MUIO_Label_SingleFrame)), DoMethod(grp, OM_ADDMEMBER, (ULONG)(o)))
-  if (sp->kind == SH_RECT || sp->kind == SH_ROUNDRECT) ADD2("Corner Radius (px):", rad = numfield(sp->radius));
+  if (sp->kind == SH_RECT || sp->kind == SH_ROUNDRECT) {
+    /* r3: a radius per corner (top left, top right, bottom right, bottom left) */
+    const double *r4 = sp->radii;
+    double one[4];
+    if (!sp->radii_on) { one[0] = one[1] = one[2] = one[3] = sp->radius; r4 = one; }
+    Object *rg = HGroup, Child, rad = numfield(r4[0]), Child, rad2 = numfield(r4[1]), Child, rad3 = numfield(r4[2]), Child, rad4 = numfield(r4[3]), End;
+    ADD2("Corner Radius (px):", rg);
+  }
   if (sp->kind == SH_POLYGON) {
     ADD2("Sides:", sides = numfield(sp->sides));
     DoMethod(grp, OM_ADDMEMBER, (ULONG)(star = check(sp->star))); DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr("Star"), 0));
@@ -326,7 +342,22 @@ int dlg_shape(struct ShapeParams *sp)
       while (*ds == ' ') ds++;
     }
     if (sp->ndash == 1) sp->dash[sp->ndash++] = sp->dash[0];      /* (one number: as long on as off) */
-    if (rad && num_of(rad) >= 0) sp->radius = num_of(rad);
+    if (rad && rad2 && rad3 && rad4) {
+      double r[4];
+      int k;
+      r[0] = num_of(rad); r[1] = num_of(rad2); r[2] = num_of(rad3); r[3] = num_of(rad4);
+      for (k = 0; k < 4; k++) if (r[k] < 0) r[k] = 0;
+      if (r[0] == r[1] && r[1] == r[2] && r[2] == r[3]) { sp->radius = r[0]; sp->radii_on = 0; }
+      else { memcpy(sp->radii, r, sizeof r); sp->radii_on = 1; }
+    }
+    {
+      /* r3: the fill: a gradient starts from the Gradient tool's (main.c takes the pattern) */
+      int fk = cyc_of(fkind);
+      double sc = num_of(gsc);
+      if (fk == SFILL_GRADIENT && (sp->fill_kind != SFILL_GRADIENT || !sp->grad_nc)) shape_set_gradient(sp, tool_gradient(), cyc_of(gsty), num_of(gang), sc, sel_of(grev));
+      sp->fill_kind = (u8)fk;
+      sp->grad_style = (u8)cyc_of(gsty); sp->grad_angle = num_of(gang); sp->grad_scale = sc >= 1 && sc <= 1000 ? sc : 100; sp->grad_reverse = (u8)sel_of(grev);
+    }
     if (sides) { int n = (int)num_of(sides); sp->sides = n < 3 ? 3 : n > 100 ? 100 : n; }
     if (star) sp->star = (u8)sel_of(star);
     if (ind) { double v = num_of(ind); sp->indent = v < 0 ? 0 : v > 99 ? 99 : v; }

@@ -2733,3 +2733,32 @@ Transform Smart Object	Smartobjekt transformieren	Transformer l'objet dynamique	
 Rasterize Smart Object	Smartobjekt rastern	Pixelliser l'objet dynamique	Rasterizar objeto inteligente	Rasterizza oggetto avanzato
 Artboard	Zeichenfläche	Plan de travail	Mesa de trabajo	Tavola da disegno
 AnimBrush	AnimBrush	AnimBrush	AnimBrush	AnimBrush
+
+## r3-image
+Combine Shapes	Formen kombinieren	Combiner les formes	Combinar formas	Combina forme
+Unite Shapes	Formen vereinigen	Réunir les formes	Unir formas	Unisci forme
+Subtract Front Shape	Vordere Form subtrahieren	Soustraire la forme de premier plan	Restar forma frontal	Sottrai forma anteriore
+Intersect Shape Areas	Schnittmenge von Formbereichen	Intersection des zones de formes	Intersección de áreas de forma	Interseca aree delle forme
+Exclude Overlapping Shapes	Überlappende Formen ausschließen	Exclure les formes en chevauchement	Excluir formas superpuestas	Escludi forme sovrapposte
+Merge Shape Components	Formkomponenten zusammenführen	Fusionner les composants de forme	Combinar componentes de forma	Unisci componenti forma
+Pattern: the pattern chosen for the tools.\nHistory: the picture as it was opened (the History Brush's source).	Muster: das für die Werkzeuge gewählte Muster.\nProtokoll: das Bild wie beim Öffnen (die Quelle des Protokollpinsels).	Motif : le motif choisi pour les outils.\nHistorique : l'image à l'ouverture (source de la Forme d'historique).	Motivo: el motivo elegido para las herramientas.\nHistoria: la imagen tal como se abrió (la fuente del Pincel de historia).	Pattern: il pattern scelto per gli strumenti.\nStoria: l'immagine com'era all'apertura (l'origine del Pennello storia).
+Choose a shape layer first.	Wählen Sie zuerst eine Formebene.	Choisissez d'abord un calque de forme.	Elija primero una capa de forma.	Scegliere prima un livello forma.
+Pick two or more shape layers in the Layers panel first.	Wählen Sie zuerst zwei oder mehr Formebenen im Ebenen-Bedienfeld.	Choisissez d'abord deux calques de forme ou plus dans le panneau Calques.	Elija primero dos o más capas de forma en el panel Capas.	Scegliere prima due o più livelli forma nel pannello Livelli.
+Nothing is left of the shapes, or there isn't enough memory for that.	Von den Formen bleibt nichts übrig, oder der Speicher reicht nicht.	Il ne reste rien des formes, ou la mémoire est insuffisante.	No queda nada de las formas, o no hay memoria suficiente.	Non resta nulla delle forme, oppure la memoria non basta.
+Active Path	Aktiver Pfad	Tracé actif	Trazado activo	Tracciato attivo
+Shape Fill	Formfüllung	Remplissage de forme	Relleno de forma	Riempimento forma
+Arrow	Pfeil	Flèche	Flecha	Freccia
+Double Arrow	Doppelpfeil	Double flèche	Flecha doble	Doppia freccia
+Heart	Herz	Coeur	Corazón	Cuore
+Speech Bubble	Sprechblase	Bulle	Bocadillo	Fumetto
+Check Mark	Häkchen	Coche	Marca de verificación	Segno di spunta
+Cross	Kreuz	Croix	Cruz	Croce
+Lightning	Blitz	Éclair	Rayo	Fulmine
+Crescent Moon	Mondsichel	Croissant de lune	Luna creciente	Falce di luna
+Raindrop	Regentropfen	Goutte de pluie	Gota de lluvia	Goccia di pioggia
+Ring	Ring	Anneau	Anillo	Anello
+Puzzle Piece	Puzzleteil	Pièce de puzzle	Pieza de puzle	Tessera di puzzle
+Banner	Banner	Bannière	Pancarta	Striscione
+Shield	Schild	Bouclier	Escudo	Scudo
+Paw Print	Pfotenabdruck	Empreinte de patte	Huella	Impronta di zampa
+Gear	Zahnrad	Engrenage	Engranaje	Ingranaggio

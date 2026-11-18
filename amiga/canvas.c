@@ -49,6 +49,7 @@
 #include "../core/layerx.h"
 #include "../core/pathops.h"
 #include "../core/shape.h"
+#include "../core/vecx.h"
 #include "../core/live.h"
 #include "../core/toolopts.h"
 #include "colorui.h"                  /* 1.2: proof colours, the gamut warning, the display profile */
@@ -1982,6 +1983,14 @@ static Path *custom_path(Doc *doc, double x0, double y0, double x1, double y1)
 {
   Path *src = cur_path(doc, 0), *p;
   double bx0, by0, bx1, by1, m[6];
+  if (opt.custom_shape > 0) {
+    /* r3: a shape of the library (core/vecx.h) */
+    if (!(p = path_new())) return NULL;
+    if (x0 > x1) { double t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { double t = y0; y0 = y1; y1 = t; }
+    if (!shape_library_path(opt.custom_shape - 1, p, x0, y0, x1, y1)) { path_free(p); return NULL; }
+    return p;
+  }
   if (!src || !src->na || !path_bounds(src, &bx0, &by0, &bx1, &by1) || bx1 - bx0 < 1e-6 || by1 - by0 < 1e-6) return NULL;
   if (!(p = path_copy(src))) return NULL;
   if (x0 > x1) { double t = x0; x0 = x1; x1 = t; }
@@ -2029,6 +2038,7 @@ static void shape_make(struct Data *d, Object *obj, Doc *doc)
   drag_box(d, &x0, &y0, &x1, &y1);
   shape_params_for(&sp, tool, x0, y0, x1, y1, doc->fg);
   if (tool == TL_CUSTOMSHAPE && !(cust = custom_path(doc, x0, y0, x1, y1))) return;
+  if (cust) sp.evenodd = cust->evenodd;                     /* (r3: the path's own fill rule) */
   if (!opt.shape_mode) {
     if (doc_new_shape(doc, &sp, cust, NULL) < 0) ask("OK", "%s", tr("There isn't enough memory for that."));
   } else if ((p = cust ? cust : path_new())) {
@@ -2506,7 +2516,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   /* 0.9: the shape tools (a shape layer, or pixels); the Custom Shape is the active path's */
   case TL_LINE: d->drag = DR_LINE; d->prev_on = !opt.shape_mode; poly_free(&d->prev); poly_init(&d->prev); break;
   case TL_RECT: case TL_ELLIPSE: case TL_ROUNDRECT: case TL_POLYGON: case TL_CUSTOMSHAPE:
-    if (t == TL_CUSTOMSHAPE && (!cur_path(doc, 0) || !cur_path(doc, 0)->na)) { ov_show(d, obj); ask("OK", "%s", tr("The Custom Shape tool draws the active path as a shape: draw a path with the Pen tool, or choose one in the Paths panel, first.")); return; }
+    if (t == TL_CUSTOMSHAPE && !opt.custom_shape && (!cur_path(doc, 0) || !cur_path(doc, 0)->na)) { ov_show(d, obj); ask("OK", "%s", tr("The Custom Shape tool draws the active path as a shape: draw a path with the Pen tool, or choose one in the Paths panel, first.")); return; }
     d->drag = DR_SHAPE; d->prev_on = t == TL_ROUNDRECT || t == TL_POLYGON || t == TL_CUSTOMSHAPE;
     poly_free(&d->prev); poly_init(&d->prev);
     break;

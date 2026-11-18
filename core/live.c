@@ -17,7 +17,7 @@ int live_render(Doc *d, Layer *l)
   int ok = 0;
   l->live_ok = 1;                                         /* (not tried again for every row when it fails) */
   if (layer_text(l)) ok = text_render((const TextParams *)l->live, d->w, d->h, &px, &b);
-  else if (layer_shape(l)) ok = shape_render((const ShapeParams *)l->live, d->w, d->h, &px, &b);
+  else if (layer_shape(l)) ok = shape_render_layer((const ShapeParams *)l->live, l, d->w, d->h, &px, &b);   /* (r3: its pattern) */
   else { free(l->livepx); l->livepx = NULL; return 1; }
   if (!ok) return 0;
   free(l->livepx);
@@ -118,6 +118,20 @@ static void save_shape(Buf *b, const ShapeParams *sp)
     kv_num(b, "aw", sp->arrow_w); kv_num(b, "al", sp->arrow_len); kv_num(b, "ac", sp->arrow_concave);
   }
   kv_num(b, "peo", sp->evenodd_path);
+  /* r3: gradient and pattern fills, radii per corner */
+  if (sp->fill_kind) {
+    kv_num(b, "fk", sp->fill_kind); kv_num(b, "gst", sp->grad_style); kv_num(b, "gan", sp->grad_angle);
+    kv_num(b, "gsc", sp->grad_scale); kv_num(b, "grv", sp->grad_reverse);
+    if (sp->grad_nc) {
+      buf_adds(b, "&gc=");
+      for (i = 0; i < sp->grad_nc && i < SH_GSTOPS; i++) buf_printf(b, i ? ",%.10g,%.10g,%ld" : "%.10g,%.10g,%ld", sp->grad_cpos[i], sp->grad_cmid[i], (long)(sp->grad_rgb[i] & 0xFFFFFF));
+    }
+    if (sp->grad_no) {
+      buf_adds(b, "&go=");
+      for (i = 0; i < sp->grad_no && i < SH_GSTOPS; i++) buf_printf(b, i ? ",%.10g,%.10g,%.10g" : "%.10g,%.10g,%.10g", sp->grad_opos[i], sp->grad_omid[i], sp->grad_op[i]);
+    }
+  }
+  if (sp->radii_on) buf_printf(b, "&radii=%.10g,%.10g,%.10g,%.10g", sp->radii[0], sp->radii[1], sp->radii[2], sp->radii[3]);
   if (svg) kv_str(b, "path", svg);
   if (ty) kv_str(b, "types", ty);
   free(svg); free(ty);
@@ -253,6 +267,24 @@ static int load_shape(Layer *l, char *s)
     else if (!strcmp(k, "aw")) sp.arrow_w = x;
     else if (!strcmp(k, "al")) sp.arrow_len = x;
     else if (!strcmp(k, "ac")) sp.arrow_concave = x;
+    else if (!strcmp(k, "fk")) sp.fill_kind = (u8)(x >= 0 && x < SFILL_N ? x : 0);          /* r3 */
+    else if (!strcmp(k, "gst")) sp.grad_style = (u8)(x >= 0 && x <= 4 ? x : 0);
+    else if (!strcmp(k, "gan")) sp.grad_angle = x;
+    else if (!strcmp(k, "gsc")) sp.grad_scale = x >= 1 && x <= 1000 ? x : 100;
+    else if (!strcmp(k, "grv")) sp.grad_reverse = x != 0;
+    else if (!strcmp(k, "gc")) {
+      double a[3 * SH_GSTOPS];
+      int m = nums(v, a, 3 * SH_GSTOPS) / 3, j;
+      for (j = 0; j < m; j++) { sp.grad_cpos[j] = a[3 * j]; sp.grad_cmid[j] = a[3 * j + 1]; sp.grad_rgb[j] = (u32)a[3 * j + 2] & 0xFFFFFF; }
+      sp.grad_nc = (u8)m;
+    }
+    else if (!strcmp(k, "go")) {
+      double a[3 * SH_GSTOPS];
+      int m = nums(v, a, 3 * SH_GSTOPS) / 3, j;
+      for (j = 0; j < m; j++) { sp.grad_opos[j] = a[3 * j]; sp.grad_omid[j] = a[3 * j + 1]; sp.grad_op[j] = a[3 * j + 2]; }
+      sp.grad_no = (u8)m;
+    }
+    else if (!strcmp(k, "radii")) sp.radii_on = nums(v, sp.radii, 4) == 4;
     else if (!strcmp(k, "path")) { dec(v); path_free(path); path = path_from_svg(v); }
     else if (!strcmp(k, "types")) { dec(v); types = v; }
   }
@@ -332,6 +364,7 @@ static void transform_shape(ShapeParams *sp, const double *m)
     double r = sp->radius * sqrt(fabs(m[0] * m[4]));
     pt(m, &sp->x0, &sp->y0); pt(m, &sp->x1, &sp->y1);
     sp->radius = r;
+    for (i = 0; i < 4; i++) sp->radii[i] *= sqrt(fabs(m[0] * m[4]));     /* (r3) */
     if (sp->kind == SH_POLYGON && (m[0] < 0) != (m[4] < 0)) sp->kind = SH_CUSTOM;   /* (a mirrored star turns the other way) */
   } else sp->kind = SH_CUSTOM;                             /* (turned or sheared: the generator can't say it; the path can) */
 }

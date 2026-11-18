@@ -10,6 +10,7 @@
 #include "layers.h"
 #include "path.h"
 #include "pattern.h"
+#include "shape.h"
 #include "paint.h"
 #include "codec.h"
 #include "live.h"
@@ -406,6 +407,19 @@ int doc_set_pattern_fill(Doc *d, int i, const struct Pattern *p, int scale)
   doc_end(d);
   return ok;
 }
+/* r3: layer i's pattern (a shape's pattern fill) set, the Pattern Overlay left as it is; inside the
+   caller's undo step */
+int layerx_set_pattern(Doc *d, int i, const struct Pattern *p, int scale)
+{
+  LayerX h;
+  Layer *l;
+  if (i < 0 || i >= d->nlay) return 0;
+  l = d->lay[i];
+  x_head(l, &h);
+  if (scale > 0) h.pat_scale = (u16)(scale > 1000 ? 1000 : scale);
+  if (p && p->px) return x_put(d, i, &h, h.vm_has ? vm_svg(l) : NULL, p->px, p->w, p->h);
+  return pat_px(l) ? x_put_same(d, i, &h) : 0;
+}
 int doc_set_pattern_overlay(Doc *d, int i, int on, const struct Pattern *p, int blend, int opacity, int scale)
 {
   LayerX h;
@@ -421,7 +435,7 @@ int doc_set_pattern_overlay(Doc *d, int i, int on, const struct Pattern *p, int 
   doc_begin(d, "Pattern Overlay");
   if (p && p->px) ok = x_put(d, i, &h, h.vm_has ? vm_svg(l) : NULL, p->px, p->w, p->h);
   else ok = x_put_same(d, i, &h);
-  if (!on && l->kind != LK_FILL) {
+  if (!on && l->kind != LK_FILL && !(layer_shape(l) && layer_shape(l)->fill_kind == SFILL_PATTERN)) {   /* (r3: nor a shape's pattern fill) */
     /* off: the pattern goes too, unless something else uses it */
     x_head(l, &h);
     ok = x_put(d, i, &h, h.vm_has ? vm_svg(l) : NULL, NULL, 0, 0) && ok;

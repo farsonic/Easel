@@ -10,6 +10,8 @@
 #include "pathops.h"
 #include "channels.h"
 #include "layers.h"
+#include "pattern.h"
+#include "brush.h"
 
 /* a box blur of a mask, radius r, three passes (as the marquees feather) */
 static void blur(u8 *m, i32 w, i32 h, int r)
@@ -139,21 +141,26 @@ done:
 }
 Path *path_from_selection(Doc *d, double tol)
 {
-  i32 w = d->w, h = d->h, W = w + 1, x, y;
+  if (!d->sel) return NULL;
+  if (tol <= 0) tol = 2;
+  if (tol < 0.5) tol = 0.5;
+  if (tol > 10) tol = 10;
+  return path_from_mask(d->sel, d->w, d->h, d->selbox, tol);
+}
+/* r3: the outline of a mask's pixels at least half on (w x h, inside box b) as a fitted path */
+Path *path_from_mask(const u8 *mask, i32 w, i32 h, Box b, double tol)
+{
+  i32 W = w + 1, x, y;
   u8 *out, *in;
   Path *path;
   double *pts = NULL;
   i32 cap = 0;
   int ok = 1;
-  Box b;
-  if (!d->sel) return NULL;
+  b = box_clip(b, box_make(0, 0, w, h));
   if (tol <= 0) tol = 2;
-  if (tol < 0.5) tol = 0.5;
-  if (tol > 10) tol = 10;
-  b = d->selbox;
   if (!(out = (u8 *)calloc((size_t)W * (h + 1), 1))) return NULL;
   if (!(path = path_new())) { free(out); return NULL; }
-#define IN(px, py) ((px) >= 0 && (py) >= 0 && (px) < w && (py) < h && d->sel[(long)(py) * w + (px)] >= 128)
+#define IN(px, py) ((px) >= 0 && (py) >= 0 && (px) < w && (py) < h && mask[(long)(py) * w + (px)] >= 128)
   for (y = b.y0; y < b.y1; y++)
     for (x = b.x0; x < b.x1; x++) {
       if (!IN(x, y)) continue;
@@ -202,6 +209,7 @@ Path *path_from_selection(Doc *d, double tol)
 
 /* ------------------------------------------------------------------ filling and stroking */
 /* coverage cov (box b) laid on the active layer in color, opacity 0-100, blend mode, inside the selection */
+static const Pattern *lay_pat; static const Snapshot *lay_snap;   /* r3: Fill Path with a pattern or history */
 static Box lay_on(Doc *d, const u8 *cov, Box b, u32 color, int opacity, int blend, const char *name)
 {
   Layer *l;
@@ -223,6 +231,8 @@ static Box lay_on(Doc *d, const u8 *cov, Box b, u32 color, int opacity, int blen
       op = c * sel_at(d, x, y) / 255 * opacity / 100;
       if (!op) continue;
       p = l->px + ((long)y * d->w + x) * 4;
+      if (lay_pat) memcpy(src, pattern_at(lay_pat, x, y, 0, 0), 4);
+      else if (lay_snap) memcpy(src, lay_snap->px + ((long)y * lay_snap->w + x) * 4, 4);
       if (l->alpha_lock) { u8 a = p[3]; blend_pixel_at(p, src, op, blend, x, y); p[3] = a; }
       else blend_pixel_at(p, src, op, blend, x, y);
       changed = box_union(changed, box_make(x, y, x + 1, y + 1));
@@ -252,6 +262,19 @@ Box path_fill(Doc *d, const Path *p, u32 color, int opacity, int blend, int anti
   Box r = box_make(0, 0, 0, 0);
   poly_init(&pl);
   if (p && path_flatten(p, 0.05, &pl)) r = fill_poly_on(d, &pl, p->evenodd, color, opacity, blend, antialias, "Fill Path");
+  poly_free(&pl);
+  return r;
+}
+Box path_fill_source(Doc *d, const Path *p, int source, u32 color, const Pattern *pat, const Snapshot *snap, int opacity, int blend, int antialias)
+{
+  Poly pl;
+  Box r = box_make(0, 0, 0, 0);
+  if (source == PF_PATTERN && (!pat || !pat->px || pat->w < 1 || pat->h < 1)) return r;
+  if (source == PF_HISTORY && (!snap || !snap->px || snap->w != d->w || snap->h != d->h)) return r;
+  poly_init(&pl);
+  lay_pat = source == PF_PATTERN ? pat : NULL; lay_snap = source == PF_HISTORY ? snap : NULL;
+  if (p && path_flatten(p, 0.05, &pl)) r = fill_poly_on(d, &pl, p->evenodd, color, opacity, blend, antialias, "Fill Path");
+  lay_pat = NULL; lay_snap = NULL;
   poly_free(&pl);
   return r;
 }

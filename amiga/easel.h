@@ -139,6 +139,8 @@ typedef struct {
   int patch_mode, patch_transparent, patch_structure, patch_color;   /* Patch: 0 source, 1 destination, 2 content-aware */
   int heal_source, heal_diffusion, spot_type;             /* Healing Brush: sampled/pattern, 1-7; Spot Healing: SPOT_ */
   int crop_angle;                     /* Crop: the box's turn (degrees), a drag outside it turns it */
+  /* r3-image */
+  int custom_shape;                   /* Custom Shape: 0 the active path, 1 + k shape k of the library (core/vecx.h) */
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */

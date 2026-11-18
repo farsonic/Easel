@@ -21,6 +21,15 @@ Path *path_from_selection(Doc *d, double tolerance);
 /* the path's inside filled on the active layer (inside the selection) with color, opacity 0-100
    and blend mode BM_; the area changed (empty if the layer can't be painted) */
 Box   path_fill(Doc *d, const Path *p, u32 color, int opacity, int blend, int antialias);
+/* r3: Fill Path's other contents: PF_PATTERN (pat's tiles from the canvas's top left) or PF_HISTORY
+   (the snapshot snap, canvas sized: the History panel's source); PF_COLOR is path_fill */
+enum { PF_COLOR, PF_PATTERN, PF_HISTORY };
+struct Pattern; struct Snapshot;
+Box   path_fill_source(Doc *d, const Path *p, int source, u32 color, const struct Pattern *pat, const struct Snapshot *snap,
+                       int opacity, int blend, int antialias);
+/* r3: the outline of mask's pixels at least half on (w x h, looked at inside b) traced and fitted
+   no further than tol pixels from it; NULL if nothing is on (or out of memory) */
+Path *path_from_mask(const u8 *mask, i32 w, i32 h, Box b, double tol);
 /* each subpath stroked with the brush b (the stroke engine: the active tool's dabs, spacing and
    dynamics), pressure tapering in and out when simulate_pressure is set */
 Box   path_stroke(Doc *d, const Path *p, const Brush *b, u32 color, int simulate_pressure);

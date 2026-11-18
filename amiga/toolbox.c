@@ -28,6 +28,7 @@
 #include "../core/brushx.h"
 #include "../core/crop.h"
 #include "../core/toolopts.h"
+#include "../core/vecx.h"            /* r3: the custom shape library */
 #include "brushwin.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
@@ -508,7 +509,17 @@ static int fields_for(int t, Field *f)
     if (t == TL_ROUNDRECT) SCRUB("Radius:", opt.round_radius, 0, 1000, "px");
     if (t == TL_POLYGON) { SCRUB("Sides:", opt.poly_sides, 3, 100, ""); CHECK("Star", opt.poly_star); if (opt.poly_star) SCRUB("Indent:", opt.poly_indent, 1, 99, "%"); }
     if (t == TL_LINE) { SCRUB("Weight:", opt.line_width, 1, 1000, "px"); if (!opt.shape_mode) { CHECK("Start", opt.arrow_start); CHECK("End", opt.arrow_end); } }
-    if (t == TL_CUSTOMSHAPE) TEXT("Drag: the active path, fitted to the box");
+    if (t == TL_CUSTOMSHAPE) {
+      /* r3: the active path or one of the library's shapes */
+      static const char *cs_labels[40];
+      int k, nl = shape_library_count();
+      if (nl > 38) nl = 38;
+      cs_labels[0] = "Active Path";
+      for (k = 0; k < nl; k++) cs_labels[k + 1] = shape_library_name(k);
+      cs_labels[nl + 1] = NULL;
+      CHOICE("Shape:", opt.custom_shape, cs_labels, nl + 1);
+      if (!opt.custom_shape) TEXT("Drag: the active path, fitted to the box");
+    }
     else if (t == TL_ELLIPSE || t == TL_RECT) TEXT("Shift: a square or circle");
     break;
   /* 0.9: the pens and path selection */

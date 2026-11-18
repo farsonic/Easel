@@ -41,10 +41,37 @@ typedef struct ShapeParams {
   double line_width;                  /* SH_LINE: thickness (pixels) */
   double arrow_w, arrow_len;          /* SH_LINE: arrowhead width and length, per cent of the line width (0: 500, 1000) */
   double arrow_concave;               /* SH_LINE: per cent the arrowhead's base is cut in (0-50) */
+  /* r3: the fill as a gradient or a pattern (PhotoCraft's Fill::Gradient / Fill::Pattern on a shape),
+     and a radius per corner for rectangles */
+  u8 fill_kind;                       /* SFILL_ */
+  u8 grad_style;                      /* GR_ (paint.h): linear, radial, angle, reflected, diamond */
+  u8 grad_reverse, grad_nc, grad_no;  /* reversed; colour and opacity stops used (up to SH_GSTOPS) */
+  u8 radii_on, pad3[2];               /* SH_RECT, SH_ROUNDRECT: radii[] used instead of radius */
+  double grad_angle;                  /* degrees, anticlockwise from left to right */
+  double grad_scale;                  /* per cent of the shape's box (0: 100); the pattern's scale too */
+  double grad_cpos[8], grad_cmid[8]; u32 grad_rgb[8];     /* colour stops: 0-1, midpoint 0.05-0.95, 0xRRGGBB */
+  double grad_opos[8], grad_omid[8], grad_op[8];          /* opacity stops: 0-1, midpoint, opacity 0-1 */
+  double radii[4];                    /* top left, top right, bottom right, bottom left (pixels) */
   /* the path that follows (kept by shape_alloc; read through shape_path) */
   i32 na, ns;
   u8 evenodd_path, pad2[7];
 } ShapeParams;
+
+#define SH_GSTOPS 8
+enum { SFILL_COLOR, SFILL_GRADIENT, SFILL_PATTERN, SFILL_N };   /* r3: what fills a shape */
+struct Gradient;
+/* r3: the shape's fill a gradient (g's stops, up to SH_GSTOPS of each, its foreground and background
+   stops taken as g->fg and g->bg), in style GR_, at angle degrees, scale per cent of the shape's box */
+void shape_set_gradient(ShapeParams *sp, const struct Gradient *g, int style, double angle, double scale, int reverse);
+/* the gradient a shape's fill holds (two stops from its fill colour when it has none) */
+void shape_get_gradient(const ShapeParams *sp, struct Gradient *g);
+/* a rectangle with a radius per corner (r: top left, top right, bottom right, bottom left) */
+int  shape_rect_path4(Path *p, double x0, double y0, double x1, double y1, const double *r);
+/* r3: shape layer i's fill: SFILL_COLOR, SFILL_GRADIENT (gradient g, as shape_set_gradient) or SFILL_PATTERN
+   (pattern pat at scale per cent; NULL keeps the layer's pattern); one undo step. 0 on failure */
+struct Pattern;
+int  doc_set_shape_fill(Doc *d, int i, int kind, const struct Gradient *g, int style, double angle, double scale, int reverse,
+                        const struct Pattern *pat);
 
 /* a ShapeParams set to defaults: kind, the box, filled with fill (stroke off, smooth edges) */
 void shape_defaults(ShapeParams *sp, int kind, double x0, double y0, double x1, double y1, u32 fill);
@@ -72,6 +99,8 @@ const ShapeParams *layer_shape(const Layer *l);
 /* the shape rendered: RGBA over transparency in box *b (the shape's extent clipped to the canvas
    w x h), malloc'd into *px. 1 with *px NULL when nothing shows; 0 if out of memory */
 int  shape_render(const ShapeParams *sp, i32 w, i32 h, u8 **px, Box *b);
+/* r3: the same for layer l, whose pattern (layerx.h) a pattern fill shows (l may be NULL) */
+int  shape_render_layer(const ShapeParams *sp, const Layer *l, i32 w, i32 h, u8 **px, Box *b);
 
 /* a new shape layer above the active one (its path from path, or the generator's when NULL); one
    undo step. Its index, -1 on failure */
