@@ -52,6 +52,9 @@
 #include "../core/swatch.h"
 #include "../core/xwrite.h"
 #include "../core/xread2.h"                  /* 1.2: Cineon, HDR */
+#include "../core/filesx.h"                  /* round 3: EXIF, Open As */
+#include "filesui.h"
+#include "filesids.h"
 #include "../core/exportx.h"                 /* 1.2: Export As */
 #include "../core/resample.h"
 #include "../core/frames.h"
@@ -159,11 +162,11 @@ char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 
 #define RC(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT, 0, (APTR)(id) }                /* (1.2: one of a set, ticked) */
 static struct NewMenu menus[] = {
   M("File"),
-  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN),
+  I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN), I("Open As...", 0, ID_OPENAS),     /* (round 3) */
   H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
   S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
   S("Clear Recent List", 0, ID_CLEARRECENT),
-  I("Open as Smart Object...", 0, ID_OPENSMART), I("Open As...", 0, ID_OPENAS),             /* 1.2, 1.3 */
+  I("Open as Smart Object...", 0, ID_OPENSMART), I("Open as Photoshop Raw...", 0, ID_OPENRAW),   /* 1.2, 1.3 */
   I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), I("Import Frames to Layers...", 0, ID_IMPFRAMES), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT), I("Package...", 0, ID_PACKAGE),
@@ -179,7 +182,6 @@ static struct NewMenu menus[] = {
   S("Sprites as C...", 0, ID_EXPSPRC), S("Sprites as Assembler...", 0, ID_EXPSPRASM), SBAR,
   S("Copper Gradient as C...", 0, ID_EXPCOPC), S("Copper Gradient as Assembler...", 0, ID_EXPCOPASM), SBAR,
   S("Save for Web (Legacy)...", 0, ID_SAVEFORWEB), S("Picked Layers to Files...", 0, ID_EXPPICKED), S("Color Lookup Tables...", 0, ID_EXPLUT),   /* 1.3 */
-  S("Export Preferences...", 0, ID_EXPPREFS),
   H("Generate"), S("Image Assets", 0, ID_ASSETS), H("Import"), S("Grab Screen...", 0, ID_GRABSCREEN), BAR,
   H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE), S("Flatten All Layer Effects", 0, ID_FLATTENFX),
   SBAR, S("Image Processor...", 0, ID_IMGPROC), S("Statistics...", 0, ID_STATISTICS),     /* 1.3 */
@@ -222,7 +224,7 @@ static struct NewMenu menus[] = {
   S("Flip Canvas Horizontal", 0, ID_IMG_FLIPH), S("Flip Canvas Vertical", 0, ID_IMG_FLIPV),
   I("Crop", 0, ID_CROP), I("Trim...", 0, ID_TRIMOPT), BAR, I("Duplicate", 0, ID_DUPIMAGE),
   I("Apply Image...", 0, ID_APPLYIMAGE), I("Calculations...", 0, ID_CALCULATIONS), BAR,       /* 1.3 */
-  H("Analysis"), S("Set Measurement Scale...", 0, ID_MSCALE), S("Record Measurements", 0, ID_MRECORD), S("Export Measurements...", 0, ID_MEXPORT), SBAR,
+  H("Analysis"), S("Set Measurement Scale...", 0, ID_MSCALE), S("Record Measurements", 0, ID_RECORDMEAS), S("Measurement Log", 0, ID_WIN_MLOG), SBAR,
   S("Ruler Tool", 0, ID_MRULER), S("Count Tool", 0, ID_MCOUNT), S("Place Scale Marker...", 0, ID_MMARKER),
   M("Layer"),
   H("New"), S("Layer", 0, ID_NEWLAYER), S("Layer...", 0, ID_NEWLAYERDLG), S("Group", 0, ID_NEWGROUP), SBAR, S("Layer via Copy", 0, ID_LAYERFROMSEL), S("Layer via Cut", 0, ID_LAYERCUTSEL),
@@ -370,6 +372,7 @@ static struct NewMenu menus[] = {
   /* 1.2 */
   I("Actions...", 0, ID_WIN_ACTIONS), I("Stop Recording", 0, ID_ACTSTOP), I("Play Action Again", 0, ID_ACTPLAY), I("Styles...", 0, ID_WIN_STYLES), I("Layer Comps...", 0, ID_WIN_COMPS),
   H("Histogram"), ST("Luminosity", ID_HISTCH0), ST("Red", ID_HISTCH0 + 1), ST("Green", ID_HISTCH0 + 2), ST("Blue", ID_HISTCH0 + 3), BAR,
+  I("Timeline", 0, ID_WIN_TIMELINE), I("Notes", 0, ID_WIN_NOTES), I("Measurement Log", 0, ID_WIN_MLOG), I("Modifier Keys", 0, ID_WIN_MODKEYS),   /* round 3 */
   H("Animation"), S("Previous Frame", 0, ID_FRAMEPREV), S("Next Frame", 0, ID_FRAMENEXT), S("Play Frames", 0, ID_FRAMEPLAY), SBAR,
   ST("Onion Skin", ID_ONION), S("Onion Skin Settings...", 0, ID_ONIONSET), S("Frame Time...", 0, ID_FRAMETIME),
   I("Spare Page", 0, ID_SPARE), I("Copy to Spare", 0, ID_COPYSPARE),
@@ -886,13 +889,16 @@ void refresh_panels(void)
   DoMethod(toolbox, MUIM_Tools_Refresh);
   DoMethod(doctabs, MUIM_DocTabs_Refresh);
   DoMethod(statusbar, MUIM_Status_Refresh);
+  filesui_refresh();                                     /* (round 3: Timeline, Notes, Measurement Log) */
   set_title();
   update_menus();
   tools2_menus();                                          /* 1.2 */
   t2_log_steps();                                          /* 1.2: the History Log */
 }
+static void qx_menu_title(void);
 void refresh_all(void)
 {
+  qx_menu_title();                                       /* (round 3: Quick Export's format) */
   DoMethod(canvas, MUIM_Canvas_Refresh);
   refresh_panels();
 }
@@ -1082,7 +1088,7 @@ static Doc *load(const char *path, int *fmt)
   return d;
 }
 /* the pictures Easel opens, for the file requester (any file can still be typed in) */
-#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
+#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo|xcf|gz|kra|krz|pdn|dng|cr2|cr3|nef|nrw|arw|srf|sr2|pef|orf|rw2|raf|3fr|erf|mef|mos|iiq|kdc|dcr)"
 static char lastdir[512];
 static void recent_add(const char *path)
 {
@@ -1101,6 +1107,39 @@ static void open_path(const char *path)
   d = load(path, &fmt);
   job_end();
   if (d) { doc_show(d, path, fmt); recent_add(path); }
+  strncpy(lastdir, path, sizeof lastdir - 1);
+}
+/* round 3: File > Open As: a file read by the reader chosen, whatever its first bytes say */
+static void open_as(void)
+{
+  static int last = OA_PNG;
+  char path[512], err[160];
+  static char msg[400];
+  const char *name;
+  u8 *data;
+  size_t len = 0;
+  int k, fmt;
+  Doc *d;
+  strcpy(path, lastdir);
+  if (!file_request(0, "Open As", path, sizeof path, NULL)) return;
+  name = (const char *)FilePart((STRPTR)path);
+  if ((k = filesui_open_as_format(name, last)) < 0) return;
+  last = k;
+  if (!(data = read_file(path, &len))) { snprintf(msg, sizeof msg, tr("%s couldn't be read."), name); ask("OK", "%s", msg); return; }
+  job_begin(NULL, "Opening the picture");
+  err[0] = 0;
+  d = codec_load_as(data, len, k, err, sizeof err);
+  job_end();
+  fmt = codec_detect(data, len);
+  free(data);
+  if (!d) {
+    if (progress_aborted) return;
+    snprintf(msg, sizeof msg, tr("%s couldn't be opened as %s:\n%s"), name, tr(open_as_names[k]), err[0] ? err : tr("not enough memory"));
+    ask("OK", "%s", msg);
+    return;
+  }
+  doc_show(d, path, fmt);
+  recent_add(path);
   strncpy(lastdir, path, sizeof lastdir - 1);
 }
 static void open_file(void)
@@ -1129,12 +1168,12 @@ static int ext_fmt(const char *path)
   if (!Stricmp((STRPTR)e, (STRPTR)".gif")) return FMT_GIF;
   if (!Stricmp((STRPTR)e, (STRPTR)".tif") || !Stricmp((STRPTR)e, (STRPTR)".tiff")) return FMT_TIFF;
   if (!Stricmp((STRPTR)e, (STRPTR)".tga")) return FMT_TGA;
-  if (!Stricmp((STRPTR)e, (STRPTR)".psd")) return FMT_PSD;
+  if (!Stricmp((STRPTR)e, (STRPTR)".psd") || !Stricmp((STRPTR)e, (STRPTR)".psb")) return FMT_PSD;   /* (round 3: PSB written) */
   return xwrite_format_of_ext(e);                      /* (1.1: WebP, PDF, Netpbm, QOI, ICO, DDS, DPX, FITS) */
 }
 /* 1.1: what xwrite_doc's sub and quality are for the next write (export_sub -1: from the extension) */
 static int export_sub = -1, export_pdf_quality;
-#define SAVE_PATTERN "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)"
+#define SAVE_PATTERN "#?.(ora|psd|psb|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)"
 int export_quality = 85, export_indexed;
 static int export_tiff_comp = TIFFC_LZW;             /* 1.2: File > Export > TIFF's choice (Save uses LZW) */
 /* the document written to path as fmt; 1 if it was */
@@ -1152,9 +1191,12 @@ static int write_doc(Doc *d, const char *path, int fmt)
   /* 0.4: GIF; an indexed (or grey) picture's own palette kept in PNG and ILBM */
   else if (fmt == FMT_GIF) data = gif_write_doc(d, 256, QM_WU, DI_FS, 0, &len);
   /* 0.6: TIFF (LZW), Targa (run-length), Photoshop with its layers; PNG and JPEG with File Info */
-  else if (fmt == FMT_TIFF) data = tiff_encode_doc(d, export_tiff_comp, &len);
+  else if (fmt == FMT_TIFF) data = tiff_encode_layered(d, export_tiff_comp, &len);   /* (round 3: with its layers) */
   else if (fmt == FMT_TGA) data = tga_write_doc(d, 1, &len);
-  else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
+  else if (fmt == FMT_PSD) {
+    const char *e = strrchr((const char *)FilePart((STRPTR)path), '.');
+    data = e && !Stricmp((STRPTR)e, (STRPTR)".psb") ? psb_write_doc(d, &len) : psd_write_doc(d, &len);   /* (round 3) */
+  }
   else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
   else if (fmt == FMT_JPEG) data = jpeg_write_doc(d, export_quality, &len);
   else if (xwrite_handles(fmt)) {
@@ -1178,6 +1220,7 @@ static int write_doc(Doc *d, const char *path, int fmt)
   }
   if (progress_aborted) { free(data); set(app, MUIA_Application_Sleep, FALSE); return 0; }   /* (0.8: Abort: nothing written) */
   if (data && !model) data = colorx_embed(d, fmt, data, &len);   /* 1.2: the profile kept */
+  if (data) data = exif_embed(d, fmt, data, &len);              /* round 3: and the EXIF */
   ok = data && write_file(path, data, len);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
@@ -1280,7 +1323,7 @@ static int save(void)
   DocView *v = cur_view();
   if (!v) return 0;
   if (!v->path[0] || !(codec_writable_06(v->fmt) || xwrite_handles(v->fmt))) return save_as();
-  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 && prefs.ask_flatten &&
+  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->fmt != FMT_TIFF && v->doc->nlay > 1 && prefs.ask_flatten &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
   }
@@ -1339,6 +1382,8 @@ static int save_as(void)
   refresh_panels();
   return 1;
 }
+static void export_start(DocView *v, char *path, size_t cap);
+static void export_done(const char *path);
 /* File > Export: a flat copy in the format asked for, the document's own file left as it is */
 static void export_as(int fmt, int indexed)
 {
@@ -1346,13 +1391,12 @@ static void export_as(int fmt, int indexed)
   char path[512];
   static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff", ".gif", ".ora", ".avif", ".tif", ".psd", ".tga" };
   if (!v) return;
-  strcpy(path, v->path[0] ? v->path : lastdir);
-  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
+  export_start(v, path, sizeof path);                    /* (round 3: in the last drawer exported to) */
   with_ext(path, sizeof path, fmt <= FMT_TGA ? ext[fmt] : xwrite_ext(fmt));
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   if (!file_request(1, "Export as", path, sizeof path, NULL)) return;
   export_indexed = indexed;
-  write_doc(v->doc, path, fmt);
+  if (write_doc(v->doc, path, fmt)) export_done(path);
   export_indexed = 0;
 }
 static void start_path(DocView *v, char *path, size_t cap);
@@ -1369,9 +1413,9 @@ static void export_x(int fmt)
     export_sub = r == 1 ? DDS_BC3 : r == 2 ? DDS_BC1 : DDS_RGBA;
   } else if (fmt == FMT_WEBP) {
     /* 1.2: lossless, or lossy at a quality */
-    static LONG wq = 80;
+    LONG wq = prefs.webp_quality;                        /* (round 3: Preferences > Export's, and remembered) */
     if (!(r = ask("Lossless|Lossy|Cancel", "%s", tr("Save the WebP picture without loss, or lossy (much smaller)?")))) return;
-    if (r == 2) { if (!ask_number("WebP Quality", "Quality (1-100):", &wq, 1, 100)) return; export_sub = (int)wq; }
+    if (r == 2) { if (!ask_number("WebP Quality", "Quality (1-100):", &wq, 1, 100)) return; export_sub = (int)wq; prefs.webp_quality = (int)wq; }
     else export_sub = 0;
   } else if (fmt == FMT_DPX) {
     if (!(r = ask("8 Bits|10 Bits|12 Bits|16 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
@@ -1391,9 +1435,10 @@ static void export_anim(int gif)
   static char msg[300];
   if (!v) return;
   anim_opts_default(&o);
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, gif ? ".gif" : ".anim");
   if (!file_request(1, gif ? "Export the layers as an animated GIF" : "Export the layers as an IFF ANIM", path, sizeof path, NULL)) return;
+  export_done(path);
   set(app, MUIA_Application_Sleep, TRUE);
   err[0] = 0;
   data = gif ? gif_write_anim(v->doc, &o, &len, err, sizeof err) : anim_write(v->doc, &o, &len, err, sizeof err);
@@ -1436,22 +1481,69 @@ static void import_frames(void)
   doc_show(d, "", FMT_ORA);
   base_name(path, docs[curdoc].name, sizeof docs[curdoc].name);
 }
-/* 1.1: File > Export > Quick Export as PNG: beside the picture's file (or in the last drawer), no questions */
+/* round 3: the drawer exports last went to, which the export requesters start in */
+static char lastexport[512];
+static void export_start(DocView *v, char *path, size_t cap)
+{
+  char name[128];
+  start_path(v, path, cap);
+  if (!lastexport[0]) return;
+  strncpy(name, (const char *)FilePart((STRPTR)path), sizeof name - 1); name[sizeof name - 1] = 0;
+  strncpy(path, lastexport, cap - 1); path[cap - 1] = 0;
+  AddPart((STRPTR)path, (STRPTR)name, cap);
+}
+static void export_done(const char *path)
+{
+  strncpy(lastexport, path, sizeof lastexport - 1); lastexport[sizeof lastexport - 1] = 0;
+  *PathPart((STRPTR)lastexport) = 0;
+}
+/* 1.1: File > Export > Quick Export: no questions. Round 3: in the format, place, metadata and colours
+   Preferences > Export chose (PNG beside the picture's file at first) */
+static const char *const qx_ext[QX_N] = { ".png", ".jpg", ".gif", ".webp", ".tif" };
+static const char *const qx_name[QX_N] = { "PNG", "JPEG", "GIF", "WebP", "TIFF" };
+static void qx_menu_title(void)
+{
+  static int shown = -1;
+  static char t[64];
+  if (shown == prefs.qx_fmt) return;
+  shown = prefs.qx_fmt;
+  snprintf(t, sizeof t, tr("Quick Export as %s"), qx_name[prefs.qx_fmt]);
+  menu_set(ID_QUICKPNG, MUIA_Menuitem_Title, (ULONG)t);
+}
 static void quick_png(void)
 {
   DocView *v = cur_view();
   char path[512];
   BPTR l;
+  int fmt;
+  ExportOpts o;
+  Doc *t;
   if (!v) return;
-  if (m3_quick_export(v->doc, v->path, v->name)) return;      /* 1.3: Export Preferences' format and place */
-  start_path(v, path, sizeof path);
-  with_ext(path, sizeof path, ".png");
-  if (v->fmt == FMT_PNG && v->path[0] && !Stricmp((STRPTR)path, (STRPTR)v->path)) with_ext(path, sizeof path, "-copy.png");
-  if ((l = Lock((STRPTR)path, ACCESS_READ))) {
+  if (prefs.qx_where == QW_BESIDE) start_path(v, path, sizeof path);
+  else if (prefs.qx_where == QW_DRAWER && prefs.qx_dir[0]) {
+    strncpy(path, prefs.qx_dir, sizeof path - 1); path[sizeof path - 1] = 0;
+    AddPart((STRPTR)path, (STRPTR)v->name, sizeof path);
+  } else export_start(v, path, sizeof path);
+  with_ext(path, sizeof path, qx_ext[prefs.qx_fmt]);
+  if (v->path[0] && !Stricmp((STRPTR)path, (STRPTR)v->path)) { char e[16]; snprintf(e, sizeof e, "-copy%s", qx_ext[prefs.qx_fmt]); with_ext(path, sizeof path, e); }
+  if (prefs.qx_where == QW_ASK) { if (!file_request(1, "Quick Export", path, sizeof path, NULL)) return; }
+  else if ((l = Lock((STRPTR)path, ACCESS_READ))) {
     UnLock(l);
     if (!ask("Replace|Cancel", tr("%s is there already. Replace it?"), (const char *)FilePart((STRPTR)path))) return;
   }
-  write_doc(v->doc, path, FMT_PNG);
+  fmt = ext_fmt(path);
+  if (fmt == FMT_UNKNOWN) fmt = FMT_PNG;
+  exportx_defaults(&o);
+  o.metadata = prefs.qx_meta; o.to_srgb = prefs.qx_srgb;
+  set(app, MUIA_Application_Sleep, TRUE);
+  t = exportx_prepare(v->doc, &o);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+  export_quality = prefs.jpeg_quality;
+  export_sub = fmt == FMT_WEBP ? prefs.webp_quality : -1;
+  if (write_doc(t, path, fmt)) export_done(path);
+  export_sub = -1;
+  doc_free(t);
 }
 /* 1.1: File > Export > Paths to SVG: the paths and shape layers, with the document's bounds */
 static void export_svg(void)
@@ -1461,9 +1553,10 @@ static void export_svg(void)
   u8 *data;
   size_t len = 0;
   if (!v) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, ".svg");
   if (!file_request(1, "Export the paths and shapes as SVG", path, sizeof path, "#?.svg")) return;
+  export_done(path);
   if (!(data = svg_write_paths(v->doc, 1, &len)) || !write_file(path, data, len)) ask("OK", "%s", tr("The SVG file couldn't be written (out of memory, or the disk is full or write-protected)."));
   free(data);
 }
@@ -1557,7 +1650,7 @@ static void export_scaled(void)
   { static const int methods[6] = { RS_NEAREST, RS_BILINEAR, RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS }; for (i = 0; i < 6; i++) if (methods[i] == xo_last.method) mi = i; }
   init[0] = xo_last.pct; init[1] = xo_last.canvas_w; init[2] = xo_last.canvas_h; init[3] = xo_last.metadata;
   if (!dlg_sliders("Export As", p, 4, rsl, "Resample:", mi, mtl, "Matte:", xo_last.matte, "Convert to sRGB", xo_last.to_srgb, init, xo_take, NULL, 0)) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);                    /* (round 3: in the last drawer exported to) */
   with_ext(path, sizeof path, ".png");
   if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, SAVE_PATTERN)) return;
   fmt = out_fmt(path, sizeof path);
@@ -1577,7 +1670,7 @@ static void export_scaled(void)
     size_text(sz, est);
     if (est && !ask("Export|Cancel", tr("The file will be about %s."), sz)) { doc_free(t); return; }
   }
-  write_doc(t, path, fmt);
+  if (write_doc(t, path, fmt)) export_done(path);
   doc_free(t);
 }
 /* File > Export > Layers to Files: each layer with pixels as a file of its own, named after it */
@@ -1588,9 +1681,10 @@ static void layers_to_files(void)
   int fmt, i, n = 0;
   static char msg[200];
   if (!v) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
   if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, SAVE_PATTERN)) return;
+  export_done(path);
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1798,6 +1892,7 @@ static void place_file(void)
     base_name(path, name, sizeof name);
     doc_set_layer_props(d, d->active, name, -1, -1, -1);
   }
+  if (prefs.place_smart) doc_smart_convert(d, d->active);   /* round 3: Preferences > General's Always create Smart Objects */
   refresh_all();
   /* 0.6: then its size and angle, as Place goes into Free Transform (1.1: unless the preferences skip it) */
   if (!prefs.skip_place_xf) transform_dialog();
@@ -1815,6 +1910,7 @@ static Doc *state_copy(Doc *d)
   c->undo = c->redo = NULL; c->undo_depth = 0; c->undo_bytes = 0;
   c->sel = c->lastsel = c->qmask = NULL; c->nlay = 0; c->nchan = 0;
   c->npaths = 0; c->workpath = NULL; c->annot = NULL;     /* (1.2: the paths and notes stay the picture's: doc_free(c) mustn't free them) */
+  c->icc = NULL; c->icclen = 0; c->exif = NULL; c->exiflen = 0;   /* (round 3: nor its profile and EXIF) */
   for (i = 0; i < d->nlay && ok; i++) if ((c->lay[i] = layer_copy(d->lay[i], d->w, d->h)) != NULL) c->nlay++; else ok = 0;
   for (i = 0; i < d->nchan && ok; i++) if ((c->chan[i] = (u8 *)malloc(n)) != NULL) { memcpy(c->chan[i], d->chan[i], n); c->nchan++; } else ok = 0;
   if (ok && d->sel && (c->sel = (u8 *)malloc(n)) != NULL) memcpy(c->sel, d->sel, n);
@@ -2076,6 +2172,7 @@ static void command(ULONG id)
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
   if (id >= ID_LS_FIRST && id <= ID_LS_LAST) { if (d) layerstyle_command(d, id); refresh_all(); return; }   /* 1.1 (fxdlg.c) */
   if (id >= ID_CU_FIRST && id <= ID_CU_LAST) { colorui_command(d, id); return; }   /* 1.2 (colorui.c) */
+  if (id > ID_OPENAS && id <= ID_FU_LAST) { if (filesui_command(id)) refresh_all(); return; }   /* round 3 (filesui.c) */
   if (id >= ID_MX_FIRST && id <= ID_MX_LAST && mx_command(d, id)) { refresh_all(); return; }               /* 1.2 (menux.c) */
   if (id > ID_M3_FIRST && id < ID_M3_LAST) { m3_command(d, id); refresh_all(); return; }                    /* 1.3 (menux3.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
@@ -2101,6 +2198,7 @@ static void command(ULONG id)
   case ID_ICONPREF: pref_icons = !pref_icons; update_menus(); return;
   case ID_PASTEAMIGA: paste_amiga(d); refresh_all(); return;
   case ID_OPEN: open_file(); return;
+  case ID_OPENAS: open_as(); return;                     /* round 3 */
   case ID_PLACE: place_file(); return;
   case ID_CLOSE: doc_close(curdoc); return;
   case ID_CLOSEALL: close_all(); return;

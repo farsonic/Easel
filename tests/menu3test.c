@@ -418,19 +418,11 @@ static void test_analysis(void)
 {
   Doc *d = doc_new(100, 80, 0xFFFFFF, 0);
   MeasureScale s;
-  Buf b;
-  double ruler[4] = { 0, 0, 30, 40 };
   int i;
   measure_scale_get(d, &s); CHECK(s.px == 1 && !strcmp(s.unit, "pixels"), "pixels at first");
   s.px = 10; s.len = 1; strcpy(s.unit, "mm");
   measure_scale_set(d, &s);
   CHECK(fabs(measure_len(d, 50) - 5) < 1e-9, "50 px is 5 mm");
-  sel_rect(d, 10, 10, 30, 20, SEL_REPLACE, 0);
-  buf_init(&b);
-  CHECK(measure_record(d, ruler, &b) >= 1, "a record");
-  buf_addc(&b, 0);
-  CHECK(strstr(b.data, "Area\tPerimeter") && strstr(b.data, "\t2.00\t6.00\t2.00\t1.00\t2.00\t1.50\t5.00\t-53.13\t0\tmm"), "area 2 mm2, perimeter 6, length 5 mm");
-  buf_free(&b);
   i = scale_marker(d, 3, 0, 4);
   CHECK(i == 1 && d->nlay == 2 && !strcmp(d->lay[1]->name, "Measurement Scale Marker"), "a scale marker layer");
   { Box bb; CHECK(layer_content_box(d, 1, &bb) && bb.x1 - bb.x0 == 30, "3 mm long is 30 px"); }
@@ -505,26 +497,18 @@ static void test_open_as(void)
   raw_guess(sizeof raw, &r);
   CHECK(r.channels == 3 && r.w * r.h == 8, "Raw's guess");
   r.w = 4; r.h = 2; r.channels = 3; r.interleaved = 1; r.header = 0;
-  d = open_as(raw, sizeof raw, OA_RAW, &r, err, sizeof err);
+  d = open_raw(raw, sizeof raw, &r, err, sizeof err);
   CHECK(d && d->w == 4 && px(d, 0, 1, 0)[0] == 30 && px(d, 0, 1, 0)[2] == 50, "interleaved RGB");
   doc_free(d);
   r.interleaved = 0;
-  d = open_as(raw, sizeof raw, OA_RAW, &r, err, sizeof err);
+  d = open_raw(raw, sizeof raw, &r, err, sizeof err);
   CHECK(d && px(d, 0, 1, 0)[0] == 10 && px(d, 0, 1, 0)[1] == 90, "planar");
   doc_free(d);
   r.channels = 1; r.header = 8; r.w = 4; r.h = 4;
-  d = open_as(raw, sizeof raw, OA_RAW, &r, err, sizeof err);
+  d = open_raw(raw, sizeof raw, &r, err, sizeof err);
   CHECK(d && px(d, 0, 0, 0)[0] == 80 && px(d, 0, 0, 0)[2] == 80, "grey after a header");
   doc_free(d);
-  r.h = 9; CHECK(!open_as(raw, sizeof raw, OA_RAW, &r, err, sizeof err) && err[0], "too small");
-  /* a PNG opened as PNG, and refused as JPEG */
-  {
-    Doc *s = gradient_doc(8, 8);
-    size_t len; u8 *png = png_encode(&(Rgba){ 8, 8, s->lay[0]->px }, 0, &len);
-    d = open_as(png, len, OA_PNG, NULL, err, sizeof err); CHECK(d && d->w == 8, "as PNG"); doc_free(d);
-    CHECK(!open_as(png, len, OA_JPEG, NULL, err, sizeof err), "not a JPEG");
-    free(png); doc_free(s);
-  }
+  r.h = 9; CHECK(!open_raw(raw, sizeof raw, &r, err, sizeof err) && err[0], "too small");
 }
 
 static void test_bucket_wand_screen(void)

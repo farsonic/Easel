@@ -1018,44 +1018,6 @@ static void num(char *out, double v)
   long t = (long)(v * 100 + (v < 0 ? -0.5 : 0.5));
   sprintf(out, "%s%ld.%02ld", t < 0 ? "-" : "", labs(t) / 100, labs(t) % 100);
 }
-static int nrecords;
-int measure_record(Doc *d, const double *ruler, void *logbuf)
-{
-  Buf *b = (Buf *)logbuf;
-  MeasureScale s;
-  char a[24], p[24], w[24], h[24], cx[24], cy[24], rl[24], ra[24];
-  double area = 0, per = 0, sx = 0, sy = 0, f;
-  Box bb = box_make(0, 0, 0, 0);
-  int counts = 0;
-  Annots *an = doc_annots(d, 0);
-  measure_scale_get(d, &s);
-  f = s.len / s.px;
-  if (d->sel && sel_bounds(d, &bb)) {
-    i32 x, y;
-    for (y = bb.y0; y < bb.y1; y++) for (x = bb.x0; x < bb.x1; x++) {
-      int v = d->sel[(long)y * d->w + x];
-      if (!v) continue;
-      area += v / 255.0; sx += (x + 0.5) * v / 255.0; sy += (y + 0.5) * v / 255.0;
-      if (v >= 128) {
-        if (x == 0 || d->sel[(long)y * d->w + x - 1] < 128) per++;
-        if (x == d->w - 1 || d->sel[(long)y * d->w + x + 1] < 128) per++;
-        if (y == 0 || d->sel[(long)(y - 1) * d->w + x] < 128) per++;
-        if (y == d->h - 1 || d->sel[(long)(y + 1) * d->w + x] < 128) per++;
-      }
-    }
-  } else if (!d->sel) { bb = doc_box(d); area = (double)d->w * d->h; per = 2.0 * (d->w + d->h); sx = d->w * area / 2; sy = d->h * area / 2; }
-  if (area > 0) { sx /= area; sy /= area; }
-  if (an) counts = an->nmark;
-  if (!nrecords++) buf_adds(b, "Record\tArea\tPerimeter\tWidth\tHeight\tCentroid X\tCentroid Y\tLength\tAngle\tCount\tScale\n");
-  num(a, area * f * f); num(p, per * f); num(w, (bb.x1 - bb.x0) * f); num(h, (bb.y1 - bb.y0) * f); num(cx, sx * f); num(cy, sy * f);
-  rl[0] = ra[0] = 0;
-  if (ruler) {
-    double dx = ruler[2] - ruler[0], dy = ruler[3] - ruler[1];
-    num(rl, sqrt(dx * dx + dy * dy) * f); num(ra, atan2(-dy, dx) * 180 / M_PI);
-  }
-  buf_printf(b, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", nrecords, a, p, w, h, cx, cy, rl, ra, counts, s.unit);
-  return nrecords;
-}
 int scale_marker(Doc *d, double len, int white, int height)
 {
   MeasureScale s;
@@ -1135,7 +1097,6 @@ int frame_from_layer(Doc *d, int i)
 }
 
 /* ================================================================== Open As */
-const char *const openas_names[OA_N + 1] = { "PNG", "JPEG", "BMP", "IFF ILBM", "GIF", "Photoshop Raw", NULL };
 void raw_guess(size_t n, RawOpts *r)
 {
   long px, s;
@@ -1148,40 +1109,26 @@ void raw_guess(size_t n, RawOpts *r)
   for (s = (long)sqrt((double)px); s > 1; s--) if (px % s == 0) break;
   r->w = (i32)(px / (s > 0 ? s : 1)); r->h = (i32)(s > 0 ? s : 1);
 }
-Doc *open_as(const u8 *data, size_t n, int f, const RawOpts *raw, char *err, size_t errcap)
+Doc *open_raw(const u8 *data, size_t n, const RawOpts *raw, char *err, size_t errcap)
 {
   Rgba im;
-  int ok = 0;
   Doc *d;
-  memset(&im, 0, sizeof im);
-  switch (f) {
-  case OA_PNG: ok = png_read(data, n, &im, err, errcap); break;
-  case OA_JPEG: ok = jpeg_read(data, n, &im, err, errcap); break;
-  case OA_BMP: ok = bmp_read(data, n, &im, err, errcap); break;
-  case OA_ILBM: ok = ilbm_read(data, n, &im, err, errcap); break;
-  case OA_GIF: ok = gif_read(data, n, &im, err, errcap); break;
-  case OA_RAW: {
-    int ch = raw ? raw->channels : 0, bps = raw && raw->bits16 ? 2 : 1;
-    long k, px;
-    i32 w = raw ? raw->w : 0, h = raw ? raw->h : 0;
-    if (!raw || ch < 1 || ch > 4 || w < 1 || h < 1 || w > MAXDIM || h > MAXDIM || raw->header < 0) { codec_err(err, errcap, "Give the width, height and channels"); return NULL; }
-    px = (long)w * h;
-    if ((double)raw->header + (double)px * ch * bps > (double)n) { codec_err(err, errcap, "The file is smaller than that size"); return NULL; }
-    if (!rgba_alloc(&im, w, h)) { codec_err(err, errcap, "Not enough memory"); return NULL; }
-    for (k = 0; k < px; k++) {
-      int c, v[4] = { 0, 0, 0, 255 };
-      for (c = 0; c < ch; c++) {
-        long at = raw->header + (raw->interleaved ? (k * ch + c) : (c * px + k)) * bps;
-        v[c] = bps == 2 ? data[at + (raw->bigendian ? 0 : 1)] : data[at];
-      }
-      if (ch <= 2) { im.px[k * 4] = im.px[k * 4 + 1] = im.px[k * 4 + 2] = (u8)v[0]; im.px[k * 4 + 3] = (u8)(ch == 2 ? v[1] : 255); }
-      else { im.px[k * 4] = (u8)v[0]; im.px[k * 4 + 1] = (u8)v[1]; im.px[k * 4 + 2] = (u8)v[2]; im.px[k * 4 + 3] = (u8)(ch == 4 ? v[3] : 255); }
+  int ch = raw ? raw->channels : 0, bps = raw && raw->bits16 ? 2 : 1;
+  long k, px;
+  i32 w = raw ? raw->w : 0, h = raw ? raw->h : 0;
+  if (!raw || ch < 1 || ch > 4 || w < 1 || h < 1 || w > MAXDIM || h > MAXDIM || raw->header < 0) { codec_err(err, errcap, "Give the width, height and channels"); return NULL; }
+  px = (long)w * h;
+  if ((double)raw->header + (double)px * ch * bps > (double)n) { codec_err(err, errcap, "The file is smaller than that size"); return NULL; }
+  if (!rgba_alloc(&im, w, h)) { codec_err(err, errcap, "Not enough memory"); return NULL; }
+  for (k = 0; k < px; k++) {
+    int c, v[4] = { 0, 0, 0, 255 };
+    for (c = 0; c < ch; c++) {
+      long at = raw->header + (raw->interleaved ? (k * ch + c) : (c * px + k)) * bps;
+      v[c] = bps == 2 ? data[at + (raw->bigendian ? 0 : 1)] : data[at];
     }
-    ok = 1;
-    break; }
-  default: codec_err(err, errcap, "Unknown format"); return NULL;
+    if (ch <= 2) { im.px[k * 4] = im.px[k * 4 + 1] = im.px[k * 4 + 2] = (u8)v[0]; im.px[k * 4 + 3] = (u8)(ch == 2 ? v[1] : 255); }
+    else { im.px[k * 4] = (u8)v[0]; im.px[k * 4 + 1] = (u8)v[1]; im.px[k * 4 + 2] = (u8)v[2]; im.px[k * 4 + 3] = (u8)(ch == 4 ? v[3] : 255); }
   }
-  if (!ok) return NULL;
   if (!(d = doc_adopt(im.w, im.h, im.px))) { rgba_free(&im); codec_err(err, errcap, "Not enough memory"); return NULL; }
   return d;
 }

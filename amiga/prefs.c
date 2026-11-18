@@ -17,6 +17,7 @@
 #include "tools2.h"                     /* 1.2 */
 #include "../core/layerx.h"
 #include "theme.h"
+#include "colorui.h"
 #include "lang.h"
 #include "ids.h"
 #include "../core/viewx.h"                 /* 1.2 */
@@ -39,16 +40,14 @@ void prefs_defaults(void)
   prefs.language = -1;
   prefs.checker_size = 2; prefs.checker_scheme = CHK_LIGHT; prefs.checker_c1 = 0xFFFFFF; prefs.checker_c2 = 0xCCCCCC;   /* 1.2 */
   prefs.screen_dpi = 72; prefs.column_w = 180; prefs.gutter_w = 12;
+  prefs.qx_fmt = QX_PNG; prefs.qx_where = QW_BESIDE; prefs.qx_meta = 2; prefs.webp_quality = 80;   /* round 3 (2: EXD_ALL) */
 }
 /* (see easel.h) one line of Easel.prefs taken if it is one of these settings; 1 if it was */
 extern signed char key_tool[26];                           /* (main.c) */
-extern int m3_quick_fmt, m3_quick_ask;                      /* (menux3.c: Export Preferences) */
 int prefs_line(const char *l)
 {
   if (histopts_line(l)) return 1;                          /* 1.2: History Options and Log */
   if (!strncmp(l, "toolkeys=", 9)) return toolkeys_parse(l + 9, key_tool, TL_N), 1;   /* 1.3: each letter's last tool */
-  if (!strncmp(l, "quickfmt=", 9)) { m3_quick_fmt = atoi(l + 9); if (m3_quick_fmt < 0 || m3_quick_fmt >= SFW_N) m3_quick_fmt = SFW_PNG24; return 1; }
-  if (!strncmp(l, "quickask=", 9)) { m3_quick_ask = atoi(l + 9) != 0; return 1; }
   static const struct { const char *key; int *v; } ints[] = {
     { "tips=", &prefs.tips }, { "large=", &prefs.large_text }, { "cursor=", &prefs.cursor }, { "capsprecise=", &prefs.caps_precise },
     { "xformnums=", &prefs.xform_numbers }, { "savefmt=", &prefs.save_fmt }, { "jpegq=", &prefs.jpeg_quality },
@@ -60,7 +59,9 @@ int prefs_line(const char *l)
     { "parcorrect=", &vx_par_correct },                    /* 1.2: View > Pixel Aspect Ratio Correction */
     { "checker=", &prefs.checker_size }, { "checkerscheme=", &prefs.checker_scheme }, { "gridstyle=", &prefs.grid_style },
     { "guidestyle=", &prefs.guide_style }, { "screendpi=", &prefs.screen_dpi }, { "columnw=", &prefs.column_w },
-    { "gutterw=", &prefs.gutter_w }, { "pointkind=", &prefs.point_kind }
+    { "gutterw=", &prefs.gutter_w }, { "pointkind=", &prefs.point_kind },
+    { "qxfmt=", &prefs.qx_fmt }, { "qxwhere=", &prefs.qx_where }, { "qxmeta=", &prefs.qx_meta }, { "qxsrgb=", &prefs.qx_srgb },   /* round 3 */
+    { "webpq=", &prefs.webp_quality }, { "placesmart=", &prefs.place_smart }, { "beepdone=", &prefs.beep_done }
   };
   int i;
   for (i = 0; i < (int)(sizeof ints / sizeof ints[0]); i++) {
@@ -73,6 +74,8 @@ int prefs_line(const char *l)
   if (!strncmp(l, "checkerc2=", 10)) { prefs.checker_c2 = strtoul(l + 10, NULL, 16) & 0xFFFFFF; return 1; }
   if (!strncmp(l, "screenid=", 9)) { prefs.screen_id = strtoul(l + 9, NULL, 16); return 1; }
   if (!strncmp(l, "recovery=", 9)) { strncpy(prefs.recovery, l + 9, sizeof prefs.recovery - 1); return 1; }
+  if (!strncmp(l, "monitoricc=", 11)) { strncpy(prefs.monitor_icc, l + 11, sizeof prefs.monitor_icc - 1); return 1; }
+  if (!strncmp(l, "qxdir=", 6)) { strncpy(prefs.qx_dir, l + 6, sizeof prefs.qx_dir - 1); return 1; }   /* round 3 */
   if (!strncmp(l, "scratch=", 8)) { strncpy(prefs.scratch, l + 8, sizeof prefs.scratch - 1); return 1; }
   if (!strncmp(l, "language=", 9)) { prefs.language = lang_by_code(l + 9); return 1; }    /* (1.1: "auto" or a code) */
   return 0;
@@ -83,7 +86,7 @@ void prefs_write(FILE *f)
   char tk[200];
   histopts_write(f);                                       /* 1.2 */
   toolkeys_format(key_tool, tk, sizeof tk);                /* 1.3 */
-  fprintf(f, "toolkeys=%s\nquickfmt=%d\nquickask=%d\n", tk, m3_quick_fmt, m3_quick_ask);
+  fprintf(f, "toolkeys=%s\n", tk);
   fprintf(f, "tabletcurve=%d\ntabletfloor=%d\ndither=%d\nparcorrect=%d\n", tablet_curve_pc, tablet_floor_pc, display_dither, vx_par_correct);
   fprintf(f, "tips=%d\nlarge=%d\ncursor=%d\ncapsprecise=%d\nxformnums=%d\n", prefs.tips, prefs.large_text, prefs.cursor, prefs.caps_precise, prefs.xform_numbers);
   fprintf(f, "savefmt=%d\njpegq=%d\naskflatten=%d\nnrecent=%d\nrecovery=%s\n", prefs.save_fmt, prefs.jpeg_quality, prefs.ask_flatten, prefs.nrecent, prefs.recovery);
@@ -97,6 +100,9 @@ void prefs_write(FILE *f)
           (unsigned long)prefs.checker_c1, (unsigned long)prefs.checker_c2, prefs.grid_style, prefs.guide_style);
   fprintf(f, "screendpi=%d\ncolumnw=%d\ngutterw=%d\npointkind=%d\n", prefs.screen_dpi, prefs.column_w, prefs.gutter_w,
           prefs.point_kind);
+  fprintf(f, "qxfmt=%d\nqxwhere=%d\nqxmeta=%d\nqxsrgb=%d\nqxdir=%s\nwebpq=%d\nplacesmart=%d\nbeepdone=%d\n", prefs.qx_fmt, prefs.qx_where,
+          prefs.qx_meta, prefs.qx_srgb, prefs.qx_dir, prefs.webp_quality, prefs.place_smart, prefs.beep_done);   /* round 3 */
+  fprintf(f, "monitoricc=%s\n", prefs.monitor_icc);
 }
 /* the settings kept in range and handed to the parts that use them (the core's undo, the bubbles) */
 void prefs_apply(void)
@@ -125,12 +131,17 @@ void prefs_apply(void)
   if (prefs.column_w < 1 || prefs.column_w > 9999) prefs.column_w = 180;
   if (prefs.gutter_w < 0 || prefs.gutter_w > 999) prefs.gutter_w = 12;
   if (prefs.point_kind != 1) prefs.point_kind = 0;
+  if (prefs.qx_fmt < 0 || prefs.qx_fmt >= QX_N) prefs.qx_fmt = QX_PNG;                  /* round 3 */
+  if (prefs.qx_where < QW_BESIDE || prefs.qx_where > QW_ASK) prefs.qx_where = QW_BESIDE;
+  if (prefs.qx_meta < 0 || prefs.qx_meta > 2) prefs.qx_meta = 2;
+  if (prefs.webp_quality < 1 || prefs.webp_quality > 100) prefs.webp_quality = 80;
   undo_budget = (long)prefs.undo_mb * 1024 * 1024;
   undo_levels = prefs.undo_levels;
   if (prefs.scratch_on && prefs.scratch[0]) { strncpy(undo_scratch, prefs.scratch, sizeof undo_scratch - 1); undo_scratch[sizeof undo_scratch - 1] = 0; }
   else undo_scratch[0] = 0;
   undo_scratch_max = (long)prefs.scratch_mb * 1024 * 1024;
   theme_tips = prefs.tips;
+  colorui_set_monitor(prefs.monitor_icc);                  /* round 3 */
   /* 1.2: smart objects keep their sources in the scratch drawer (T: when none is set) */
   strncpy(smart_drawer, prefs.scratch[0] ? prefs.scratch : "T:", sizeof smart_drawer - 1); smart_drawer[sizeof smart_drawer - 1] = 0;
 }
@@ -158,12 +169,16 @@ void unit_text(char *out, double px, long length, int dpi, int name)
 }
 
 /* ------------------------------------------------------------------ the window */
-static const char *const pages[] = { "General", "Interface", "Tools", "File Handling", "Units & Rulers", "Guides & Grid", "Scratch Drawer", "Transparency", NULL };
+static const char *const pages[] = { "General", "Interface", "Tools", "File Handling", "Export", "Units & Rulers", "Guides & Grid", "Scratch Drawer", "Transparency", NULL };
+/* round 3: the Export page's choices */
+static const char *const qx_formats[] = { "PNG", "JPEG", "GIF", "WebP", "TIFF", NULL };
+static const char *const qx_wheres[] = { "Beside the picture's file", "In the last drawer exported to", "In this drawer:", "Ask each time", NULL };
+static const char *const qx_metas[] = { "None", "Copyright only", "All", NULL };
 static const char *const point_kinds[] = { "PostScript (72 points/inch)", "Traditional (72.27 points/inch)", NULL };
 static const char *cyc_labels[3][CHK_N + 1];       /* (1.2: the cycles' labels, translated) */
 static const char *const cursors[] = { "Brush outline", "Crosshair", "Outline and crosshair", NULL };
 static const char *const formats[] = { "OpenRaster (.ora)", "PNG", "JPEG", "TIFF", "Photoshop PSD", "IFF ILBM", NULL };
-static const char *pagelist[9];
+static const char *pagelist[10];
 static ULONG pick_guide, pick_grid, pick_c1, pick_c2;   /* the colours as they are being chosen */
 static Object *guide_txt, *grid_txt, *c1_txt, *c2_txt;
 static const char *langlist[UI_NLANG + 2];  /* (1.1) Locale prefs' choice, then each language in its own words */
@@ -196,6 +211,7 @@ int dlg_preferences(int *reopen)
   Object *w, *list, *pg, *gpick, *gridpick;
   Object *ck, *cks, *c1p, *c2p, *grs, *gus, *sdp, *cw, *gw, *pk, *hl, *hp;
   char sdb[8], cwb[8], gwb[8];
+  Object *qf, *qw, *qd, *qm, *qs, *wq, *psm, *bd;   /* round 3 */
   Object *spx, *lgc, *as, *ic, *lv, *mb, *tp, *dk, *lg, *cu, *cp, *xn, *sf, *jq, *af, *nr, *rc, *un, *dp, *gs, *gsub, *so, *sp, *smb;
   char asb[8], dpb[8], usage[120];
   int i, ok;
@@ -222,6 +238,8 @@ int dlg_preferences(int *reopen)
             Child, label("Undo memory (MB):"), Child, mb = slider(1, 512, prefs.undo_mb),
             Child, label("Help bubbles:"), Child, HGroup, Child, tp = check(prefs.tips), Child, HSpace(0), End,
             Child, label("Skip Transform when Placing:"), Child, HGroup, Child, spx = check(prefs.skip_place_xf), Child, HSpace(0), End,
+            Child, label("Always create Smart Objects when placing:"), Child, HGroup, Child, psm = check(prefs.place_smart), Child, HSpace(0), End,
+            Child, label("Beep when long jobs are done:"), Child, HGroup, Child, bd = check(prefs.beep_done), Child, HSpace(0), End,
             Child, label("History log (each step to a file):"), Child, HGroup, Child, hl = check(hist_opts.log_on), Child, HSpace(0), End,
             Child, label("Log file:"), Child, hp = string(hist_opts.log_file, 250),
             End, Child, HVSpace, End,
@@ -245,6 +263,15 @@ int dlg_preferences(int *reopen)
             Child, label("Recent files listed:"), Child, nr = slider(0, 10, prefs.nrecent),
             Child, label("Recovery drawer:"), Child, rc = string(prefs.recovery, 250),
             End, Child, HVSpace, End,
+          /* round 3: Export */
+          Child, VGroup, Child, QTitleObject(tr("Export")), Child, ColGroup(2),
+            Child, label("Quick Export format:"), Child, qf = cycle(qx_formats, prefs.qx_fmt),
+            Child, label("Quick Export writes:"), Child, qw = cycle(qx_wheres, prefs.qx_where),
+            Child, label("Drawer:"), Child, qd = string(prefs.qx_dir, 250),
+            Child, label("Metadata kept:"), Child, qm = cycle(qx_metas, prefs.qx_meta),
+            Child, label("Convert to sRGB:"), Child, HGroup, Child, qs = check(prefs.qx_srgb), Child, HSpace(0), End,
+            Child, label("Lossy WebP quality:"), Child, wq = slider(1, 100, prefs.webp_quality),
+            End, Child, text(tr("(Quick Export's choices; Export As asks its own.\nJPEG's quality is on File Handling.)")), Child, HVSpace, End,
           /* Units & Rulers */
           Child, VGroup, Child, QTitleObject(tr("Units & Rulers")), Child, ColGroup(2),
             Child, label("Rulers and Info in:"), Child, un = cycle(unit_names, prefs.units),
@@ -299,6 +326,11 @@ int dlg_preferences(int *reopen)
     prefs.undo_levels = (int)xget(lv, MUIA_Numeric_Value); prefs.undo_mb = (int)xget(mb, MUIA_Numeric_Value);
     prefs.tips = xget(tp, MUIA_Selected) != 0;
     prefs.skip_place_xf = xget(spx, MUIA_Selected) != 0;
+    prefs.place_smart = xget(psm, MUIA_Selected) != 0; prefs.beep_done = xget(bd, MUIA_Selected) != 0;   /* round 3 */
+    prefs.qx_fmt = (int)xget(qf, MUIA_Cycle_Active); prefs.qx_where = (int)xget(qw, MUIA_Cycle_Active);
+    prefs.qx_meta = (int)xget(qm, MUIA_Cycle_Active); prefs.qx_srgb = xget(qs, MUIA_Selected) != 0;
+    prefs.webp_quality = (int)xget(wq, MUIA_Numeric_Value);
+    strncpy(prefs.qx_dir, (const char *)xget(qd, MUIA_String_Contents), sizeof prefs.qx_dir - 1);
     prefs.language = (int)xget(lgc, MUIA_Cycle_Active) - 1;
     prefs.cursor = (int)xget(cu, MUIA_Cycle_Active); prefs.caps_precise = xget(cp, MUIA_Selected) != 0; prefs.xform_numbers = xget(xn, MUIA_Selected) != 0;
     prefs.save_fmt = (int)xget(sf, MUIA_Cycle_Active); prefs.jpeg_quality = (int)xget(jq, MUIA_Numeric_Value);

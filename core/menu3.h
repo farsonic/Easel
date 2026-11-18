@@ -6,8 +6,8 @@
  * from History and Preserve Transparency, Edit > Stroke's mode, File > Export > Color Lookup
  * Tables, File > Automate > Contact Sheet II, File > Scripts > Statistics, File > Generate > Image
  * Assets, Edit > Find and Replace Text, Image > Apply Image and Calculations, Image > Analysis
- * (measurement scale, recording, scale marker), Layer > New Layer Based Slice, Artboard and Frame
- * from Layers, File > Open As (with Photoshop Raw), the blend-mode and opacity keys, View > Snap To
+ * (measurement scale, scale marker), Layer > New Layer Based Slice, Artboard and Frame
+ * from Layers, File > Open as Photoshop Raw, the blend-mode and opacity keys, View > Snap To
  * > Layers and Slices, and a grabbed screen as a document. Portable C99, no AmigaOS calls.
  */
 #ifndef EASEL_MENU3_H
@@ -200,10 +200,6 @@ void measure_scale_get(const Doc *d, MeasureScale *s);
 void measure_scale_set(const Doc *d, const MeasureScale *s);
 void measure_forget(const Doc *d);                     /* (a document closed) */
 double measure_len(const Doc *d, double px);           /* a length in pixels in the scale's units */
-/* Record Measurements: a tab-separated line (with a heading line before the first) of the
-   selection's area, perimeter, extent and centre, the Ruler's length and angle (ruler: x0 y0 x1 y1,
-   NULL none) and the counts, appended to log (Buf). The number of the record */
-int  measure_record(Doc *d, const double *ruler, void *logbuf);
 /* Place Scale Marker: a new layer with a bar len units long (in the scale) at the bottom left,
    black or white; its index or -1 */
 int  scale_marker(Doc *d, double len, int white, int height);
@@ -214,12 +210,10 @@ Box  layer_bounds(const Doc *d, int i);                /* what a layer (or group
 int  artboard_from_layers(Doc *d);                     /* the picked layers in a new artboard round them; its index */
 int  frame_from_layer(Doc *d, int i);                  /* the layer placed in a new frame of its size; its index */
 
-/* ------------------------------------------------------------------ File > Open As */
-enum { OA_PNG, OA_JPEG, OA_BMP, OA_ILBM, OA_GIF, OA_RAW, OA_N };
-extern const char *const openas_names[OA_N + 1];
+/* ------------------------------------------------------------------ File > Open as Photoshop Raw */
 typedef struct { i32 w, h; int channels; int interleaved; long header; int bits16; int bigendian; } RawOpts;
-/* data read as format f (OA_) whatever it looks like, as a one-layer document */
-Doc *open_as(const u8 *data, size_t n, int f, const RawOpts *raw, char *err, size_t errcap);
+/* data read as Photoshop Raw (headerless 1-4 channel samples) as a one-layer document */
+Doc *open_raw(const u8 *data, size_t n, const RawOpts *raw, char *err, size_t errcap);
 /* Photoshop Raw's guess: a square (or w x h for the given channels) that the size fits */
 void raw_guess(size_t n, RawOpts *r);
 

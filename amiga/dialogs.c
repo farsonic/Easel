@@ -15,6 +15,7 @@
 #include <proto/muimaster.h>
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
+#include "../core/filesx.h"               /* round 3: JPEG Options' file size */
 #include "easel.h"
 #include "../core/menu3.h"
 #include "../core/filters2.h"
@@ -1660,20 +1661,47 @@ void dlg_load_selection(void)
 }
 
 extern int export_quality;
+/* round 3: JPEG Options shows how big the file will be (a mosaic of the picture encoded at each change) */
+static Rgba jsz_thumb;
+static long jsz_w, jsz_h;
+static Object *jsz_text, *jsz_q, *jsz_pr;
+static void jsz_show(ULONG id)
+{
+  static char b[80];
+  long n;
+  if (id != ID_DLGCHANGE || !jsz_text || !jsz_thumb.px) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  n = jpeg_size_estimate(&jsz_thumb, jsz_w, jsz_h, (int)xget(jsz_q, MUIA_Numeric_Value), (int)xget(jsz_pr, MUIA_Selected));
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (n < 10240) snprintf(b, sizeof b, tr("File size: about %ld bytes"), n);
+  else snprintf(b, sizeof b, tr("File size: about %ld KB"), (n + 512) / 1024);
+  set(jsz_text, MUIA_Text_Contents, (ULONG)b);
+}
 void dlg_export(int fmt)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *q, *pr;
+  Object *w, *q, *pr, *sz;
+  Doc *d = cur_doc();
   if (fmt != FMT_JPEG) return;
   w = dialog_window("JPEG Options", ColGroup(2),
         Child, QLabel(tr("Quality:"), MUIO_Label_Centered), Child, q = slider(1, 100, prefs.jpeg_quality),
         Child, pr = check(jpeg_write_progressive), Child, QLabel(tr("Progressive (shown coarse first while it loads)"), 0),   /* 1.2 */
+        Child, HSpace(0), Child, sz = TextObject, MUIA_Text_Contents, (ULONG)"", End,      /* round 3 */
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Low quality makes small files; JPEG keeps no layers\nor transparency (it is laid over white)."), End,
       End, "Save");
   if (!w) return;
-  if (run_modal(w, ends, NULL) == ID_DLGOK) { prefs.jpeg_quality = export_quality = (int)xget(q, MUIA_Numeric_Value); jpeg_write_progressive = (int)xget(pr, MUIA_Selected); }   /* (1.1: remembered) */
+  jsz_text = NULL;
+  if (d && jpeg_size_thumb(d, &jsz_thumb)) {
+    jsz_text = sz; jsz_q = q; jsz_pr = pr; jsz_w = d->w; jsz_h = d->h;
+    DoMethod(q, MUIM_Notify, MUIA_Numeric_Value, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
+    DoMethod(pr, MUIM_Notify, MUIA_Selected, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
+    jsz_show(ID_DLGCHANGE);
+  }
+  if (run_modal(w, ends, jsz_show) == ID_DLGOK) { prefs.jpeg_quality = export_quality = (int)xget(q, MUIA_Numeric_Value); jpeg_write_progressive = (int)xget(pr, MUIA_Selected); }   /* (1.1: remembered) */
   else export_quality = 0;
   MUI_DisposeObject(w);
+  rgba_free(&jsz_thumb);
+  jsz_text = NULL;
 }
 void dlg_new(void) { }
 

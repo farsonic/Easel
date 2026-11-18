@@ -98,6 +98,8 @@ double tablet_curve(double p, int curve, int floor_pc);
 u8  *abr_write(const Brush *bs, const char *const *names, int n, size_t *len);
 /* .grd (version 5 descriptors, and version 3): gradients added to out (up to max); how many */
 int  grd_read(const u8 *data, size_t n, struct Gradient *out, int max, char *err, size_t errcap);
+/* round 3: and written (version 5, grdw.c), n gradients; malloc'd, NULL if out of memory */
+u8  *grd_write(const struct Gradient *gs, int n, size_t *len);
 /* .pat (8BPT version 1: grey, indexed and RGB, raw or PackBits, 8 bits): patterns added; how many */
 int  pat_read(PatternList *l, const u8 *data, size_t n, char *err, size_t errcap);
 /* and writing one (RGB, raw) so pictures can be taken to other programs */

@@ -29,13 +29,19 @@ static void rgb_of(u32 c, u8 *p) { p[0] = (u8)(c >> 16); p[1] = (u8)(c >> 8); p[
 
 /* a pixel of layer l given colour col (RGB) at coverage cov (0-255) in blend mode; with alpha lock
    its transparency stays as it was */
-static void put_px(Layer *l, u8 *p, const u8 *col, int cov, int blend)
+void paint_px_mode(u8 *p, const u8 *col, int cov, int blend)
 {
   u8 s[4];
+  s[0] = col[0]; s[1] = col[1]; s[2] = col[2]; s[3] = (u8)cov;
+  if (blend == BM_BEHIND) { blend_pixel(s, p, 255, BM_NORMAL); memcpy(p, s, 4); }   /* (what is there laid over the paint) */
+  else if (blend == BM_CLEAR) p[3] = (u8)mul255(p[3], 255 - cov);
+  else blend_pixel(p, s, 255, blend > BM_CLEAR ? BM_NORMAL : blend);
+}
+static void put_px(Layer *l, u8 *p, const u8 *col, int cov, int blend)
+{
   int a = p[3];
   if (cov <= 0) return;
-  s[0] = col[0]; s[1] = col[1]; s[2] = col[2]; s[3] = (u8)cov;
-  blend_pixel(p, s, 255, blend);
+  paint_px_mode(p, col, cov, blend);
   if (l->alpha_lock) {
     if (!a) { p[0] = p[1] = p[2] = 0; }
     p[3] = (u8)a;

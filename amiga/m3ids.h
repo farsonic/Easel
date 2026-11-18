@@ -7,12 +7,12 @@
 enum {
   ID_M3_FIRST = 7300,
   /* File */
-  ID_OPENAS, ID_SAVEFORWEB, ID_EXPPICKED, ID_EXPLUT, ID_EXPPREFS, ID_ASSETS, ID_IMGPROC, ID_STATISTICS, ID_CONTACT,
+  ID_OPENRAW, ID_SAVEFORWEB, ID_EXPPICKED, ID_EXPLUT, ID_ASSETS, ID_IMGPROC, ID_STATISTICS, ID_CONTACT,
   ID_GRABSCREEN, ID_PACKAGE,
   /* Edit */
   ID_FINDREPLACE, ID_RESETTOOL, ID_RESETALLTOOLS,
   /* Image */
-  ID_APPLYIMAGE, ID_CALCULATIONS, ID_MSCALE, ID_MRECORD, ID_MEXPORT, ID_MMARKER, ID_MRULER, ID_MCOUNT,
+  ID_APPLYIMAGE, ID_CALCULATIONS, ID_MSCALE, ID_MMARKER, ID_MRULER, ID_MCOUNT,
   /* Layer */
   ID_LAYERSLICE, ID_ARTBOARDLAYERS, ID_FRAMELAYERS,
   /* View */
@@ -26,7 +26,6 @@ void m3_command(Doc *d, ULONG id);
 void m3_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val));
 void m3_new_doc(void);                 /* File > New (the presets, units, modes, pixel aspect) */
 void m3_doc_closed(Doc *d);            /* (main.c) its measurement scale forgotten */
-int  m3_quick_export(Doc *d, const char *docpath, const char *name);   /* (main.c Quick Export) 1 if menux3.c did it (Export Preferences) */
 extern int m3_pixelart;                /* View > Pixel Art Preview: whole zoom steps, the pixel grid from 400 % */
 extern int m3_flip;                    /* View > Flip Horizontal: the view mirrored (the picture unchanged) */
 extern int m3_slices_locked;           /* View > Lock Slices */

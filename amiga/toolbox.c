@@ -21,6 +21,7 @@
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/paint.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -350,6 +351,14 @@ typedef struct {
 static const char *const blendlist[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
   "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)" };
+/* round 3: the Brush's and Pencil's list, with the painting-only Behind and Clear (core/paint.h) after the layer modes */
+static const char *paintlist[BM_N + 3];
+static const char *const *paint_modes(void)
+{
+  int k;
+  if (!paintlist[0]) { for (k = 0; k < BM_N; k++) paintlist[k] = blendlist[k]; paintlist[BM_BEHIND] = "Behind"; paintlist[BM_CLEAR] = "Clear"; }
+  return paintlist;
+}
 static const char *const samples[NPICK_SIZES] = { "Point Sample", "3 by 3 Average", "5 by 5 Average", "11 by 11 Average", "31 by 31 Average", "51 by 51 Average", "101 by 101 Average" };
 static const char *const layersample[] = { "Current Layer", "Current & Below", "All Layers" };
 /* 1.1 */
@@ -445,7 +454,7 @@ static int fields_for(int t, Field *f)
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
     SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
-  case TL_BRUSH: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
+  case TL_BRUSH: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], paint_modes(), BM_CLEAR + 1);
     SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); SCRUB("Smoothing:", brushui.b.dyn.smoothing, 0, 100, "%");
     CHECK("Airbrush", brushui.b.dyn.buildup); BUTTON("Brush Settings...", ID_WIN_BRUSHSET); break;
   case TL_PATTERN: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
@@ -460,7 +469,7 @@ static int fields_for(int t, Field *f)
     SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Protect Foreground", opt.protect_fg); break;
   case TL_MAGICERASE: SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); CHECK("Anti-alias", opt.antialias);
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
-  case TL_PENCIL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
+  case TL_PENCIL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], paint_modes(), BM_CLEAR + 1); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Smoothing:", brushui.b.dyn.smoothing, 0, 100, "%"); CHECK("Auto Erase", brushui.b.auto_erase); break;
   case TL_ERASER: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", brushui.b.eraser_mode, erasemodes, 3); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Erase to History", opt.erase_history); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;

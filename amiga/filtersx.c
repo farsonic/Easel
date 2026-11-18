@@ -225,7 +225,7 @@ static void color_lookup(void)
   char err[120];
   Lut3D *l;
   if (!d || !mem_ok(area_bytes(d))) return;
-  if (!ui_file_request(0, "Choose a 3D LUT (.cube or .3dl)", lut_path, sizeof lut_path, "#?.(cube|3dl)")) return;
+  if (!ui_file_request(0, "Choose a 3D LUT (.cube, .3dl or .look)", lut_path, sizeof lut_path, "#?.(cube|3dl|look)")) return;
   if (!(l = lut_load_cube(lut_path, err, sizeof err))) { ask("OK", "%s", tr(err)); return; }
   lut_free(lut_cur); lut_cur = l;
   snprintf(info, sizeof info, "%s (%d x %d x %d)", l->title[0] ? l->title : (const char *)FilePart((STRPTR)lut_path), l->n, l->n, l->n);

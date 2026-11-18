@@ -375,11 +375,9 @@ static const u8 *merged_px(Stroke *s, i32 x, i32 y)
 /* src laid on p (straight RGBA) at coverage cov in mode; with alpha lock its transparency stays */
 static void put_px(int alpha_lock, u8 *p, const u8 *col, int cov, int blend)
 {
-  u8 sp[4];
   int a = p[3];
   if (cov <= 0) return;
-  sp[0] = col[0]; sp[1] = col[1]; sp[2] = col[2]; sp[3] = (u8)cov;
-  blend_pixel(p, sp, 255, blend);
+  paint_px_mode(p, col, cov, blend);                     /* (round 3: and Behind and Clear) */
   if (alpha_lock) {
     if (!a) { p[0] = p[1] = p[2] = 0; }
     p[3] = (u8)a;

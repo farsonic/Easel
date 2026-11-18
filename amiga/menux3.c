@@ -1,8 +1,8 @@
 /*
  * menux3.c - Easel 1.3's menu, tool and automation additions on the Amiga side (round 3 of the
- * PhotoCraft gap work): File > Open As, Export > Save for Web (Legacy) (with its 2-up preview, the
+ * PhotoCraft gap work): File > Open as Photoshop Raw, Export > Save for Web (Legacy) (with its 2-up preview, the
  * "Save for Screen" of ADPro's tradition), Export Picked Layers to Files, Color Lookup Tables,
- * Export Preferences, Generate > Image Assets, Scripts > Image Processor and Statistics, Automate >
+ * Generate > Image Assets, Scripts > Image Processor and Statistics, Automate >
  * Contact Sheet II, Import > Grab Screen; Edit > Find and Replace Text, Reset Tool and Reset All
  * Tools; Image > Apply Image, Calculations and Analysis; Layer > New Layer Based Slice, Artboard and
  * Frame from Layers; View > Pixel Art Preview, Flip Horizontal, Fit Artboard on Screen, Snap To >
@@ -167,46 +167,40 @@ static Object *picture(const Rgba *im)
   return NewObject(piccls->mcc_Class, NULL, TextFrame, MUIA_M3Pic_Image, (ULONG)im, MUIA_FillArea, FALSE, TAG_DONE);
 }
 
-/* ================================================================== File > Open As */
-static void open_as_cmd(void)
+/* ================================================================== File > Open as Photoshop Raw */
+static void open_raw_cmd(void)
 {
   static char path[512];
   static RawOpts raw;
   static const ULONG ends[] = { ID_DLGOK, 0 };
+  Object *w, *ws, *hs, *cs, *hd, *il, *b16;
   u8 *data;
   size_t len = 0;
-  int f;
+  int ok;
   Doc *d;
-  char err[120], name[108];
+  char err[120];
   if (!path[0]) strcpy(path, m3dir);
-  if (!m3_file_request(0, "Open a picture as a format of your choice", path, sizeof path, NULL)) return;
-  if (!(f = ask("PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop Raw...|Cancel", "%s", tr("Open the file as which format?")))) return;
-  f--;
+  if (!m3_file_request(0, "Open a file of raw samples", path, sizeof path, NULL)) return;
   if (!(data = file_read(path, &len))) { sayf("%s couldn't be read.", file_part(path)); return; }
-  if (f == OA_RAW) {
-    Object *w, *ws, *hs, *cs, *hd, *il, *b16;
-    int ok;
-    if (!raw.w) raw_guess(len, &raw);
-    w = dialog_window("Photoshop Raw Options", ColGroup(2),
-          Child, label("Width (px):"), Child, ws = numstr(raw.w),
-          Child, label("Height (px):"), Child, hs = numstr(raw.h),
-          Child, label("Channels:"), Child, cs = numstr(raw.channels),
-          Child, label("Header (bytes):"), Child, hd = numstr(raw.header),
-          Child, il = check(raw.interleaved), Child, QLabel(tr("Interleaved"), 0),
-          Child, b16 = check(raw.bits16), Child, QLabel(tr("16 bits a channel (Mac byte order)"), 0),
-        End, "OK");
-    if (!w) { free(data); return; }
-    ok = run_modal(w, ends, NULL) == ID_DLGOK;
-    raw.w = (i32)numof(ws); raw.h = (i32)numof(hs); raw.channels = (int)numof(cs); raw.header = numof(hd);
-    raw.interleaved = (int)xget(il, MUIA_Selected); raw.bits16 = (int)xget(b16, MUIA_Selected); raw.bigendian = 1;
-    MUI_DisposeObject(w);
-    if (!ok) { free(data); return; }
-  }
+  if (!raw.w) raw_guess(len, &raw);
+  w = dialog_window("Photoshop Raw Options", ColGroup(2),
+        Child, label("Width (px):"), Child, ws = numstr(raw.w),
+        Child, label("Height (px):"), Child, hs = numstr(raw.h),
+        Child, label("Channels:"), Child, cs = numstr(raw.channels),
+        Child, label("Header (bytes):"), Child, hd = numstr(raw.header),
+        Child, il = check(raw.interleaved), Child, QLabel(tr("Interleaved"), 0),
+        Child, b16 = check(raw.bits16), Child, QLabel(tr("16 bits a channel (Mac byte order)"), 0),
+      End, "OK");
+  if (!w) { free(data); return; }
+  ok = run_modal(w, ends, NULL) == ID_DLGOK;
+  raw.w = (i32)numof(ws); raw.h = (i32)numof(hs); raw.channels = (int)numof(cs); raw.header = numof(hd);
+  raw.interleaved = (int)xget(il, MUIA_Selected); raw.bits16 = (int)xget(b16, MUIA_Selected); raw.bigendian = 1;
+  MUI_DisposeObject(w);
+  if (!ok) { free(data); return; }
   err[0] = 0;
-  d = open_as(data, len, f, &raw, err, sizeof err);
+  d = open_raw(data, len, &raw, err, sizeof err);
   free(data);
   if (!d) { static char m[300]; snprintf(m, sizeof m, tr("%s couldn't be opened:\n%s"), file_part(path), err[0] ? err : tr("not enough memory")); ask("OK", "%s", m); return; }
-  strncpy(name, file_part(path), sizeof name - 1); name[sizeof name - 1] = 0;
   m3_show(d, "");
 }
 
@@ -347,47 +341,6 @@ static void export_lut(Doc *d)
     sayf("%s couldn't be written (the disk is full or write-protected?).", file_part(path));
   free(text);
 }
-/* Export Preferences: what Quick Export writes */
-int m3_quick_fmt = SFW_PNG24, m3_quick_ask;
-static void export_prefs(void)
-{
-  static const char *const where[] = { "Next to the picture", "Ask each time", NULL };
-  static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *fc, *wc;
-  w = dialog_window("Export Preferences", ColGroup(2),
-        Child, label("Quick Export Format:"), Child, fc = cycle(sfw_names, m3_quick_fmt),
-        Child, label("Quick Export Location:"), Child, wc = cycle(where, m3_quick_ask),
-      End, "OK");
-  if (!w) return;
-  if (run_modal(w, ends, NULL) == ID_DLGOK) { m3_quick_fmt = (int)xget(fc, MUIA_Cycle_Active); m3_quick_ask = (int)xget(wc, MUIA_Cycle_Active); }
-  MUI_DisposeObject(w);
-}
-/* (main.c's Quick Export as PNG asks this) the format chosen; 1 if it isn't PNG-24 and was written */
-int m3_quick_export(Doc *d, const char *docpath, const char *name)
-{
-  SfwOpts o;
-  char path[600];
-  u8 *data;
-  size_t len;
-  if (m3_quick_fmt == SFW_PNG24 && !m3_quick_ask) return 0;
-  sfw_defaults(&o); o.fmt = m3_quick_fmt; o.colors = 256; o.quality = prefs.jpeg_quality;
-  if (docpath && docpath[0]) { strcpy(path, docpath); *PathPart((STRPTR)path) = 0; } else strcpy(path, m3dir);
-  {
-    char nm[120];
-    snprintf(nm, sizeof nm, "%s", name);
-    if (strrchr(nm, '.')) *strrchr(nm, '.') = 0;
-    strncat(nm, sfw_ext(o.fmt), sizeof nm - 1 - strlen(nm));
-    AddPart((STRPTR)path, (STRPTR)nm, sizeof path);
-  }
-  if (m3_quick_ask && !m3_file_request(1, "Quick Export as", path, sizeof path, NULL)) return 1;
-  set(app, MUIA_Application_Sleep, TRUE);
-  data = sfw_encode(d, &o, &len);
-  set(app, MUIA_Application_Sleep, FALSE);
-  if (!data || !file_write(path, data, len)) sayf("%s couldn't be written (the disk is full or write-protected?).", file_part(path));
-  free(data);
-  return 1;
-}
-
 /* ================================================================== File > Package */
 static void package_cmd(Doc *d)
 {
@@ -836,7 +789,6 @@ static void apply_calc(Doc *d, int calc)
 }
 
 /* ================================================================== Image > Analysis */
-static Buf mlog; static int mlog_on;
 static void set_scale(Doc *d)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
@@ -859,29 +811,6 @@ static void set_scale(Doc *d)
     measure_scale_set(d, &s);
   }
   MUI_DisposeObject(w);
-}
-static void record_measurements(Doc *d)
-{
-  static char m[600];
-  const char *last;
-  if (!mlog_on) { buf_init(&mlog); mlog_on = 1; }
-  measure_record(d, ruler_on ? ruler_xy : NULL, &mlog);
-  /* the last line shown */
-  buf_addc(&mlog, 0); mlog.len--;
-  last = mlog.data + mlog.len - 1;
-  while (last > mlog.data && last[-1] != '\n') last--;
-  if (last > mlog.data) { const char *p = last - 1; while (p > mlog.data && p[-1] != '\n') p--; snprintf(m, sizeof m, "%.*s%s", (int)(last - p), p, last); }
-  else snprintf(m, sizeof m, "%s", last);
-  { char *t; for (t = m; *t; t++) if (*t == '\t') *t = ' '; }
-  ask("OK", "%s", m);
-}
-static void export_measurements(void)
-{
-  char path[512];
-  if (!mlog_on || !mlog.len) { say("Nothing has been recorded yet\n(Image > Analysis > Record Measurements)."); return; }
-  strcpy(path, m3dir); AddPart((STRPTR)path, (STRPTR)"Measurements.txt", sizeof path);
-  if (m3_file_request(1, "Export the measurements as", path, sizeof path, NULL) && !file_write(path, mlog.data, mlog.len))
-    sayf("%s couldn't be written (the disk is full or write-protected?).", file_part(path));
 }
 static void place_marker(Doc *d)
 {
@@ -1010,7 +939,7 @@ static void tick(void (*menu_set)(ULONG, ULONG, ULONG), ULONG id, int on) { menu
 void m3_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
 {
   static const ULONG needdoc[] = { ID_PACKAGE, ID_SAVEFORWEB, ID_EXPPICKED, ID_EXPLUT, ID_ASSETS, ID_FINDREPLACE, ID_APPLYIMAGE, ID_CALCULATIONS,
-    ID_MSCALE, ID_MRECORD, ID_MMARKER, ID_LAYERSLICE, ID_ARTBOARDLAYERS, ID_FRAMELAYERS, ID_FITARTBOARD, ID_SNAPLAYERS, ID_SNAPSLICES, ID_CLEARSLICES, 0 };
+    ID_MSCALE, ID_MMARKER, ID_LAYERSLICE, ID_ARTBOARDLAYERS, ID_FRAMELAYERS, ID_FITARTBOARD, ID_SNAPLAYERS, ID_SNAPSLICES, ID_CLEARSLICES, 0 };
   int i;
   for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, d != NULL);
   tick(menu_set, ID_PIXELART, m3_pixelart);
@@ -1028,8 +957,7 @@ void m3_command(Doc *d, ULONG id)
   if (!m3dir[0]) { BPTR l = Lock((STRPTR)"PROGDIR:", ACCESS_READ); if (l) { NameFromLock(l, (STRPTR)m3dir, sizeof m3dir); UnLock(l); } }
   /* those that work without a picture */
   switch (id) {
-  case ID_OPENAS: open_as_cmd(); return;
-  case ID_EXPPREFS: export_prefs(); return;
+  case ID_OPENRAW: open_raw_cmd(); return;
   case ID_IMGPROC: image_processor(); return;
   case ID_STATISTICS: statistics(); return;
   case ID_CONTACT: contact_sheet_cmd(); return;
@@ -1038,7 +966,6 @@ void m3_command(Doc *d, ULONG id)
   case ID_RESETALLTOOLS:
     if (ask("OK|Cancel", "%s", tr("Reset the settings of every tool?"))) { int t; for (t = 0; t < TL_N; t++) reset_tool(t); DoMethod(optbar, MUIM_Opts_Refresh); }
     return;
-  case ID_MEXPORT: export_measurements(); return;
   case ID_MRULER: set_tool(TL_RULER); return;
   case ID_MCOUNT: set_tool(TL_COUNT); return;
   case ID_PIXELART:
@@ -1060,7 +987,6 @@ void m3_command(Doc *d, ULONG id)
   case ID_APPLYIMAGE: apply_calc(d, 0); return;
   case ID_CALCULATIONS: apply_calc(d, 1); return;
   case ID_MSCALE: set_scale(d); return;
-  case ID_MRECORD: record_measurements(d); return;
   case ID_MMARKER: place_marker(d); return;
   case ID_LAYERSLICE:
     if (slice_from_layer(d, d->active) < 0) say("The active layer is empty (or there are 64 slices already).");

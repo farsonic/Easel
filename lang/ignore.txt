@@ -33,8 +33,8 @@ italiano
 Easel
 Liberation Sans
 Easel - %s%s
-#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)
-#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)
+#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo|xcf|gz|kra|krz|pdn|dng|cr2|cr3|nef|nrw|arw|srf|sr2|pef|orf|rw2|raf|3fr|erf|mef|mos|iiq|kdc|dcr)
+#?.(ora|psd|psb|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)
 #?.(gif|anim|anm|iff)
 ModeID
 , EHB
@@ -131,9 +131,24 @@ copper.c
 copper
 # r2-colour: file patterns and colour mode codes
 #?.(icc|icm)
-#?.(cube|3dl)
+#?.(cube|3dl|look)
 CMYK/8
 Lab/8
+# round 3 (r3-files)
+WebP
+-copy%s
+qxfmt=
+qxwhere=
+qxmeta=
+qxsrgb=
+webpq=
+placesmart=
+beepdone=
+Note %d (%ld, %ld) %s\n%s\n\n
+#?.(gradients|ggr|grd)
+Shift
+Alt
+Ctrl
 Look.3dl
 Look.cube
 -assets

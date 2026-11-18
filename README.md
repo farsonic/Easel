@@ -26,22 +26,20 @@ interface and icons. None of the icons are copied from any other program.
 - File > New: presets (built in, from PAL Low Res to A4, and your own, saved and deleted), width and
   height in pixels, inches, centimetres, millimetres, points or picas, the colour mode (Bitmap,
   Grayscale, RGB, CMYK, Lab), the background and the pixel aspect.
-- File > Open As: a file read as the format you choose, or as Photoshop Raw (width, height,
-  channels, header). File > Import > Grab Screen: the frontmost screen as a new picture (a palette
+- File > Open as Photoshop Raw (width, height, channels, header). File > Import > Grab Screen: the frontmost screen as a new picture (a palette
   screen opens indexed, with its colours).
 - File > Export More > Save for Web (Legacy): GIF, PNG-8, PNG-24, JPEG or IFF ILBM with colours,
   palette, dither, quality and matte, the original and the result side by side with the file's size
   and download time - Easel's "Save for Screen". Export As says how big the file will be. Picked
-  Layers to Files, Color Lookup Tables (.cube, .3dl, from the adjustment layers), Export Preferences
-  (Quick Export's format and place), File > Package (the picture and its linked files in a drawer). File > Generate > Image Assets: layers named like files
+  Layers to Files, Color Lookup Tables (.cube, .3dl, from the adjustment layers), File > Package (the picture and its linked files in a drawer). File > Generate > Image Assets: layers named like files
   ("logo.png, 50% logo-small.jpg8") written trimmed into a drawer.
 - File > Scripts > Image Processor (the open pictures or files, to JPEG, PSD, TIFF, PNG and IFF
   ILBM, fitted, with a copyright and icons) and Statistics (the stack modes over files); File >
   Automate > Contact Sheet II (with file names as captions).
 - Edit > Find and Replace Text in the type layers; Reset Tool and Reset All Tools (PhotoCraft's tips);
   Fill from History and Preserve Transparency; Stroke in a blend mode, with Preserve Transparency.
-- Image > Apply Image and Calculations; Image > Analysis: Set Measurement Scale, Record and Export
-  Measurements, Place Scale Marker.
+- Image > Apply Image and Calculations; Image > Analysis: Set Measurement Scale, Record
+  Measurements (into the Measurement Log), Place Scale Marker.
 - Layer: Artboard from Layers, Frame from Layers, New Layer Based Slice.
 - View: Flip Horizontal, Pixel Art Preview (whole zoom steps), Fit Artboard on Screen, Snap To >
   Layers and Slices, Lock Slices and Clear Slices.
@@ -50,6 +48,26 @@ interface and icons. None of the icons are copied from any other program.
   Shift + and Shift - through the blend modes, Shift-[ and Shift-] for the Magnetic Lasso's width
   limits, and each tool letter remembers its last tool between runs. A copyrighted picture's tab
   shows ©.
+
+## New after 1.2 (round 3): other programs' files, export and the timeline
+
+- Opening other programs' documents with their layers: GIMP (.xcf and .xcf.gz, any precision, groups,
+  masks, channels and the selection), Krita (.kra, .krz) and Paint.NET (.pdn, with its own blend
+  modes). Layered TIFF files (Photoshop's layers in the TIFF) open with their layers and a TIFF of
+  several pages opens a layer a page; a picture with layers saved as TIFF keeps them.
+- Camera raw files (DNG, CR2, CR3, NEF, ARW, PEF, ORF, RW2, RAF and more) open from the full-size
+  JPEG the camera keeps in them. OpenEXR's tiled files and the PXR24, B44 and B44A compressions are
+  read. Color Lookup reads SpeedGrade .look files. Photoshop's large documents (.psb) are saved.
+- File > Open As reads a file with the reader you choose, whatever it looks like.
+- EXIF is kept: a JPEG, PNG or WebP's camera data goes back into the JPEG or PNG you save.
+- Preferences > Export: Quick Export's format, where it writes, its metadata and sRGB, and lossy
+  WebP's quality. JPEG Options shows how big the file will be. Exports start in the drawer the last
+  one went to. General: always make placed pictures smart objects, and a beep when a long job is done.
+- Image > Mode > Indexed Color has Photoshop's Matte and Transparency. Edit > Color Settings loads the
+  monitor's ICC profile, which the picture is then shown through.
+- Window > Timeline (the frames with their times; new, delete, tween, reverse, frame times, play),
+  Window > Notes and Window > Measurement Log (the Ruler, the selection's area, perimeter and grey
+  values, the Count tool; exported as text).
 
 ## New in 1.2: colour management, more formats and type
 
@@ -611,6 +629,9 @@ Mode; Edit has the brush and pattern commands).
 | SVG | as shape layers (paths and basic shapes, groups, transforms, fill, stroke) | the paths and shape layers |
 | Workbench icons (.info) | classic (1.x, 2.x and MagicWB colours), NewIcons, GlowIcons, PNG icons | — |
 | Sun raster, SGI, Degas, NEOchrome | every common kind | — |
+| GIMP (.xcf, .xcf.gz), Krita (.kra, .krz), Paint.NET (.pdn) | layers, groups, masks, blend modes, opacity, visibility (GIMP: channels and the selection too) | — |
+| Camera raw (DNG, CR2, CR3, NEF, ARW, PEF, ORF, RW2, RAF...) | the full-size JPEG the camera keeps in the file | — |
+| Layered TIFF, Photoshop PSB | layers | layers |
 
 Saving a picture with layers in a flat format offers to save it as .ora instead, or to flatten
 it. File > Export always writes a flat copy and leaves the picture's own file alone.

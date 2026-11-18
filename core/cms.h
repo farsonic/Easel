@@ -126,6 +126,7 @@ typedef struct {
   int intent, bpc;                    /* how colours are proofed */
   int gamma10;                        /* the display's gamma in tenths (0: an sRGB display) */
   const IccProfile *cmyk;             /* the working CMYK profile (NULL: Easel's press) */
+  const IccProfile *monitor;          /* round 3: the display's own RGB profile (NULL: sRGB, or gamma10) */
 } ViewSpec;
 /* the transform the canvas draws a document through (doc its profile, NULL for untagged = sRGB);
    NULL when it would change nothing, or for want of memory */

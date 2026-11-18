@@ -193,6 +193,9 @@ typedef struct {
      Lab document is edited as RGB and saved in its model) ---- */
   u8 *icc; u32 icclen;
   u8 cmode;
+  /* round 3: the EXIF block an opened file had (a TIFF-structured block as JPEG's APP1 holds it after
+     "Exif\0\0"; malloc'd, NULL for none; not part of undo), written back by filesx.h's exif_embed */
+  u8 *exif; u32 exiflen;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */
