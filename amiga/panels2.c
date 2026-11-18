@@ -260,7 +260,21 @@ static void info_draw(struct IData *d, Object *obj)
   {
     DocView *v = cur_view();
     int i;
-    for (i = 0; v && i < v->nsamp; i++) {
+    for (i = 0; v && v->nsamp > 4 && i < v->nsamp; i++) {
+      /* 1.3: more than four: two to a line, the colour and its code */
+      u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick_ex(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], SAMPLE_ALL, pick_sizes[opt.sample % NPICK_SIZES]) : 0xFFFFFFFFUL;
+      LONG cx = x + (i & 1) * (_mwidth(obj) / 2);
+      sprintf(buf, "#%d", i + 1);
+      theme_text(rp, theme_font(), cx, y, buf, tpen(T_TEXT));
+      if (c != 0xFFFFFFFFUL) {
+        draw_rgb_box(rp, _screen(obj), cx + fh() * 2 + 4, y + 1, cx + fh() * 3 + 2, y + fh() - 1, c);
+        theme_rect(rp, cx + fh() * 2 + 3, y, cx + fh() * 3 + 3, y + fh(), tpen(T_BORDER2));
+        sprintf(buf, "%06lX", (unsigned long)c);
+      } else strcpy(buf, "-");
+      theme_text(rp, theme_font(), cx + fh() * 3 + 10, y, buf, tpen(T_TEXT));
+      if ((i & 1) || i == v->nsamp - 1) y += lh;
+    }
+    for (i = 0; v && v->nsamp <= 4 && i < v->nsamp; i++) {
       u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick_ex(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], SAMPLE_ALL, pick_sizes[opt.sample % NPICK_SIZES]) : 0xFFFFFFFFUL;
       if (c == 0xFFFFFFFFUL) sprintf(buf, "#%d  %s", i + 1, tr("transparent"));
       else {

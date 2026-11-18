@@ -19,6 +19,8 @@
 #include "../core/fx.h"
 #include "../core/layers.h"
 #include "../core/util.h"
+#include "../core/menu3.h"
+#include "clipboard.h"
 
 static struct { Object *strip, *menu, *owner; } ctx[CTX_N];
 static char under_names[CTX_MAXUNDER][40];
@@ -161,6 +163,12 @@ int ctx_command(ULONG id, int *doc, ULONG *then)
     return 1;
   }
   if (id >= ID_CTX_SAMPLE0 && id < ID_CTX_SAMPLE0 + CTX_NSAMPLE) { opt.sample = (int)(id - ID_CTX_SAMPLE0); DoMethod(optbar, MUIM_Opts_Refresh); return 1; }
+  if ((id == ID_CTX_COPYHTML || id == ID_CTX_COPYHEX) && d) {
+    char t[24];
+    if (id == ID_CTX_COPYHTML) color_html(d->fg, t); else color_hex(d->fg, t);
+    clipboard_put_text(t);
+    return 1;
+  }
   if (id >= ID_CTX_PICKFROM0 && id < ID_CTX_PICKFROM0 + 3) { opt.pick_from = (int)(id - ID_CTX_PICKFROM0); DoMethod(optbar, MUIM_Opts_Refresh); return 1; }
   return 0;
 }

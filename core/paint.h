@@ -129,6 +129,11 @@ u8     *brush_dab_preview(const Brush *b, int *w, int *h);
 /* Paint Bucket at x, y: the area like the pixel there (tolerance 0-255; contiguous or every such
    pixel; sampling all layers or the active one) filled with color at opacity 0-100 */
 Box fill_bucket(Doc *d, i32 x, i32 y, u32 color, int tolerance, int contiguous, int all_layers, int opacity, int antialias);
+/* r3: the same in a blend mode (BM_; the options bar's Mode), and the Sample Size the Magic Wand and
+   the Paint Bucket compare with: the average of a similar_sample-pixel square round the click (1: the
+   pixel itself) */
+Box fill_bucket_mode(Doc *d, i32 x, i32 y, u32 color, int tolerance, int contiguous, int all_layers, int opacity, int antialias, int blend);
+extern int similar_sample;
 /* the selection (or everything) filled with color (Edit > Fill), or emptied (Edit > Clear:
    transparent, or the background colour on a layer that can't be transparent) */
 Box fill_selection(Doc *d, u32 color, int opacity, int blend);
@@ -151,6 +156,7 @@ Box shape_ellipse(Doc *d, double x0, double y0, double x1, double y1, u32 color,
 Box shape_line(Doc *d, double x0, double y0, double x1, double y1, double width, u32 color, int opacity);
 /* the selection's edge drawn width pixels wide, inside, centred or outside (Edit > Stroke) */
 Box stroke_selection(Doc *d, int width, int where, u32 color, int opacity);
+Box stroke_selection_mode(Doc *d, int width, int where, u32 color, int opacity, int blend);   /* r3: in a blend mode */
 
 /* ------------------------------------------------------------------ selections */
 enum { SEL_REPLACE, SEL_ADD, SEL_SUBTRACT, SEL_INTERSECT };

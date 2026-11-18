@@ -83,7 +83,7 @@ int main(void)
   s.crop = 1; n = ctx_menu(CTX_CANVAS, &s, &title, it, CTX_MAXITEMS);
   ok("crop pending", n == 2 && it[0].id == ID_COMMIT && it[1].id == ID_CANCEL);
   s = doc(CK_EYEDROP); s.sample = 2; s.pick_from = 1; n = ctx_menu(CTX_CANVAS, &s, &title, it, CTX_MAXITEMS);
-  ok("eyedropper", n == CTX_NSAMPLE + 1 + 3 && (it[2].flags & CTX_TICK) && !(it[0].flags & CTX_TICK) && it[CTX_NSAMPLE + 2].id == ID_CTX_PICKFROM0 + 1 && (it[CTX_NSAMPLE + 2].flags & CTX_TICK));
+  ok("eyedropper", n == CTX_NSAMPLE + 1 + 3 + 3 && it[n - 2].id == ID_CTX_COPYHTML && it[n - 1].id == ID_CTX_COPYHEX && (it[2].flags & CTX_TICK) && !(it[0].flags & CTX_TICK) && it[CTX_NSAMPLE + 2].id == ID_CTX_PICKFROM0 + 1 && (it[CTX_NSAMPLE + 2].flags & CTX_TICK));
   s = doc(CK_SAMPLER); n = ctx_menu(CTX_CANVAS, &s, &title, it, CTX_MAXITEMS);
   ok("sampler clear greyed", it[n - 1].id == ID_SAMPCLEAR && (it[n - 1].flags & CTX_OFF));
   s = doc(CK_TYPE); ok("type over pixels", ctx_menu(CTX_CANVAS, &s, &title, it, CTX_MAXITEMS) == 0);

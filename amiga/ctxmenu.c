@@ -87,6 +87,7 @@ static const char *canvas_menu(Build *b, const CtxState *s)
     for (i = 0; i < CTX_NSAMPLE; i++) add(b, ctx_sample_names[i], ID_CTX_SAMPLE0 + i, i == s->sample ? CTX_TICK : 0);
     bar(b);
     for (i = 0; i < 3; i++) add(b, pick_names[i], ID_CTX_PICKFROM0 + i, i == s->pick_from ? CTX_TICK : 0);
+    bar(b); add(b, "Copy Color as HTML", ID_CTX_COPYHTML, 0); add(b, "Copy Color's Hex Code", ID_CTX_COPYHEX, 0);   /* 1.3 (#12182) */
     return "Eyedropper";
   case CK_SAMPLER:
     for (i = 0; i < CTX_NSAMPLE; i++) add(b, ctx_sample_names[i], ID_CTX_SAMPLE0 + i, i == s->sample ? CTX_TICK : 0);

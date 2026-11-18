@@ -1120,7 +1120,7 @@ static void tab_label(int i, char *buf, size_t cap)
   Doc *doc = v->doc;
   char lay[48];
   to_latin1(doc->lay[doc->active]->name, lay, sizeof lay);
-  snprintf(buf, cap, "%s @ %ld%% (%s, %s)%s", v->name, (long)(v->zoom * 100 + 0.5), lay, doc->mode == MODE_INDEXED ? tr("Indexed") : doc->mode == MODE_GRAY ? tr("Gray/8") : doc->mode == MODE_BITMAP ? tr("Bitmap") : doc->cmode == 1 ? "CMYK/8" : doc->cmode == 2 ? "Lab/8" : "RGB/8", doc->dirty ? "*" : "");   /* (1.2: CMYK and Lab) */
+  snprintf(buf, cap, "%s%s @ %ld%% (%s, %s)%s", doc->info.copyright[0] ? "\251 " : "", v->name,   /* (1.3: \251 a copyrighted picture, #13985) */ (long)(v->zoom * 100 + 0.5), lay, doc->mode == MODE_INDEXED ? tr("Indexed") : doc->mode == MODE_GRAY ? tr("Gray/8") : doc->mode == MODE_BITMAP ? tr("Bitmap") : doc->cmode == 1 ? "CMYK/8" : doc->cmode == 2 ? "Lab/8" : "RGB/8", doc->dirty ? "*" : "");   /* (1.2: CMYK and Lab) */
 }
 static ULONG tabdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {

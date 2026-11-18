@@ -151,7 +151,7 @@ static const char *const tool_help[TL_N] = {
   "Rubs out the area of similar colour where you click, at once.",
   "Selects along edges as you go: click to start, move round the edge (clicking to pin it down), then double-click or press Return. Backspace takes the last point back.",
   "Measures a distance and an angle: drag between two points. Straighten Layer then turns the layer so the line is level.",
-  "Marks up to four points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.",
+  "Marks up to ten points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.",
   /* 1.0 */
   "Paints out spots and blemishes: brush over them, and when you let go they are filled from the picture round them.",
   "Paints with texture from another part of the picture (Alt-click the source first), blended into the colour and light of where you paint when you let go.",
@@ -429,7 +429,8 @@ static int fields_for(int t, Field *f)
   case TL_MAGLASSO: SELOPS(); SCRUB("Width:", opt.ml_width, 1, 256, "px"); SCRUB("Contrast:", opt.ml_contrast, 1, 100, "%"); SCRUB("Frequency:", opt.ml_freq, 0, 100, "");
     CHECK("Anti-alias", opt.sel_antialias); SCRUB("Feather:", opt.feather, 0, 250, "px");
     break;
-  case TL_WAND: SELOPS(); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.sel_antialias); CHECK("Contiguous", opt.contiguous); CHECK("Sample All Layers", opt.all_layers); break;
+  case TL_WAND: SELOPS(); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.sel_antialias); CHECK("Contiguous", opt.contiguous); CHECK("Sample All Layers", opt.all_layers);
+    CHOICE("Sample Size:", opt.wand_sample, samples, NPICK_SIZES); break;   /* (1.3) */
   case TL_CROP:
     for (i = 0; i < ncrop_presets && i < 32; i++) croplist[i] = crop_presets[i].name;
     if (opt.crop_preset >= i) opt.crop_preset = 0;
@@ -438,7 +439,7 @@ static int fields_for(int t, Field *f)
     BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT(opt.crop_straighten ? "Drag along what should be level" : "Drag a box, adjust its handles (drag outside it to turn it), then Return"); break;
   case TL_RULER: TEXT(ruler_info[0] ? ruler_info : "Drag to measure"); BUTTON("Straighten Layer", ID_STRAIGHTEN); CHECK("Whole Picture", opt.ruler_image);
     BUTTON("Clear", ID_RULERCLEAR); break;
-  case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
+  case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to ten; drag one to move it; Alt-click removes it"); break;
   case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); CHOICE("Sample:", opt.pick_from, layersample, 3); TEXT("Alt-click picks the background colour"); break;
   /* 1.0 */
   case TL_SPOTHEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Type:", opt.spot_type, spottypes, 3); break;
@@ -475,6 +476,7 @@ static int fields_for(int t, Field *f)
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Erase to History", opt.erase_history); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
   case TL_BUCKET: CHOICE("Fill:", opt.fill_source, fillsrc, 2);
     if (opt.fill_source && npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
+    CHOICE("Mode:", opt.mode[t], blendlist, BM_N);                       /* (1.3) */
     SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.antialias);
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
   case TL_GRADIENT: if (ngrad_names) CHOICE("", opt.grad_preset, grad_names, ngrad_names);
@@ -496,7 +498,7 @@ static int fields_for(int t, Field *f)
     /* 0.9: the font, its style and size, anti-aliasing, alignment, the colour; Warp, Character, Paragraph */
     Doc *doc = cur_doc();
     for (i = 0; i < font_count() && i < 96; i++) fontlist[i] = font_label(i);
-    if (t == TL_TYPEMASK) SELOPS();
+    if (t == TL_TYPEMASK) { SELOPS(); CHECK("Vertical", opt.tmask_vertical); }     /* (1.3: the Vertical Type Mask) */
     if (i) CHOICE("", opt.text_font, fontlist, i);
     CHOICE("", opt.text_style, tstyles, 4);
     SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 5); CHOICE("", opt.text_align, taligns, 5);

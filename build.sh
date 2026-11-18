@@ -14,6 +14,7 @@ CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and pane
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
 CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"   # r3-image: vector, filter, selection and type extras
 CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c core/modex.c core/timeline.c core/measure.c core/grdw.c"   # round 3: file formats, import and export
+CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation additions
 if [ "$1" != "fast" ]; then
   # 1.1: the interface languages (lang/strings.txt, amiga/lang_table.h, every string translated)
   python3 tools/mklang.py --check && python3 tools/langcheck.py | tail -1
@@ -64,6 +65,7 @@ if [ "$1" != "fast" ]; then
   t toolsxtest;   /tmp/easel_toolsxtest /tmp | tail -1
   # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
   t menutest;     /tmp/easel_menutest | tail -1
+  t menu3test;    /tmp/easel_menu3test /tmp | tail -1
   # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
   # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
   # LittleCMS and ImageMagick check the files and colours

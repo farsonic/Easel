@@ -65,6 +65,7 @@ static void consider(double v, double c, double *best, double *bd)
   double dd = fabs(c - v);
   if (dd < *bd) { *bd = dd; *best = c; }
 }
+int (*snap_extra)(Doc *d, int vertical, int flags, double *out, int max);
 int snap_coord(Doc *d, double *v, int vertical, int flags)
 {
   double tol = snap_tolerance(d), bd = tol + 1e-9, best = *v, size = vertical ? d->w : d->h;
@@ -82,6 +83,12 @@ int snap_coord(Doc *d, double *v, int vertical, int flags)
   }
   if (flags & SNAP_EDGES) { consider(*v, 0, &best, &bd); consider(*v, size, &best, &bd); }
   if (flags & SNAP_CENTER) consider(*v, size / 2, &best, &bd);
+  if (snap_extra && (flags & (64 | 128))) {
+    /* r3: the other layers' edges and centres, the slices' edges (menu3.c) */
+    double e[600];
+    int n = snap_extra(d, vertical, flags, e, 600);
+    for (i = 0; i < n; i++) consider(*v, e[i], &best, &bd);
+  }
   if (bd <= tol) { *v = best; return 1; }
   if (flags & SNAP_PIXEL) { *v = floor(*v + 0.5); return 0; }
   return 0;

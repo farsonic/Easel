@@ -34,6 +34,8 @@
 #include "ids.h"
 #include "fxids.h"                    /* 1.1 */
 #include "mxids.h"                    /* 1.2 */
+#include "m3ids.h"
+#include "../core/menu3.h"
 #include "r3ids.h"                    /* r3-image */
 #include "../core/vecx.h"
 #include "../core/viewx.h"
@@ -166,10 +168,10 @@ static struct NewMenu menus[] = {
   H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
   S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
   S("Clear Recent List", 0, ID_CLEARRECENT),
-  I("Open as Smart Object...", 0, ID_OPENSMART),                                         /* 1.2 */
+  I("Open as Smart Object...", 0, ID_OPENSMART), I("Open as Photoshop Raw...", 0, ID_OPENRAW),   /* 1.2, 1.3 */
   I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), I("Import Frames to Layers...", 0, ID_IMPFRAMES), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
-  I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
+  I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT), I("Package...", 0, ID_PACKAGE),
   H("Export"), S("Export As...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
   S("WebP...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
   S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7),
@@ -180,9 +182,12 @@ static struct NewMenu menus[] = {
   H("Export More"), S("Slices as PNG...", 0, ID_EXPSLICES), S("Artboards as PNG...", 0, ID_EXPARTBOARDS), SBAR,
   S("Raw Bitplanes and Palette...", 0, ID_EXPRAW), S("Bitplanes as C...", 0, ID_EXPCSRC), S("Bitplanes as Assembler...", 0, ID_EXPASM), SBAR,
   S("Sprites as C...", 0, ID_EXPSPRC), S("Sprites as Assembler...", 0, ID_EXPSPRASM), SBAR,
-  S("Copper Gradient as C...", 0, ID_EXPCOPC), S("Copper Gradient as Assembler...", 0, ID_EXPCOPASM), BAR,
+  S("Copper Gradient as C...", 0, ID_EXPCOPC), S("Copper Gradient as Assembler...", 0, ID_EXPCOPASM), SBAR,
+  S("Save for Web (Legacy)...", 0, ID_SAVEFORWEB), S("Picked Layers to Files...", 0, ID_EXPPICKED), S("Color Lookup Tables...", 0, ID_EXPLUT),   /* 1.3 */
+  H("Generate"), S("Image Assets", 0, ID_ASSETS), H("Import"), S("Grab Screen...", 0, ID_GRABSCREEN), BAR,
   H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE), S("Flatten All Layer Effects", 0, ID_FLATTENFX),
-  H("Automate"), S("Batch...", 0, ID_BATCH), S("Conditional Mode Change...", 0, ID_CONDMODE),
+  SBAR, S("Image Processor...", 0, ID_IMGPROC), S("Statistics...", 0, ID_STATISTICS),     /* 1.3 */
+  H("Automate"), S("Batch...", 0, ID_BATCH), S("Conditional Mode Change...", 0, ID_CONDMODE), SBAR, S("Contact Sheet II...", 0, ID_CONTACT),
   I("File Info...", 0, ID_FILEINFO), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
@@ -190,7 +195,7 @@ static struct NewMenu menus[] = {
   I("Fade...", 0, ID_FADE), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
   I("Paste Into", 0, ID_PASTEINTO), I("Paste Outside", 0, ID_PASTEOUTSIDE), I("Paste from Amiga Clipboard", 0, ID_PASTEAMIGA), I("Clear", 0, ID_CLEAR), BAR,
-  I("Search...", 0, ID_SEARCH), BAR,
+  I("Search...", 0, ID_SEARCH), I("Find and Replace Text...", 0, ID_FINDREPLACE), BAR,      /* (1.3) */
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Content-Aware Fill...", 0, ID_CAFILL), I("Stroke...", 0, ID_STROKE), BAR,
   I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN),
   H("Presets"), S("Load Patterns (.pat)...", 0, ID_LOADPAT), S("Load Gradients (.grd)...", 0, ID_LOADGRD), SBAR,      /* 1.2 */
@@ -202,6 +207,7 @@ static struct NewMenu menus[] = {
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("History Options...", 0, ID_HISTOPTS), I("Rename Snapshot...", 0, ID_SNAPRENAME), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
   I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
   I("Color Settings...", 0, ID_COLORSET), I("Assign Profile...", 0, ID_ASSIGNPROF), I("Convert to Profile...", 0, ID_CONVERTPROF), BAR,   /* 1.2 */
+  I("Reset Tool", 0, ID_RESETTOOL), I("Reset All Tools", 0, ID_RESETALLTOOLS),             /* 1.3 */
   I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
   M("Image"),
   H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
@@ -219,6 +225,9 @@ static struct NewMenu menus[] = {
   H("Image Rotation"), S("180\260", 0, ID_IMG_R180), S("90\260 Clockwise", 0, ID_IMG_R90R), S("90\260 Anticlockwise", 0, ID_IMG_R90L), S("Arbitrary...", 0, ID_IMG_RANY), SBAR,
   S("Flip Canvas Horizontal", 0, ID_IMG_FLIPH), S("Flip Canvas Vertical", 0, ID_IMG_FLIPV),
   I("Crop", 0, ID_CROP), I("Trim...", 0, ID_TRIMOPT), BAR, I("Duplicate", 0, ID_DUPIMAGE),
+  I("Apply Image...", 0, ID_APPLYIMAGE), I("Calculations...", 0, ID_CALCULATIONS), BAR,       /* 1.3 */
+  H("Analysis"), S("Set Measurement Scale...", 0, ID_MSCALE), S("Record Measurements", 0, ID_RECORDMEAS), S("Measurement Log", 0, ID_WIN_MLOG), SBAR,
+  S("Ruler Tool", 0, ID_MRULER), S("Count Tool", 0, ID_MCOUNT), S("Place Scale Marker...", 0, ID_MMARKER),
   M("Layer"),
   H("New"), S("Layer", 0, ID_NEWLAYER), S("Layer...", 0, ID_NEWLAYERDLG), S("Group", 0, ID_NEWGROUP), SBAR, S("Layer via Copy", 0, ID_LAYERFROMSEL), S("Layer via Cut", 0, ID_LAYERCUTSEL),
   SBAR, S("Background from Layer", 0, ID_BGFROMLAYER),
@@ -266,7 +275,8 @@ static struct NewMenu menus[] = {
   S("Convert to Linked...", 0, ID_SO_TOLINKED), S("Convert to Embedded", 0, ID_SO_TOEMBEDDED), S("Convert to Layers", 0, ID_SO_TOLAYERS), SBAR,
   S("Reset Transform", 0, ID_SO_RESET), S("Rasterize", 0, ID_SO_RASTER),
   H("Links and Artboards"), S("Link Layers", 0, ID_LINK), S("Unlink Layers", 0, ID_UNLINK), S("Select Linked Layers", 0, ID_SELLINKED), SBAR,
-  S("New Artboard", 0, ID_NEWARTBOARD), S("Artboard from Group", 0, ID_ARTBOARDGROUP), S("Place in Frame", 0, ID_FRAMEPLACE),
+  S("New Artboard", 0, ID_NEWARTBOARD), S("Artboard from Group", 0, ID_ARTBOARDGROUP), S("Artboard from Layers", 0, ID_ARTBOARDLAYERS),   /* (1.3) */
+  S("Place in Frame", 0, ID_FRAMEPLACE), S("Frame from Layers", 0, ID_FRAMELAYERS), SBAR, S("New Layer Based Slice", 0, ID_LAYERSLICE),
   I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP),
   H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE), S("Layer Style", 0, ID_FXRASTER), S("All Layers", 0, ID_RASTERALL),
   H("Stack Mode"), S("Mean", 0, ID_STACKMODE0 + STK_MEAN), S("Median", 0, ID_STACKMODE0 + STK_MEDIAN), S("Minimum", 0, ID_STACKMODE0 + STK_MIN),
@@ -331,7 +341,9 @@ static struct NewMenu menus[] = {
   S("Color to Alpha...", 0, ID_F_COLORALPHA), S("HSB/HSL...", 0, ID_F_HSBHSL),
   M("View"),
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("Fit Layer(s) on Screen", 0, ID_FITLAYERS),
+  I("Fit Artboard on Screen", 0, ID_FITARTBOARD),                                                   /* 1.3 */
   I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), I("Print Size", 0, ID_PRINTSIZE), BAR,
+  T("Flip Horizontal", 0, ID_FLIPVIEW), T("Pixel Art Preview", 0, ID_PIXELART), BAR,                  /* 1.3 */
   /* 1.2: the pixel aspect, the extras, Pattern Preview */
   H("Pixel Aspect Ratio"), ST("Square", ID_PAR0), ST("D1/DV NTSC (0.91)", ID_PAR0 + 1), ST("D1/DV PAL (1.09)", ID_PAR0 + 2), ST("D1/DV NTSC Widescreen (1.21)", ID_PAR0 + 3),
   ST("HDV 1080/DVCPRO HD 720 (1.33)", ID_PAR0 + 4), ST("D1/DV PAL Widescreen (1.46)", ID_PAR0 + 5), ST("DVCPRO HD 1080 (1.5)", ID_PAR0 + 6), ST("Anamorphic 2:1 (2)", ID_PAR0 + 7), SBAR,
@@ -343,8 +355,9 @@ static struct NewMenu menus[] = {
   S("Guides from TV Safe Areas", 0, ID_SAFEGUIDES), SBAR, S("All", 0, ID_SHOWALL), S("None", 0, ID_SHOWNONE),
   T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
   H("Snap To"), ST("Guides", ID_SNAPTO0), ST("Grid", ID_SNAPTO0 + 1), ST("Document Bounds", ID_SNAPTO0 + 2), ST("Centre Lines", ID_SNAPTO0 + 3), ST("Pixels", ID_SNAPTO0 + 4),
+  ST("Layers", ID_SNAPLAYERS), ST("Slices", ID_SNAPSLICES),                                          /* 1.3 */
   I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), I("New Guide Layout...", 0, ID_GUIDELAYOUT), I("New Guides From Shape", 0, ID_GUIDESHAPE),
-  T("Lock Guides", 0, ID_LOCKGUIDES), I("Clear Guides", 0, ID_CLEARGUIDES), BAR, T("Pattern Preview", 0, ID_PATPREVIEW), BAR,
+  T("Lock Guides", 0, ID_LOCKGUIDES), I("Clear Guides", 0, ID_CLEARGUIDES), T("Lock Slices", 0, ID_LOCKSLICES), I("Clear Slices", 0, ID_CLEARSLICES), BAR, T("Pattern Preview", 0, ID_PATPREVIEW), BAR,
   /* 1.2: proofing */
   T("Proof Colors", 0, ID_PROOF), T("Gamut Warning", 0, ID_GAMUT),
   H("Proof Setup"), RC("Working CMYK", ID_PROOFSET0 + PRF_CMYK), RC("Working Cyan Plate", ID_PROOFSET0 + PRF_CYAN), RC("Working Magenta Plate", ID_PROOFSET0 + PRF_MAGENTA),
@@ -734,7 +747,7 @@ static void opts_defaults(void)
 }
 const int sample_layers[3] = { SAMPLE_CURRENT, SAMPLE_BELOW, SAMPLE_ALL };
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
-static signed char key_tool[26];
+signed char key_tool[26];                 /* (1.3: kept in Easel.prefs, prefs.c) */
 int tool_for_key(int c)
 {
   static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
@@ -829,6 +842,7 @@ static void update_menus(void)
   layerstyle_menus(d, menu_set);                         /* 1.1 */
   colorui_menus(has ? d : NULL, menu_set);               /* 1.2 */
   mx_menus(d, menu_set);                                 /* 1.2 */
+  m3_menus(d, menu_set);                                 /* 1.3 */
   menu_set(ID_PASTEOUTSIDE, MUIA_Menuitem_Enabled, has && clip != NULL && d->sel != NULL);
   /* 0.9: type and shape layers' items */
   {
@@ -1661,6 +1675,16 @@ static void export_scaled(void)
   t = exportx_prepare(v->doc, &xo_last);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+  {
+    /* 1.3: the size it will have, before it is written (Save for Web shows it with a preview) */
+    size_t est;
+    char sz[16];
+    set(app, MUIA_Application_Sleep, TRUE);
+    est = export_estimate(t, NULL, fmt, fmt == FMT_JPEG ? export_quality : 0);
+    set(app, MUIA_Application_Sleep, FALSE);
+    size_text(sz, est);
+    if (est && !ask("Export|Cancel", tr("The file will be about %s."), sz)) { doc_free(t); return; }
+  }
   if (write_doc(t, path, fmt)) export_done(path);
   doc_free(t);
 }
@@ -1834,6 +1858,7 @@ static int doc_close(int i)
   comps_forget(docs[i].doc);                             /* 1.2 */
   hsnaps_free(&docs[i]);
   snapshot_free(docs[i].snap);
+  m3_doc_closed(docs[i].doc);                           /* (1.3: its measurement scale) */
   doc_free(docs[i].doc);
   memmove(&docs[i], &docs[i + 1], (size_t)(ndocs - i - 1) * sizeof docs[0]);
   ndocs--;
@@ -1846,19 +1871,6 @@ static int close_all(void)
 {
   while (ndocs) if (!doc_close(ndocs - 1)) return 0;
   return 1;
-}
-static void new_doc(void)
-{
-  LONG w = 800, h = 600, dpi = prefs.dpi;
-  int bg = 0;
-  Doc *d;
-  Doc *c = cur_doc();
-  if (!dlg_new_values(&w, &h, &dpi, &bg)) return;
-  d = doc_new((i32)w, (i32)h, bg == 1 && c ? c->bg : 0xFFFFFF, bg == 2);
-  if (!d) { ask("OK", "%s", tr("There isn't enough memory for a picture that size.")); return; }
-  d->dpi = (u16)dpi;
-  if (c) { d->fg = c->fg; d->bg = c->bg; } else { d->fg = 0; d->bg = 0xFFFFFF; }
-  doc_show(d, "", FMT_ORA);
 }
 static void transform_dialog(void);
 /* 0.8: the window closed and opened again (the theme, its text size or the screen changed) */
@@ -2185,6 +2197,7 @@ static void command(ULONG id)
   if (id > ID_OPENAS && id <= ID_FU_LAST) { if (filesui_command(id)) refresh_all(); return; }   /* round 3 (filesui.c) */
   if (id >= ID_MX_FIRST && id <= ID_MX_LAST && mx_command(d, id)) { refresh_all(); return; }               /* 1.2 (menux.c) */
   if (id >= ID_R3_FIRST && id <= ID_R3_LAST) { r3_command(d, id); refresh_all(); return; }                  /* r3-image (r3image.c) */
+  if (id > ID_M3_FIRST && id < ID_M3_LAST) { m3_command(d, id); refresh_all(); return; }                    /* 1.3 (menux3.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);
@@ -2204,7 +2217,7 @@ static void command(ULONG id)
     return;
   }
   switch (id) {
-  case ID_NEW: new_doc(); return;
+  case ID_NEW: m3_new_doc(); return;                   /* (1.3: presets, units, modes and pixel aspect; menux3.c) */
   case ID_ICONPREF: pref_icons = !pref_icons; update_menus(); return;
   case ID_PASTEAMIGA: paste_amiga(d); refresh_all(); return;
   case ID_OPEN: open_file(); return;
@@ -2816,6 +2829,11 @@ int mx_open(const char *path)
 int mx_write(Doc *d, const char *path) { return write_doc(d, path, ext_fmt(path)); }
 void mx_close_current(void) { if (curdoc >= 0) { docs[curdoc].doc->dirty = 0; doc_close(curdoc); } }
 int mx_file_request(int save, const char *title, char *path, int cap, int drawers) { (void)drawers; return file_request(save, title, path, (size_t)cap, NULL); }
+/* 1.3: services for menux3.c */
+Doc *m3_load(const char *path) { int f; return load(path, &f); }
+int  m3_file_multi(const char *title, char paths[][512], int max) { return file_request_multi(title, paths, max); }
+int  m3_file_request(int save, const char *title, char *path, int cap, const char *pattern) { return file_request(save, title, path, (size_t)cap, pattern); }
+int  m3_show(Doc *d, const char *path) { return doc_show(d, path, FMT_ORA); }
 
 static void pal_redraw(void)
 {

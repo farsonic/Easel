@@ -150,3 +150,9 @@ Note %d (%ld, %ld) %s\n%s\n\n
 Shift
 Alt
 Ctrl
+Look.3dl
+Look.cube
+-assets
+Untitled-assets
+PROGDIR:Easel.newpresets
+PROGDIR:

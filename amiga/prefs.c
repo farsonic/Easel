@@ -13,6 +13,7 @@
 #include <proto/muimaster.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/menu3.h"
 #include "tools2.h"                     /* 1.2 */
 #include "../core/layerx.h"
 #include "theme.h"
@@ -42,9 +43,11 @@ void prefs_defaults(void)
   prefs.qx_fmt = QX_PNG; prefs.qx_where = QW_BESIDE; prefs.qx_meta = 2; prefs.webp_quality = 80;   /* round 3 (2: EXD_ALL) */
 }
 /* (see easel.h) one line of Easel.prefs taken if it is one of these settings; 1 if it was */
+extern signed char key_tool[26];                           /* (main.c) */
 int prefs_line(const char *l)
 {
   if (histopts_line(l)) return 1;                          /* 1.2: History Options and Log */
+  if (!strncmp(l, "toolkeys=", 9)) return toolkeys_parse(l + 9, key_tool, TL_N), 1;   /* 1.3: each letter's last tool */
   static const struct { const char *key; int *v; } ints[] = {
     { "tips=", &prefs.tips }, { "large=", &prefs.large_text }, { "cursor=", &prefs.cursor }, { "capsprecise=", &prefs.caps_precise },
     { "xformnums=", &prefs.xform_numbers }, { "savefmt=", &prefs.save_fmt }, { "jpegq=", &prefs.jpeg_quality },
@@ -80,7 +83,10 @@ int prefs_line(const char *l)
 /* these settings written to Easel.prefs */
 void prefs_write(FILE *f)
 {
+  char tk[200];
   histopts_write(f);                                       /* 1.2 */
+  toolkeys_format(key_tool, tk, sizeof tk);                /* 1.3 */
+  fprintf(f, "toolkeys=%s\n", tk);
   fprintf(f, "tabletcurve=%d\ntabletfloor=%d\ndither=%d\nparcorrect=%d\n", tablet_curve_pc, tablet_floor_pc, display_dither, vx_par_correct);
   fprintf(f, "tips=%d\nlarge=%d\ncursor=%d\ncapsprecise=%d\nxformnums=%d\n", prefs.tips, prefs.large_text, prefs.cursor, prefs.caps_precise, prefs.xform_numbers);
   fprintf(f, "savefmt=%d\njpegq=%d\naskflatten=%d\nnrecent=%d\nrecovery=%s\n", prefs.save_fmt, prefs.jpeg_quality, prefs.ask_flatten, prefs.nrecent, prefs.recovery);
