@@ -76,6 +76,10 @@ enum {
   ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER,
   ID_F_LAST,
   ID_F_AGAIN = 695,
+  /* the Filter Gallery and its effects, Color Lookup, Focus Area, Select and Mask (filtersx.c) */
+  ID_FX_GALLERY = 4600, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE,
+  ID_GX0 = 4650,                      /* .. ID_GX0 + GX_N - 1 (core/gallery.h): the gallery effects */
+  ID_GX_LAST = 4699,
   /* View */
   ID_ZOOMIN = 700, ID_ZOOMOUT, ID_FIT, ID_ACTUAL, ID_ZOOM200, ID_ZOOM50, ID_SHOWEDGES, ID_DARKUI,
   ID_RULERS, ID_SHOWGRID, ID_SHOWGUIDES, ID_SNAP, ID_GRIDSET, ID_NEWGUIDE, ID_CLEARGUIDES, ID_ASPECT,

@@ -62,6 +62,8 @@
 #include "../core/pathops.h"
 #include "../core/shape.h"
 #include "../core/live.h"
+#include "../core/gallery.h"
+#include "dlgx.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -156,7 +158,7 @@ static struct NewMenu menus[] = {
   H("Adjustments"),
   S("Brightness/Contrast...", 0, ID_ADJ_BC), S("Levels...", "L", ID_ADJ_LEVELS), S("Curves...", "M", ID_ADJ_CURVES), S("Exposure...", 0, ID_ADJ_EXPOSURE), SBAR,
   S("Vibrance...", 0, ID_ADJ_VIBRANCE), S("Hue/Saturation...", "U", ID_ADJ_HUESAT), S("Color Balance...", "B", ID_ADJ_BALANCE), S("Black & White...", 0, ID_ADJ_BW),
-  S("Photo Filter...", 0, ID_ADJ_PHOTO), S("Channel Mixer...", 0, ID_ADJ_MIXER), S("Gradient Map...", 0, ID_ADJ_GRADMAP), S("Selective Color...", 0, ID_ADJ_SELCOLOR), SBAR,
+  S("Photo Filter...", 0, ID_ADJ_PHOTO), S("Channel Mixer...", 0, ID_ADJ_MIXER), S("Color Lookup...", 0, ID_FX_LOOKUP), S("Gradient Map...", 0, ID_ADJ_GRADMAP), S("Selective Color...", 0, ID_ADJ_SELCOLOR), SBAR,
   S("Invert", "I", ID_ADJ_INVERT), S("Posterize...", 0, ID_ADJ_POSTERIZE), S("Threshold...", 0, ID_ADJ_THRESHOLD), SBAR,
   S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE), SBAR,
   S("Shadows/Highlights...", 0, ID_ADJ_SHADOWHI), S("Match Color...", 0, ID_ADJ_MATCH), S("Replace Color...", 0, ID_ADJ_REPLACE),     /* 1.0 */
@@ -196,13 +198,14 @@ static struct NewMenu menus[] = {
   I("Merge Down", "E", ID_MERGEDOWN), I("Merge Group", 0, ID_MERGEGROUP), I("Merge Layers", 0, ID_MERGELAYERS), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
   M("Select"),
   I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
-  I("Color Range...", 0, ID_COLORRANGE), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
+  I("Color Range...", 0, ID_COLORRANGE), I("Focus Area...", 0, ID_FX_FOCUS), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
+  I("Select and Mask...", 0, ID_FX_REFINE),
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
   I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR), BAR,
   I("Transform Selection", 0, ID_XFSEL), T("Edit in Quick Mask Mode", 0, ID_QUICKMASK), BAR,
   I("Load Selection...", 0, ID_LOADSEL), I("Save Selection...", 0, ID_SAVESEL),
   M("Filter"),
-  I("Last Filter", "F", ID_F_AGAIN), BAR,
+  I("Last Filter", "F", ID_F_AGAIN), BAR, I("Filter Gallery...", 0, ID_FX_GALLERY),
   I("Lens Correction...", 0, ID_F_LENSCORR), BAR,
   H("Blur"), S("Average", 0, ID_F_AVERAGE), S("Blur", 0, ID_F_BLUR), S("Blur More", 0, ID_F_BLURMORE), SBAR,
   S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
@@ -219,10 +222,19 @@ static struct NewMenu menus[] = {
   H("Stylize"), S("Emboss...", 0, ID_F_EMBOSS), S("Find Edges", 0, ID_F_EDGES), S("Trace Contour...", 0, ID_F_CONTOUR), S("Solarize", 0, ID_F_SOLARIZE),
   S("Oil Paint...", 0, ID_F_OIL), S("Diffuse...", 0, ID_F_DIFFUSE), S("Tiles...", 0, ID_F_TILES), S("Wind...", 0, ID_F_WIND),
   S("Extrude...", 0, ID_F_EXTRUDE), S("Glowing Edges...", 0, ID_F_GLOWEDGES), S("Detect Edges...", 0, ID_F_EDGEDETECT),
-  H("Artistic"), S("Cutout...", 0, ID_F_CUTOUT), S("Film Grain...", 0, ID_F_FILMGRAIN), S("Plastic Wrap...", 0, ID_F_PLASTIC), S("Poster Edges...", 0, ID_F_POSTEREDGES),
-  H("Brush Strokes"), S("Spatter...", 0, ID_F_SPATTER),
-  H("Sketch"), S("Halftone Pattern...", 0, ID_F_HALFTONEPAT), S("Photocopy...", 0, ID_F_PHOTOCOPY),
-  H("Texture"), S("Mosaic Tiles...", 0, ID_F_MOSAICTILES), S("Patchwork...", 0, ID_F_PATCHWORK), S("Stained Glass...", 0, ID_F_STAINEDGLASS), S("Texturizer...", 0, ID_F_TEXTURIZER),
+  H("Artistic"), S("Colored Pencil...", 0, ID_GX0 + GX_COLORED_PENCIL), S("Cutout...", 0, ID_F_CUTOUT), S("Dry Brush...", 0, ID_GX0 + GX_DRY_BRUSH),
+  S("Film Grain...", 0, ID_F_FILMGRAIN), S("Fresco...", 0, ID_GX0 + GX_FRESCO), S("Neon Glow...", 0, ID_GX0 + GX_NEON_GLOW), S("Paint Daubs...", 0, ID_GX0 + GX_PAINT_DAUBS),
+  S("Palette Knife...", 0, ID_GX0 + GX_PALETTE_KNIFE), S("Plastic Wrap...", 0, ID_F_PLASTIC), S("Poster Edges...", 0, ID_F_POSTEREDGES), S("Rough Pastels...", 0, ID_GX0 + GX_ROUGH_PASTELS),
+  S("Smudge Stick...", 0, ID_GX0 + GX_SMUDGE_STICK), S("Sponge...", 0, ID_GX0 + GX_SPONGE), S("Underpainting...", 0, ID_GX0 + GX_UNDERPAINTING), S("Watercolor...", 0, ID_GX0 + GX_WATERCOLOR),
+  H("Brush Strokes"), S("Accented Edges...", 0, ID_GX0 + GX_ACCENTED_EDGES), S("Angled Strokes...", 0, ID_GX0 + GX_ANGLED_STROKES), S("Crosshatch...", 0, ID_GX0 + GX_CROSSHATCH),
+  S("Dark Strokes...", 0, ID_GX0 + GX_DARK_STROKES), S("Ink Outlines...", 0, ID_GX0 + GX_INK_OUTLINES), S("Spatter...", 0, ID_F_SPATTER), S("Sprayed Strokes...", 0, ID_GX0 + GX_SPRAYED_STROKES),
+  S("Sumi-e...", 0, ID_GX0 + GX_SUMI_E),
+  H("Sketch"), S("Bas Relief...", 0, ID_GX0 + GX_BAS_RELIEF), S("Chalk & Charcoal...", 0, ID_GX0 + GX_CHALK_CHARCOAL), S("Charcoal...", 0, ID_GX0 + GX_CHARCOAL),
+  S("Chrome...", 0, ID_GX0 + GX_CHROME), S("Conte Crayon...", 0, ID_GX0 + GX_CONTE_CRAYON), S("Graphic Pen...", 0, ID_GX0 + GX_GRAPHIC_PEN), S("Halftone Pattern...", 0, ID_F_HALFTONEPAT),
+  S("Note Paper...", 0, ID_GX0 + GX_NOTE_PAPER), S("Photocopy...", 0, ID_F_PHOTOCOPY), S("Plaster...", 0, ID_GX0 + GX_PLASTER), S("Reticulation...", 0, ID_GX0 + GX_RETICULATION),
+  S("Stamp...", 0, ID_GX0 + GX_STAMP), S("Torn Edges...", 0, ID_GX0 + GX_TORN_EDGES), S("Water Paper...", 0, ID_GX0 + GX_WATER_PAPER),
+  H("Texture"), S("Craquelure...", 0, ID_GX0 + GX_CRAQUELURE), S("Grain...", 0, ID_GX0 + GX_GRAIN), S("Mosaic Tiles...", 0, ID_F_MOSAICTILES), S("Patchwork...", 0, ID_F_PATCHWORK),
+  S("Stained Glass...", 0, ID_F_STAINEDGLASS), S("Texturizer...", 0, ID_F_TEXTURIZER),
   H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
   S("Lighting Effects...", 0, ID_F_LIGHTING), S("Vignette...", 0, ID_F_VIGNETTE),
   H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC), S("PAL Colors", 0, ID_F_PAL),
@@ -600,7 +612,7 @@ static void update_menus(void)
     ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
     ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
     ID_F_FILMGRAIN, ID_F_CUTOUT, ID_F_POSTEREDGES, ID_F_DIFFUSEGLOW, ID_F_STAINEDGLASS, ID_F_HALFTONEPAT, ID_F_PHOTOCOPY, ID_F_TEXTURIZER,
-    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, 0 };
+    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, ID_FX_GALLERY, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE, 0 };
   /* 0.7: what works on the selection, greyed out while it is being edited as a Quick Mask */
   static const ULONG needsel[] = { ID_SELALL, ID_DESELECT, ID_RESELECT, ID_INVERSE, ID_COLORRANGE, ID_SELALPHA, ID_FEATHER, ID_EXPAND,
     ID_CONTRACT, ID_BORDER, ID_SMOOTH, ID_GROWSIM, ID_SIMILAR, ID_SAVESEL, ID_LOADSEL, ID_XFSEL, 0 };
@@ -610,6 +622,21 @@ static void update_menus(void)
   int i;
   if (!win) return;
   for (i = 0; needdoc[i]; i++) menu_set(needdoc[i], MUIA_Menuitem_Enabled, has);
+  {
+    /* filters and adjustments: none in a Bitmap picture but Invert (as Photoshop; PhotoCraft #10545) */
+    static int was_off;
+    int fx_on = has && d->mode != MODE_BITMAP, off = has && !fx_on;
+    ULONG k;
+    if (off || was_off) for (k = ID_F_GAUSS; k < ID_F_LAST; k++) menu_set(k, MUIA_Menuitem_Enabled, fx_on);
+    if (off || was_off) {
+      for (k = ID_GX0; k < ID_GX0 + GX_N; k++) menu_set(k, MUIA_Menuitem_Enabled, fx_on);
+      for (k = ID_ADJ_BC; k <= ID_ADJ_EQUALIZE; k++) if (k != ID_ADJ_INVERT) menu_set(k, MUIA_Menuitem_Enabled, fx_on);
+    }
+    was_off = off;
+    for (k = ID_ADJ_REPLACE; k <= ID_ADJ_MATCH; k++) menu_set(k, MUIA_Menuitem_Enabled, fx_on);
+    menu_set(ID_F_AGAIN, MUIA_Menuitem_Enabled, fx_on); menu_set(ID_FX_GALLERY, MUIA_Menuitem_Enabled, fx_on); menu_set(ID_FX_LOOKUP, MUIA_Menuitem_Enabled, fx_on);
+    menu_set(ID_AUTOTONE, MUIA_Menuitem_Enabled, fx_on); menu_set(ID_AUTOCONTRAST, MUIA_Menuitem_Enabled, fx_on); menu_set(ID_AUTOCOLOR, MUIA_Menuitem_Enabled, fx_on);
+  }
   for (i = 0; needmask[i]; i++) menu_set(needmask[i], MUIA_Menuitem_Enabled, al && al->mask);
   for (i = 0; needsel[i]; i++) menu_set(needsel[i], MUIA_Menuitem_Enabled, has && !qm);
   menu_set(ID_SELFROMMASK, MUIA_Menuitem_Enabled, al && al->mask && !qm);
@@ -1675,6 +1702,7 @@ static void command(ULONG id)
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
+  if ((id >= ID_FX_GALLERY && id <= ID_FX_REFINE) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);

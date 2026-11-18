@@ -132,8 +132,9 @@ static double strokes(i32 x, i32 y, int dx, int dy, double len, double wid, u32 
 }
 static void light_dir(int k, double *lx, double *ly)
 {
-  static const double s = 0.70710678118654752;
-  static const double t[8][2] = { { 0, 1 }, { -s, s }, { -1, 0 }, { -s, -s }, { 0, -1 }, { s, -s }, { 1, 0 }, { s, s } };
+#define S2 0.70710678118654752
+  static const double t[8][2] = { { 0, 1 }, { -S2, S2 }, { -1, 0 }, { -S2, -S2 }, { 0, -1 }, { S2, -S2 }, { 1, 0 }, { S2, S2 } };
+#undef S2
   k = clampi(k, 0, 7);
   *lx = t[k][0]; *ly = t[k][1];
 }
