@@ -48,6 +48,27 @@ interface and icons. None of the icons are copied from any other program.
   Mask, Ctrl-Shift-B Auto Color, Ctrl-Alt-Shift-L Auto Contrast, Ctrl-Alt-Shift-B Black & White,
   Ctrl-R rulers, Ctrl-' grid, Ctrl-; guides, Ctrl-Shift-; snap, Ctrl-Alt-S Save a Copy, Ctrl-Alt-W
   Close All.
+## New in 1.1: files, animations and SVG
+
+- More formats saved, each from File > Export, Save As (by the name's extension) and EaselConvert:
+  WebP (lossless), PDF (one page, lossless or JPEG), PBM/PGM/PPM/PAM, QOI, Windows icons (every
+  size up to 256), DDS textures (BC1, BC3 or uncompressed, with mipmaps), DPX (8 or 10 bits) and
+  FITS. EaselConvert also writes TIFF, Targa and PSD now.
+- Animations: File > Import Frames to Layers opens every frame of an animated GIF or an IFF ANIM
+  (op 5, as Deluxe Paint writes them) as layers, each named with its time ("Frame 3 (0.10 s)");
+  File > Export > Layers as Animated GIF and Layers as IFF ANIM write the layers back as frames.
+- SVG: drawings open as shape layers that stay editable (paths, rectangles, circles, ellipses,
+  lines and polygons, with their groups, transforms, fill and stroke); File > Export > Paths to SVG
+  writes the paths and shape layers.
+- File: Close Others, Quick Export as PNG, and Scripts: Delete All Empty Layers, Flatten All Masks
+  and Fit Image. Edit > Purge: Undo History, Clipboard and All (every picture's history).
+- Saving an opened JPEG keeps the quality it was saved at; the JPEG Options remember the last
+  quality.
+- Warp Text has six more styles: Arc Lower, Arc Upper, Shell Lower, Shell Upper, Fisheye and
+  Inflate. Layer > Type > Paste Lorem Ipsum fills a type layer with placeholder text, and Convert to
+  Paragraph Text and Convert to Point Text change its kind, the text staying where it is.
+- View > Snap To chooses what snaps (guides, grid, the picture's edges, its centre lines, whole
+  pixels); View > Lock Guides.
 
 ## New in 1.0: filters, adjustments and retouching
 
@@ -394,16 +415,16 @@ Mode; Edit has the brush and pattern commands).
 | Format | Opens | Saves |
 |---|---|---|
 | OpenRaster (.ora) | layers and groups, names, opacity, blend modes, visibility, locks, masks, clipping, adjustment and fill layers | the same: Easel's own format, which GIMP, Krita and MyPaint also open |
-| PNG | every kind, with transparency | 8-bit RGB or RGBA, with resolution |
+| PNG | every kind, with transparency | 8-bit RGB or RGBA, palette or grey by the picture's mode, with resolution and File Info |
 | JPEG | baseline and progressive | baseline, quality 1 to 100 |
 | BMP | 1, 4, 8, 16, 24 and 32-bit, RLE | 24-bit, or 32-bit with transparency |
 | IFF ILBM | 1 to 8 planes, EHB, HAM6, HAM8, 24 and 32-bit deep, PBM; a palette picture opens indexed, with its colour cycling | 24-bit, 256 colours, or with the Amiga options: 1 to 8 planes, EHB, HAM6/HAM8, SHAM, mask, cycling, ModeID |
-| GIF | the first frame, with transparency | 256 colours or the picture's palette |
+| GIF | the first frame, with transparency; every frame as layers (Import Frames to Layers) | 256 colours or the picture's palette; animated, from the layers |
 | TIFF (saving) | see the full list below | LZW: RGB(A), grey, palette, 1-bit |
 | Targa (saving) | see the full list below | run-length: 24/32-bit, grey, colour-mapped |
 | Photoshop PSD | layers (8 and 16-bit RGB and grey), else the flattened picture | layers, masks, groups, blend modes, and the merged picture |
 | AVIF | 8, 10 and 12-bit, 4:2:0, 4:2:2, 4:4:4 and grey, transparency, tiled (grid) pictures, rotation and mirroring | — |
-| WebP | lossy, lossless, with transparency; the first frame of an animation | — |
+| WebP | lossy, lossless, with transparency; the first frame of an animation | lossless |
 | TIFF | the first page: uncompressed, PackBits, LZW, Deflate, CCITT fax, JPEG; 1 to 32-bit and float; grey, palette, RGB, CMYK, Lab; strips or tiles | — |
 | Photoshop PSD/PSB (other kinds) | the flattened picture: 1 to 32-bit, RGB, CMYK, Lab, grey, indexed | — |
 | Targa, PCX, QOI | every common kind | Targa (above) |
@@ -413,7 +434,10 @@ Mode; Edit has the brush and pattern commands).
 | Radiance HDR, FITS, DPX | tone-mapped (HDR) or scaled to 8 bits | — |
 | IFF ACBM, RGBN, RGB8, DEEP | 1 to 8 planes, EHB, HAM, deep; run-length kinds | — |
 | IFF ILBM with SHAM, CTBL or PCHG | the palette changing line by line, as shown on the Amiga | — |
-| IFF ANIM | the first frame | — |
+| IFF ANIM | the first frame; every frame as layers (op 0 and 5) | from the layers (op 5) |
+| PDF | — | one page: the picture lossless or as a JPEG |
+| PBM/PGM/PPM/PAM, QOI, ICO, DDS, DPX, FITS (saving) | see the rows above | PBM/PGM/PPM/PAM; QOI; icons 16-256; DDS BC1, BC3 or uncompressed with mipmaps; DPX 8 or 10 bits; 8-bit FITS |
+| SVG | as shape layers (paths and basic shapes, groups, transforms, fill, stroke) | the paths and shape layers |
 | Workbench icons (.info) | classic (1.x, 2.x and MagicWB colours), NewIcons, GlowIcons, PNG icons | — |
 | Sun raster, SGI, Degas, NEOchrome | every common kind | — |
 
@@ -428,8 +452,8 @@ another screen. `DEBUG=file` writes a log.
 
 ## Not included
 
-Easel leaves out printing and ARexx. Copying pictures to other programs through the clipboard,
-animated brushes and drawing guides by dragging from the rulers may come later.
+Easel leaves out printing and ARexx. Animated brushes and drawing guides by dragging from the
+rulers may come later.
 
 ## Credits and licences
 

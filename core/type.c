@@ -17,7 +17,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-const char *const text_warp_names[TW_N] = { "None", "Arc", "Arch", "Bulge", "Flag", "Wave", "Fish", "Rise", "Squeeze", "Twist" };
+const char *const text_warp_names[TW_N] = { "None", "Arc", "Arch", "Bulge", "Flag", "Wave", "Fish", "Rise", "Squeeze", "Twist",
+  "Arc Lower", "Arc Upper", "Shell Lower", "Shell Upper", "Fisheye", "Inflate" };
 
 static u32 be16(const u8 *p) { return ((u32)p[0] << 8) | p[1]; }
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
@@ -797,6 +798,27 @@ static void map_pt(const Warp *w, double *px, double *py)
       x -= dy * sin(a); y = w->cy + dy * cos(a);
       break;
     }
+    /* 1.1: one edge bent (Arc, Shell: the bent edge also drawn in), the whole bulged from the middle */
+    case TW_ARCLOWER: y += b * H * 0.5 * (1 - u * u) * (v + 1) / 2; break;
+    case TW_ARCUPPER: y -= b * H * 0.5 * (1 - u * u) * (1 - v) / 2; break;
+    case TW_SHELLLOWER: case TW_SHELLUPPER: {
+      double t = w->warp == TW_SHELLLOWER ? (v + 1) / 2 : (1 - v) / 2, c = cos(u * M_PI / 2);
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      y += (w->warp == TW_SHELLLOWER ? 1 : -1) * b * H * 0.5 * c * t;
+      x = w->cx + (x - w->cx) * (1 - 0.3 * b * t);
+      break;
+    }
+    case TW_FISHEYE: {
+      double r2 = u * u + v * v, k = r2 < 1 ? 1 + b * 0.5 * (1 - r2) : 1;
+      x = w->cx + (x - w->cx) * k; y = w->cy + (y - w->cy) * k;
+      break;
+    }
+    case TW_INFLATE: {
+      double vv = v > 1 ? 1 : v < -1 ? -1 : v;
+      x += (x - w->cx) * b * 0.5 * (1 - vv * vv); y += (y - w->cy) * b * 0.5 * (1 - u * u);
+      break;
+    }
     }
   }
   xf_apply(w->tp, &x, &y);
@@ -1200,5 +1222,48 @@ int doc_set_text(Doc *d, int i, const TextParams *tp)
   sanitize((TextParams *)l->live);
   l->live_ok = 0;
   doc_end(d);
+  return 1;
+}
+
+/* ------------------------------------------------------------------ 1.1: Convert to Paragraph / Point Text */
+int text_to_paragraph(TextParams *tp)
+{
+  TextLayout *tl;
+  double lead;
+  if (tp->box || tp->vertical) return 0;
+  if (!(tl = text_layout(tp))) return 0;
+  /* the box round the text as it is laid out, with a little room to spare so nothing wraps anew */
+  lead = tl->nl ? tl->ln[0].ascent + tl->ln[0].descent : tp->run[0].size;
+  tp->x = floor(tl->bx0); tp->y = floor(tl->by0);
+  tp->bw = ceil(tl->bx1 - tp->x) + tp->run[0].size * 0.5 + 1;
+  tp->bh = ceil(tl->by1 - tp->y) + lead;
+  tp->box = 1;
+  text_layout_free(tl);
+  return 1;
+}
+int text_to_point(TextParams *tp)
+{
+  TextLayout *tl;
+  int k;
+  double bx, bw;
+  if (!tp->box || tp->vertical) return 0;
+  if (!(tl = text_layout(tp))) return 0;
+  bx = tp->x; bw = tp->bw;
+  /* a line break where each line wraps (in place of the space it wrapped at), from the end back */
+  for (k = tl->nl - 2; k >= 0; k--) {
+    i32 e = tl->ln[k].end;
+    if (e < (i32)strlen(tp->text) && tp->text[e] == '\n') continue;
+    if (tl->ln[k].hidden) continue;
+    if (e > 0 && tp->text[e - 1] == ' ') tp->text[e - 1] = '\n';
+    else if (e < (i32)strlen(tp->text) && tp->text[e] == ' ') tp->text[e] = '\n';
+    else text_insert(tp, e, "\n", 1);
+  }
+  /* the first baseline, at the alignment point the lines keep */
+  tp->y = tl->nl ? tl->ln[0].base : tp->y + tp->run[0].size;
+  if (tp->align == TA_CENTER) tp->x = bx + bw / 2;
+  else if (tp->align == TA_RIGHT) tp->x = bx + bw;
+  else { tp->x = bx; if (tp->align > TA_RIGHT) tp->align = TA_LEFT; }
+  tp->box = 0;
+  text_layout_free(tl);
   return 1;
 }

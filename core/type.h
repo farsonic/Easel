@@ -28,7 +28,9 @@
 enum { TA_JUSTIFY = 3,                 /* justified, the last line of each paragraph left */
        TA_JUSTIFY_ALL = 4 };           /* every line justified */
 enum { TAA_NONE, TAA_SHARP, TAA_SMOOTH };   /* anti-aliasing: none, sharp (hinted), smooth */
-enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST, TW_N };
+enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST,
+       TW_ARCLOWER, TW_ARCUPPER, TW_SHELLLOWER, TW_SHELLUPPER, TW_FISHEYE, TW_INFLATE,   /* 1.1 */
+       TW_N };
 extern const char *const text_warp_names[TW_N];
 
 typedef struct {
@@ -145,6 +147,11 @@ int  text_coverage(const TextParams *tp, i32 w, i32 h, u8 *mask);
 Path *text_to_path(const TextParams *tp);
 /* the kerning between two glyphs of a face, font units (0 when it has none) */
 int  text_kern(Face *f, u16 left, u16 right);
+
+/* 1.1: Type > Convert to Paragraph Text (a box round the text as it lies) and Convert to Point Text
+   (a line break where each line wrapped, the box dropped); 0 if it is already that kind (or vertical) */
+int  text_to_paragraph(TextParams *tp);
+int  text_to_point(TextParams *tp);
 
 /* ------------------------------------------------------------------ in the document */
 const TextParams *layer_text(const Layer *l);                    /* NULL if it isn't a type layer */

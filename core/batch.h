@@ -1,7 +1,8 @@
 /*
  * batch.h - converting picture files, for the EaselConvert Shell command (amiga/convert.c) and the
  * native tests: any picture Easel reads, optionally resized, written as PNG, JPEG, BMP, IFF ILBM
- * (24-bit or a number of colours), GIF or OpenRaster, optionally with a Workbench icon beside it.
+ * (24-bit or a number of colours), GIF or OpenRaster, optionally with a Workbench icon beside it;
+ * 1.1: also TIFF, Targa, PSD and every xwrite.h format (WebP, PDF, Netpbm, QOI, ICO, DDS, DPX, FITS).
  * Portable C99.
  */
 #ifndef EASEL_BATCH_H
@@ -22,11 +23,14 @@ typedef struct {
   const char *deftool;                /* the icon's default tool (NULL: none) */
   /* a last resort for a file Easel's decoders don't know (the Amiga's datatypes); NULL: none */
   Doc *(*fallback)(const char *path, char *err, size_t errcap);
+  int variant;                        /* 1.1: xwrite_doc's sub (PNM kind, DDS kind, DPX 10 bits, ICO size);
+                                         0 with the format from the name: what its extension asks */
 } BatchOpts;
 void batch_opts_default(BatchOpts *o);
 
-/* the FMT_ for a format name (PNG, JPEG or JPG, BMP, ILBM, IFF or LBM, GIF, ORA; any case) or a
-   file name's extension; FMT_UNKNOWN if none */
+/* the FMT_ for a format name (PNG, JPEG or JPG, BMP, ILBM, IFF or LBM, GIF, ORA; 1.1: TIFF, TGA or
+   TARGA, PSD, WEBP, PDF, PNM/PBM/PGM/PPM/PAM or NETPBM, QOI, ICO or ICON, DDS, DPX, FITS; any case)
+   or a file name's extension; FMT_UNKNOWN if none (FMT_PDF_OUT for PDF, see xwrite.h) */
 int  batch_format_named(const char *name);
 int  batch_format_of_path(const char *path);
 const char *batch_ext(int fmt);                     /* ".png" ... */
