@@ -17,6 +17,10 @@
 #include "core/xread2.h"
 #include "core/modex.h"
 #include "core/cms.h"
+#include "core/timeline.h"
+#include "core/legacy.h"
+#include "core/measure.h"
+#include "core/toolsx.h"
 #include "core/palette.h"
 #include <math.h>
 
@@ -688,6 +692,78 @@ static void test_open_as(void)
   doc_free(d);
 }
 
+/* the Timeline window's frame commands */
+static void test_timeline(void)
+{
+  Doc *d = doc_new(8, 6, 0, 1);
+  Layer *b = layer_new(d, "Frame 2 (0.20 s)");
+  int f[MAXLAYERS], n;
+  long k;
+  for (k = 0; k < 48; k++) { u8 *p = d->lay[0]->px + k * 4; p[0] = 255; p[3] = 255; }       /* red, opaque */
+  for (k = 0; k < 24; k++) { u8 *p = b->px + k * 4; p[2] = 255; p[3] = 255; }                /* blue, top half */
+  doc_set_layer_props(d, 0, "Frame 1 (0.10 s)", -1, -1, -1);
+  doc_add_layer(d, b, 1);
+  doc_forget_undo(d);
+  CHECK(tl_length(d, 10) == 30, "the animation lasts 0.3 s");
+  CHECK(tl_tween(d, 0, 3), "three frames tweened");
+  n = frames_list(d, f, MAXLAYERS);
+  CHECK(n == 5, "five frames");
+  {
+    const u8 *p = d->lay[2]->px, *q = d->lay[2]->px + 40 * 4;   /* the middle tween: top half, bottom half */
+    CHECK(p[0] >= 126 && p[0] <= 129 && p[2] >= 126 && p[2] <= 129 && p[3] == 255, "half red, half blue where both are");
+    CHECK(q[0] == 255 && q[2] == 0 && q[3] >= 126 && q[3] <= 129, "the red fading out where only it is");
+    CHECK(frame_time(d->lay[2]->name) == 10, "a tween takes the first frame's time");
+  }
+  CHECK(tl_length(d, 10) == 60, "now 0.6 s");
+  doc_undo(d);
+  CHECK(frames_list(d, f, MAXLAYERS) == 2, "Tween undone");
+  CHECK(tl_new_frame(d, 1), "a new frame");
+  CHECK(d->nlay == 3 && !strcmp(d->lay[2]->name, "Frame 3 (0.20 s)") && d->active == 2, "a copy named as the third, with its time");
+  CHECK(tl_reverse(d) && !strcmp(d->lay[0]->name, "Frame 3 (0.20 s)") && !strcmp(d->lay[2]->name, "Frame 1 (0.10 s)"), "reversed");
+  CHECK(tl_set_all_times(d, 50) && tl_length(d, 10) == 150, "every frame 0.5 s");
+  CHECK(tl_delete_frame(d, 0) && d->nlay == 2, "a frame deleted");
+  CHECK(tl_delete_frame(d, 0) && !tl_delete_frame(d, 0) && d->nlay == 1, "but not the last");
+  CHECK(!tl_tween(d, 0, 2), "nothing to tween towards");
+  doc_undo(d); doc_undo(d); doc_undo(d); doc_undo(d);
+  CHECK(d->nlay == 3 && !strcmp(d->lay[0]->name, "Frame 1 (0.10 s)"), "all undone");
+  doc_free(d);
+}
+
+/* the Measurement Log */
+static void test_measure(void)
+{
+  Doc *d = doc_new(20, 10, 0xFFFFFF, 0);
+  MeasureRec m;
+  static MeasureLog lg;
+  char line[200], *t;
+  i32 x, y;
+  for (y = 0; y < 10; y++) for (x = 0; x < 10; x++) { u8 *p = d->lay[0]->px + (y * 20 + x) * 4; p[0] = p[1] = p[2] = 0; }   /* the left half black */
+  CHECK(measure_selection(d, &m) && m.count == 200 && fabs(m.area - 200) < 1e-9 && m.perimeter == 60, "the whole canvas: 200 px, 60 round");
+  CHECK(fabs(m.mean - 127.5) < 0.01 && m.minv == 0 && m.maxv == 255 && fabs(m.density - 25500) < 1, "half black, half white");
+  d->sel = (u8 *)calloc(200, 1);
+  for (y = 2; y < 6; y++) for (x = 8; x < 14; x++) d->sel[y * 20 + x] = 255;   /* 6 x 4 over the edge */
+  d->selbox = box_make(8, 2, 14, 6);
+  CHECK(measure_selection(d, &m) && m.count == 24 && m.perimeter == 20 && m.w == 6 && m.h == 4, "a 6 x 4 selection");
+  CHECK(fabs(m.mean - 255.0 * 4 / 6) < 0.01, "two thirds of it white");
+  CHECK(mlog_add(&lg, &m, "Test") == 0, "logged");
+  measure_ruler(0, 0, 3, 4, &m);
+  CHECK(fabs(m.length - 5) < 1e-9, "the ruler's 3-4-5");
+  mlog_add(&lg, &m, "Test");
+  note_add(d, 1, 1, "", "", 0);
+  count_add(d, 3, 3); count_add(d, 5, 5);
+  measure_count(d, &m);
+  CHECK(m.count == 2, "two markers counted");
+  mlog_add(&lg, &m, "Test");
+  mlog_line(&lg.r[1], 1, "Ruler Tool", line, sizeof line);
+  CHECK(strstr(line, "5 px") != NULL, "the ruler's row");
+  t = mlog_text(&lg);
+  CHECK(t && strstr(t, "Measurement 1\tTest\tSelection\t24\t24\t20\t6\t4") && strstr(t, "Measurement 3\tTest\tCount Tool\t2"), "the exported log");
+  free(t);
+  mlog_delete(&lg, 0);
+  CHECK(lg.n == 2 && lg.r[0].source == MS_RULER, "a row deleted");
+  doc_free(d);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -746,6 +822,8 @@ int main(int argc, char **argv)
   test_matte();
   test_monitor();
   test_open_as();
+  test_timeline();
+  test_measure();
   test_exif();
   test_layered();
   test_exr2();

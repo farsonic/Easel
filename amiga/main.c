@@ -359,6 +359,7 @@ static struct NewMenu menus[] = {
   /* 1.2 */
   I("Actions...", 0, ID_WIN_ACTIONS), I("Stop Recording", 0, ID_ACTSTOP), I("Play Action Again", 0, ID_ACTPLAY), I("Styles...", 0, ID_WIN_STYLES), I("Layer Comps...", 0, ID_WIN_COMPS),
   H("Histogram"), ST("Luminosity", ID_HISTCH0), ST("Red", ID_HISTCH0 + 1), ST("Green", ID_HISTCH0 + 2), ST("Blue", ID_HISTCH0 + 3), BAR,
+  I("Timeline", 0, ID_WIN_TIMELINE), I("Notes", 0, ID_WIN_NOTES), I("Measurement Log", 0, ID_WIN_MLOG),   /* round 3 */
   H("Animation"), S("Previous Frame", 0, ID_FRAMEPREV), S("Next Frame", 0, ID_FRAMENEXT), S("Play Frames", 0, ID_FRAMEPLAY), SBAR,
   ST("Onion Skin", ID_ONION), S("Onion Skin Settings...", 0, ID_ONIONSET), S("Frame Time...", 0, ID_FRAMETIME),
   I("Spare Page", 0, ID_SPARE), I("Copy to Spare", 0, ID_COPYSPARE),
@@ -874,6 +875,7 @@ void refresh_panels(void)
   DoMethod(toolbox, MUIM_Tools_Refresh);
   DoMethod(doctabs, MUIM_DocTabs_Refresh);
   DoMethod(statusbar, MUIM_Status_Refresh);
+  filesui_refresh();                                     /* (round 3: Timeline, Notes, Measurement Log) */
   set_title();
   update_menus();
   tools2_menus();                                          /* 1.2 */
@@ -2158,6 +2160,7 @@ static void command(ULONG id)
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
   if (id >= ID_LS_FIRST && id <= ID_LS_LAST) { if (d) layerstyle_command(d, id); refresh_all(); return; }   /* 1.1 (fxdlg.c) */
   if (id >= ID_CU_FIRST && id <= ID_CU_LAST) { colorui_command(d, id); return; }   /* 1.2 (colorui.c) */
+  if (id > ID_OPENAS && id <= ID_FU_LAST) { if (filesui_command(id)) refresh_all(); return; }   /* round 3 (filesui.c) */
   if (id >= ID_MX_FIRST && id <= ID_MX_LAST && mx_command(d, id)) { refresh_all(); return; }               /* 1.2 (menux.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
