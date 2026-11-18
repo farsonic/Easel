@@ -381,12 +381,14 @@ int r3_command(Doc *d, ULONG id)
   case ID_LIQUIFY: liquify(d); break;
   case ID_SELSUBJECT: select_found(d, 0); break;
   case ID_SELSKY: select_found(d, 1); break;
-  case ID_TYPEONPATH: case ID_TYPEOFFPATH: {
-    /* Layer > Type > Type on Active Path, and Off the Path */
-    Path *p = id == ID_TYPEONPATH ? active_path(d) : NULL;
-    if (d->active < 0 || d->active >= d->nlay || !layer_text(d->lay[d->active])) { ask("OK", "%s", tr("Choose a type layer first.")); break; }
-    if (id == ID_TYPEONPATH && (!p || !p->na)) { ask("OK", "%s", tr("Choose a path in the Paths panel first (or draw one with the Pen tool).")); break; }
-    if (!doc_text_on_path(d, d->active, p) && id == ID_TYPEONPATH) ask("OK", "%s", tr("That path is too long to keep with the text."));
+  case ID_TYPEONPATH: case ID_TYPEOFFPATH: case ID_TYPEAREA: {
+    /* Layer > Type > Type on Active Path, Type in Active Path (area type), and Type off the Path */
+    Path *p = id != ID_TYPEOFFPATH ? active_path(d) : NULL;
+    const TextParams *tp;
+    if (d->active < 0 || d->active >= d->nlay || !(tp = layer_text(d->lay[d->active]))) { ask("OK", "%s", tr("Choose a type layer first.")); break; }
+    if (id != ID_TYPEOFFPATH && (!p || !p->na)) { ask("OK", "%s", tr("Choose a path in the Paths panel first (or draw one with the Pen tool).")); break; }
+    if (id == ID_TYPEOFFPATH) { if (tp->area) doc_text_in_area(d, d->active, NULL); else doc_text_on_path(d, d->active, NULL); }
+    else if (!(id == ID_TYPEAREA ? doc_text_in_area(d, d->active, p) : doc_text_on_path(d, d->active, p))) ask("OK", "%s", tr("That path is too long to keep with the text."));
     break; }
   default: break;
   }

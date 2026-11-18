@@ -32,9 +32,13 @@ interface and icons. None of the icons are copied from any other program.
   colours; Curves loads and saves Photoshop's .acv files.
 - Select > Subject and Sky, without trained models; Select and Mask can Decontaminate Colors when
   it makes a new layer.
-- Type: horizontal and vertical scale (Character), Crisp and Strong anti-aliasing, hyphenation of
-  paragraph text (Paragraph; patterns from a Hyphen .dic file in the Dict drawer, as Quill's), and
-  the contextual OpenType lookups, so Contextual Alternates and Fractions work.
+- Type: type on a path and area type (Layer > Type > Type on Active Path, Type in Active Path),
+  horizontal and vertical scale (Character), Crisp and Strong anti-aliasing, hyphenation of
+  paragraph text (Paragraph; patterns from a Hyphen .dic file in the Dict drawer, as Quill's), the
+  contextual OpenType lookups (so Contextual Alternates and Fractions work), and Ctrl-. throws a
+  type edit away.
+- Painting: symmetry along a path; Shift-Alt-click with a painting tool places a colour sampler;
+  the colour picker has CMYK fields and Only Web Colors.
 - Shapes: gradient and pattern fills, a radius for each corner, Layer > Combine Shapes (Unite,
   Subtract Front Shape, Intersect, Exclude, Merge Shape Components), sixteen built-in custom shapes
   on the Custom Shape tool's options bar; Fill Path with a pattern or the history.

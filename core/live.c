@@ -75,6 +75,7 @@ static void save_text(Buf *b, const TextParams *tp)
   kv_num(b, "align", tp->align); kv_num(b, "aa", tp->aa); kv_num(b, "kern", tp->kern);
   if (tp->hyphenate) kv_num(b, "hy", 1);                   /* r3 */
   if (tp->path[0]) kv_str(b, "tpath", tp->path);           /* r3: type on a path */
+  if (tp->path[0] && tp->area) kv_num(b, "tarea", 1);      /* (r3: area type) */
   if (tp->vertical) kv_num(b, "vert", 1);
   if (tp->leading) kv_num(b, "lead", tp->leading);
   if (tp->indent) kv_num(b, "indent", tp->indent);
@@ -179,6 +180,7 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "aa")) tp->aa = (u8)(x >= 0 && x <= 4 ? x : 2);        /* (r3: up to Strong) */
     else if (!strcmp(k, "kern")) tp->kern = x != 0;
     else if (!strcmp(k, "hy")) tp->hyphenate = x != 0;          /* r3 */
+    else if (!strcmp(k, "tarea")) tp->area = x != 0;
     else if (!strcmp(k, "tpath")) { dec(v); strncpy(tp->path, v, TP_MAXPATH - 1); tp->path[TP_MAXPATH - 1] = 0; }
     else if (!strcmp(k, "vert")) tp->vertical = x != 0;
     else if (!strcmp(k, "lead")) tp->leading = x;

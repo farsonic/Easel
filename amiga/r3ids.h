@@ -17,6 +17,7 @@
 #define ID_SELSKY       7721
 #define ID_TYPEONPATH   7740
 #define ID_TYPEOFFPATH  7741
+#define ID_TYPEAREA     7742
 #define ID_R3_LAST      7899
 
 #include "../core/doc.h"

@@ -575,6 +575,43 @@ static i32 hyphen_at(const TextParams *tp, TextLayout *tl, const RunFont *rf, i3
   }
   return best;
 }
+/* r3: area type: the widest stretch inside the closed polygon pl across heights ya..yb (looked at
+   three heights; even-odd); 0 if there is none */
+static int spans_at(const Poly *pl, double y, double *xs, int max)
+{
+  i32 c, s = 0, i;
+  int n = 0, a, b;
+  for (c = 0; c < pl->nc; s = pl->end[c], c++) {
+    i32 m = pl->end[c] - s;
+    for (i = 0; i < m; i++) {
+      const double *p = pl->xy + 2 * (s + i), *q = pl->xy + 2 * (s + (i + 1) % m);
+      if ((p[1] <= y) == (q[1] <= y) || n >= max) continue;
+      xs[n++] = p[0] + (y - p[1]) * (q[0] - p[0]) / (q[1] - p[1]);
+    }
+  }
+  for (a = 1; a < n; a++) { double v = xs[a]; b = a - 1; while (b >= 0 && xs[b] > v) { xs[b + 1] = xs[b]; b--; } xs[b + 1] = v; }
+  return n & ~1;
+}
+static int area_span(const Poly *pl, double ya, double yb, double *x0, double *x1)
+{
+  double xs[3][64], ys[3], a = 0, b = 0;
+  int n[3], k, i, have = 0;
+  ys[0] = (ya + yb) / 2; ys[1] = ya; ys[2] = yb;
+  for (k = 0; k < 3; k++) n[k] = spans_at(pl, ys[k], xs[k], 64);
+  for (i = 0; i + 1 < n[0]; i += 2) if (!have || xs[0][i + 1] - xs[0][i] > b - a) { a = xs[0][i]; b = xs[0][i + 1]; have = 1; }
+  if (!have) return 0;
+  for (k = 1; k < 3; k++) {
+    double ba = 0, bb = 0, best = -1;
+    for (i = 0; i + 1 < n[k]; i += 2) {
+      double lo = xs[k][i] > a ? xs[k][i] : a, hi = xs[k][i + 1] < b ? xs[k][i + 1] : b;
+      if (hi - lo > best) { best = hi - lo; ba = lo; bb = hi; }
+    }
+    if (best <= 0) return 0;
+    a = ba; b = bb;
+  }
+  *x0 = a; *x1 = b;
+  return 1;
+}
 TextLayout *text_layout(const TextParams *tpin)
 {
   TextLayout *tl = (TextLayout *)calloc(1, sizeof *tl);
@@ -583,16 +620,31 @@ TextLayout *text_layout(const TextParams *tpin)
   i32 n, ps, cap, li = 0;
   double base = 0, prev_after = 0;
   int first_line = 1, hide = 0;
+  Poly area_pl;                                           /* r3: area type's shape */
+  int area_on = 0;
   if (!tl) return NULL;
+  poly_init(&area_pl);
   if (!(tp = tl->tp = (TextParams *)malloc(sizeof *tp))) { free(tl); return NULL; }
   *tp = *tpin;
   sanitize(tp);
+  if (tp->path[0] && tp->area) {
+    /* r3: area type: paragraph text in the shape's box, each line as wide as the shape is there */
+    Path *ap = path_from_svg(tp->path);
+    double x0, y0, x1, y1;
+    poly_init(&area_pl);
+    if (ap && path_bounds(ap, &x0, &y0, &x1, &y1) && path_flatten(ap, 0.5, &area_pl) && area_pl.nc) {
+      tp->box = 1; tp->vertical = 0; tp->warp = TW_NONE;
+      tp->x = x0; tp->y = y0; tp->bw = x1 - x0; tp->bh = y1 - y0;
+      area_on = 1;
+    }
+    path_free(ap);
+  }
   tl->vertical = tp->vertical;
   n = (i32)strlen(tp->text);
   cap = n + 1;
   if (!(rf = (RunFont *)malloc((size_t)tp->nruns * sizeof *rf)) ||
       !(tl->g = (TGlyph *)calloc((size_t)cap, sizeof(TGlyph))) || !(tl->ln = (TLine *)calloc((size_t)cap + 1, sizeof(TLine)))) {
-    free(rf); text_layout_free(tl); return NULL;
+    free(rf); poly_free(&area_pl); text_layout_free(tl); return NULL;
   }
   {
     int r;
@@ -653,10 +705,27 @@ TextLayout *text_layout(const TextParams *tpin)
     k = g0;
     do {
       i32 j = k, brk = -1;
-      double w = 0, asc = 0, desc = 0, lead = 0, start, lw, extra = 0;
+      double w = 0, asc = 0, desc = 0, lead = 0, start, lw, extra = 0, area_skip = 0, area_x0 = 0;
       int nsp = 0, last_of_par;
       TLine *L = &tl->ln[tl->nl];
       avail = tp->box ? (tp->vertical ? tp->bh : tp->bw - tp->indent_left - tp->indent_right - (k == g0 ? tp->indent : 0)) : 1e30;
+      area_skip = 0;
+      if (area_on && !hide) {
+        /* r3: where this line's baseline will be (as below, with the first glyph's font), moved down
+           until the shape is wide enough there; its width and left edge from the shape */
+        const RunFont *f0 = &rf[k < tl->ng ? tl->g[k].run : text_run_at(tp, ps)];
+        double eb, st = tp->leading > 0 ? tp->leading : f0->lead, sx0, sx1, need = 0;
+        i32 q;
+        for (q = k; q < tl->ng && q < k + 40 && !is_space(tl->g[q].cp); q++) need += tl->g[q].adv;   /* (its first word) */
+        if (first_line) eb = tp->y + tp->space_before + f0->asc;
+        else eb = base + st + (k == g0 ? prev_after + tp->space_before : 0);
+        for (;;) {
+          if (eb + f0->desc > tp->y + tp->bh + 0.5) { hide = 1; break; }
+          if (area_span(&area_pl, eb - f0->asc, eb + f0->desc, &sx0, &sx1) && sx1 - sx0 - tp->indent_left - tp->indent_right >= need) break;
+          eb += st > 1 ? st / 2 : 1; area_skip += st > 1 ? st / 2 : 1;
+        }
+        if (!hide) { area_x0 = sx0; avail = sx1 - sx0 - tp->indent_left - tp->indent_right - (k == g0 ? tp->indent : 0); }
+      }
       while (j < tl->ng) {
         TGlyph *g = &tl->g[j];
         if (w + g->adv > avail + 1e-9 && j > k && !is_space(g->cp)) {
@@ -695,7 +764,7 @@ TextLayout *text_layout(const TextParams *tpin)
       for (i = j - 1; i >= k && is_space(tl->g[i].cp); i--) nsp--;
       /* where it starts */
       if (tp->box) {
-        double lo = tp->vertical ? tp->y : tp->x + tp->indent_left + (k == g0 ? tp->indent : 0), room = avail - lw;
+        double lo = tp->vertical ? tp->y : (area_on ? area_x0 : tp->x) + tp->indent_left + (k == g0 ? tp->indent : 0), room = avail - lw;
         int al = tp->align;
         start = lo;
         /* 1.2: a justified paragraph's last line left, centred or right */
@@ -718,6 +787,7 @@ TextLayout *text_layout(const TextParams *tpin)
         if (k == g0) step += prev_after + tp->space_before;
         base += tp->vertical ? -step : step;
       }
+      base += area_skip;                                  /* (r3: area type: below where the shape was too narrow) */
       L->base = base; L->ascent = asc; L->descent = desc;
       if (tp->box && !tp->vertical && tp->bh > 0 && base + desc > tp->y + tp->bh + 0.5) hide = 1;
       if (tp->box && tp->vertical && tp->bw > 0 && base - asc < tp->x - 0.5) hide = 1;
@@ -762,6 +832,7 @@ TextLayout *text_layout(const TextParams *tpin)
   }
   if (tl->bx0 > tl->bx1) { tl->bx0 = tl->bx1 = tp->x; tl->by0 = tl->by1 = tp->y; }
   free(rf);
+  poly_free(&area_pl);
   return tl;
 }
 void text_layout_free(TextLayout *tl)
@@ -936,7 +1007,7 @@ static void path_init(Warp *w, const TextParams *tp, const TextLayout *tl)
   Poly pl;
   i32 n, i, step;
   w->np = 0; w->pxy = w->cum = NULL;
-  if (!tp->path[0] || !(p = path_from_svg(tp->path))) return;
+  if (!tp->path[0] || tp->area || !(p = path_from_svg(tp->path))) return;
   if (!(w->pxy = (double *)malloc(3 * WP_MAX * sizeof(double)))) { path_free(p); return; }
   w->cum = w->pxy + 2 * WP_MAX;
   poly_init(&pl);
@@ -1454,13 +1525,37 @@ int doc_text_on_path(Doc *d, int i, const Path *p)
     free(svg);
     if (!(first = path_from_svg(tp->path)) || !path_bounds(first, &x0, &y0, &x1, &y1)) { path_free(first); free(tp); return 0; }
     path_free(first);
-    tp->box = 0; tp->x = 0; tp->y = 0; tp->warp = TW_NONE; tp->vertical = 0;
+    tp->box = 0; tp->x = 0; tp->y = 0; tp->warp = TW_NONE; tp->vertical = 0; tp->area = 0;
   } else {
     Box b = text_bounds(cur);
-    if (!cur->path[0]) { free(tp); return 0; }
+    if (!cur->path[0] || cur->area) { free(tp); return 0; }
     tp->path[0] = 0;
     /* off the path: a line of point text where it began */
     tp->x = b.x0; tp->y = b.y1;
+  }
+  ok = doc_set_text(d, i, tp);
+  free(tp);
+  return ok;
+}
+int doc_text_in_area(Doc *d, int i, const Path *p)
+{
+  const TextParams *cur;
+  TextParams *tp;
+  int ok;
+  if (i < 0 || i >= d->nlay || !(cur = layer_text(d->lay[i]))) return 0;
+  if (!(tp = (TextParams *)malloc(sizeof *tp))) return 0;
+  *tp = *cur;
+  if (p) {
+    char *svg = path_to_svg(p);
+    double x0, y0, x1, y1;
+    if (!svg || !p->na || strlen(svg) >= TP_MAXPATH || !path_bounds(p, &x0, &y0, &x1, &y1) || x1 - x0 < 1 || y1 - y0 < 1) { free(svg); free(tp); return 0; }
+    strcpy(tp->path, svg);
+    free(svg);
+    tp->area = 1; tp->box = 1; tp->x = x0; tp->y = y0; tp->bw = x1 - x0; tp->bh = y1 - y0;
+    tp->warp = TW_NONE; tp->vertical = 0;
+  } else {
+    if (!cur->path[0] || !cur->area) { free(tp); return 0; }
+    tp->path[0] = 0; tp->area = 0;                        /* (paragraph text in the shape's box) */
   }
   ok = doc_set_text(d, i, tp);
   free(tp);

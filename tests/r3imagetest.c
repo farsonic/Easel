@@ -858,6 +858,45 @@ static void test_type(void)
     path_free(p);
     doc_free(d);
   }
+  /* area type: in a triangle standing on its base, the lines widen downwards and stay inside */
+  {
+    Doc *d = doc_new(400, 400, 0xFFFFFF, 0);
+    TextParams t0;
+    Path *p = path_new();
+    TextLayout *al;
+    int li, ok = 1, wider = 1;
+    i32 i;
+    double prevw = -1;
+    text_params_init(&t0, "Carlito", 16, 0, 10, 10);
+    text_set_string(&t0, "Area type fills the inside of a shape the way paragraph text fills its box, each line as wide as the shape is at its height, so this text should take a triangle's form.");
+    li = doc_new_text(d, &t0, NULL);
+    path_move_to(p, 200, 20); path_line_to(p, 380, 380); path_line_to(p, 20, 380); path_close(p);
+    CHECK(li >= 0 && doc_text_in_area(d, li, p), "text put in a triangle");
+    al = text_layout(layer_text(d->lay[li]));
+    CHECK(al && al->nl >= 5, "several lines");
+    if (al)
+      for (i = 0; i < al->nl; i++) {
+        const TLine *L = &al->ln[i];
+        double y = L->base, half = (y - L->ascent - 20) / 360.0 * 180;   /* (the triangle's half width at the line's top) */
+        if (L->hidden || L->g1 == L->g0) continue;
+        if (L->x0 < 200 - half - 1 || L->x1 > 200 + (y + L->descent - 20) / 360.0 * 180 + 1) ok = 0;
+        if (i + 1 < al->nl && !al->ln[i + 1].hidden && al->ln[i + 1].g1 < al->ng && L->x1 - L->x0 < prevw - 30) wider = 0;
+        prevw = L->x1 - L->x0;
+      }
+    CHECK(ok, "every line inside the triangle");
+    CHECK(wider, "the lines wider further down");
+    text_layout_free(al);
+    {
+      char *sv = live_save(d->lay[li]);
+      Layer l2;
+      memset(&l2, 0, sizeof l2);
+      CHECK(sv && strstr(sv, "tarea=1") && live_load(&l2, LK_TEXT, sv) && layer_text(&l2)->area, "area type kept");
+      free(sv); free(l2.live);
+    }
+    CHECK(doc_text_in_area(d, li, NULL) && !layer_text(d->lay[li])->path[0] && layer_text(d->lay[li])->box, "back to paragraph text in the box");
+    path_free(p);
+    doc_free(d);
+  }
   /* contextual alternates and fractions (GSUB lookups 6), for check_r3.py to redo with fontTools */
   snprintf(path, sizeof path, "%s/r3_gsub.txt", tmpdir);
   gf = fopen(path, "w");

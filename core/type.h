@@ -105,7 +105,9 @@ typedef struct TextParams {
   double indent_left, indent_right;   /* 1.2: paragraph text's left and right indents, pixels */
   i32 nruns;
   u8 hyphenate;                       /* r3: paragraph text breaks words at their hyphenation points (hyphen.h) */
-  u8 pad2[3];
+  u8 area;                            /* r3: with path set, area type: the text fills the path's inside
+                                         as paragraph text fills its box */
+  u8 pad2[2];
   TextRun run[TP_MAXRUNS];
   char text[TP_MAXTEXT];
   char path[TP_MAXPATH];              /* r3: type on a path: SVG path data ("" none). The text runs along the
@@ -116,6 +118,10 @@ typedef struct TextParams {
 /* r3: type layer i's text put on path p (its first subpath; NULL takes it off the path, where it
    lay); one undo step. 0 if it isn't a type layer, the path is empty or too long to keep */
 int  doc_text_on_path(Doc *d, int i, const Path *p);
+/* r3: area type: type layer i's text flowed inside closed path p (paragraph text whose lines take
+   the width the shape has at their height); NULL makes it paragraph text in the shape's box. One
+   undo step; 0 as doc_text_on_path */
+int  doc_text_in_area(Doc *d, int i, const Path *p);
 
 /* ------------------------------------------------------------------ fonts */
 /* how a run's family and style become a face: set by the UI (the default looks in text_fonts,
