@@ -15,6 +15,8 @@
 #include "core/fx.h"
 #include "core/viewx.h"
 #include "core/actions.h"
+#include "core/picinfo.h"
+#include "core/codec.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -258,8 +260,27 @@ static void test_histogram(void)
   doc_free(d);
 }
 
+static void test_picinfo(void)
+{
+  Doc *d = doc_new(32, 20, 0x112233, 0);
+  Rgba im;
+  u8 *png;
+  size_t n;
+  char err[100], *t;
+  im.w = 32; im.h = 20; im.px = (u8 *)malloc(32 * 20 * 4);
+  doc_composite(d, doc_box(d), im.px, 32 * 4);
+  png = png_encode(&im, 144, &n);
+  t = png ? picture_info(png, n, err, sizeof err) : NULL;
+  CHECK(t && strstr(t, "Format: PNG\n") && strstr(t, "Size: 32 x 20 pixels\n") && strstr(t, "Resolution: 144 dpi\n") && strstr(t, "Layers: 1 (1 pixel"), "a PNG described");
+  free(t);
+  CHECK(!picture_info((const u8 *)"nonsense!", 9, err, sizeof err) && err[0], "not a picture: a message");
+  free(png); free(im.px);
+  doc_free(d);
+}
+
 int main(void)
 {
+  test_picinfo();
   test_par();
   test_guides();
   test_trim();

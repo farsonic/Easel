@@ -4,8 +4,9 @@
  *
  * An action is a plain list of steps, each a menu command (its ID and the name it was recorded
  * under), played back in order. There is no scripting language and nothing is controlled from
- * outside Easel (that would be ARexx's role, which Easel leaves out): a step whose command has a
- * dialog shows it when the step's dialog toggle is on, else it is done with the settings last used.
+ * outside Easel (that would be ARexx's role, which Easel leaves out). A step whose command has a
+ * dialog shows the dialog as it plays (each step's dialog flag is kept in the file for when dialogs
+ * can be skipped with their last settings).
  */
 #ifndef EASEL_ACTIONS_H
 #define EASEL_ACTIONS_H
