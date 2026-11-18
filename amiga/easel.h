@@ -115,7 +115,21 @@ typedef struct {
   int poly_sides, poly_star, poly_indent;   /* polygon: 3-100 sides, a star, its indent per cent */
   int arrow_start, arrow_end;         /* line: arrowheads */
   int round_radius;                   /* rounded rectangle: corner radius */
+  /* 1.1 (core/toolopts.h) */
+  int protect_tones, vibrance, sponge_mode;   /* dodge and burn (range is their TR_ less one); sponge: vibrance, 0 desaturate 1 saturate */
+  int clone_sample, clone_aligned;    /* clone stamp, healing brush: 0 current layer, 1 current & below, 2 all; Aligned */
+  int pick_from;                      /* eyedropper: the same three (sample is its pick_sizes[] index) */
+  int erase_history;                  /* eraser: Erase to History */
+  int finger_paint, protect_detail;   /* smudge; sharpen */
+  int move_group, move_bounds;        /* move: Auto-Select picks the group; the layer's bounding box shown */
+  int crop_overlay, crop_straighten;  /* crop: CO_; a drag draws the line to straighten by */
+  int zoom_out;                       /* zoom: a click zooms out (Alt-click in) */
+  int grad_palrange;                  /* gradient: an indexed picture's palette range (DPaint's range fill) */
 } Opts;
+extern const int sample_layers[3];
+extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */
+#define RETOUCH_MODES 7               /* (1.1) Blur, Sharpen, Smudge: Normal, Darken, Lighten, Hue, Saturation, Color, Luminosity */
+extern const int retouch_bm[RETOUCH_MODES];   /* (main.c) those as BM_ */    /* (1.1) the options bar's Current Layer, Current & Below, All Layers as SAMPLE_ */
 /* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
 enum { MQS_NORMAL, MQS_RATIO, MQS_SIZE, MQS_ROW, MQS_COL };
 /* 0.5: the gradient and pattern the tools use (main.c) */

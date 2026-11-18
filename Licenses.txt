@@ -16,8 +16,9 @@ PhotoCraft, ArtCraft Team    picture readers in core/: tiff.c,  MIT
                                amigafmt.c; brushes and painting
                                in core/: brush.h, brush.c,
                                stroke.c, preset.h, preset.c,
-                               gradient.h, gradient.c (each says
-                               what it took)
+                               gradient.h, gradient.c; the tone
+                               curves in core/toolopts.c (each
+                               says what it took)
 X.Org rgb.txt colour names   XPM colour names (core/rasters.c)  MIT/X11 (The Open Group,
                                                                   Oracle)
 libwebp, Google              core/webp.c follows its integer    BSD 3-clause, with Google's

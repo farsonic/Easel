@@ -25,6 +25,8 @@
 #include "lang.h"
 #include "ids.h"
 #include "../core/crop.h"
+#include "../core/toolopts.h"
+#include "brushwin.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
 
@@ -310,7 +312,8 @@ struct MUI_CustomClass *toolbox_class(void)
 }
 
 /* ------------------------------------------------------------------ the options bar */
-enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT, F_SWATCH, F_ICON };
+enum { F_SCRUB, F_CHOICE, F_CHECK, F_SELOPS, F_BUTTON, F_TEXT, F_SWATCH, F_ICON, F_MENU };
+/* (1.1) F_MENU: a button with a list; the entry chosen sends command ids[k] */
 /* (0.9) F_SWATCH: a colour, clicked for the command min; F_ICON: icon max as a small button for the
    command min (the label is its name, for the help bubble) */
 typedef struct {
@@ -320,12 +323,22 @@ typedef struct {
   int min, max;                          /* F_SCRUB: the range; F_BUTTON: the command (min) */
   const char *suffix;                    /* F_SCRUB: "px", "%" */
   const char *const *choices; int nchoices;
+  const ULONG *ids;                      /* F_MENU */
 } Field;
 #define MAXF 16
 static const char *const blendlist[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
-static const char *const samples[] = { "Point Sample", "3 by 3 Average", "5 by 5 Average" };
-static const char *const layersample[] = { "Current Layer", "All Layers" };
+static const char *const samples[NPICK_SIZES] = { "Point Sample", "3 by 3 Average", "5 by 5 Average", "11 by 11 Average", "31 by 31 Average", "51 by 51 Average", "101 by 101 Average" };
+static const char *const layersample[] = { "Current Layer", "Current & Below", "All Layers" };
+/* 1.1 */
+static const char *const toneranges[] = { "Shadows", "Midtones", "Highlights" };
+static const char *const spongemodes[] = { "Desaturate", "Saturate" };
+static const char *const rtmodes[RETOUCH_MODES] = { "Normal", "Darken", "Lighten", "Hue", "Saturation", "Color", "Luminosity" };
+static const char *const erasemodes[] = { "Brush", "Pencil", "Block" };
+static const char *const movetargets[] = { "Layer", "Group" };
+static const char *const zoommodes[] = { "Zoom In", "Zoom Out" };
+static const char *const alignlist[] = { "Left Edges", "Horizontal Centers", "Right Edges", "Top Edges", "Vertical Centers", "Bottom Edges", "Distribute Horizontally", "Distribute Vertically" };
+static const ULONG alignids[] = { ID_AL_LEFT, ID_AL_HCENTER, ID_AL_RIGHT, ID_AL_TOP, ID_AL_VCENTER, ID_AL_BOTTOM, ID_DIST_H, ID_DIST_V };
 static const char *const gradkinds[] = { "Linear", "Radial", "Angle", "Reflected", "Diamond" };
 static const char *const gradcols[] = { "Foreground to Background", "Foreground to Transparent" };
 static const char *const aligns[] = { "Left", "Centre", "Right" };
@@ -355,6 +368,7 @@ static int fields_for(int t, Field *f)
 #define SELOPS() (f[n].kind = F_SELOPS, f[n].label = "", f[n].val = &opt.sel_op, n++)
 #define SWATCH(l, v, id) (f[n].kind = F_SWATCH, f[n].label = l, f[n].val = &(v), f[n].min = id, n++)
 #define ICONBTN(l, ic, id) (f[n].kind = F_ICON, f[n].label = l, f[n].min = id, f[n].max = ic, n++)
+#define MENU(l, c, k, i) (f[n].kind = F_MENU, f[n].label = l, f[n].choices = c, f[n].nchoices = k, f[n].ids = i, n++)
   if (xform_pending) {
     /* 0.7: Free Transform's numbers and its buttons, whatever the tool */
     if (prefs.xform_numbers) TEXT(xform_info);      /* (0.8: Preferences > Tools) */
@@ -363,7 +377,8 @@ static int fields_for(int t, Field *f)
     return n;
   }
   switch (t) {
-  case TL_MOVE: CHECK("Auto-Select Layer", opt.auto_select); TEXT("Drag to move the layer or the selection; Alt-drag moves a copy"); break;
+  case TL_MOVE: CHECK("Auto-Select", opt.auto_select); CHOICE("", opt.move_group, movetargets, 2); CHECK("Show Transform Controls", opt.move_bounds);
+    MENU("Align", alignlist, 8, alignids); TEXT("Alt-drag moves a copy"); break;
   case TL_MARQUEE: case TL_EMARQUEE: SELOPS(); SCRUB("Feather:", opt.feather, 0, 250, "px");
     if (t == TL_EMARQUEE) { if (opt.mq_style > MQS_SIZE) opt.mq_style = MQS_NORMAL; CHECK("Anti-alias", opt.sel_antialias); }
     CHOICE("Style:", opt.mq_style, mqstyles, t == TL_EMARQUEE ? 3 : 5);
@@ -381,45 +396,59 @@ static int fields_for(int t, Field *f)
     for (i = 0; i < ncrop_presets && i < 32; i++) croplist[i] = crop_presets[i].name;
     if (opt.crop_preset >= i) opt.crop_preset = 0;
     CHOICE("", opt.crop_preset, croplist, i); BUTTON(opt.crop_swap ? "Swap (H:W)" : "Swap (W:H)", ID_CROPSWAP);
-    BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT("Drag a box, adjust its handles, then Return"); break;
+    CHOICE("", opt.crop_overlay, crop_overlay_names, CO_N); CHECK("Straighten", opt.crop_straighten);
+    BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT(opt.crop_straighten ? "Drag along what should be level" : "Drag a box, adjust its handles, then Return"); break;
   case TL_RULER: TEXT(ruler_info[0] ? ruler_info : "Drag to measure"); BUTTON("Straighten Layer", ID_STRAIGHTEN); CHECK("Whole Picture", opt.ruler_image);
     BUTTON("Clear", ID_RULERCLEAR); break;
-  case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, 3); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
-  case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, 3); CHOICE("Sample:", opt.all_layers, layersample, 2); TEXT("Alt-click picks the background colour"); break;
+  case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
+  case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); CHOICE("Sample:", opt.pick_from, layersample, 3); TEXT("Alt-click picks the background colour"); break;
   /* 1.0 */
   case TL_SPOTHEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Type: Proximity Match"); break;
-  case TL_HEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
+  case TL_HEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
+    SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
   case TL_PATCH: SELOPS(); TEXT("Draw round the area, then drag it to the patch"); break;
   case TL_REDEYE: SCRUB("Pupil Size:", opt.redeye_pupil, 1, 100, "%"); SCRUB("Darken Amount:", opt.redeye_darken, 1, 100, "%"); break;
-  case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
-    SCRUB("Flow:", opt.flow[t], 1, 100, "%"); TEXT("Alt-click sets the source"); break;
+  case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
+    SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
+    SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
   case TL_BRUSH: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); BUTTON("Brush Settings...", ID_WIN_BRUSHSET); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); SCRUB("Smoothing:", brushui.b.dyn.smoothing, 0, 100, "%");
+    CHECK("Airbrush", brushui.b.dyn.buildup); BUTTON("Brush Settings...", ID_WIN_BRUSHSET); break;
   case TL_PATTERN: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     if (npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
     CHECK("Aligned", opt.pattern_aligned); break;
   case TL_HISTORY: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); BUTTON("Snapshot", ID_SNAPSHOT); TEXT("Paints back the snapshot"); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); BUTTON("Snapshot", ID_SNAPSHOT);
+    BUTTON("From History", ID_HISTBRUSHSRC); TEXT("Paints back the snapshot"); break;
   case TL_REPLACE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.replace_mode, rplmodes, 4); CHOICE("", opt.sampling, samplings, 3);
     CHOICE("Limits:", opt.limits, limitlist, 3); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); break;
   case TL_BGERASE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("", opt.sampling, samplings, 3); CHOICE("Limits:", opt.limits, limitlist, 3);
     SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Protect Foreground", opt.protect_fg); break;
   case TL_MAGICERASE: SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); CHECK("Anti-alias", opt.antialias);
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
-  case TL_PENCIL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); break;
-  case TL_ERASER: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
-    SCRUB("Flow:", opt.flow[t], 1, 100, "%"); break;
+  case TL_PENCIL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
+    SCRUB("Smoothing:", brushui.b.dyn.smoothing, 0, 100, "%"); CHECK("Auto Erase", brushui.b.auto_erase); break;
+  case TL_ERASER: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", brushui.b.eraser_mode, erasemodes, 3); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
+    SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Erase to History", opt.erase_history); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
   case TL_BUCKET: CHOICE("Fill:", opt.fill_source, fillsrc, 2);
     if (opt.fill_source && npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
     SCRUB("Opacity:", opt.fill_opacity, 1, 100, "%"); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); CHECK("Anti-alias", opt.antialias);
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
   case TL_GRADIENT: if (ngrad_names) CHOICE("", opt.grad_preset, grad_names, ngrad_names);
     BUTTON("Edit...", ID_GRADEDIT); CHOICE("Style:", opt.grad_kind, gradkinds, 5); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); CHECK("Dither", opt.grad_dither); break;
-  case TL_BLUR: case TL_SHARPEN: case TL_SMUDGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%");
-    SCRUB("Strength:", opt.strength[t], 1, 100, "%"); break;
-  case TL_DODGE: case TL_BURN: case TL_SPONGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%");
-    SCRUB(t == TL_SPONGE ? "Flow:" : "Exposure:", opt.strength[t], 1, 100, "%"); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); CHECK("Dither", opt.grad_dither);
+    if (cur_doc() && cur_doc()->mode == MODE_INDEXED) CHECK("Palette Range", opt.grad_palrange);
+    break;
+  case TL_BLUR: case TL_SHARPEN: case TL_SMUDGE: SCRUB("Size:", opt.size[t], 1, 2500, "px");
+    if (opt.mode[t] >= RETOUCH_MODES) opt.mode[t] = 0;
+    CHOICE("Mode:", opt.mode[t], rtmodes, RETOUCH_MODES); SCRUB("Strength:", opt.strength[t], 1, 100, "%");
+    if (t == TL_SHARPEN) CHECK("Protect Detail", opt.protect_detail);
+    if (t == TL_SMUDGE) CHECK("Finger Painting", opt.finger_paint);
+    SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
+  case TL_DODGE: case TL_BURN: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Range:", opt.range, toneranges, 3);
+    SCRUB("Exposure:", opt.strength[t], 1, 100, "%"); CHECK("Protect Tones", opt.protect_tones); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
+  case TL_SPONGE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.sponge_mode, spongemodes, 2);
+    SCRUB("Flow:", opt.strength[t], 1, 100, "%"); CHECK("Vibrance", opt.vibrance); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
   case TL_TEXT: case TL_VTEXT: case TL_TYPEMASK: {
     /* 0.9: the font, its style and size, anti-aliasing, alignment, the colour; Warp, Character, Paragraph */
     Doc *doc = cur_doc();
@@ -458,8 +487,11 @@ static int fields_for(int t, Field *f)
     BUTTON("Fill Path", ID_PATHFILL); BUTTON("Stroke Path", ID_PATHSTROKE); BUTTON("Make Selection", ID_PATHMKSEL);
     TEXT(t == TL_PATHSEL ? "Drag a path to move it; Ctrl-T transforms it" : "Drag points or handles; drag across points to choose them");
     break;
-  case TL_HAND: case TL_ZOOM: BUTTON("100%", ID_ACTUAL); BUTTON("Fit Screen", ID_FIT); BUTTON("Zoom In", ID_ZOOMIN); BUTTON("Zoom Out", ID_ZOOMOUT);
-    if (t == TL_ZOOM) TEXT("Alt-click zooms out");
+  case TL_HAND: case TL_ZOOM:
+    if (t == TL_ZOOM) CHOICE("", opt.zoom_out, zoommodes, 2);
+    BUTTON("100%", ID_ACTUAL); BUTTON("Fit Screen", ID_FIT); BUTTON("Fill Screen", ID_FILLSCREEN);
+    if (t == TL_HAND) { BUTTON("Zoom In", ID_ZOOMIN); BUTTON("Zoom Out", ID_ZOOMOUT); }
+    else TEXT("Alt-click: the other way; drag left or right to zoom");
     break;
   }
   return n;
@@ -505,7 +537,7 @@ static const char *field_help(const Field *f)
     { "Weight:", "The line's width in pixels." },
     { "Style:", "The shape of the gradient: in a line, round from the middle, and so on." },
     { "Sample Size:", "Picks up one pixel, or the average of a small square round it." },
-    { "Sample:", "Picks up the colour of the layer in use only, or of everything you see." },
+    { "Sample:", "What it picks up: the layer in use, that layer and the ones below it, or everything you see." },
     { "Align:", "Lines the text up on the point you clicked: left, centre or right." },
     { "Contiguous", "Only the area touching the pixel you click, not every pixel of that colour." },
     { "Sample All Layers", "Looks at everything you see, not just the layer in use." },
@@ -528,6 +560,25 @@ static const char *field_help(const Field *f)
     { "Fit Screen", "Zooms so the whole picture fits the window." },
     { "Zoom In", "Zooms in a step." },
     { "Zoom Out", "Zooms out a step." },
+    /* 1.1 */
+    { "Auto-Select", "Clicking chooses the topmost layer with something under the pointer (or, with Group, the group it is in)." },
+    { "Show Transform Controls", "Shows the layer's box with handles: drag one to scale or turn the layer (Free Transform; Return applies it)." },
+    { "Align", "Lines the picked layers up with each other, or with the selection, or spreads them out evenly." },
+    { "Range:", "Which tones change most: the shadows, the midtones or the highlights." },
+    { "Protect Tones", "Keeps the colours from shifting in hue as they get lighter or darker." },
+    { "Vibrance", "Changes dull colours more than vivid ones, so nothing goes past full saturation." },
+    { "Aligned", "The source moves with each stroke; off, every stroke starts again from the source you Alt-clicked." },
+    { "Protect Detail", "Sharpens gently, without bright fringes or grain." },
+    { "Finger Painting", "Each stroke starts with the foreground colour, smeared into the picture." },
+    { "Erase to History", "Paints back the snapshot (Edit > Take Snapshot) instead of erasing to transparency." },
+    { "Auto Erase", "A stroke that starts on the foreground colour paints the background colour." },
+    { "Smoothing:", "Steadies the stroke: the brush follows the pointer more slowly the higher it is." },
+    { "Airbrush", "Builds up paint while the button is held and the pointer stays still." },
+    { "Straighten", "Drag along something that should be level (or upright): the picture is turned to match and cropped." },
+    { "Fill Screen", "Zooms so the picture fills the whole window." },
+    { "Palette Range", "Fills through the palette's colours from one end of its first cycling range to the other (or the whole palette), as Deluxe Paint's range fills do." },
+    { "Snapshot", "Takes a snapshot of the layer as it is now for the History Brush to paint back (Edit > Take Snapshot)." },
+    { "From History", "The History Brush paints back the snapshot clicked last in the History panel instead." },
     /* 0.9 */
     { "AA:", "How the text's edges are smoothed: None (hard), Sharp or Smooth." },
     { "Warp", "Bends the text into an arc, a wave, a flag and other shapes, and can still be edited." },
@@ -559,6 +610,11 @@ static const char *field_help(const Field *f)
   if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
   if (f->kind == F_SCRUB && f->val == &opt.stroke_width) return "The stroke's width in pixels.";
   if (f->kind == F_CHOICE && f->choices == gradcols) return "The gradient's colours: foreground to background, or the foreground fading out.";
+  if (f->kind == F_CHOICE && f->choices == crop_overlay_names) return "The lines drawn over the crop box to help with the composition.";
+  if (f->kind == F_CHOICE && f->choices == movetargets) return "What Auto-Select picks: the layer under the pointer, or the group it is in.";
+  if (f->kind == F_CHOICE && f->choices == spongemodes) return "Takes colour away, or adds it.";
+  if (f->kind == F_CHOICE && f->choices == zoommodes) return "What a click does (Alt-click does the other).";
+  if (f->kind == F_CHOICE && f->choices == erasemodes) return "The eraser's tip: a soft brush, a hard pencil or a square block.";
   if (f->kind == F_CHOICE && f->choices == croplist) return "The crop's proportions or size: free, the picture's own, a ratio, or a size it is resampled to.";
   if (f->kind == F_BUTTON && f->min == ID_CROPSWAP) return "Swaps the preset's width and height (portrait or landscape).";
   return NULL;
@@ -584,6 +640,7 @@ static void ob_layout(struct OData *d, Object *obj)
     case F_CHECK: lw = 0; vw = 16 + theme_textlen(rp, theme_font(), f->label); break;
     case F_SELOPS: lw = 0; vw = 4 * 22; break;
     case F_BUTTON: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 20; break;
+    case F_MENU: lw = 0; vw = theme_textlen(rp, theme_font(), f->label) + 30; break;
     case F_TEXT: lw = 0; vw = theme_textlen(rp, theme_font(), f->label); break;
     case F_SWATCH: lw = 0; vw = 24 + (f->label[0] ? theme_textlen(rp, theme_font(), f->label) + 5 : 0); break;
     case F_ICON: lw = 0; vw = 22; break;
@@ -651,10 +708,16 @@ static void ob_draw(struct OData *d, Object *obj)
         theme_icon(rp, IC_SELNEW + k, bx + 2, my - 8, 16, 0);
       }
       break; }
-    case F_BUTTON:
+    case F_BUTTON: case F_MENU:
       theme_fill(rp, x0, vt, x1, vb, tpen(d->hot == i ? T_HOVER : T_WHITE));
       theme_rect(rp, x0, vt, x1, vb, tpen(T_BORDER2));
       theme_text(rp, theme_font(), x0 + 10, my - fh() / 2, f->label, tpen(T_TEXT));
+      if (f->kind == F_MENU) {
+        LONG ax = x1 - 10, ay = my - 1;
+        SetAPen(rp, tpen(T_DIM));
+        Move(rp, ax - 3, ay - 1); Draw(rp, ax + 3, ay - 1); Move(rp, ax - 2, ay); Draw(rp, ax + 2, ay); Move(rp, ax - 1, ay + 1); Draw(rp, ax + 1, ay + 1);
+        WritePixel(rp, ax, ay + 2);
+      }
       break;
     case F_TEXT:
       theme_text(rp, theme_font(), x0, my - fh() / 2, f->label, tpen(T_GROUPLABEL));
@@ -700,7 +763,8 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
       *d->f[d->popfield].val = (int)t->ti_Data;
       ob_redraw(d, obj);
       ob_changed(obj);
-    }
+    } else if (t && d->popfield >= 0 && d->popfield < d->n && d->f[d->popfield].kind == F_MENU && (int)t->ti_Data >= 0 && (int)t->ti_Data < d->f[d->popfield].nchoices)
+      DoMethod(_app(obj), MUIM_Application_ReturnID, d->f[d->popfield].ids[t->ti_Data]);    /* (1.1) */
     break;
   }
   case MUIM_AskMinMax: {
@@ -804,10 +868,10 @@ static ULONG odispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
       case F_CHECK: *f->val = !*f->val; ob_redraw(d, obj); ob_changed(obj); break;
       case F_SELOPS: { int k = (int)((im->MouseX - d->vx0[h]) / 22); if (k >= 0 && k < 4) *f->val = k; ob_redraw(d, obj); break; }
       case F_BUTTON: case F_SWATCH: case F_ICON: DoMethod(_app(obj), MUIM_Application_ReturnID, (ULONG)f->min); break;
-      case F_CHOICE: {
+      case F_CHOICE: case F_MENU: {
         struct Window *w = _window(obj);
         d->popfield = h;
-        popup_list(obj, w->LeftEdge + d->vx0[h], w->TopEdge + _mbottom(obj) - 2, d->x1[h] - d->vx0[h], f->choices, f->nchoices, *f->val, MUIA_Popup_Chosen);
+        popup_list(obj, w->LeftEdge + d->vx0[h], w->TopEdge + _mbottom(obj) - 2, d->x1[h] - d->vx0[h], f->choices, f->nchoices, f->kind == F_MENU ? -1 : *f->val, MUIA_Popup_Chosen);
         break; }
       }
     }

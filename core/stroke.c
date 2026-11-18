@@ -31,6 +31,7 @@
 #include "pattern.h"
 #include "layers.h"
 #include "retouch.h"
+#include "toolopts.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -98,6 +99,7 @@ struct Stroke {
   double qox[SYM_MAXCOPIES], qoy[SYM_MAXCOPIES], qrot[SYM_MAXCOPIES];    /* and the dab before's */
   int smir[SYM_MAXCOPIES], qmir[SYM_MAXCOPIES];
   u8 gen[SYM_MAXCOPIES];              /* copies that need their own dab image */
+  u8 tlut[256];                       /* 1.1: Dodge and Burn's curve at the stroke's exposure */
 };
 
 static void dab_free(DabImg *c)
@@ -359,7 +361,8 @@ static const u8 *merged_px(Stroke *s, i32 x, i32 y)
   if (!s->merged[t]) {
     x0 = (x / TS) * TS; y0 = (y / TS) * TS;
     if (!(s->merged[t] = (u8 *)calloc(TS * TS, 4))) return NULL;
-    doc_composite(d, box_clip(box_make(x0, y0, x0 + TS, y0 + TS), doc_box(d)), s->merged[t], TS * 4);
+    if (s->b.sample_all == SAMPLE_BELOW) doc_composite_below(d, d->active, box_clip(box_make(x0, y0, x0 + TS, y0 + TS), doc_box(d)), s->merged[t], TS * 4);
+    else doc_composite(d, box_clip(box_make(x0, y0, x0 + TS, y0 + TS), doc_box(d)), s->merged[t], TS * 4);
   }
   return s->merged[t] + ((y % TS) * TS + x % TS) * 4;
 }
@@ -377,6 +380,15 @@ static void put_px(int alpha_lock, u8 *p, const u8 *col, int cov, int blend)
   }
 }
 
+/* 1.1: the Blur, Sharpen and Smudge tools' Mode: what they made (p) laid on what was there
+   (before) in that blend mode, so Darken only darkens, Luminosity keeps the colours and so on */
+static void mode_back(u8 *p, const u8 *before, int blend)
+{
+  u8 r[4], src[4];
+  memcpy(r, before, 4); memcpy(src, p, 3); src[3] = 255;
+  blend_pixel(r, src, 255, blend);
+  p[0] = r[0]; p[1] = r[1]; p[2] = r[2];
+}
 /* ------------------------------------------------------------------ one pixel of a dab */
 /* pixel i, j given dab coverage a (and a colour brush's colour src): the stroke's coverage
    there built up, and the tool's work done */
@@ -385,10 +397,20 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   Doc *d = s->d;
   int m, cov, sel, tool = s->b.tool, bpp = s->t.bpp, lock = s->t.alpha_lock;
   i32 t;
-  u8 *mp, *tp, p[4], tmp[4], c4[4];
+  u8 *mp, *tp, p[4], tmp[4], c4[4], before[4];
   const u8 *o;
   if (!a || !(sel = sel_at(d, i, j))) return;
   if (!tile_ready(s, i, j)) return;
+  if (s->b.nstencil && s->t.bpp == 4) {
+    /* 1.1: the stencil: pixels of its colours (as they were before the stroke) kept */
+    const u8 *q = orig_px(s, i, j, tmp);
+    int k, hit = 0;
+    if (q[3] == 255) {
+      u32 c = (u32)q[0] << 16 | (u32)q[1] << 8 | q[2];
+      for (k = 0; k < s->b.nstencil; k++) if (s->b.stencil[k] == c) { hit = 1; break; }
+    }
+    if (hit != s->b.stencil_invert) return;
+  }
   t = (j / TS) * s->ntx + i / TS;
   mp = s->mask[t] + (j % TS) * TS + i % TS;
   m = *mp;
@@ -408,6 +430,7 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   o = orig_px(s, i, j, tmp);
   tp = s->t.px + ((long)j * s->t.w + i) * bpp;
   if (bpp == 4) memcpy(p, tp, 4); else { p[0] = p[1] = p[2] = *tp; p[3] = 255; }
+  memcpy(before, p, 4);
   if (s->b.custom) {
     switch (s->b.custom_mode) {
     case CB_COLOR: case CB_CYCLE: memcpy(p, o, 4); put_px(lock, p, dp->col, cov, s->b.blend); break;
@@ -425,6 +448,14 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
     }
   } else switch (tool) {
   case PT_ERASER:
+    if (s->b.erase_history && s->b.snapshot && bpp == 4) {
+      /* 1.1: Erase to History paints the snapshot back, as the History Brush does */
+      const u8 *c = s->b.snapshot->px + ((long)j * s->b.snapshot->w + i) * 4;
+      int k;
+      for (k = 0; k < 4; k++) p[k] = (u8)(o[k] + ((c[k] - o[k]) * cov + (c[k] > o[k] ? 127 : -127)) / 255);
+      if (lock) p[3] = o[3];
+      break;
+    }
     memcpy(p, o, 4);
     if (bpp == 1) { u8 bgc[3]; rgb_of(s->b.bg, bgc); put_px(0, p, bgc, cov, BM_NORMAL); }
     else if (!lock) p[3] = (u8)mul255(o[3], 255 - cov);
@@ -432,7 +463,7 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   case PT_CLONE: case PT_HEAL: {
     const u8 *c = s->b.sample_all && bpp == 4 ? merged_px(s, i + s->b.clone_dx, j + s->b.clone_dy) : orig_px(s, i + s->b.clone_dx, j + s->b.clone_dy, c4);
     memcpy(p, o, 4);
-    if (c) put_px(lock, p, c, mul255(cov, c[3]), BM_NORMAL);
+    if (c) put_px(lock, p, c, mul255(cov, c[3]), tool == PT_CLONE ? s->b.blend : BM_NORMAL);   /* (1.1: the Clone Stamp's Mode) */
     break; }
   case PT_PATTERN: {
     const Pattern *pt = s->b.pattern;
@@ -455,18 +486,36 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
     }
     for (k = 0; k < 4; k++) {
       int avg = sum[k] / 9, v = tool == PT_BLUR ? avg : clamp255(p[k] + (p[k] - avg) * 0.6);
+      if (tool == PT_SHARPEN && s->b.protect_detail) {
+        /* 1.1: Protect Detail sharpens gently, and no step more than 16 (no haloes, no grain) */
+        int dv = (p[k] - avg) * 3 / 10;
+        v = clamp255(p[k] + (dv > 16 ? 16 : dv < -16 ? -16 : dv));
+      }
       if (k == 3 && lock) continue;
       p[k] = (u8)(p[k] + ((v - p[k]) * f) / 255);
     }
+    if (s->b.blend) mode_back(p, before, s->b.blend);
     break; }
   case PT_SMUDGE: {
     const u8 *q = orig_px(s, i - pl->sdx, j - pl->sdy, c4);
     int k, f = mul255(cov, s->b.strength * 255 / 100);
+    u8 fq[4];
+    if (s->b.finger_painting && bpp == 4) {
+      /* 1.1: Finger Painting: the stroke starts with the foreground colour, which thins out as it
+         is pushed along (by the strength, dab by dab) */
+      double w = pow(s->b.strength / 100.0, (double)s->ndabs * 0.25);
+      for (k = 0; k < 3; k++) fq[k] = (u8)(q[k] + (s->col[k] - q[k]) * w);
+      fq[3] = (u8)(q[3] + (255 - q[3]) * w);
+      q = fq;
+    }
     for (k = 0; k < 4; k++) p[k] = (u8)(p[k] + ((q[k] - p[k]) * f) / 255);
+    if (s->b.blend) mode_back(p, before, s->b.blend);
     break; }
   case PT_DODGE: case PT_BURN: case PT_SPONGE: {
     int k, f = mul255(cov, s->b.strength * 255 / 100);
-    if (tool == PT_SPONGE) {
+    if (tool == PT_SPONGE && (s->b.sponge_saturate || s->b.vibrance)) tone_sponge(p, f / 2, s->b.sponge_saturate, s->b.vibrance);  /* 1.1 */
+    else if (tool != PT_SPONGE && (s->b.tone_range || s->b.protect_tones)) tone_apply(p, s->tlut, mul255(cov, 255), s->b.protect_tones);  /* 1.1 */
+    else if (tool == PT_SPONGE) {
       int g = (p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8;
       for (k = 0; k < 3; k++) p[k] = (u8)(p[k] + ((g - p[k]) * f) / 510);
     } else
@@ -940,6 +989,7 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
   if (s->b.opacity < 0) s->b.opacity = 0;
   if (s->b.opacity > 100) s->b.opacity = 100;
   if (s->b.tool == PT_ERASER && s->b.eraser_mode == ER_BLOCK) { s->b.opacity = 100; s->b.flow = 100; }
+  if (!s->b.stencil) s->b.nstencil = 0;
   if (s->b.tip && (!s->b.tip->a || s->b.tip->w < 1 || s->b.tip->h < 1)) s->b.tip = NULL;
   if (s->b.custom && (!s->b.custom->px || s->b.custom->w < 1 || s->b.custom->h < 1)) s->b.custom = NULL;
   if (s->b.tool != PT_BRUSH && s->b.tool != PT_PENCIL) s->b.custom = NULL;   /* (colour brushes paint with the brush tools) */
@@ -952,12 +1002,15 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
     if (t->bpp == 4 ? q[3] && q[0] == fg[0] && q[1] == fg[1] && q[2] == fg[2] : *q == grey_of(fg)) s->color = s->b.bg & 0xFFFFFF;
   }
   rgb_of(s->color, s->col);
+  if (s->b.tool == PT_DODGE || s->b.tool == PT_BURN) tone_lut(s->tlut, s->b.tone_range, s->b.tool == PT_BURN, s->b.strength);
+  if (s->b.tool == PT_ERASER && s->b.erase_history && (!s->b.snapshot || s->b.snapshot->w != d->w || s->b.snapshot->h != d->h)) s->b.erase_history = 0;
   s->cmode = s->b.dyn.transfer_on || s->b.dyn.pressure_opacity;
   s->coarse = s->b.dyn.shape_on && (s->b.dyn.angle.jitter > 0 || s->b.dyn.angle.control != CTL_OFF);
   s->ntx = (d->w + TS - 1) / TS; s->nty = (d->h + TS - 1) / TS;
   nt = (long)s->ntx * s->nty;
   s->mask = (u8 **)calloc((size_t)nt, sizeof(u8 *));
   s->orig = (u8 **)calloc((size_t)nt, sizeof(u8 *));
+  if (s->b.sample_all && s->b.sample_all != SAMPLE_ALL && s->b.sample_all != SAMPLE_BELOW) s->b.sample_all = SAMPLE_ALL;
   if ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all) s->merged = (u8 **)calloc((size_t)nt, sizeof(u8 *));
   if (!s->mask || !s->orig || ((s->b.tool == PT_CLONE || s->b.tool == PT_HEAL) && s->b.sample_all && !s->merged) || !get_dab(s, base_diam(s, pressure), s->b.angle, 1, 0, 0)) {
     free(s->mask); free(s->orig); free(s->merged); dab_free(&s->cache[0]); free(s);

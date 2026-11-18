@@ -95,6 +95,8 @@ enum {
   ID_OPTCHG, ID_TEXTCOLOR, ID_STROKECOLOR,
   /* dialogs */
   ID_DLGOK = 1000, ID_DLGCANCEL, ID_DLGCHANGE, ID_DLGRESET, ID_DLGAUTO,
-  ID_DLGBTN0 = 1010                   /* 1.0: .. ID_DLGBTN0 + 7: a dialog's own buttons */
+  ID_DLGBTN0 = 1010,                  /* 1.0: .. ID_DLGBTN0 + 7: a dialog's own buttons */
+  /* 1.1: the tools' options bar (Zoom and Hand: Fill Screen) */
+  ID_FILLSCREEN = 1150, ID_HISTBRUSHSRC
 };
 #endif

@@ -36,6 +36,7 @@
 #include "../core/codec.h"
 #include "../core/image.h"
 #include "../core/layers.h"
+#include "../core/toolopts.h"
 #include "../core/selmore.h"
 #include "../core/palette.h"
 #include "../core/amigamodes.h"
@@ -487,6 +488,9 @@ static void ami_free(void)
 }
 
 /* ------------------------------------------------------------------ tools */
+/* 1.1: the Blur, Sharpen and Smudge tools' Mode list (toolbox.c) as blend modes */
+const int retouch_bm[RETOUCH_MODES] = { BM_NORMAL, BM_DARKEN, BM_LIGHTEN, BM_HUE, BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
+static int retouch_blend(int k) { return k >= 0 && k < RETOUCH_MODES ? retouch_bm[k] : BM_NORMAL; }
 Brush tool_brush(int t)
 {
   Brush b;
@@ -502,6 +506,15 @@ Brush tool_brush(int t)
   b.pattern = tool_pattern(); b.pattern_aligned = opt.pattern_aligned;
   if (t == TL_REPLACE || t == TL_BGERASE) { b.sampling = opt.sampling; b.limits = opt.limits; b.tolerance = opt.tolerance; b.replace_mode = opt.replace_mode; b.protect_fg = opt.protect_fg; }
   if (t == TL_HISTORY) { DocView *v = cur_view(); b.snapshot = v ? v->snap : NULL; }
+  /* 1.1: the options bar's tool options */
+  if (t == TL_DODGE || t == TL_BURN) { b.tone_range = TR_SHADOWS + (opt.range > 2 ? 1 : opt.range); b.protect_tones = opt.protect_tones; }
+  if (t == TL_SPONGE) { b.sponge_saturate = opt.sponge_mode == 1; b.vibrance = opt.vibrance; }
+  if (t == TL_CLONE || t == TL_HEAL) b.sample_all = sample_layers[opt.clone_sample % 3];
+  if (t == TL_HEAL) b.blend = BM_NORMAL;
+  if (t == TL_BLUR || t == TL_SHARPEN || t == TL_SMUDGE) b.blend = retouch_blend(opt.mode[t]);
+  if (t == TL_SHARPEN) b.protect_detail = opt.protect_detail;
+  if (t == TL_SMUDGE) b.finger_painting = opt.finger_paint;
+  if (t == TL_ERASER && opt.erase_history) { DocView *v = cur_view(); b.erase_history = 1; b.snapshot = v ? v->snap : NULL; }
   return b;
 }
 /* ------------------------------------------------------------------ 0.5: gradients and patterns */
@@ -523,6 +536,14 @@ void names_refresh(void)
 const Gradient *tool_gradient(void)
 {
   GradientList *g = gradwin_presets();
+  Doc *d = cur_doc();
+  if (opt.grad_palrange && d && d->mode == MODE_INDEXED) {
+    /* 1.1: DPaint's range fill: the palette's first cycling range (else all of it) as the gradient */
+    static Gradient pg;
+    int lo, hi;
+    doc_fill_range(d, &lo, &hi);
+    if (gradient_from_palette(&pg, d->pal, d->npal, lo, hi)) return &pg;
+  }
   return g && opt.grad_preset >= 0 && opt.grad_preset < g->n ? &g->g[opt.grad_preset] : &cur_grad;
 }
 const Pattern *tool_pattern(void) { return opt.pattern >= 0 && opt.pattern < patterns.n ? patterns.p[opt.pattern] : NULL; }
@@ -543,7 +564,10 @@ static void opts_defaults(void)
   /* 0.9 */
   opt.text_aa = 2; opt.shape_fill = 1; opt.stroke_width = 3; opt.stroke_color = 0x000000;
   opt.poly_sides = 5; opt.poly_indent = 50; opt.round_radius = 10; opt.arrow_end = 1;
+  /* 1.1 */
+  opt.range = 1; opt.protect_tones = 1; opt.vibrance = 1; opt.clone_aligned = 1; opt.crop_overlay = CO_THIRDS;
 }
+const int sample_layers[3] = { SAMPLE_CURRENT, SAMPLE_BELOW, SAMPLE_ALL };
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
 static signed char key_tool[26];
 int tool_for_key(int c)
@@ -1796,6 +1820,7 @@ static void command(ULONG id)
   case ID_ZOOMIN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 1); refresh_panels(); return;
   case ID_ZOOMOUT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, -1); refresh_panels(); return;
   case ID_FIT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 2); refresh_panels(); return;
+  case ID_FILLSCREEN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 3); refresh_panels(); return;   /* (1.1) */
   case ID_ACTUAL: DoMethod(canvas, MUIM_Canvas_Zoom, 1000, 0); refresh_panels(); return;
   case ID_ZOOM200: DoMethod(canvas, MUIM_Canvas_Zoom, 2000, 0); refresh_panels(); return;
   case ID_ZOOM50: DoMethod(canvas, MUIM_Canvas_Zoom, 500, 0); refresh_panels(); return;
@@ -1833,6 +1858,7 @@ static void command(ULONG id)
   /* 0.4: rulers, grid and guides */
   case ID_RULERS: d->guides.show_rulers = !d->guides.show_rulers; DoMethod(canvas, MUIM_Canvas_Refresh); break;
   case ID_SHOWGRID: d->guides.show_grid = !d->guides.show_grid; break;
+  case ID_SHOWEDGES: extras_hidden = !extras_hidden; DoMethod(canvas, MUIM_Canvas_Refresh); break;   /* (1.1: Ctrl-H, View > Extras) */
   case ID_SHOWGUIDES: d->guides.show_guides = !d->guides.show_guides; break;
   case ID_SNAP: d->guides.snap = d->guides.snap ? 0 : SNAP_GUIDES | SNAP_GRID | SNAP_EDGES | SNAP_CENTER; break;
   case ID_GRIDSET: {
@@ -2014,6 +2040,16 @@ static void command(ULONG id)
   case ID_HISTSNAPDEL: {
     DocView *v = cur_view();
     int k = hist_pick;
+    if (v && (k < 0 || k >= v->nhsnap)) {
+      /* 1.1: no snapshot picked: the step in effect deleted, with the ones after it */
+      char msg[160];
+      if (!doc_can_undo(v->doc)) return;
+      snprintf(msg, sizeof msg, tr("Delete the step \"%s\" and the steps after it?"), doc_undo_name(v->doc));
+      if (ask("Delete|Cancel", "%s", msg) != 1) return;
+      if (!doc_delete_state(v->doc, -1)) ask("OK", "%s", tr("That step can't be deleted."));
+      refresh_all();
+      return;
+    }
     if (!v || k < 0 || k >= v->nhsnap) return;
     doc_free(v->hsnap[k]);
     memmove(&v->hsnap[k], &v->hsnap[k + 1], (size_t)(v->nhsnap - k - 1) * sizeof v->hsnap[0]);
@@ -2028,6 +2064,16 @@ static void command(ULONG id)
     DoMethod(canvas, MUIM_Canvas_Cancel);
     if (!state_restore(v->doc, v->hsnap[hist_pick], v->hsnap_name[hist_pick])) ask("OK", "%s", tr("There isn't enough memory for that."));
     refresh_all();
+    return; }
+  case ID_HISTBRUSHSRC: {
+    /* 1.1: the History Brush's source: the History panel's snapshot (its layer in use) */
+    DocView *v = cur_view();
+    Snapshot *sn;
+    if (!v) return;
+    if (hist_pick < 0 || hist_pick >= v->nhsnap) { ask("OK", "%s", tr("Click a snapshot in the History panel first (or make one with its camera button).")); return; }
+    if (v->hsnap[hist_pick]->w != v->doc->w || v->hsnap[hist_pick]->h != v->doc->h) { ask("OK", "%s", tr("That snapshot is another size from the picture now, so the History Brush can't paint from it.")); return; }
+    if (!(sn = snapshot_take(v->hsnap[hist_pick]))) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+    snapshot_free(v->snap); v->snap = sn;
     return; }
   case ID_HISTNEWDOC: {
     DocView *v = cur_view();

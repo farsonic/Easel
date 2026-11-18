@@ -53,6 +53,7 @@ typedef struct {
   CustomBrush *custom;                /* the DPaint brush (owned), or NULL */
   int use_custom;                     /* the brush tools paint with it */
   int pick_merged, pick_key;          /* pick up from everything seen; the background colour transparent */
+  int stencil;                        /* 1.1: DPaint's stencil, toolopts.h's STC_ (b.stencil_invert inverts it) */
   char path[512];                     /* the last file loaded or saved */
   void (*picked)(const Brush *b);
   void (*changed)(void);

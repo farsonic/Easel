@@ -43,6 +43,7 @@
 #include "../core/pathops.h"
 #include "../core/shape.h"
 #include "../core/live.h"
+#include "../core/toolopts.h"
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -52,11 +53,13 @@ char xform_info[80];
 int ruler_on;
 double ruler_xy[4];
 char ruler_info[96];
+int extras_hidden;                       /* (1.1, easel.h) */
 static Doc *ruler_doc;                   /* the picture the Ruler's line was drawn on */
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
        DR_XFORM, DR_RULER, DR_SAMPLE,
-       DR_TYPEBOX, DR_TYPESEL, DR_PATH };              /* 0.9: a paragraph box dragged out, text selected, a path edited */
+       DR_TYPEBOX, DR_TYPESEL, DR_PATH,
+       DR_STRAIGHTEN, DR_ZOOMSCRUB };                   /* 1.1: the Crop tool's straightening line; scrubby zoom */              /* 0.9: a paragraph box dragged out, text selected, a path edited */
 /* 0.9: what a path tool's drag does */
 enum { PE_NONE, PE_HANDLES, PE_ANCHOR, PE_SELMOVE, PE_HANDLE, PE_SUBMOVE, PE_BOX };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
@@ -119,6 +122,12 @@ struct Data {
   int pen_on, pen_sub; Doc *pen_doc;
   int pe_what, pe_s, pe_k, pe_which, pe_alone, pe_moved; double pe_lx, pe_ly; Doc *pe_doc;
   int ov_type;                           /* the Type tool's caret and selection are in the overlay drawn */
+  /* 1.1: the crop overlay drawn; the Move tool's transform box drawn (and the layer it was worked
+     out for); scrubby zoom's start */
+  int ov_crop, ov_bounds; Box bbox; Doc *bb_doc; void *bb_undo; int bb_active, bb_nlay; u8 *bb_px; Box ov_bbox;
+  double zs_z; LONG zs_mx, zs_my; int zs_moved;
+  int tilde;                             /* 1.1: the ` key held: the Brush erases */
+  int shape_centre;                      /* 1.1: Alt held while a shape is dragged out: from its centre */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -245,6 +254,7 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
   LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
   LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
   int i, k;
+  if (extras_hidden) return;                             /* (1.1: View > Extras off) */
   if (ix1 > x1) ix1 = x1;
   if (iy1 > y1) iy1 = y1;
   if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
@@ -387,7 +397,7 @@ static void ants(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1
   struct RastPort *rp = _rp(obj);
   int i;
   UWORD pat;
-  if (!d->nedges || !d->edges) return;
+  if (!d->nedges || !d->edges || extras_hidden) return;
   pat = (UWORD)((0xF0F0F0F0UL >> (d->phase & 7)) & 0xFFFF);
   SetDrMd(rp, JAM2);
   SetAPen(rp, theme_is_dark() ? tpen(T_WHITE) : tpen(T_TEXT));
@@ -591,6 +601,30 @@ static void type_overlay(struct Data *d, Object *obj, struct RastPort *rp)
     if (a0 == a1) xline(rp, a0 + 1, b0, a1 + 1, b1);        /* (two pixels wide, to be seen) */
   }
 }
+/* 1.1: the Move tool's transform box: the active layer's content (xform_source_box), worked out
+   again only when the picture or the layer changes (a scan of the layer is slow on a 68040) */
+static int move_bounds(struct Data *d, Box *b)
+{
+  Doc *doc = cur_doc();
+  Layer *l;
+  if (!doc || doc->active < 0 || doc->active >= doc->nlay) return 0;
+  l = doc->lay[doc->active];
+  if (l->kind != LK_PIXEL || !l->px) return 0;
+  if (d->bb_doc != doc || d->bb_undo != (void *)doc->undo || d->bb_active != doc->active || d->bb_nlay != doc->nlay || d->bb_px != l->px) {
+    d->bbox = xform_source_box(doc, doc->active);
+    d->bb_doc = doc; d->bb_undo = (void *)doc->undo; d->bb_active = doc->active; d->bb_nlay = doc->nlay; d->bb_px = l->px;
+  }
+  *b = d->bbox;
+  return !box_empty(d->bbox);
+}
+/* its eight handles on the screen: the corners, then the sides' middles */
+static void bounds_handles(LONG x0, LONG y0, LONG x1, LONG y1, LONG *hx, LONG *hy)
+{
+  LONG mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  hx[0] = x0; hy[0] = y0; hx[1] = x1; hy[1] = y0; hx[2] = x1; hy[2] = y1; hx[3] = x0; hy[3] = y1;
+  hx[4] = mx; hy[4] = y0; hx[5] = x1; hy[5] = my; hx[6] = mx; hy[6] = y1; hx[7] = x0; hy[7] = my;
+}
+static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1);
 /* everything in the overlay drawn (or, drawn again, taken away) */
 static void ov_draw(struct Data *d, Object *obj)
 {
@@ -618,8 +652,12 @@ static void ov_draw(struct Data *d, Object *obj)
     break;
   case DR_SHAPE:
     if (d->ov_prev) break;
-    if (tool == TL_ELLIPSE) xellipse(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
-    else xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    {
+      double x0, y0, x1, y1;
+      drag_box(d, &x0, &y0, &x1, &y1);
+      if (tool == TL_ELLIPSE) xellipse(rp, to_sx(d, obj, x0), to_sy(d, obj, y0), to_sx(d, obj, x1), to_sy(d, obj, y1));
+      else xrect(rp, to_sx(d, obj, x0), to_sy(d, obj, y0), to_sx(d, obj, x1), to_sy(d, obj, y1));
+    }
     break;
   case DR_LINE:
     if (d->ov_prev) break;
@@ -627,6 +665,9 @@ static void ov_draw(struct Data *d, Object *obj)
     break;
   case DR_TYPEBOX:
     xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    break;
+  case DR_STRAIGHTEN:
+    xline(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
     break;
   case DR_PATH:
     if (d->pe_what == PE_BOX) xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
@@ -676,6 +717,14 @@ static void ov_draw(struct Data *d, Object *obj)
       st = en;
     }
   }
+  if (d->ov_bounds) {
+    /* 1.1: the Move tool's Show Transform Controls: the layer's box and its handles */
+    LONG x0 = to_sx(d, obj, d->ov_bbox.x0), y0 = to_sy(d, obj, d->ov_bbox.y0), x1 = to_sx(d, obj, d->ov_bbox.x1) - 1, y1 = to_sy(d, obj, d->ov_bbox.y1) - 1, hx[8], hy[8];
+    int k;
+    xrect(rp, x0, y0, x1, y1);
+    bounds_handles(x0, y0, x1, y1, hx, hy);
+    for (k = 0; k < 8; k++) xrect(rp, hx[k] - 3, hy[k] - 3, hx[k] + 3, hy[k] + 3);
+  }
   if (d->ov_path) path_overlay(d, obj, rp);
   if (d->ov_type) type_overlay(d, obj, rp);
   for (i = 0; i < d->ov_nsamp; i++) {
@@ -698,10 +747,12 @@ static void ov_draw(struct Data *d, Object *obj)
   if (d->crop_on) {
     LONG x0 = to_sx(d, obj, d->c0x), y0 = to_sy(d, obj, d->c0y), x1 = to_sx(d, obj, d->c1x) - 1, y1 = to_sy(d, obj, d->c1y) - 1, k;
     xrect(rp, x0, y0, x1, y1);
-    /* the rule of thirds, and the handles at the corners and sides */
-    if (x1 - x0 > 30 && y1 - y0 > 30) {
+    /* the overlay (1.1: the one chosen; the rule of thirds at first), and the handles at the corners and sides */
+    if (x1 - x0 > 30 && y1 - y0 > 30 && d->ov_crop) {
+      double sg[4 * 64];
+      int ns = crop_overlay_lines(d->ov_crop, x0, y0, x1, y1, 32, sg, 64);
       SetDrPt(rp, 0xCCCC);
-      for (k = 1; k < 3; k++) { xline(rp, x0 + (x1 - x0) * k / 3, y0 + 1, x0 + (x1 - x0) * k / 3, y1 - 1); xline(rp, x0 + 1, y0 + (y1 - y0) * k / 3, x1 - 1, y0 + (y1 - y0) * k / 3); }
+      for (k = 0; k < ns; k++) xline(rp, (LONG)sg[k * 4], (LONG)sg[k * 4 + 1], (LONG)sg[k * 4 + 2], (LONG)sg[k * 4 + 3]);
       SetDrPt(rp, 0xFFFF);
     }
     for (k = 0; k < 8; k++) {
@@ -725,6 +776,8 @@ static void ov_show(struct Data *d, Object *obj)
   d->ov_prev = d->prev_on && (d->drag == DR_SHAPE || d->drag == DR_LINE);
   path_snapshot(d);
   d->ov_type = type_editing && ty.doc == cur_doc() && ty.tl;
+  d->ov_crop = opt.crop_overlay;
+  d->ov_bounds = tool == TL_MOVE && opt.move_bounds && !d->xf_on && d->drag != DR_MOVE && move_bounds(d, &d->ov_bbox);
   {
     DocView *v = cur_view();
     int i;
@@ -848,7 +901,7 @@ static void pick(struct Data *d, Object *obj, double x, double y, int bg)
   Doc *doc = cur_doc();
   u32 c;
   if (!doc || x < 0 || y < 0 || x >= doc->w || y >= doc->h) return;
-  c = doc_pick(doc, (i32)x, (i32)y, opt.all_layers, opt.sample);
+  c = doc_pick_ex(doc, (i32)x, (i32)y, sample_layers[opt.pick_from % 3], pick_sizes[opt.sample % NPICK_SIZES]);   /* (1.1) */
   if (c == 0xFFFFFFFFUL) return;
   if (bg) doc->bg = c; else doc->fg = c;
   set(obj, MUIA_Canvas_Picked, TRUE);
@@ -1713,6 +1766,11 @@ static Path *custom_path(Doc *doc, double x0, double y0, double x1, double y1)
 static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1)
 {
   if (tool == TL_LINE) { *x0 = d->ax; *y0 = d->ay; *x1 = d->bx; *y1 = d->by; return; }
+  if (d->shape_centre && d->drag == DR_SHAPE && tool != TL_REDEYE) {
+    double w = fabs(d->bx - d->ax), h = fabs(d->by - d->ay);
+    *x0 = d->ax - w; *x1 = d->ax + w; *y0 = d->ay - h; *y1 = d->ay + h;
+    return;
+  }
   *x0 = d->ax < d->bx ? d->ax : d->bx; *x1 = d->ax < d->bx ? d->bx : d->ax;
   *y0 = d->ay < d->by ? d->ay : d->by; *y1 = d->ay < d->by ? d->by : d->ay;
 }
@@ -1796,6 +1854,10 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   Doc *doc = cur_doc();
   double x = to_ix(d, obj, mx), y = to_iy(d, obj, my);
   int t = d->space ? TL_HAND : tool, dbl = DoubleClick(d->secs, d->micros, secs, micros);
+  /* 1.1: Ctrl-Space and Alt-Space zoom in and out while held; Ctrl with a painting, filling or
+     sampling tool is the Move tool for the drag */
+  if (d->space && (qual & (IEQUALIFIER_CONTROL | QALT))) t = TL_ZOOM;
+  else if ((qual & IEQUALIFIER_CONTROL) && !d->xf_on && (brushlike(t) || t == TL_GRADIENT || t == TL_BUCKET || t == TL_EYEDROPPER || t == TL_MAGICERASE)) t = TL_MOVE;
   int shift = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0, alt = (qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
   Box ch;
   d->secs = secs; d->micros = micros;
@@ -1806,8 +1868,11 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
     snap_point(doc, &x, &y, SNAP_DOC);
   }
+  /* 1.1: DPaint's grid snap: with the grid shown and snapping to it, painting goes from grid point to grid point */
+  if (doc && brushlike(t) && doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);
   d->ax = d->bx = x; d->ay = d->by = y;
   if (!doc) return;
+  d->shape_centre = 0;
   ov_hide(d, obj);
   if (d->xf_on && t != TL_HAND) {
     /* 0.7: Free Transform's handles take the mouse, whatever the tool */
@@ -1822,16 +1887,38 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   switch (t) {
   case TL_HAND: d->drag = DR_PAN; d->pmx = mx; d->pmy = my; break;
   case TL_ZOOM:
-    ov_show(d, obj);
-    zoom_to(d, obj, zoom_step(d->z, alt ? -1 : 1), mx, my);
-    return;
+    /* 1.1: a click zooms in (out with Zoom Out chosen, or Alt); a drag left or right zooms smoothly */
+    d->drag = DR_ZOOMSCRUB; d->zs_z = d->z; d->zs_mx = mx; d->zs_my = my; d->zs_moved = 0;
+    break;
   case TL_EYEDROPPER: pick(d, obj, x, y, alt && tool == TL_EYEDROPPER); d->drag = DR_PICK; break;
   case TL_MOVE:
+    if (opt.move_bounds && !doc->sel) {
+      /* 1.1: a handle of the transform box held: Free Transform from there */
+      Box bb;
+      if (move_bounds(d, &bb)) {
+        LONG hx[8], hy[8];
+        int k;
+        bounds_handles(to_sx(d, obj, bb.x0), to_sy(d, obj, bb.y0), to_sx(d, obj, bb.x1) - 1, to_sy(d, obj, bb.y1) - 1, hx, hy);
+        for (k = 0; k < 8; k++) if (labs(mx - hx[k]) <= 5 && labs(my - hy[k]) <= 5) break;
+        if (k < 8) {
+          xf_start(d, obj, XM_FREE, 0);
+          if (d->xf_on) {
+            ov_hide(d, obj);
+            d->xf_handle = xf_hit(d, obj, mx, my); d->xf0 = d->xf; d->qual = qual;
+            d->drag = DR_XFORM;
+            ov_show(d, obj);
+          }
+          ov_show(d, obj);
+          return;
+        }
+      }
+    }
     if (opt.auto_select && x >= 0 && y >= 0 && x < doc->w && y < doc->h) {
-      /* the topmost visible layer with something at the pointer */
+      /* the topmost visible layer with something at the pointer (1.1: or the group it is in) */
       int i;
       for (i = doc->nlay - 1; i >= 0; i--)
         if (doc->lay[i]->visible && layer_has(doc, doc->lay[i], (i32)x, (i32)y)) break;
+      i = auto_select_target(doc, i, opt.move_group);
       if (i >= 0 && i != doc->active) { doc->active = i; changed(d, obj); tell_changed(d, obj); }
     }
     d->drag = DR_MOVE;
@@ -1956,6 +2043,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     else { d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); }
     break;
   case TL_CROP:
+    if (opt.crop_straighten) { d->drag = DR_STRAIGHTEN; break; }      /* 1.1: a line to straighten by */
     if (d->crop_on) {
       int h = crop_hit(d, obj, mx, my);
       if (dbl && h == 8) { ov_show(d, obj); crop_apply(d, obj, 1); return; }
@@ -1969,9 +2057,11 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (brushlike(t)) {
       Brush b = tool_brush(t);
       u32 color = doc->fg;
+      if (t == TL_BRUSH && d->tilde) { b.tool = PT_ERASER; b.custom = NULL; }     /* (1.1: ` held: the Brush erases) */
       if (t == TL_CLONE || t == TL_HEAL) {
         if (alt) { d->clone_x = x; d->clone_y = y; d->clone_set = 1; d->clone_aligned_set = 0; break; }
         if (!d->clone_set) { ask("OK", "%s", tr(t == TL_HEAL ? "Alt-click where the Healing Brush should take its texture from first." : "Alt-click where the Clone Stamp should copy from first.")); break; }
+        if (!opt.clone_aligned) d->clone_aligned_set = 0;          /* (1.1: not Aligned: each stroke starts from the source) */
         if (!d->clone_aligned_set) { d->clone_dx = (i32)floor(d->clone_x - x + 0.5); d->clone_dy = (i32)floor(d->clone_y - y + 0.5); d->clone_aligned_set = 1; }
         b.clone_dx = d->clone_dx; b.clone_dy = d->clone_dy;
       }
@@ -2029,8 +2119,15 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     d->pmx = mx; d->pmy = my;
     draw_all(d, obj);
     break;
+  case DR_STRAIGHTEN: ov_hide(d, obj); d->bx = x; d->by = y; ov_show(d, obj); break;
+  case DR_ZOOMSCRUB:
+    /* 1.1: scrubby zoom: right zooms in, left out, about where the drag began */
+    if (labs(mx - d->zs_mx) > 3) d->zs_moved = 1;
+    if (d->zs_moved) { ov_hide(d, obj); zoom_to(d, obj, d->zs_z * pow(2.0, (mx - d->zs_mx) / 100.0), d->zs_mx, d->zs_my); }
+    break;
   case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
   case DR_STROKE:
+    if (doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);   /* (1.1) */
     if (d->stroke) { stroke_to(d->stroke, x, y, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch); }
     d->bx = x; d->by = y;
     break;
@@ -2085,7 +2182,8 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     ov_hide(d, obj);
     if (doc->guides.snap && d->drag != DR_MOVE) snap_point(doc, &x, &y, SNAP_DOC);
     d->bx = x; d->by = y;
-    if (d->modifiers & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
+    d->shape_centre = d->drag == DR_SHAPE && (d->qual & QALT) != 0;        /* (1.1: Alt: from the centre) */
+    if ((d->modifiers | (d->drag == DR_SHAPE ? d->qual : 0)) & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
       if (d->drag == DR_MARQUEE || d->drag == DR_SHAPE) {
         /* Shift: a square or a circle */
         double w = fabs(d->bx - d->ax), h = fabs(d->by - d->ay), s = w > h ? w : h;
@@ -2149,6 +2247,23 @@ static void release(struct Data *d, Object *obj)
     tell_changed(d, obj);
     break;
   case DR_PICK: break;
+  case DR_ZOOMSCRUB:
+    if (!d->zs_moved) { int out = d->space ? (d->modifiers & QALT) != 0 : opt.zoom_out ^ ((d->modifiers & QALT) != 0); ov_hide(d, obj); zoom_to(d, obj, zoom_step(d->z, out ? -1 : 1), d->zs_mx, d->zs_my); }
+    break;
+  case DR_STRAIGHTEN:
+    /* 1.1: the Crop tool's Straighten: the picture turned so the line is level, and cropped */
+    d->drag = DR_STRAIGHTEN; ov_hide(d, obj); d->drag = DR_NONE;
+    if (fabs(d->bx - d->ax) + fabs(d->by - d->ay) >= 4 && image_straighten(doc, d->ax, d->ay, d->bx, d->by)) {
+      opt.crop_straighten = 0;
+      d->crop_on = 0; crop_pending = 0;
+      changed(d, obj);
+      d->edges_ok = 0;
+      draw_all(d, obj);
+      DoMethod(optbar, MUIM_Opts_Refresh);
+      tell_changed(d, obj);
+      return;
+    }
+    break;
   case DR_SAMPLE: set(obj, MUIA_Canvas_Pointer, TRUE); break;
   case DR_LASSO: d->drag = DR_LASSO; poly_finish(d, obj, 1); break;
   case DR_MARQUEE:
@@ -2307,6 +2422,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     }
     return 1;
   }
+  if ((code & ~IECODE_UP_PREFIX) == 0x00) { d->tilde = !(code & IECODE_UP_PREFIX); return 1; }   /* 1.1: ` (the key left of 1) */
   if (code & IECODE_UP_PREFIX) return 0;
   if (!(q & IEQUALIFIER_REPEAT)) {
     /* 0.8: a command's extra key (Edit > Keyboard Shortcuts) */
@@ -2323,7 +2439,11 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
       BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
     for (i = 0; i < (int)sizeof raw; i++) if (raw[i] == code) {
       if (tool == TL_MOVE) { if (doc->lay[doc->active]->kind != LK_GROUP || mode[i]) doc_set_layer_props(doc, doc->active, NULL, -1, mode[i], -1); changed(d, obj); tell_changed(d, obj); draw_all(d, obj); }
-      else if (brushlike(tool) || tool == TL_GRADIENT) { opt.mode[tool] = mode[i]; DoMethod(optbar, MUIM_Opts_Refresh); }
+      else if (tool == TL_BLUR || tool == TL_SHARPEN || tool == TL_SMUDGE) {
+        /* (1.1: their Mode list has seven of the modes) */
+        int k;
+        for (k = 0; k < RETOUCH_MODES; k++) if (retouch_bm[k] == mode[i]) { opt.mode[tool] = k; DoMethod(optbar, MUIM_Opts_Refresh); }
+      } else if (brushlike(tool) || tool == TL_GRADIENT) { opt.mode[tool] = mode[i]; DoMethod(optbar, MUIM_Opts_Refresh); }
       return 1;
     }
   }
@@ -2352,8 +2472,20 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
       return 1;
     }
     if (d->xf_on) return 1;
+    if (d->poly_on && d->npoly > 1) { ov_hide(d, obj); d->npoly--; ov_show(d, obj); return 1; }   /* 1.1: the Polygonal Lasso's last corner taken back */
     if (PATH_TOOL(tool) && path_delete_sel(d, obj)) return 1;          /* 0.9: the chosen anchors deleted */
     DoMethod(_app(obj), MUIM_Application_ReturnID, (q & IEQUALIFIER_CONTROL) ? ID_FILLBG : (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? ID_FILLFG : ID_CLEAR);
+    return 1;
+  case 0x48: case 0x49: case 0x70: case 0x71:   /* 1.1: Page Up, Page Down (Ctrl: left, right), Home, End */
+    if (code == 0x70) { v->sx = -1000000; v->sy = -1000000; }
+    else if (code == 0x71) { v->sx = 1000000; v->sy = 1000000; }
+    else if (q & IEQUALIFIER_CONTROL) v->sx += (code == 0x49 ? 1 : -1) * (_mwidth(obj) * 9 / 10);
+    else v->sy += (code == 0x49 ? 1 : -1) * (_mheight(obj) * 9 / 10);
+    draw_all(d, obj);
+    return 1;
+  case 0x54: case 0x55: case 0x6F:               /* 1.1: Shift-F5 Fill, Shift-F6 Feather, F12 Revert */
+    if (code != 0x6F && !shift) return 0;
+    DoMethod(_app(obj), MUIM_Application_ReturnID, code == 0x54 ? ID_FILL : code == 0x55 ? ID_FEATHER : ID_REVERT);
     return 1;
   case 0x4C: case 0x4D: case 0x4E: case 0x4F: {  /* the arrows: nudge (move tool) or scroll */
     LONG dx = code == 0x4E ? 1 : code == 0x4F ? -1 : 0, dy = code == 0x4D ? 1 : code == 0x4C ? -1 : 0;
@@ -2375,6 +2507,23 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     /* PhotoCraft's Ctrl shortcuts (the Amiga key ones are the menus') */
     int alt = (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
     ULONG id = 0;
+    /* 1.1: more of PhotoCraft's (CAT): Reselect, Fade, Last Filter, Clipping Mask, Auto Color, Black
+       & White, Auto Contrast, Rulers, Grid, Guides, Snap, Extras, Save a Copy, Close All */
+    switch (ToLower((ULONG)c)) {
+    case 'd': if (shift) id = ID_RESELECT; break;
+    case 'f': id = shift ? ID_FADE : alt ? ID_F_AGAIN : 0; break;
+    case 'g': if (alt) id = ID_CLIP; break;
+    case 'b': if (shift) id = alt ? ID_ADJ_BW : ID_AUTOCOLOR; break;
+    case 'l': if (shift && alt) id = ID_AUTOCONTRAST; break;
+    case 'r': id = ID_RULERS; break;
+    case '\'': id = ID_SHOWGRID; break;
+    case ';': id = ID_SHOWGUIDES; break;
+    case ':': id = ID_SNAP; break;
+    case 'h': id = ID_SHOWEDGES; break;
+    case 's': if (alt) id = ID_SAVECOPY; break;
+    case 'w': if (alt) id = ID_CLOSEALL; break;
+    }
+    if (id) { DoMethod(_app(obj), MUIM_Application_ReturnID, id); return 1; }
     switch (ToLower((ULONG)c)) {
     case 'z': id = shift ? ID_REDO : alt ? ID_STEPBACK : ID_UNDO; break;
     case 'y': id = ID_REDO; break;
@@ -2422,9 +2571,13 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     DoMethod(optbar, MUIM_Opts_Refresh);
     return 1;
   }
+  if (shift && code >= 0x01 && code <= 0x0A && brushlike(tool)) c = code == 0x0A ? '0' : '0' + code;   /* (1.1: Shift and a digit key) */
   if (c >= '0' && c <= '9' && (brushlike(tool) || tool == TL_GRADIENT || tool == TL_BUCKET)) {
     int o = c == '0' ? 100 : (c - '0') * 10;
-    if (tool == TL_BUCKET) opt.fill_opacity = o; else opt.opacity[tool] = o;
+    /* 1.1: Alt and a digit sets the Smoothing, Shift and a digit the Flow (PhotoCraft's keys) */
+    if ((q & QALT) && brushlike(tool)) brushui.b.dyn.smoothing = c == '0' ? 100 : (c - '0') * 10;
+    else if (shift && brushlike(tool)) opt.flow[tool] = o;
+    else if (tool == TL_BUCKET) opt.fill_opacity = o; else opt.opacity[tool] = o;
     DoMethod(optbar, MUIM_Opts_Refresh);
     return 1;
   }
@@ -2434,6 +2587,12 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   if (c == 'x' || c == 'X') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_SWAPCOLORS); return 1; }
   if (c == 'd' || c == 'D') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_DEFCOLORS); return 1; }
   if (c == 'q' || c == 'Q') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_QUICKMASK); return 1; }   /* 0.7: Quick Mask */
+  if ((c == 'f' || c == 'F') && tool_for_key('F') < 0) {
+    /* 1.1: F steps through the screen modes: a window, Easel's own screen, full screen */
+    static const ULONG sm[3] = { ID_SCR_OWN, ID_SCR_FULL, ID_SCR_WINDOW };
+    DoMethod(_app(obj), MUIM_Application_ReturnID, sm[prefs.screen_mode % 3]);
+    return 1;
+  }
   /* a tool's letter: that tool, or (pressed again, or with Shift) the next tool sharing the letter */
   c = ToUpper((ULONG)c);
   if ((i = tool_for_key(c)) < 0) return 0;
