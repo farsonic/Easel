@@ -62,6 +62,7 @@ void pens_free(void)
   ncube = 0;
   if (chunky) { FreeVec(chunky); chunky = NULL; chunky_cap = 0; }
 }
+int display_dither;                     /* 1.2 (easel.h): 0 ordered, 1 none, 2 error diffusion */
 void draw_rgb(struct RastPort *rp, struct Screen *scr, const UBYTE *rgb, LONG mod, LONG x, LONG y, LONG w, LONG h)
 {
   LONG i, j;
@@ -76,11 +77,46 @@ void draw_rgb(struct RastPort *rp, struct Screen *scr, const UBYTE *rgb, LONG mo
     chunky_cap = w * h;
     if (!(chunky = (UBYTE *)AllocVec((ULONG)chunky_cap, MEMF_ANY))) { chunky_cap = 0; return; }
   }
+  if (display_dither == 2) {
+    /* 1.2: error diffusion (Floyd-Steinberg) within the part drawn */
+    static short *err;
+    static LONG errcap;
+    if ((w + 2) * 6 > errcap) {
+      if (err) FreeVec(err);
+      errcap = (w + 2) * 6;
+      if (!(err = (short *)AllocVec((ULONG)errcap * sizeof(short), MEMF_ANY | MEMF_CLEAR))) errcap = 0;
+    }
+    if (err) {
+      memset(err, 0, (size_t)errcap * sizeof(short));
+      for (j = 0; j < h; j++) {
+        const UBYTE *s = rgb + j * mod;
+        UBYTE *o = chunky + j * w;
+        short *cur = err + ((j & 1) ? (w + 2) * 3 : 0), *nxt = err + ((j & 1) ? 0 : (w + 2) * 3);
+        memset(nxt, 0, (size_t)(w + 2) * 3 * sizeof(short));
+        for (i = 0; i < w; i++, s += 3) {
+          int q[3], k;
+          for (k = 0; k < 3; k++) {
+            int v = s[k] + cur[(i + 1) * 3 + k] / 16, l, e;
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            l = (v * (cubelv - 1) + 127) / 255;
+            q[k] = l;
+            e = v - l * 255 / (cubelv - 1);
+            cur[(i + 2) * 3 + k] += (short)(e * 7);
+            nxt[i * 3 + k] += (short)(e * 3); nxt[(i + 1) * 3 + k] += (short)(e * 5); nxt[(i + 2) * 3 + k] += (short)e;
+          }
+          o[i] = (UBYTE)cube[(q[0] * cubelv + q[1]) * cubelv + q[2]];
+        }
+      }
+      WriteChunkyPixels(rp, (ULONG)x, (ULONG)y, (ULONG)(x + w - 1), (ULONG)(y + h - 1), chunky, w);
+      return;
+    }
+  }
   for (j = 0; j < h; j++) {
     const UBYTE *s = rgb + j * mod;
     UBYTE *o = chunky + j * w;
     for (i = 0; i < w; i++, s += 3) {
-      int t = bayer[(y + j) & 3][(x + i) & 3] * 255 / 16, q[3], k;
+      int t = display_dither == 1 ? 127 : bayer[(y + j) & 3][(x + i) & 3] * 255 / 16, q[3], k;   /* (1.2: none: the nearest) */
       for (k = 0; k < 3; k++) { q[k] = (s[k] * (cubelv - 1) + t) / 255; if (q[k] > cubelv - 1) q[k] = cubelv - 1; }
       o[i] = (UBYTE)cube[(q[0] * cubelv + q[1]) * cubelv + q[2]];
     }

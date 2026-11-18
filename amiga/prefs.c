@@ -13,6 +13,8 @@
 #include <proto/muimaster.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "tools2.h"                     /* 1.2 */
+#include "../core/layerx.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -35,13 +37,15 @@ void prefs_defaults(void)
 /* (see easel.h) one line of Easel.prefs taken if it is one of these settings; 1 if it was */
 int prefs_line(const char *l)
 {
+  if (histopts_line(l)) return 1;                          /* 1.2: History Options and Log */
   static const struct { const char *key; int *v; } ints[] = {
     { "tips=", &prefs.tips }, { "large=", &prefs.large_text }, { "cursor=", &prefs.cursor }, { "capsprecise=", &prefs.caps_precise },
     { "xformnums=", &prefs.xform_numbers }, { "savefmt=", &prefs.save_fmt }, { "jpegq=", &prefs.jpeg_quality },
     { "askflatten=", &prefs.ask_flatten }, { "nrecent=", &prefs.nrecent }, { "units=", &prefs.units }, { "dpi=", &prefs.dpi },
     { "gridsp=", &prefs.grid_spacing }, { "gridsub=", &prefs.grid_sub }, { "scratchon=", &prefs.scratch_on },
     { "scratchmb=", &prefs.scratch_mb }, { "undomb=", &prefs.undo_mb }, { "undolevels=", &prefs.undo_levels },
-    { "screenmode=", &prefs.screen_mode }, { "skipplacexf=", &prefs.skip_place_xf }
+    { "screenmode=", &prefs.screen_mode }, { "skipplacexf=", &prefs.skip_place_xf },
+    { "tabletcurve=", &tablet_curve_pc }, { "tabletfloor=", &tablet_floor_pc }, { "pixaspect=", &view_aspect }, { "dither=", &display_dither }   /* 1.2 */
   };
   int i;
   for (i = 0; i < (int)(sizeof ints / sizeof ints[0]); i++) {
@@ -58,6 +62,8 @@ int prefs_line(const char *l)
 /* these settings written to Easel.prefs */
 void prefs_write(FILE *f)
 {
+  histopts_write(f);                                       /* 1.2 */
+  fprintf(f, "tabletcurve=%d\ntabletfloor=%d\npixaspect=%d\ndither=%d\n", tablet_curve_pc, tablet_floor_pc, view_aspect, display_dither);
   fprintf(f, "tips=%d\nlarge=%d\ncursor=%d\ncapsprecise=%d\nxformnums=%d\n", prefs.tips, prefs.large_text, prefs.cursor, prefs.caps_precise, prefs.xform_numbers);
   fprintf(f, "savefmt=%d\njpegq=%d\naskflatten=%d\nnrecent=%d\nrecovery=%s\n", prefs.save_fmt, prefs.jpeg_quality, prefs.ask_flatten, prefs.nrecent, prefs.recovery);
   fprintf(f, "units=%d\ndpi=%d\nguidecol=%06lX\ngridcol=%06lX\ngridsp=%d\ngridsub=%d\n", prefs.units, prefs.dpi,
@@ -91,6 +97,8 @@ void prefs_apply(void)
   else undo_scratch[0] = 0;
   undo_scratch_max = (long)prefs.scratch_mb * 1024 * 1024;
   theme_tips = prefs.tips;
+  /* 1.2: smart objects keep their sources in the scratch drawer (T: when none is set) */
+  strncpy(smart_drawer, prefs.scratch[0] ? prefs.scratch : "T:", sizeof smart_drawer - 1); smart_drawer[sizeof smart_drawer - 1] = 0;
 }
 
 /* ------------------------------------------------------------------ units */

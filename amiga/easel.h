@@ -42,6 +42,7 @@ typedef struct {
   LONG samp_x[4], samp_y[4]; int nsamp;
   /* 0.8: the History panel's snapshots: whole copies of the picture as it was, and their names */
   Doc *hsnap[8]; char hsnap_name[8][24]; int nhsnap;
+  double vrot;                        /* 1.2: Rotate View: the view's turn, degrees clockwise */
 } DocView;
 #define MAXHSNAP 8
 extern int hist_pick;                 /* (panels.c) the snapshot clicked last in the History panel, -1 none */
@@ -68,11 +69,14 @@ enum {
      and TL_LINE make shape layers too) */
   TL_TYPEMASK, TL_VTEXT, TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT, TL_PATHSEL, TL_DIRECTSEL,
   TL_ROUNDRECT, TL_POLYGON, TL_CUSTOMSHAPE,
+  /* 1.2 (tools2.c) */
+  TL_QUICKSEL, TL_OBJSEL, TL_PCROP, TL_SLICE, TL_SLICESEL, TL_FRAME, TL_NOTE, TL_COUNT, TL_MIXER, TL_ARTHIST,
+  TL_REMOVE, TL_CAMOVE, TL_ROTVIEW, TL_ARTBOARD,
   TL_N
 };
 /* a tool's icon (theme.h): the first ones in TL_ order, 0.5's (and 0.7's, 0.8's and 1.0's) after the
    rest, 0.9's after those */
-#define TOOL_ICON(t) ((t) >= TL_TYPEMASK ? IC_T_TYPEMASK + (t) - TL_TYPEMASK : (t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
+#define TOOL_ICON(t) ((t) >= TL_QUICKSEL ? IC_T_QUICKSEL + (t) - TL_QUICKSEL : (t) >= TL_TYPEMASK ? IC_T_TYPEMASK + (t) - TL_TYPEMASK : (t) <= TL_ZOOM ? IC_T_MOVE + (t) : IC_T_PATTERN + (t) - TL_PATTERN)
 /* 0.9: the tools that make shapes (as shape layers or pixels), and those that work on paths */
 #define SHAPE_TOOL(t) ((t) == TL_RECT || (t) == TL_ELLIPSE || (t) == TL_LINE || (t) == TL_ROUNDRECT || (t) == TL_POLYGON || (t) == TL_CUSTOMSHAPE)
 #define PATH_TOOL(t) ((t) >= TL_PEN && (t) <= TL_DIRECTSEL)
@@ -125,6 +129,16 @@ typedef struct {
   int crop_overlay, crop_straighten;  /* crop: CO_; a drag draws the line to straighten by */
   int zoom_out;                       /* zoom: a click zooms out (Alt-click in) */
   int grad_palrange;                  /* gradient: an indexed picture's palette range (DPaint's range fill) */
+  /* 1.2 (tools2.c) */
+  int qs_enhance, obj_hard;           /* Quick Selection: Auto-Enhance; Object Selection: Hard Edge */
+  int pcrop_w, pcrop_h;               /* Perspective Crop: the size (0: the perspective's own) */
+  int frame_kind, frame_stroke;       /* Frame: 0 rectangle, 1 ellipse; stroke width */
+  int mix_wet, mix_load, mix_mix, mix_autoload, mix_autoclean, mix_all;   /* Mixer Brush */
+  int ah_style, ah_area, ah_tolerance;                    /* Art History Brush */
+  int cam_extend, cam_structure, cam_color;               /* Content-Aware Move */
+  int patch_mode, patch_transparent, patch_structure, patch_color;   /* Patch: 0 source, 1 destination, 2 content-aware */
+  int heal_source, heal_diffusion, spot_type;             /* Healing Brush: sampled/pattern, 1-7; Spot Healing: SPOT_ */
+  int crop_angle;                     /* Crop: the box's turn (degrees), a drag outside it turns it */
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */
@@ -271,6 +285,7 @@ void draw_rgb_box(struct RastPort *rp, struct Screen *scr, LONG x0, LONG y0, LON
    else dithered to a cube of pens obtained from scr on first use (and kept till pens_free) */
 void draw_rgb(struct RastPort *rp, struct Screen *scr, const UBYTE *rgb, LONG mod, LONG x, LONG y, LONG w, LONG h);
 int  truecolor(struct Screen *scr);
+extern int display_dither;            /* (1.2) palette screens: 0 ordered dither, 1 the nearest pens, 2 error diffusion */
 void pens_free(void);
 /* the nearest pen to an 0xRRGGBB on scr (ReleasePen it) */
 LONG rgb_pen(struct Screen *scr, ULONG c);

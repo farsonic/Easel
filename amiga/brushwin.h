@@ -54,6 +54,9 @@ typedef struct {
   int use_custom;                     /* the brush tools paint with it */
   int pick_merged, pick_key;          /* pick up from everything seen; the background colour transparent */
   int stencil;                        /* 1.1: DPaint's stencil, toolopts.h's STC_ (b.stencil_invert inverts it) */
+  /* 1.2: Brush Settings' Texture (on, the pattern's number), Dual Brush's tip (0 round, 1.. a built-in),
+     Noise and Wet Edges, Brush Pose and its overrides, Protect Texture, the draw mode for plain brushes */
+  int tex_on, tex_pat, dual_tip, noise_on, wet_on, pose_on, pose_tilt, pose_rot, pose_press, protect_texture, draw_mode;
   char path[512];                     /* the last file loaded or saved */
   void (*picked)(const Brush *b);
   void (*changed)(void);

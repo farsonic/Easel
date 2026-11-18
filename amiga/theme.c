@@ -1072,6 +1072,21 @@ static const char *const icons[IC_N] = {
   /* PATHSTROKE: stroke path: a thick ring */ "ci O 8 8 6 O 8 8 5 O 8 8 4",
   /* PATHFROMSEL: work path from the selection: a dashed box becoming a path */ "cd L 1 1 3 1 L 6 1 8 1 L 1 1 1 3 L 1 6 1 8 ci L 5 13 13 5 L 4 14 5 13 ca F 3 12 5 14 F 12 3 14 5",
   /* WARP: warp text: a T over an arched line */ "ci F 3 2 12 3 F 7 2 8 10 ca P 5 1 14 4 12 8 11 12 12 15 14",
+  /* 1.2 */
+  /* T_QUICKSEL: quick selection: a brush in a dashed ring */ "cd O 6 9 5 ci L 9 7 14 2 L 10 7 15 2 ca F 7 7 10 10",
+  /* T_OBJSEL: object selection: a dashed box round a disc */ "cd R 1 1 14 14 ci E 8 8 4",
+  /* T_PCROP: perspective crop: a skewed frame */ "ci L 3 1 3 12 L 3 12 14 12 L 1 4 12 3 L 12 3 13 15 cd L 4 5 11 4",
+  /* T_SLICE: slice: a knife */ "ci L 2 13 11 4 L 3 13 12 4 L 4 13 13 4 ca F 11 2 14 5",
+  /* T_SLICESEL: slice select: an arrow over a box */ "cd R 6 6 15 15 ci P 8 1 1 1 10 4 7 7 11 9 9 5 6 9 6 1 1",
+  /* T_FRAME: frame: a box with a cross */ "ci R 1 1 14 14 cd L 2 2 13 13 L 13 2 2 13",
+  /* T_NOTE: note: a sheet with lines */ "cy F 2 2 13 13 ci R 2 2 13 13 L 4 5 11 5 L 4 8 11 8 L 4 11 8 11",
+  /* T_COUNT: count: a 1 and a cross */ "ci L 4 3 4 13 L 3 4 4 3 L 2 13 6 13 ca L 9 6 15 12 L 15 6 9 12",
+  /* T_MIXER: mixer brush: a brush and a drop */ "ci L 9 1 14 6 L 8 2 13 7 F 4 7 9 12 ca E 4 13 2",
+  /* T_ARTHIST: art history brush: a brush and a curl */ "ci L 10 1 14 5 F 6 6 9 9 ca P 6 2 14 1 10 3 8 6 9 7 12 4 13",
+  /* T_REMOVE: remove: a plaster and a sparkle */ "ci P 5 3 13 13 3 15 5 5 15 3 13 ca L 1 2 5 2 L 3 0 3 4",
+  /* T_CAMOVE: content-aware move: four arrows */ "ci L 8 1 8 15 L 1 8 15 8 L 6 3 8 1 L 10 3 8 1 L 6 13 8 15 L 10 13 8 15 L 3 6 1 8 L 3 10 1 8 L 13 6 15 8 L 13 10 15 8",
+  /* T_ROTVIEW: rotate view: a ring with an arrow */ "ci O 8 8 6 ca L 13 2 14 5 L 11 5 14 5",
+  /* T_ARTBOARD: artboard: a board with its name tab */ "ci R 1 4 14 14 ca F 1 1 7 3",
 };
 /* the next number in an icon description, spaces before it skipped and *p moved past it */
 static LONG num(const char **p)

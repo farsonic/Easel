@@ -21,6 +21,39 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.2: tools, layers and brushes
+
+- New tools: Quick Selection (paint over what you want; it grows to the edges) and Object Selection
+  (a box round the object), Perspective Crop, Slice and Slice Select (File > Export More > Slices
+  as PNG), Frame, Note and Count, the Mixer Brush (Wet, Load, Mix, Auto Load and Clean), the Art
+  History Brush (ten styles), Remove and Content-Aware Move, Rotate View and the Artboard tool.
+- Content-aware fill: Edit > Content-Aware Fill, the Remove tool, the Spot Healing Brush's
+  Content-Aware type, the Patch tool's Content-Aware mode and Content-Aware Move fill from the
+  picture round the area (PatchMatch, coarse to fine, with progress and Abort). It is slow on a
+  68040: seconds for a blemish, about a minute for an area of 100 x 100 pixels.
+- Healing: the Spot Healing Brush's Create Texture; the Healing Brush's Source (Sampled or a
+  Pattern), Mode and Diffusion; the Patch tool's Destination (with Transparent) and Content-Aware.
+- The Crop tool's box turns with a drag outside it (Shift: 15 degree steps).
+- Brush Settings: Texture, Dual Brush, Noise, Wet Edges, Brush Pose, Pen Tilt, Protect Texture,
+  and Deluxe Paint's draw modes (now with Tint) for any brush; symmetry gets Diagonal and Tile.
+- Pen tablets: pressure and tilt from any driver sending Intuition's tablet events (OS 3.x), with a
+  pressure curve and floor in Easel.prefs (`tabletcurve=`, `tabletfloor=`).
+- Photoshop files: brushes saved as .abr; gradients (.grd) and patterns (.pat) loaded, and
+  patterns saved as .pat (Edit > Presets).
+- Layers: vector masks (Layer > Vector Mask), linked layers that move together, pattern fill
+  layers and Pattern Overlay, layer styles on groups, artboards and frames (Layer > Links and
+  Artboards), and smart objects (Layer > Smart Objects, File > Open as Smart Object): their
+  sources wait as PNG files in the scratch drawer (or are linked files), so they cost no more
+  memory than a pixel layer, and transforms are worked out from the source without loss.
+- History: Edit > History Options (the first snapshot made on opening, a snapshot on saving, the
+  New Snapshot dialog, and a History Log to a file or the picture's File Info), Rename Snapshot.
+- Amiga: View > Pixel Aspect Ratio Correction shows lores and hires pixels as the screen would;
+  overscan sizes and View > Show > Guides from TV Safe Areas; File > Export More writes raw
+  bitplanes (interleaved or not, with LoadRGB4 or LoadRGB32 palettes), the same as C or assembler
+  source, hardware sprites and copper-list gradients; Window > Spare Page and Copy to Spare;
+  Window > Animation steps through and plays the frames (layers) with onion skins; brushes shear
+  and bend; icons get tool types.
+
 ## New in 1.1: tool options
 
 - Dodge and Burn have a Range (Shadows, Midtones, Highlights) and Protect Tones; the Sponge
@@ -355,8 +388,9 @@ next to itself.
 | Move | V | drag the layer, or what is selected; arrow keys nudge by 1 (Shift: 10); Auto-Select picks the layer under the pointer |
 | Rectangular / Elliptical Marquee | M | Shift adds, Alt subtracts, both intersect; Shift while dragging makes a square or circle; feather |
 | Lasso / Polygonal Lasso / Magnetic Lasso | L | freehand; or click the corners, then double-click or press Return to close (Esc drops it); the magnetic lasso follows edges |
-| Magic Wand | W | tolerance, contiguous, sample all layers |
-| Crop | C | drag a box and adjust its handles; Return or a double-click inside crops, Esc cancels |
+| Object Selection / Quick Selection / Magic Wand | W | a box round the object; paint over it; tolerance, contiguous, sample all layers |
+| Crop / Perspective Crop / Slice / Slice Select | C | drag a box and adjust its handles (drag outside it to turn it); Return or a double-click inside crops, Esc cancels; four corners for Perspective Crop |
+| Frame | K | drag a rectangle or ellipse frame; Place in Frame fills it |
 | Eyedropper / Color Sampler / Ruler | I | point or up to 101 × 101 average, current, current and below, or all layers; Alt-click sets the background colour; the sampler leaves up to four marks; the ruler measures and straightens |
 | Spot Healing Brush / Healing Brush / Patch / Red Eye | J | paint over a spot; Alt-click a source, then paint; draw round an area and drag it to the source; click a red eye |
 | Clone Stamp / Pattern Stamp | S | Alt-click sets the clone source, then paint; the pattern stamp paints the chosen pattern |

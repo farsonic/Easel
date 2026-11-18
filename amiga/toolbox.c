@@ -24,6 +24,8 @@
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
+#include "tools2ids.h"                  /* 1.2 */
+#include "../core/brushx.h"
 #include "../core/crop.h"
 #include "../core/toolopts.h"
 #include "brushwin.h"
@@ -31,14 +33,18 @@
 static int fh(void) { return theme_font()->tf_YSize; }
 
 /* ------------------------------------------------------------------ the groups */
-typedef struct { int n; int tools[6]; } Group;
+typedef struct { int n; int tools[8]; } Group;
 static const Group groups[] = {
-  { 1, { TL_MOVE } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 1, { TL_WAND } },
-  { 1, { TL_CROP } }, { 3, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER } }, { 4, { TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REDEYE } } /* 1.0 */, { 3, { TL_CLONE, TL_PATTERN, TL_HISTORY } }, { 3, { TL_BRUSH, TL_PENCIL, TL_REPLACE } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
+  /* (1.2: the Artboard, Object and Quick Selection, Perspective Crop, Slice, Frame, Note, Count, Remove,
+     Content-Aware Move, Art History, Mixer Brush and Rotate View tools join their groups) */
+  { 2, { TL_MOVE, TL_ARTBOARD } }, { 2, { TL_MARQUEE, TL_EMARQUEE } }, { 3, { TL_LASSO, TL_PLASSO, TL_MAGLASSO } }, { 3, { TL_OBJSEL, TL_QUICKSEL, TL_WAND } },
+  { 5, { TL_CROP, TL_PCROP, TL_SLICE, TL_SLICESEL, TL_FRAME } }, { 5, { TL_EYEDROPPER, TL_SAMPLER, TL_RULER, TL_NOTE, TL_COUNT } },
+  { 6, { TL_SPOTHEAL, TL_HEAL, TL_PATCH, TL_REMOVE, TL_CAMOVE, TL_REDEYE } } /* 1.0 */, { 4, { TL_CLONE, TL_PATTERN, TL_HISTORY, TL_ARTHIST } },
+  { 4, { TL_BRUSH, TL_PENCIL, TL_REPLACE, TL_MIXER } }, { 3, { TL_ERASER, TL_BGERASE, TL_MAGICERASE } },
   { 2, { TL_GRADIENT, TL_BUCKET } }, { 3, { TL_BLUR, TL_SHARPEN, TL_SMUDGE } }, { 3, { TL_DODGE, TL_BURN, TL_SPONGE } },
   /* 0.9: the pens, type, path selection and the shapes */
   { 4, { TL_PEN, TL_ADDANCHOR, TL_DELANCHOR, TL_CONVERT } }, { 3, { TL_TEXT, TL_VTEXT, TL_TYPEMASK } }, { 2, { TL_PATHSEL, TL_DIRECTSEL } },
-  { 6, { TL_RECT, TL_ROUNDRECT, TL_ELLIPSE, TL_POLYGON, TL_LINE, TL_CUSTOMSHAPE } }, { 1, { TL_HAND } }, { 1, { TL_ZOOM } }
+  { 6, { TL_RECT, TL_ROUNDRECT, TL_ELLIPSE, TL_POLYGON, TL_LINE, TL_CUSTOMSHAPE } }, { 2, { TL_HAND, TL_ROTVIEW } }, { 1, { TL_ZOOM } }
 };
 #define NGROUPS (int)(sizeof groups / sizeof groups[0])
 #define G_HAND (NGROUPS - 2)             /* the Hand's group, set apart with the Zoom's at the bottom */
@@ -53,7 +59,7 @@ static int shown_tool[NGROUPS];          /* each group's tool last used (the one
 #define TB_W 36                          /* the toolbox's width, and each button's height */
 #define TB_H 25
 
-struct TData { struct MUI_EventHandlerNode ehn; int shown, hot, popgroup; char labels[6][48]; const char *lp[6]; int pick, color; };
+struct TData { struct MUI_EventHandlerNode ehn; int shown, hot, popgroup; char labels[8][48]; const char *lp[8]; int pick, color; };
 static struct MUI_CustomClass *tcls, *ocls;
 
 static int tbcols = 1;                   /* two columns on a short screen (set up in MUIM_Setup) */
@@ -160,7 +166,22 @@ static const char *const tool_help[TL_N] = {
   "Chooses and moves points and handles of a path; drag across points to choose several. Backspace deletes them.",
   "Draws a rectangle with round corners as a shape layer (or in pixels).",
   "Draws a polygon or a star as a shape layer (or in pixels).",
-  "Draws the active path as a shape, fitted to the box you drag."
+  "Draws the active path as a shape, fitted to the box you drag.",
+  /* 1.2 */
+  "Selects as you paint: brush over what you want and the selection grows out to its edges. Alt takes away.",
+  "Selects the object in a box you drag round it, by its colours and edges.",
+  "Crops and straightens a picture taken at an angle: drag a box, move its corners onto the corners of what should be square, then press Return.",
+  "Divides the picture into slices for exporting as separate files: drag a box for each.",
+  "Chooses and moves slices: click one, drag it; the options bar divides or deletes it.",
+  "Draws a frame (a rectangle or an ellipse) that a picture can be placed in: drag a box; Layer > Links and Artboards > Place in Frame fills it.",
+  "Puts notes on the picture (they are never part of it): click to add one, click it again to change it, Alt-click to delete it.",
+  "Counts things: click each one to put a numbered mark on it; Alt-click a mark to take it away.",
+  "Paints like real paint: the brush's colour mixes with the colours already there as you paint. Wet, Load and Mix set how much.",
+  "Paints quick stylised strokes in the colours of the snapshot (the History Brush's source), for a painted look.",
+  "Removes what you brush over, filling it from the rest of the picture (this takes a while on a 68040).",
+  "Moves (or copies) the selection somewhere else and fills the place it leaves from the picture round it.",
+  "Turns the view (not the picture) as you drag; Shift turns in steps of 15 degrees. Reset View puts it back.",
+  "Makes artboards: drag a box for each. A layer inside an artboard shows only within it."
 };
 
 static int tb_hit(Object *obj, LONG mx, LONG my, int *corner)
@@ -357,6 +378,12 @@ static const char *const salign[] = { "Centre", "Inside", "Outside" };
 static int fg_show;                     /* the foreground colour, for the Type tool's swatch */
 static const char *const mqstyles[] = { "Normal", "Fixed Ratio", "Fixed Size", "Single Row", "Single Column" };
 static const char *croplist[32];
+/* 1.2 */
+static const char *const framekinds[] = { "Rectangle", "Ellipse" };
+static const char *const cammodes[] = { "Move", "Extend" };
+static const char *const spottypes[] = { "Proximity Match", "Create Texture", "Content-Aware" };
+static const char *const healsrc[] = { "Sampled", "Pattern" };
+static const char *const patchmodes[] = { "Source", "Destination", "Content-Aware" };
 
 static int fields_for(int t, Field *f)
 {
@@ -398,16 +425,21 @@ static int fields_for(int t, Field *f)
     if (opt.crop_preset >= i) opt.crop_preset = 0;
     CHOICE("", opt.crop_preset, croplist, i); BUTTON(opt.crop_swap ? "Swap (H:W)" : "Swap (W:H)", ID_CROPSWAP);
     CHOICE("", opt.crop_overlay, crop_overlay_names, CO_N); CHECK("Straighten", opt.crop_straighten);
-    BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT(opt.crop_straighten ? "Drag along what should be level" : "Drag a box, adjust its handles, then Return"); break;
+    BUTTON("Crop", ID_COMMIT); BUTTON("Cancel", ID_CANCEL); TEXT(opt.crop_straighten ? "Drag along what should be level" : "Drag a box, adjust its handles (drag outside it to turn it), then Return"); break;
   case TL_RULER: TEXT(ruler_info[0] ? ruler_info : "Drag to measure"); BUTTON("Straighten Layer", ID_STRAIGHTEN); CHECK("Whole Picture", opt.ruler_image);
     BUTTON("Clear", ID_RULERCLEAR); break;
   case TL_SAMPLER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); BUTTON("Clear", ID_SAMPCLEAR); TEXT("Click to place up to four; drag one to move it; Alt-click removes it"); break;
   case TL_EYEDROPPER: CHOICE("Sample Size:", opt.sample, samples, NPICK_SIZES); CHOICE("Sample:", opt.pick_from, layersample, 3); TEXT("Alt-click picks the background colour"); break;
   /* 1.0 */
-  case TL_SPOTHEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Type: Proximity Match"); break;
-  case TL_HEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
-    SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Alt-click sets the source"); break;
-  case TL_PATCH: SELOPS(); TEXT("Draw round the area, then drag it to the patch"); break;
+  case TL_SPOTHEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Type:", opt.spot_type, spottypes, 3); break;
+  case TL_HEAL: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); CHOICE("Source:", opt.heal_source, healsrc, 2);
+    if (opt.heal_source && npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
+    CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
+    SCRUB("Diffusion:", opt.heal_diffusion, 1, 7, ""); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); break;
+  case TL_PATCH: SELOPS(); CHOICE("", opt.patch_mode, patchmodes, 3);
+    if (opt.patch_mode == 1) CHECK("Transparent", opt.patch_transparent);
+    if (opt.patch_mode == 2) { SCRUB("Structure:", opt.patch_structure, 1, 7, ""); SCRUB("Color:", opt.patch_color, 0, 10, ""); }
+    TEXT(opt.patch_mode == 1 ? "Draw round the patch, then drag it where it goes" : "Draw round the area, then drag it to the patch"); break;
   case TL_REDEYE: SCRUB("Pupil Size:", opt.redeye_pupil, 1, 100, "%"); SCRUB("Darken Amount:", opt.redeye_darken, 1, 100, "%"); break;
   case TL_CLONE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%");
     SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Aligned", opt.clone_aligned); CHOICE("Sample:", opt.clone_sample, layersample, 3);
@@ -488,6 +520,26 @@ static int fields_for(int t, Field *f)
     BUTTON("Fill Path", ID_PATHFILL); BUTTON("Stroke Path", ID_PATHSTROKE); BUTTON("Make Selection", ID_PATHMKSEL);
     TEXT(t == TL_PATHSEL ? "Drag a path to move it; Ctrl-T transforms it" : "Drag points or handles; drag across points to choose them");
     break;
+  /* 1.2 */
+  case TL_QUICKSEL: SELOPS(); SCRUB("Size:", opt.size[t], 1, 500, "px"); CHECK("Sample All Layers", opt.all_layers); CHECK("Auto-Enhance", opt.qs_enhance); break;
+  case TL_OBJSEL: SELOPS(); CHECK("Sample All Layers", opt.all_layers); CHECK("Hard Edge", opt.obj_hard); TEXT("Drag a box round the object"); break;
+  case TL_PCROP: SCRUB("W:", opt.pcrop_w, 0, 16384, "px"); SCRUB("H:", opt.pcrop_h, 0, 16384, "px"); BUTTON("Crop", ID_PCROP_GO); BUTTON("Cancel", ID_CANCEL);
+    TEXT("0: the perspective's own size; Return crops"); break;
+  case TL_SLICE: BUTTON("Slices From Guides", ID_SLICEGUIDES); BUTTON("Clear Slices", ID_SLICECLEAR); TEXT("Drag a box for each slice"); break;
+  case TL_SLICESEL: BUTTON("Divide Slice...", ID_SLICEDIVIDE); BUTTON("Delete Slice", ID_SLICEDEL); BUTTON("Slices From Guides", ID_SLICEGUIDES); break;
+  case TL_FRAME: CHOICE("", opt.frame_kind, framekinds, 2); SCRUB("Stroke:", opt.frame_stroke, 0, 100, "px"); TEXT("The stroke in the foreground colour"); break;
+  case TL_NOTE: BUTTON("Clear All", ID_NOTECLEAR); TEXT("Click: a note; click one: change it; Alt-click: delete it"); break;
+  case TL_COUNT: BUTTON("New Group...", ID_COUNTGROUP); BUTTON("Clear", ID_COUNTCLEAR); BUTTON("Record Measurements", ID_COUNTRECORD); TEXT("Alt-click a mark removes it"); break;
+  case TL_MIXER: SCRUB("Size:", opt.size[t], 1, 2500, "px"); BUTTON("Load", ID_MIXLOAD); BUTTON("Clean", ID_MIXCLEAN); CHECK("Auto Load", opt.mix_autoload);
+    CHECK("Auto Clean", opt.mix_autoclean); SCRUB("Wet:", opt.mix_wet, 0, 100, "%"); SCRUB("Load:", opt.mix_load, 1, 100, "%"); SCRUB("Mix:", opt.mix_mix, 0, 100, "%");
+    SCRUB("Flow:", opt.flow[t], 1, 100, "%"); CHECK("Sample All Layers", opt.mix_all); break;
+  case TL_ARTHIST: SCRUB("Size:", opt.size[t], 1, 500, "px"); SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHOICE("Style:", opt.ah_style, ah_names, AH_N);
+    SCRUB("Area:", opt.ah_area, 1, 500, "px"); SCRUB("Tolerance:", opt.ah_tolerance, 0, 100, "%"); break;
+  case TL_REMOVE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); TEXT("Brush over what should go; slow on a 68040"); break;
+  case TL_CAMOVE: SELOPS(); CHOICE("Mode:", opt.cam_extend, cammodes, 2); SCRUB("Structure:", opt.cam_structure, 1, 7, ""); SCRUB("Color:", opt.cam_color, 0, 10, "");
+    TEXT("Draw round it, then drag it"); break;
+  case TL_ROTVIEW: BUTTON("Reset View", ID_ROTRESET); BUTTON("90\260", ID_ROT_CW); TEXT("Drag to turn the view; Shift: 15 degree steps"); break;
+  case TL_ARTBOARD: TEXT("Drag a box for an artboard; drag one to move it"); break;
   case TL_HAND: case TL_ZOOM:
     if (t == TL_ZOOM) CHOICE("", opt.zoom_out, zoommodes, 2);
     BUTTON("100%", ID_ACTUAL); BUTTON("Fit Screen", ID_FIT); BUTTON("Fill Screen", ID_FILLSCREEN);

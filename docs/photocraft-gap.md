@@ -107,7 +107,7 @@ Rows that group several identical items say how many they cover.
 
 ## 1. Tools, with options per tool
 
-PhotoCraft has 68 tools (`Tool::ALL` in TOOL), and its options bar is OPT. Easel 1.1 has 49 tools
+PhotoCraft has 68 tools (`Tool::ALL` in TOOL), and its options bar is OPT. Easel 1.1 has 49 tools (1.2: 63)
 (`TL_` in `E:amiga/easel.h`), and its options bar is `fields_for` in `E:amiga/toolbox.c`. Keys are
 PhotoCraft's (`Tool::key()`). Rechecked 2026-11-18 against Easel 1.1 and PhotoCraft `c337d6e`
 (rows marked *upstream* are PhotoCraft changes since `eb6c1ab`, from its merged pull requests).
@@ -116,7 +116,7 @@ PhotoCraft's (`Tool::key()`). Rechecked 2026-11-18 against Easel 1.1 and PhotoCr
 |---|---|---|---|
 | Move (V): Auto-Select Layer/Group, transform controls, align bar (`tools/align_bar.rs`), ⌥-drag duplicates (`tools/move_mods.rs`), nudge; TOOL `Move` | **Have**: Auto-Select with Layer or Group (`auto_select_target`, `E:core/toolopts.c`), Show Transform Controls (`move_bounds`, a handle starts Free Transform, `E:amiga/canvas.c`), the Align list (`F_MENU`, `alignids` in `E:amiga/toolbox.c`), Alt-drag copies (`move_selection_copy`), nudge | Done | — |
 | *upstream* Move: Distribute buttons, the gear menu (#11540); Auto-Select target dropdown Group, Layer (#12166) | **Have**: Distribute Horizontally/Vertically in the Align list; the Layer/Group choice | Done | — |
-| Artboard (V); TOOL `Artboard` | **Missing** | Moderate: artboards are clipped top-level groups (groups exist since 0.3) | P3 |
+| Artboard (V); TOOL `Artboard` | **Have** (1.2): the Artboard tool drags out artboards (groups clipped to their box, with a white background; `doc_new_artboard` in `E:core/layerx.c`), a drag on one moves it; Layer › Links and Artboards › New Artboard / Artboard from Group; File › Export More › Artboards as PNG; kept in OpenRaster (`easel:artboard`) | Done | — |
 | Rectangular Marquee (M): New/Add/Subtract/Intersect, Feather, Style Normal/Fixed Ratio/Fixed Size, W/H swap; OPT 246-315 | **Have** (0.7: `MQS_` styles, `marquee_box` in `E:core/selx.c`) | Done | — |
 | Elliptical Marquee (M): the same plus Anti-alias | **Have** (`sel_ellipse_ex` with Anti-alias) | Done | — |
 | Single Row Marquee: a 1-pixel row | **Have** (`MQS_ROW`, `sel_single_row`) | Done | — |
@@ -126,24 +126,24 @@ PhotoCraft's (`Tool::key()`). Rechecked 2026-11-18 against Easel 1.1 and PhotoCr
 | Magnetic Lasso (L): Width, Contrast, Frequency, pen pressure; `tools/magnetic_lasso_ui.rs`, `algo/src/magnetic.rs` | **Partial**: Width, Contrast, Frequency (`E:core/maglasso.c`); no pen pressure | Moderate (pressure, with tablet input) | P3 |
 | *upstream* Magnetic Lasso: Shift-[ and Shift-] jump to the width limits (#11701); Caps Lock shows the width circle (#12151) | **Missing** | Easy | P3 |
 | Magic Wand (W): Tolerance, Anti-alias, Contiguous, Sample All Layers, Select Subject button; OPT 360 | **Partial**: Tolerance, Anti-alias, Contiguous, All Layers (`sel_wand_ex`); no Sample Size. Select Subject: **Left out** (a trained segmentation model; no Amiga stand-in) | Easy (sample size) | P3 |
-| Quick Selection (W): a brush-driven graph cut; `algo/src/segment.rs` (`quick`) | **Missing** | Hard: a min-cut on a quarter-size proxy is about seconds per stroke | P3 |
-| Object Selection (W): GrabCut in a box, Object Finder; `tools/object_finder.rs`; *upstream* Hard Edge (#13039) | **Missing** (Object Finder is AI: **Left out**) | Hard: GrabCut's iterations take tens of seconds on a 68040 | P3 |
-| Crop (C): ratio and size presets (`tools/crop_presets.rs`), Straighten (`crop_straighten.rs`), overlays (`crop_overlay.rs`), Delete Cropped Pixels, Content-Aware fill, rotating the box | **Partial**: presets with W/H swap (`E:core/crop.c`), 1.1's overlays (Rule of Thirds, Grid, Diagonal, Triangle, Golden Ratio: `crop_overlay_lines`, `E:core/toolopts.c`) and Straighten (a drag, `image_straighten`); no turning the box on the canvas (the core has `image_crop_rotated`), no non-destructive crop, no Content-Aware fill | Moderate (rotating the box); Hard (non-destructive: layers are canvas-sized) | P2 |
+| Quick Selection (W): a brush-driven graph cut; `algo/src/segment.rs` (`quick`) | **Have** (1.2): no graph cut but region growing: colour clusters from what the brush covers and from a ring round it that isn't selected, grown out from the brush to the nearer-coloured pixels and stopped at strong edges, within a few brush widths (`quick_select` in `E:core/selsmart.c`); Add/Subtract, Sample All Layers, Auto-Enhance, one undo step a drag | Done | — |
+| Object Selection (W): GrabCut in a box, Object Finder; `tools/object_finder.rs`; *upstream* Hard Edge (#13039) | **Have** (1.2): a box round the object; GrabCut-like rounds of colour clusters (inside and a band outside), classing, smoothing and refitting, then what joins the box's middle with its holes filled (`object_select` in `E:core/selsmart.c`); Hard Edge, Sample All Layers, objects on transparent layers (as upstream #12869). Object Finder: **Left out** (a trained model) | Done | — |
+| Crop (C): ratio and size presets (`tools/crop_presets.rs`), Straighten (`crop_straighten.rs`), overlays (`crop_overlay.rs`), Delete Cropped Pixels, Content-Aware fill, rotating the box | **Partial**: presets with W/H swap, overlays and Straighten (1.1); 1.2 turns the box with a drag outside it (Shift: 15° steps; `crop_corners`, `crop_drag_angle` in `E:core/toolsx.c`, applied by `image_crop_rotated`) and Edit › Content-Aware Fill fills what a crop leaves empty; no non-destructive crop | Hard (non-destructive: layers are canvas-sized) | P3 |
 | *upstream* Crop: Straighten's label and spirit-level glyph (#11490), Reset button (#9730), Always Show Overlay (#11022), the Contextual Task Bar under the frame (#11669) | **Partial**: Straighten is labelled and Cancel resets; no task bar (it would cover the picture on a 640 × 480 screen) | Easy | P3 |
-| Perspective Crop (C); `tools/perspective_crop_ui.rs` and its upstream fixes (#12221-#12237, #12421) | **Missing** | Moderate: `image_remap` (`E:core/paint.h`) does the projective resample already | P3 |
-| Slice (C) | **Missing** | Easy, but of little use without web export | P3 |
-| Slice Select (C) | **Missing** | Easy | P3 |
-| Frame (K): a placeholder frame with a stroke; `tools/frame_tool.rs`, `Group::frame_stroke`; *upstream* reworked (#8920) | **Missing** | Moderate: needs vector masks | P3 |
+| Perspective Crop (C); `tools/perspective_crop_ui.rs` and its upstream fixes (#12221-#12237, #12421) | **Have** (1.2): drag a box, move its four corners, Return (or Crop on the options bar) remaps the picture upright through the homography (`image_perspective_crop` in `E:core/toolsx.c`, `image_remap`); W and H on the options bar, 0 for the quad's own perspective size (as #12421) | Done | — |
+| Slice (C) | **Have** (1.2): the Slice tool drags out slices (up to 64, numbered on the canvas; `slice_add` in `E:core/toolsx.c`), Slices From Guides, File › Export More › Slices as PNG (`slices_export`), kept in OpenRaster | Done | — |
+| Slice Select (C) | **Have** (1.2): click to pick, drag to move; Divide Slice, Delete Slice on the options bar (`slice_divide`) | Done | — |
+| Frame (K): a placeholder frame with a stroke; `tools/frame_tool.rs`, `Group::frame_stroke`; *upstream* reworked (#8920) | **Have** (1.2): the Frame tool drags a rectangular or elliptical frame: a group with a vector mask of that shape, a grey placeholder with a cross and a stroke in the foreground colour (`doc_new_frame` in `E:core/layerx.c`); Layer › Links and Artboards › Place in Frame scales the active layer to fill it (`doc_frame_place`) | Done | — |
 | Eyedropper (I): sample point/3/5/11/31/51/101, Current/Current & Below/All Layers; `eyedropper_ui.rs` | **Have** (1.1: `doc_pick_ex` and `pick_sizes`, `E:core/toolopts.c`; the square is composited once) | Done | — |
 | *upstream* Eyedropper: right-click menu with the sample sizes, Copy Color as HTML and its hex code (#12182) | **Missing** | Easy | P3 |
 | Color Sampler (I): up to 10 fixed readouts in Info | **Partial**: up to four (0.8, `DocView.samp_x`), shown in Info, with the Eyedropper's sample size (as *upstream* #12175) | Easy | P3 |
 | Ruler (I): measures angle and length; Straighten Layer | **Have** (0.7, `E:core/crop.h` `ruler_measure`, `layer_straighten`) | Done | — |
-| Note (I): annotations | **Missing** | Easy | P3 |
-| Count (I): numbered markers | **Missing** | Easy | P3 |
-| Brush (B): Size, Hardness, Mode, Opacity, Flow, airbrush build-up, Smoothing, pressure for size and opacity, preset picker (`tools/brush_picker.rs`), symmetry (`tools/symmetry_ui.rs`); OPT 134-220 | **Partial**: all of it (0.5, Brush Settings and the Brushes panel; 1.1 puts Smoothing and Airbrush on the options bar) but pressure: the engine takes it (`stroke_begin_p`) and nothing reads a tablet | Moderate: `IESUBCLASS_NEWTABLET` input events | P2 |
+| Note (I): annotations | **Have** (1.2): notes (up to 64, in their colour, never part of the picture; `note_add` and friends in `E:core/toolsx.c`): click adds one, double-click edits, Alt-click deletes, drag moves, Clear All asks first (as upstream #12217); View › Show › Notes; kept in OpenRaster (`easel:note`) | Done | — |
+| Count (I): numbered markers | **Have** (1.2): numbered marks in up to 16 colour groups (`count_add`, `count_group_add`), Alt-click removes, drag moves, adding a mark shows the count again (upstream #11845), Record Measurements gives "group<TAB>count" lines (`count_record`); kept in OpenRaster | Done | — |
+| Brush (B): Size, Hardness, Mode, Opacity, Flow, airbrush build-up, Smoothing, pressure for size and opacity, preset picker (`tools/brush_picker.rs`), symmetry (`tools/symmetry_ui.rs`); OPT 134-220 | **Have**: all of it (0.5; 1.1 the options bar's Smoothing and Airbrush); 1.2 reads the pen: an input handler before Intuition takes `IESUBCLASS_NEWTABLET` events' `TABLETA_Pressure` (or TabletZ/RangeZ) and `TABLETA_AngleX/Y` (`tablet_parse` in `E:core/brushx.c`, `E:amiga/tools2.c`) into `stroke_begin_p`/`stroke_to_p` and `stroke_tilt`, through a pressure curve and floor (`tablet_curve`); without tablet hardware here the path is tested with tag lists made as Intuition sends them (`E:tests/brushxtest.c`) | Done | — |
 | *upstream* Brush: Alt+digit sets Smoothing (#12034), opacity minimum 1 % and "00" (#11823), Shift-drags constrained (#11926), the HUD's size/hardness drag (#12056), Reset Tool's defaults (#11856) | **Partial**: Alt+digit Smoothing and Shift+digit Flow (1.1, `keys`); no HUD drag, no Reset Tool | Easy | P3 |
 | Pencil (B): Size, Mode, Opacity, Smoothing, Auto Erase; OPT 173; *upstream* pressure toggles (#12477), Auto Erase only on the exact foreground (#12209) | **Have**: Smoothing and Auto Erase on the options bar (1.1), Auto Erase on the exact colour (`stroke_begin_target`); pressure as the Brush | Done | — |
-| Mixer Brush (B): Wet, Load, Mix, Flow, load and clean after each stroke, Sample All Layers; `paint/src/mixer.rs` | **Missing** | Moderate: a per-dab pickup buffer is fine at small sizes | P3 |
+| Mixer Brush (B): Wet, Load, Mix, Flow, load and clean after each stroke, Sample All Layers; `paint/src/mixer.rs` | **Have** (1.2): PhotoCraft's reservoir and pickup model (`mixer_dab` in `E:core/brushx.c`, `PT_MIXER` in `E:core/stroke.c`): Wet, Load, Mix, Flow, Load and Clean buttons, Auto Load, Auto Clean, Sample All Layers | Done | — |
 | Color Replacement (B): Mode Hue/Saturation/Color/Luminosity, Sampling Continuous/Once/Background, Limits Contiguous/Discontiguous/Find Edges, Tolerance; `paint/src/replace.rs` | **Have** (0.5, `PT_REPLACE`) | Done | — |
 | Eraser (E): Mode Brush/Pencil/Block, Opacity, Flow, Erase to History; `tools/eraser_ui.rs` | **Have**: the modes (0.5, `ER_`) and Erase to History (1.1, `Brush.erase_history` in `E:core/stroke.c`) on the options bar | Done | — |
 | Background Eraser (E): Sampling, Limits, Tolerance, Protect Foreground; `paint/src/bg_erase.rs`; *upstream* graded Find Edges, fading Protect Foreground, decontamination (#12152-#12154) | **Partial**: the options (0.5, `PT_BGERASE`); the upstream refinements are not ported | Easy | P3 |
@@ -155,18 +155,18 @@ PhotoCraft's (`Tool::key()`). Rechecked 2026-11-18 against Easel 1.1 and PhotoCr
 | Horizontal Type Mask (T): the glyphs as a selection | **Have** (0.9, `TL_TYPEMASK`) | Done | — |
 | Vertical Type Mask (T) | **Missing**: the Type Mask tool sets horizontal text only | Easy | P3 |
 | Hand (H): Fit Screen, Fill Screen, scroll all windows | **Have**: 100%, Fit Screen, Fill Screen (1.1), Zoom In/Out, the Space bar. Scroll All Windows (*upstream* #9144): **Left out**, Easel shows one picture at a time in tabs | Done | — |
-| Rotate View (R): view angle, reset | **Missing** | Hard: rotating the display on every redraw is slow; a 90° step would be Easy | P3 |
+| Rotate View (R): view angle, reset | **Partial** (1.2): the Rotate View tool (Shift: 15° steps, double-click resets) and View › Rotate View (90°, 180°, Reset View) turn the canvas's drawing (`render_turned` in `E:amiga/canvas.c`, `view_rotate` in `E:core/toolsx.c`); painting, picking, Quick Selection, the Art History Brush, Hand and Zoom work on a turned view, the other tools ask for it to be put straight; it needs the whole composite in memory | Moderate (the other tools' overlays turned too) | P3 |
 | Zoom (Z): Resize Windows to Fit, scrubby zoom, Fit/Fill/100%; *upstream* Zoom In / Zoom Out mode (#13013), the bar's buttons (#12286) | **Have** (1.1: the mode, a drag zooms, Fill Screen; `DR_ZOOMSCRUB` in `E:amiga/canvas.c`); Resize Windows: **Left out** (tabs, one window) | Done | — |
-| Remove (J): non-local patch completion; `algo/src/remove.rs` | **Missing** | Hard: minutes for a small area | P3 |
-| Spot Healing Brush (J): Type Content-Aware/Create Texture/Proximity Match, Sample All Layers | **Partial**: Proximity Match (1.0, `E:core/retouch.c`) | Moderate (Create Texture); Hard (Content-Aware) | P3 |
-| Healing Brush (J): Source Sampled/Pattern, Aligned, Sample current/below/all, Mode, Diffusion | **Partial**: Sampled, Aligned and Sample (1.1); no Pattern source, Mode or Diffusion | Easy | P3 |
-| Patch (J): Source/Destination, Transparent, Diffusion, Content-Aware; *upstream* Shift constrains (#12274), Destination moves the selection (#12298) | **Partial**: Source only (1.0, `patch_heal`) | Easy (Destination); Hard (Content-Aware) | P3 |
-| Content-Aware Move (J): Move/Extend, Structure, Color, Transform On Drop | **Missing** | Hard | P3 |
+| Remove (J): non-local patch completion; `algo/src/remove.rs` | **Have** (1.2): the Remove tool brushes over what should go; when the stroke ends it is filled by PatchMatch over a pyramid (`ca_fill_rgba` in `E:core/cafill.c`), in bands of rows with progress and Abort. Slow on a 68040: seconds for a small blemish, about a minute for 100 × 100 pixels | Done | — |
+| Spot Healing Brush (J): Type Content-Aware/Create Texture/Proximity Match, Sample All Layers | **Have**: Proximity Match (1.0); 1.2 adds Create Texture (blocks of texture from round the spot healed into it, `spot_texture_fill` in `E:core/brushx.c`) and Content-Aware (PatchMatch, `E:core/cafill.c`) | Done | — |
+| Healing Brush (J): Source Sampled/Pattern, Aligned, Sample current/below/all, Mode, Diffusion | **Have**: Sampled, Aligned and Sample (1.1); 1.2 adds Source: Pattern, Mode (the healed pixels laid in that mode) and Diffusion 1-7 (how much of the source's fine detail is kept, `heal_blend_ex`) | Done | — |
+| Patch (J): Source/Destination, Transparent, Diffusion, Content-Aware; *upstream* Shift constrains (#12274), Destination moves the selection (#12298) | **Have**: Source (1.0); 1.2 adds Destination (the patch healed in where it is dragged, the selection going with it, as #12298), Transparent (its texture only) and Content-Aware with Structure and Color (`patch_dest`, `patch_content` in `E:core/cafill.c`); Diffusion as the Healing Brush's | Done | — |
+| Content-Aware Move (J): Move/Extend, Structure, Color, Transform On Drop | **Have** (1.2): draw round it, drag it: Move (the hole filled by PatchMatch from round it) or Extend (copied), Structure (the patch size) and Color (how much the edge is healed in) (`doc_ca_move` in `E:core/cafill.c`); no Transform On Drop (Free Transform afterwards does it) | Done | — |
 | Red Eye (J): Pupil Size, Darken Amount; `algo/src/redeye.rs` | **Have** (1.0, `redeye_fix`) | Done | — |
 | Clone Stamp (S): Size, Hardness, Mode, Opacity, Flow, Aligned, Sample current/below/all, Clone Source overlay with 5 sources | **Partial**: everything but the Clone Source panel and its overlay (1.1: Mode, Aligned and Current & Below, `doc_composite_below`) | Easy | P3 |
 | Pattern Stamp (S): pattern, Aligned, Impressionist; *upstream* Behind in the Mode list (#13028) | **Partial**: pattern and Aligned (0.5); no Impressionist, no Mode | Easy | P3 |
 | History Brush (Y): paints from a chosen history state; *upstream* opacity/flow and source selection (#4446) | **Have**: the snapshot (0.5), Flow and a History panel snapshot as the source (1.1, `ID_HISTBRUSHSRC`) | Done | — |
-| Art History Brush (Y): 10 stroke styles, Area, Tolerance; `algo/src/art_history.rs` | **Missing** | Moderate | P3 |
+| Art History Brush (Y): 10 stroke styles, Area, Tolerance; `algo/src/art_history.rs` | **Have** (1.2): the ten styles (Tight/Loose, Short/Medium/Long, Dab, the curls), Area and Tolerance, strokes along the snapshot's edges in its colours (`art_history` in `E:core/brushx.c`), starting with Tight Short (as upstream #12726); one undo step a drag | Done | — |
 | Blur tool: Mode, Strength, Sample All Layers | **Partial**: Mode (1.1, `mode_back` in `E:core/stroke.c`) and Strength; no Sample All Layers | Easy | P3 |
 | Sharpen tool: as Blur, plus Protect Detail; *upstream* gentle Protect Detail (#12999) | **Partial**: Mode and Protect Detail (1.1); no Sample All Layers | Easy | P3 |
 | Smudge: Strength, Finger Painting, Sample All; *upstream* Mode (#13031) | **Partial**: Mode, Strength, Finger Painting (1.1); no Sample All Layers | Easy | P3 |
@@ -457,16 +457,16 @@ shape layers) made most of the old "Missing" rows stale.
 | Pixel layer, `LayerContent::Raster` (sparse tiles, any size or offset) | **Partial**: full canvas-size buffers with no offset, so off-canvas pixels are lost | Moderate (tiles, section 20) | P2 |
 | Group, `LayerContent::Group` (nesting to 100 levels, expand and collapse) | **Have**: `LK_GROUP` with `depth` and `collapsed` (`E:core/layers.c`), pass-through or isolated, masks on groups; OpenRaster and PSD keep them | Done | — |
 | Adjustment layer, `LayerContent::Adjustment` | **Have**: `LK_ADJUST` for every adjustment (`AdjParams`, applied row by row in `doc_composite`) | Done | — |
-| Fill layer, `LayerContent::Fill` (Solid, Gradient, Pattern; DOC `Fill`) | **Partial**: solid colour and gradient (`FillParams`); pattern fill layers are missing | Easy | P3 |
+| Fill layer, `LayerContent::Fill` (Solid, Gradient, Pattern; DOC `Fill`) | **Have**: solid colour and gradient (`FillParams`); 1.2 pattern fill layers with a scale (`doc_new_pattern_fill` in `E:core/layerx.c`, the pattern kept with the layer) | Done | — |
 | Type layer, `LayerContent::Text` | **Have**: `LK_TEXT` (0.9, `E:core/type.h`) | Done | — |
 | Shape layer, `LayerContent::Shape` | **Have**: `LK_SHAPE` (0.9, `E:core/shape.h`) | Done | — |
-| Smart Object, `LayerContent::Smart` | **Missing** | Hard: keeps the full-size source as well as its render. Easel's type and shape layers already transform without loss | P3 |
+| Smart Object, `LayerContent::Smart` | **Have** (1.2): memory-conscious: the source is a PNG in the scratch drawer (or the linked file) and is read back only while the layer is redrawn after a transform, so a smart object costs what a pixel layer does; Free Transform on one works from the source (scaling down and up again loses nothing); embedded sources go inside OpenRaster files (`E:core/layerx.c`) | Done | — |
 | Opacity | **Have** | Done | — |
 | Fill Opacity (content but not effects), `Layer::fill_opacity` | **Have**: `fill_cut`; in 1.1 the layer style is drawn at the layer's opacity whatever the fill (`fx_under`/`fx_over` in `E:core/fx.c`) | Done | — |
 | Blend mode | **Have**: all 34 (section 4) | Done | — |
 | Visibility | **Have** | Done | — |
 | Colour labels (12, `LabelColor`) | **Have** (1.1): Layer › Layer Color with PhotoCraft's twelve (None, Red, Orange, Yellow, Green, Blue, Violet, Gray, Seafoam, Indigo, Magenta, Fuchsia; `doc_set_label` on the picked layers), shown down the Layers panel's eye column, kept in OpenRaster (`easel:label`) | Done | — |
-| Link groups, `Layer::link_group` | **Missing** | Easy | P3 |
+| Link groups, `Layer::link_group` | **Have** (1.2): Layer › Links and Artboards › Link Layers, Unlink Layers, Select Linked Layers (`doc_link_layers`); the Move tool moves linked layers together in one step (`doc_move_linked`); kept in OpenRaster | Done | — |
 | Blending Options › Blend If (this layer and underlying ranges), `BlendIf` | **Partial**: Blend If on grey, this layer and underlying, black and white points (`blendif` in `E:core/doc.h`, Layer Properties); the per-channel ranges and split (feathered) points are missing | Easy | P3 |
 | Advanced Blending: channels excluded, knockout, blend interior effects or clipped as a group, transparency shapes, mask hides effects (`AdvancedBlending`, `excluded_channels`) | **Missing**: Easel blends interior effects on their own and clips as a group, as Photoshop's defaults do | Moderate | P3 |
 | Multi-layer selection (Ctrl or Shift-click in Layers) | **Have**: `picked`, `doc_pick_layer` (0.3) | Done | — |
@@ -486,7 +486,7 @@ shape layers) made most of the old "Missing" rows stale.
 | Layer Mask › Link Layer Mask (toggle) | **Have** | Done | — |
 | Painting on the mask, Alt-click to view it, mask thumbnail (`panels/mask_thumbs_ui.rs`) | **Partial**: paint on the mask (click its thumbnail or Edit Mask/Layer), mask thumbnails with a red cross when off; viewing the mask alone (Alt-click) is missing | Easy | P3 |
 | Mask properties: density and feather (`panels/mask_props_ui.rs`) | **Have**: `mask_fade`, `mask_feather` (Layer Properties) | Done | — |
-| Vector Mask › Reveal All, Hide All, Current Path, Delete, Enable, Link (6 items) | **Missing** (paths exist since 0.9) | Moderate | P3 |
+| Vector Mask › Reveal All, Hide All, Current Path, Delete, Enable, Link (6 items) | **Have** (1.2): Layer › Vector Mask (and Rasterize): a path whose inside shows, drawn anti-aliased, combined with the layer mask, with feather and density; linked, it moves with the layer and follows crops and rotations (`doc_vmask_add` and friends in `E:core/layerx.c`); kept in OpenRaster as SVG path data | Done | — |
 | Create Clipping Mask `layer.createClippingMask` (`Layer::clipped`) | **Have**: `doc_set_clip`, arrows in the Layers panel | Done | — |
 | Drag a layer mask onto another layer or group to move it, Alt to copy it (upstream #10549) | **Missing** | Easy | P3 |
 
@@ -497,7 +497,7 @@ Each effect is worked out from the layer's shape (its alpha times its mask) with
 distance transforms (spread, choke, stroke) and three box blurs (softness), into one byte a pixel per
 effect over the box the effects reach, and kept with the layer until its pixels, mask or style change;
 `doc_composite` then only blends them in, row by row. They work on pixel, fill, type and shape layers
-(not on groups and adjustment layers, unlike PhotoCraft) and are kept in OpenRaster (`easel:effects`).
+(1.2: and on groups; not on adjustment layers, unlike PhotoCraft) and are kept in OpenRaster (`easel:effects`).
 PSD files get the merged look but not the effect settings (no `lfx2` writer or reader yet).
 `E:tests/fxtest.c` checks each one.
 
@@ -512,7 +512,7 @@ PSD files get the merged look but not the effect settings (no `lfx2` writer or r
 | Color Overlay… | **Have** | Done | — |
 | Gradient Overlay… | **Have**: two colours, mode, opacity, reverse, linear, radial, angle, reflected or diamond, angle, scale, offset (multi-stop gradients from the Gradient Editor are missing) | Done | — |
 | Gradient Overlay moved by a drag on the canvas (upstream #10840) | **Partial**: moved by the Offset sliders in the Layer Style window, not by dragging on the canvas | Easy | P3 |
-| Pattern Overlay… | **Missing** | Easy (patterns exist, 0.5) | P3 |
+| Pattern Overlay… | **Have** (1.2): Layer › Layer Style › Pattern Overlay: the chosen pattern over the layer's content, mode, opacity, scale (`doc_set_pattern_overlay` in `E:core/layerx.c`), drawn below the colour and gradient overlays | Done | — |
 | Outer Glow… | **Partial**: mode, colour, opacity, spread, size; contours (upstream #11410 fixes their flat case), gradient glows and noise are missing | Easy | P3 |
 | Drop Shadow… | **Have**: mode, colour, opacity, angle, global light, distance, spread, size, Layer Knocks Out Drop Shadow | Done | — |
 | Copy Layer Style | **Have** | Done | — |
@@ -522,7 +522,7 @@ PSD files get the merged look but not the effect settings (no `lfx2` writer or r
 | Create Layer (effects to pixel layers) | **Have**: Create Layers (`doc_fx_to_layers`): shadow and glow below, the rest above, each with its mode and opacity | Done | — |
 | Hide All Effects | **Have** (a ticked item; the Layers panel greys a hidden style's "fx") | Done | — |
 | Scale Effects… | **Have**: sizes, distances, soften and gradient offset by 1-1000 % | Done | — |
-| Effects on groups and adjustment layers (PhotoCraft's `lfxs`) | **Missing** | Moderate: a group's composite would need its own cache | P3 |
+| Effects on groups and adjustment layers (PhotoCraft's `lfxs`) | **Partial** (1.2): every effect on groups, worked out from the members' composite (its alpha, made while the effects are, `E:core/fx.c`) and drawn again when a member changes; not on adjustment layers | Moderate (adjustment layers' shape is the whole canvas) | P3 |
 
 ### 3.4 Fill layers (Layer › New Fill Layer)
 
@@ -530,7 +530,7 @@ PSD files get the merged look but not the effect settings (no `lfx2` writer or r
 |---|---|---|---|
 | Solid Color… | **Have**: `doc_new_fill` (0.3) | Done | — |
 | Gradient… | **Have**: two colours, five styles, angle, scale, reverse (multi-stop gradients are missing) | Done | — |
-| Pattern… | **Missing** | Easy | P3 |
+| Pattern… | **Have** (1.2): Layer › New Fill Layer › Pattern (the chosen pattern, a scale) | Done | — |
 
 ### 3.5 Adjustment layers (Layer › New Adjustment Layer, 16 items; ADJ)
 
@@ -561,20 +561,20 @@ Black & White and per-channel Curves.
 
 | PhotoCraft item | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Convert to Smart Object (lossless transforms) | **Missing** | Hard: keeps the source at full size, and 16 MB machines can't afford it. Type and shape layers already transform without loss (0.9) | P3 |
-| New Smart Object via Copy | **Missing** | Hard | P3 |
-| Reveal in Finder (Easel would call it "Show in Drawer") | **Missing** | Easy, once linked smart objects exist | P3 |
-| Update Modified Content / Update All Modified Content (2 items) | **Missing** | Moderate | P3 |
-| Edit Contents | **Missing** | Moderate | P3 |
-| Relink to File… | **Missing** | Moderate | P3 |
-| Replace Contents… | **Missing** | Moderate | P3 |
-| Export Contents… | **Missing** | Easy | P3 |
-| Convert to Linked… / Convert to Embedded (2 items) | **Missing** | Moderate | P3 |
-| Convert to Layers | **Missing** | Moderate | P3 |
-| Reset Transform (upstream #11675) | **Missing** | Easy, once smart objects exist | P3 |
-| File › Open as Smart Object… (upstream #12212) | **Missing** | Easy, once smart objects exist | P3 |
+| Convert to Smart Object (lossless transforms) | **Have** (1.2): the layer's content box written to the scratch drawer as PNG (`doc_smart_convert`); Free Transform then works from it | Done | — |
+| New Smart Object via Copy | **Have** (1.2, `doc_smart_copy`: a layer with its own copy of the source) | Done | — |
+| Reveal in Finder (Easel would call it "Show in Drawer") | **Have** (1.2): Show in Drawer tells where the source is | Done | — |
+| Update Modified Content / Update All Modified Content (2 items) | **Have** (1.2): the source (or every linked one) read again and the layer redrawn | Done | — |
+| Edit Contents | **Have** (1.2): the source opens as a picture of its own; saved, Update Modified Content brings it back | Done | — |
+| Relink to File… | **Have** (1.2, `doc_smart_relink`) | Done | — |
+| Replace Contents… | **Have** (1.2, `doc_smart_replace`: the new picture fitted to the old one's size) | Done | — |
+| Export Contents… | **Have** (1.2: the source as PNG) | Done | — |
+| Convert to Linked… / Convert to Embedded (2 items) | **Have** (1.2, `doc_smart_link`, `doc_smart_embed`) | Done | — |
+| Convert to Layers | **Have** (1.2: the source as a pixel layer at its place, untransformed; the smart object hidden) | Done | — |
+| Reset Transform (upstream #11675) | **Have** (1.2: back to 100 % and upright about its centre, `doc_smart_reset`) | Done | — |
+| File › Open as Smart Object… (upstream #12212) | **Have** (1.2: a new picture whose one layer is the file as a smart object, `smart_open`) | Done | — |
 | Stack Mode › Entropy, Kurtosis, Maximum, Mean, Median, Minimum, Range, Skewness, Standard Deviation, Summation, Variance (11 items) | **Have** (1.1): Layer › Stack Mode (`doc_stack_mode` in `E:core/layerops.c`): a new layer of the statistic of the picked pixel layers (or every visible one), pixel by pixel, skipping transparent pixels, as a job with progress; Photoshop applies it to a smart object, Easel to the layers themselves | Done | — |
-| Rasterize (smart object) | **Missing** | Easy | P3 |
+| Rasterize (smart object) | **Have** (1.2, Layer › Smart Objects › Rasterize) | Done | — |
 | Warp / Perspective Warp / Puppet Warp on a smart object (3 items) | **Missing** | Hard | P3 |
 | Smart Filter › Disable Smart Filters, Delete Filter Mask, Disable Filter Mask, Blending Options…, Clear Smart Filters (5 items); `SmartFilter` in DOC | **Missing** | Hard: every edit re-runs each filter at 68040 speed. Stand-ins: Edit › Fade and the History Brush | P3 |
 
@@ -815,27 +815,27 @@ Rechecked 2026-11-18 against Easel 1.1.
 | Flip X/Y of the tip | **Have** (0.5) | Done | — |
 | Sampled (bitmap) tips, `TipShape::Sampled` | **Have** (0.5: `Tip`, Edit > Define Brush Preset, `tip_from_doc`) | Done | — |
 | Aliased or square tip (`aliased`, `square`) | **Have** (the Pencil, and Square in Brush Settings) | Done | — |
-| Shape Dynamics: size, angle and roundness jitter; controls Fade/Pressure/Tilt/Direction (`ShapeDynamics`, `Control`) | **Partial**: jitters with Fade, Pressure, Direction and Initial Direction (`CTL_`); no Tilt (no tablet input) | Moderate (tilt) | P3 |
+| Shape Dynamics: size, angle and roundness jitter; controls Fade/Pressure/Tilt/Direction (`ShapeDynamics`, `Control`) | **Have**: jitters with Fade, Pressure, Direction and Initial Direction (`CTL_`); 1.2 adds Pen Tilt (`CTL_TILT`: the angle the pen leans, or upright-to-flat for size; from the tablet's tilt or Brush Pose) | Done | — |
 | Scattering: both axes, count, count jitter | **Have** (0.5) | Done | — |
-| Texture: pattern, scale, mode, depth | **Missing** | Moderate | P3 |
-| Dual Brush | **Missing** | Moderate | P3 |
+| Texture: pattern, scale, mode, depth | **Have** (1.2): Brush Settings › Texture: pattern, scale, depth, Multiply/Subtract/Darken/Height/Linear Height, invert, brightness, contrast (`brushx_cov` in `E:core/brushx.c`, per pixel of each dab) | Done | — |
+| Dual Brush | **Have** (1.2): a second tip (round or a built-in one) scattered round each dab in Multiply, Darken or Subtract, with size, scatter and count; replays exactly (`brushx_cov`) | Done | — |
 | Color Dynamics: foreground/background jitter, hue, saturation, brightness, purity | **Have** (0.5, with Apply Per Stroke) | Done | — |
 | Transfer: opacity and flow jitter | **Have** (0.5) | Done | — |
-| Brush Pose: tilt, rotation and pressure overrides | **Missing** | Easy | P3 |
-| Noise | **Missing** | Easy | P3 |
-| Wet Edges | **Missing** | Easy | P3 |
+| Brush Pose: tilt, rotation and pressure overrides | **Have** (1.2: `POSE_TILT`, `POSE_ROTATION`, `POSE_PRESSURE`) | Done | — |
+| Noise | **Have** (1.2: fixed grain in the soft edge, the same at the same pixel) | Done | — |
+| Wet Edges | **Have** (1.2: `brushx_wet`, the stroke's middle lighter than its edges) | Done | — |
 | Build-up (airbrush) and its rate | **Have** (0.5, `stroke_tick`; 1.1 puts Airbrush on the options bar). *upstream* about ten dabs a second (#12169): Easel's rate is set in Brush Settings | Done | — |
 | Smoothing, including Pulled String (`Smoothing`, `dynamics.rs` `Smoother`) | **Have** (0.5; 1.1: on the options bar and Alt+digit) | Done | — |
-| Protect Texture | **Missing** | Easy, with Texture | P3 |
+| Protect Texture | **Have** (1.2: a picked preset keeps the brush's texture, `brushx_protect_texture`) | Done | — |
 | Brush presets and the Brushes panel (`BrushPreset`, `presets.rs`) | **Have** (0.5, `E:core/preset.c`) | Done | — |
-| .abr brush import and export (`psd/src/abr.rs`) | **Partial**: import (versions 1, 2 and 6-10, `presets_read_abr`); no export | Easy | P3 |
-| Painting symmetry: Vertical, Horizontal, Dual, Diagonal, from a path (`SymmetryMode`) | **Partial**: vertical, horizontal, both, radial and mandala (`SYM_`, `brush_symmetry`); no diagonal or path symmetry | Easy | P3 |
-| Pen pressure, tilt and rotation (`crates/tablet`, `input/stylus.rs`) and the pressure curve; *upstream* Pressure for Size starts off (#11847) | **Partial**: the engine takes pressure (`stroke_begin_p`, Pressure Controls Size/Opacity); the canvas reads no tablet, so pressure is always full | Moderate: Intuition's `IESUBCLASS_NEWTABLET` and `TABLETA_Pressure` (V39 and later) carry pressure from tablet drivers | P2 |
+| .abr brush import and export (`psd/src/abr.rs`) | **Have**: import (versions 1, 2 and 6-10, `presets_read_abr`); 1.2 writes version 2 (computed and sampled tips with their names, `abr_write`), read back by the reader | Done | — |
+| Painting symmetry: Vertical, Horizontal, Dual, Diagonal, from a path (`SymmetryMode`) | **Partial**: vertical, horizontal, both, radial and mandala (`SYM_`, `brush_symmetry`); 1.2 adds Diagonal (both diagonals) and Tile; no path symmetry | Easy | P3 |
+| Pen pressure, tilt and rotation (`crates/tablet`, `input/stylus.rs`) and the pressure curve; *upstream* Pressure for Size starts off (#11847) | **Have** (1.2): an input handler at priority 51 reads Intuition's `IESUBCLASS_NEWTABLET` events (`TABLETA_Pressure`, TabletZ/RangeZ, `TABLETA_AngleX/Y`, InProximity, `TAG_MORE`) into the strokes, with a pressure curve and floor in Preferences (`tabletcurve`, `tabletfloor` in Easel.prefs); Pressure for Size starts off. No tablet here: tested with synthetic tag lists. No pen rotation (Intuition's AngleZ is not used by drivers known to us) | Done | — |
 | Brush outline cursor (Cursors preferences) | **Have**: drawn in COMPLEMENT (`E:amiga/canvas.c`), outline, crosshair or both (0.8 Preferences), Caps Lock for the crosshair | Done | — |
 | Alt for the eyedropper with painting tools | **Have** | Done | — |
 | Shift-click draws a straight line | **Have** | Done | — |
-| Gradient presets and the gradient editor: stops, midpoints, opacity stops, .grd (`gradient_fill_cmds.rs`, DOC `Fill::Gradient`) | **Partial**: all but .grd (0.5; GIMP .ggr and Easel's own files instead, `E:core/gradient.c`) | Easy (.grd reading) | P3 |
-| Pattern library: built-ins, Define Pattern, .pat (`pattern_cmds.rs`) | **Partial**: built-ins, Define Pattern, IFF pattern sets (0.5, `E:core/pattern.c`); no .pat | Easy | P3 |
+| Gradient presets and the gradient editor: stops, midpoints, opacity stops, .grd (`gradient_fill_cmds.rs`, DOC `Fill::Gradient`) | **Have**: all of it (0.5); 1.2 reads Photoshop .grd, version 5 descriptors (RGB, HSB, grey, CMYK and Lab stops, foreground and background stops, opacity stops) and version 3 (`grd_read` in `E:core/brushx.c`; Edit › Presets › Load Gradients) | Done | — |
+| Pattern library: built-ins, Define Pattern, .pat (`pattern_cmds.rs`) | **Have**: built-ins, Define Pattern, IFF pattern sets (0.5); 1.2 reads Photoshop .pat (grey, indexed and RGB, raw or PackBits, with transparency) and writes it (`pat_read`, `pat_write`; Edit › Presets) | Done | — |
 | Colour picker dialog: HSB/RGB/Lab/CMYK/hex, web colours only, sampling the screen (`docs/color-picker.md`) | **Partial**: HSB, RGB, Lab and hex (0.5, `E:amiga/colorpick.c`); no CMYK, web-colours-only or screen sampling | Easy | P3 |
 | Deterministic, replayable strokes (`BrushSettings::seed`) | **Have** (0.5: `BrushDynamics.seed`, counter-based `brush_hash`) | Done | — |
 | *upstream* Painting tools: Shift+Alt+click adds a colour sampler (#12245) | **Missing** | Easy | P3 |
@@ -961,12 +961,12 @@ scratch drawer), and has a History panel (`history_class`, `E:amiga/panels.c`). 
 | Multi-level undo and redo, named steps | **Have** | Done | — |
 | History panel: click a state to go back or forward | **Have** (`E:amiga/panels.c` `history_class`) | Done | — |
 | Step Backward / Step Forward | **Have** | Done | — |
-| Snapshots: new, rename, delete, select (`history.newSnapshot` and others) | **Partial**: new, delete and go back to (0.8, up to eight whole copies, `DocView.hsnap`); no rename | Easy | P3 |
+| Snapshots: new, rename, delete, select (`history.newSnapshot` and others) | **Have**: new, delete and go back to (0.8, up to eight whole copies, `DocView.hsnap`); 1.2 adds Edit › Rename Snapshot and the New Snapshot dialog | Done | — |
 | New Document from a state (`history.newDocument`) | **Have** (0.8, `ID_HISTNEWDOC`) | Done | — |
 | Delete a state (`history.deleteState`) | **Have** (1.1: the panel's bin with no snapshot picked, `doc_delete_state` in `E:core/toolopts.c`; linear history, so the steps after it go too) | Done | — |
-| History Options: non-linear history, automatic first snapshot (`PREFS` history options); *upstream* Automatically Create First Snapshot, New Snapshot When Saving, Show New Snapshot Dialog (#3634) | **Missing** | Moderate (non-linear); Easy (the snapshot options) | P3 |
+| History Options: non-linear history, automatic first snapshot (`PREFS` history options); *upstream* Automatically Create First Snapshot, New Snapshot When Saving, Show New Snapshot Dialog (#3634) | **Partial** (1.2): Edit › History Options: Automatically Create First Snapshot, Automatically Create New Snapshot When Saving, Show New Snapshot Dialog by Default (as #3634; kept in Easel.prefs, `hist_opts` in `E:core/toolsx.c`); no non-linear history | Moderate (non-linear) | P3 |
 | History states limit (`PREFS` `history_states`) and memory use | **Have** (0.8: Preferences' undo memory and steps, `undo_budget`, `undo_levels`, and the scratch drawer) | Done | — |
-| History log: session, concise, detailed; to the metadata or a file (Preferences › History Log) | **Missing** | Easy | P3 |
+| History log: session, concise, detailed; to the metadata or a file (Preferences › History Log) | **Have** (1.2): History Options' History Log: Sessions Only, Concise or Detailed, to a text file, to File Info's description (its History section, the oldest lines dropped when full) or both (`histlog_event`, `histlog_step` in `E:core/toolsx.c`) | Done | — |
 | Autosave and crash recovery (`PREFS` `autosave`, `autosave_minutes`, `recover_on_launch`; `.pcraft`) | **Have** (0.6: Edit > Autosave to the Recovery drawer, offered back at the next start) | Done | — |
 | *upstream* History Brush: source selection (#4446) | **Have** (1.1: From History, a History panel snapshot as the source) | Done | — |
 | *upstream* one history step per action, kept across saves (persisted single-action grouping) | **Partial**: one step per action; the history is not kept in files | Moderate | P3 |
@@ -1289,7 +1289,7 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 | OCS/ECS 12-bit palettes (4 bits per gun, 4096 colours) and AGA 24-bit palettes when quantizing | all | **Have** (0.4): `QM_OCS12` | Done | — |
 | Halfbrite (EHB) editing: edit the 32 base colours and see their 32 half-bright twins | DPaint IV, PPaint | **Have** (0.4): Make Extra Half-Brite palette in the Color Table; EHB writing | Done | — |
 | Stencils: protect chosen colours, or an area, from painting | DPaint ("Stencil", "Fix Background"), PPaint | **Have** (1.1): Brush Settings' Stencil keeps the background colour or the Color Table's locked colours from every painting tool, or (Stencil Inverted) paints only them (`Brush.stencil`, `stencil_colors` in `E:core/toolopts.c`); an area is protected with the selection or Quick Mask | Done | — |
-| Shade, Cycle, Tint and Blend draw modes over a palette range | DPaint | **Partial**: Smear, Shade, Blend and Cycle are custom-brush modes (0.5, `CB_` in `E:core/brush.h`); no Tint, and they work with a picked-up brush only | Easy | P3 |
+| Shade, Cycle, Tint and Blend draw modes over a palette range | DPaint | **Have** (1.2): Tint (`CB_TINT`) joins Smear, Shade, Blend and Cycle, and Brush Settings' Draw Mode gives them to any brush, not just a picked-up one (`DMODE` in `E:core/stroke.c`) | Done | — |
 | Range fills: a gradient through a palette range, with dither styles | DPaint | **Have** (1.1): the Gradient tool's Palette Range on indexed pictures fills through the first cycling range (else the whole palette), dithered back to the palette (`gradient_from_palette`, `doc_fill_range`) | Done | — |
 
 ### 21.2 Colour cycling
@@ -1307,13 +1307,13 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 | Pick up a custom brush: a rectangle, lasso or whole layer, with the background colour as transparent | DPaint, PPaint, Brilliance | **Have** (0.5: Edit > Pick Up Brush, `cbrush_pickup`) | Done | — |
 | Paint with the custom brush in Matte, Color or Replace mode, and stamp it | DPaint | **Have** (0.5: Window > DPaint Brush, `CB_MATTE`, `CB_COLOR`, `CB_REPLACE`) | Done | — |
 | Save and load brushes as ILBM, with the GRAB hotspot | DPaint | **Have** (0.5: `cbrush_write_ilbm`, `cbrush_read_ilbm`) | Done | — |
-| Brush handle, and brush transforms: flip, rotate 90° or any angle, double or halve, stretch, shear, bend, outline | DPaint | **Partial**: flip, turn, scale, halve, double and outline (0.5, `cbrush_*`); no shear or bend | Easy (shear); Moderate (bend) | P3 |
-| Anim brushes: a multi-frame brush that steps as it paints, saved as an ANIM | DPaint, Brilliance | **Missing** | Moderate | P3 |
+| Brush handle, and brush transforms: flip, rotate 90° or any angle, double or halve, stretch, shear, bend, outline | DPaint | **Have**: flip, turn, scale, halve, double and outline (0.5); 1.2 adds Shear and Bend (`cbrush_shear`, `cbrush_bend` in `E:core/legacy.c`) | Done | — |
+| Anim brushes: a multi-frame brush that steps as it paints, saved as an ANIM | DPaint, Brilliance | **Partial** (1.2): animated brushes picked up from the frames (layers), a frame a dab (`animbrush_pickup`, `animbrush_stroke` in `E:core/legacy.c`); not yet on a tool or saved as an ANIM brush | Easy (the UI) | P3 |
 | Perspective: place a brush on a 3D plane | DPaint | **Missing** | Moderate | P3 |
-| Spare page (J) and copy to spare | DPaint | **Partial**: tabs and Next Document (Ctrl-Tab); no copy to spare | Easy | P3 |
+| Spare page (J) and copy to spare | DPaint | **Have** (1.2): Window › Spare Page (the picture shown before) and Copy to Spare (a copy of the picture into it, one undo step there) | Done | — |
 | Magnify: a split view, zoomed beside 1:1 | DPaint, PPaint | **Partial**: the Navigator panel (0.6) shows the whole picture beside the zoomed view; no zoomed split | Easy | P3 |
 | Grid snap for painting | DPaint | **Have** (1.1): with the grid shown and View > Snap on, the painting tools go from grid point to grid point (`grid_snap_paint`) | Done | — |
-| Symmetry: N-fold point, mirror, tile | DPaint | **Partial**: mirror and N-fold (radial and mandala, 0.5 `brush_symmetry`); no tile | Easy | P3 |
+| Symmetry: N-fold point, mirror, tile | DPaint | **Have**: mirror and N-fold (0.5); 1.2 adds Tile (the canvas as 2-8 tiles across and down, `SYM_TILE`) and both diagonals | Done | — |
 
 ### 21.4 Writing Amiga picture modes
 
@@ -1325,7 +1325,7 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 | SHAM, PCHG and CTBL writing (a palette per line, "dynamic" HAM and hires) | ADPro, ImageFX, Photon Paint | **Partial** (0.4): SHAM is written (`IK_SHAM`); PCHG and CTBL aren't | Moderate | P3 |
 | A choice of bitplane depth (1-8) and the ByteRun1 or uncompressed setting | all | **Have** (0.4): `IlbmOpts` planes and compress | Done | — |
 | Masking in the ILBM header: `mskHasMask` and `mskHasTransparentColor`, and a transparent colour for genlock | DPaint, TVPaint, ImageFX | **Have** (0.4): `IMK_PLANE`, `IMK_TRANSPARENT` | Done | — |
-| Export as raw interleaved bitplanes plus a palette, or as C or assembler source, or as hardware sprites | coders' converters, PPaint | **Missing** | Easy | P3 |
+| Export as raw interleaved bitplanes plus a palette, or as C or assembler source, or as hardware sprites | coders' converters, PPaint | **Have** (1.2): File › Export More: raw bitplanes (interleaved or plane after plane) with LoadRGB4 or LoadRGB32 palettes, the same as C (`__chip UWORD`) or assembler (`dc.w`, `SECTION DATA_C`), and 16-pixel hardware sprites with their control words (`bitplanes_raw`, `bitplanes_source`, `sprites_source` in `E:core/legacy.c`) | Done | — |
 
 ### 21.5 Screen-mode-aware output
 
@@ -1333,11 +1333,11 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 |---|---|---|---|---|
 | Pick the target ModeID from the ASL ScreenMode requester, and write CAMG and the page size to match | all | **Have** (0.4): Image › Amiga Screen Mode (`E:amiga/modedlg.c`, `E:core/amigamodes.c`), CAMG and page size written | Done | — |
 | Enforce the chipset's limits: OCS/ECS 32 colours in lores, 16 in hires, 64 EHB, 4096 HAM; AGA 256 or HAM8 | all | **Have** (0.4): the mode dialog warns when the picture doesn't fit the mode and chipset | Done | — |
-| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Partial**: each mode's aspect is known, kept in the document (`aspect_x`, `aspect_y`) and written to ILBM's BMHD; the canvas doesn't draw it (section 2.5) | Easy: a separate vertical zoom in `E:amiga/canvas.c` | P1 |
-| Overscan presets (352 × 283, 704 × 566, 368 × 241…) and safe-area guides | DPaint, Brilliance, TVPaint | **Partial**: New and the Crop presets have the PAL and NTSC sizes; overscan sizes and safe-area guides are missing | Easy | P2 |
+| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Have** (1.2): View › Pixel Aspect Ratio Correction draws the canvas with a vertical zoom of the picture's aspect (`zy` in `E:amiga/canvas.c`: rulers, grid, guides and tools follow it); the aspect is kept and written as before | Done | — |
+| Overscan presets (352 × 283, 704 × 566, 368 × 241…) and safe-area guides | DPaint, Brilliance, TVPaint | **Have** (1.2): the PAL and NTSC overscan sizes with their aspects (`overscan_sizes` in `E:core/legacy.c`) and View › Show › Guides from TV Safe Areas (action-safe 90 %, title-safe 80 %, `guides_safe_areas`) | Done | — |
 | A "Save for Screen" preview that dithers and quantizes to the chosen mode before saving | ADPro, ImageFX | **Partial**: Image › Mode › Indexed Color previews the palette and dither on the canvas, and undo takes it back; there's no side-by-side preview at export | Moderate | P2 |
-| A display dither choice on palette screens: none, ordered or Floyd-Steinberg; a HAM8 preview on AGA | ImageFX, TVPaint | **Partial**: AGA and ECS screens get a fixed colour cube with ordered dither (`draw_rgb` in `E:amiga/widgets.c`); an indexed picture shows its own palette | Moderate | P2 |
-| Copper-list gradients: design a per-line background colour gradient, preview it with a user copper list, save it as PCHG or SHAM | Brilliance, DPaint IV, ImageFX | **Missing** | Moderate | P3 |
+| A display dither choice on palette screens: none, ordered or Floyd-Steinberg; a HAM8 preview on AGA | ImageFX, TVPaint | **Partial** (1.2): View › Screen Dither: Ordered, None (the nearest pens) or Error Diffusion (Floyd-Steinberg within each part drawn, `draw_rgb` in `E:amiga/widgets.c`); no HAM8 preview | Moderate | P3 |
+| Copper-list gradients: design a per-line background colour gradient, preview it with a user copper list, save it as PCHG or SHAM | Brilliance, DPaint IV, ImageFX | **Partial** (1.2): the Gradient tool's gradient down the lines as a copper list (WAIT/MOVE, the PAL wrap at line 255, OCS 12-bit or AGA 24-bit with BPLCON3's LOCT) in C or assembler (`copper_gradient` in `E:core/legacy.c`); no live preview, no PCHG or SHAM | Moderate | P3 |
 
 ### 21.6 Workbench icons
 
@@ -1347,14 +1347,14 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 | Save as NewIcons (the image in tool types) | NewIcons tools | **Have** (0.6) | Done | — |
 | Save as GlowIcons (an IFF FORM ICON with ARGB or palette images, OS 3.5) | IconEdit 3.5 | **Have** (0.6): the default when saving a picture's icon | Done | — |
 | Save as a PNG icon (OS4, AROS, MorphOS) | — | **Have** (0.6) | Done | — |
-| Two images for selected and unselected, and the icon's tool type and default tool | IconEdit | **Partial**: a selected image (the picture darkened) and the default tool (`IconOpts`); tool types can't be set | Easy | P3 |
+| Two images for selected and unselected, and the icon's tool type and default tool | IconEdit | **Have**: a selected image and the default tool (0.6); 1.2 adds the icon's own tool types (`IconOpts.tooltypes`, every kind of icon) | Done | — |
 
 ### 21.7 Animation
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
 | Open every frame of an IFF ANIM (ANIM5/7/8) as frames or layers | DPaint, Brilliance, PPaint | **Have** (1.1): File › Import Frames to Layers reads ANIM op 0 and op 5 with both buffers, palette changes and the frame times; DPaint's two looping frames are left out (`anim_read_frames` in `E:core/frames.c`). Ops 7 and 8 aren't read (the frames up to one are kept). Animated GIFs too, with their disposal | Done | — |
-| Edit the frames: a frame strip, add or delete or move frames, onion skin, play, timing (ANHD and DPAN) | DPaint, Brilliance, TVPaint | **Partial**: frames are layers, so the Layers panel adds, deletes and moves them; each frame's time is in its layer's name ("Frame 3 (0.25 s)"); there's no frame strip, onion skin or playback | Moderate | P2 |
+| Edit the frames: a frame strip, add or delete or move frames, onion skin, play, timing (ANHD and DPAN) | DPaint, Brilliance, TVPaint | **Partial**: frames are layers (the Layers panel adds, deletes and moves them); 1.2 adds Window › Animation: Previous and Next Frame, Play Frames (at each frame's time, Abort stops it), Onion Skin with frames before and after at falling opacity (`frames_onion` in `E:core/legacy.c`) and Frame Time (`frame_time`, `frame_set_time`); no frame strip | Moderate (a strip panel) | P3 |
 | Write an IFF ANIM (ANIM5 delta, and ANIM7/8) | DPaint, Brilliance | **Have** (1.1): File › Export › Layers as IFF ANIM writes op 5 for two buffers with the loop frames (`anim_write`); ANIM7/8 aren't written | Done | — |
 | Animated GIF writing | PPaint 7 | **Have** (1.1): File › Export › Layers as Animated GIF: one palette, loops, each frame only where it changed (`gif_write_anim`; Pillow checks it, `E:tests/check_frames.py`) | Done | — |
 

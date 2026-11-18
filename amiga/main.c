@@ -73,6 +73,10 @@
 #include "../core/live.h"
 #include "../core/gallery.h"
 #include "dlgx.h"
+#include "tools2.h"                     /* 1.2 */
+#include "tools2ids.h"
+#include "../core/layerx.h"
+#include "../core/cafill.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -98,6 +102,7 @@ int pref_autosave = 5;                   /* minutes between autosaves (0: none) 
 int pref_icons = 1;                      /* a Workbench icon written beside a saved picture that has none */
 DocView docs[MAXDOCS];
 int ndocs, curdoc = -1;
+int t2_spare = -1;                       /* 1.2: (tools2.h) the spare page: the picture shown before */
 Opts opt;
 int tool = TL_BRUSH;
 static Clip *clip;                       /* what Easel copied last */
@@ -120,11 +125,16 @@ const char *const tool_names[TL_N] = {
   "Color Sampler Tool",
   "Spot Healing Brush Tool", "Healing Brush Tool", "Patch Tool", "Red Eye Tool",     /* 1.0 */
   "Horizontal Type Mask Tool", "Vertical Type Tool", "Pen Tool", "Add Anchor Point Tool", "Delete Anchor Point Tool", "Convert Point Tool",
-  "Path Selection Tool", "Direct Selection Tool", "Rounded Rectangle Tool", "Polygon Tool", "Custom Shape Tool"
+  "Path Selection Tool", "Direct Selection Tool", "Rounded Rectangle Tool", "Polygon Tool", "Custom Shape Tool",
+  /* 1.2 */
+  "Quick Selection Tool", "Object Selection Tool", "Perspective Crop Tool", "Slice Tool", "Slice Select Tool", "Frame Tool",
+  "Note Tool", "Count Tool", "Mixer Brush Tool", "Art History Brush Tool", "Remove Tool", "Content-Aware Move Tool",
+  "Rotate View Tool", "Artboard Tool"
 };
 char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 'E', 'G', 'G', 'R', 'R', 'R', 'O', 'O', 'O', 'T', 'U', 'U', 'U', 'H', 'Z',
   'S', 'Y', 'B', 'E', 'E', 'L', 'I', 'I', 'J', 'J', 'J', 'J',
-  'T', 'T', 'P', 'P', 'P', 'P', 'A', 'A', 'U', 'U', 'U' };
+  'T', 'T', 'P', 'P', 'P', 'P', 'A', 'A', 'U', 'U', 'U',
+  'W', 'W', 'C', 'C', 'C', 'K', 'I', 'I', 'B', 'Y', 'J', 'J', 'R', 'V' };   /* 1.2 */
 
 /* ------------------------------------------------------------------ the menus */
 #define M(title) { NM_TITLE, (STRPTR)title, 0, 0, 0, 0 }
@@ -142,6 +152,7 @@ static struct NewMenu menus[] = {
   H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
   S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
   S("Clear Recent List", 0, ID_CLEARRECENT),
+  I("Open as Smart Object...", 0, ID_OPENSMART),                                         /* 1.2 */
   I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), I("Import Frames to Layers...", 0, ID_IMPFRAMES), BAR,
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
@@ -149,7 +160,12 @@ static struct NewMenu menus[] = {
   S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
   S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7), SBAR,
   S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), S("Paths to SVG...", 0, ID_EXPSVG), SBAR,
-  S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
+  S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT),
+  /* 1.2: slices, artboards, and data for programmers */
+  H("Export More"), S("Slices as PNG...", 0, ID_EXPSLICES), S("Artboards as PNG...", 0, ID_EXPARTBOARDS), SBAR,
+  S("Raw Bitplanes and Palette...", 0, ID_EXPRAW), S("Bitplanes as C...", 0, ID_EXPCSRC), S("Bitplanes as Assembler...", 0, ID_EXPASM), SBAR,
+  S("Sprites as C...", 0, ID_EXPSPRC), S("Sprites as Assembler...", 0, ID_EXPSPRASM), SBAR,
+  S("Copper Gradient as C...", 0, ID_EXPCOPC), S("Copper Gradient as Assembler...", 0, ID_EXPCOPASM), BAR,
   H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE),
   I("File Info...", 0, ID_FILEINFO), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
@@ -158,13 +174,15 @@ static struct NewMenu menus[] = {
   I("Fade...", 0, ID_FADE), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
   I("Paste Into", 0, ID_PASTEINTO), I("Paste from Amiga Clipboard", 0, ID_PASTEAMIGA), I("Clear", 0, ID_CLEAR), BAR,
-  I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Stroke...", 0, ID_STROKE), BAR,
-  I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN), BAR,
+  I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Content-Aware Fill...", 0, ID_CAFILL), I("Stroke...", 0, ID_STROKE), BAR,
+  I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN),
+  H("Presets"), S("Load Patterns (.pat)...", 0, ID_LOADPAT), S("Load Gradients (.grd)...", 0, ID_LOADGRD), SBAR,      /* 1.2 */
+  S("Save Brushes as .abr...", 0, ID_SAVEABR), S("Save Patterns as .pat...", 0, ID_SAVEPAT), BAR,
   I("Free Transform", "T", ID_FREETRANSFORM), I("Numeric Transform...", 0, ID_NUMTRANSFORM),
   H("Transform"), S("Again", 0, ID_XF_AGAIN), SBAR, S("Scale", 0, ID_XF_SCALE), S("Rotate", 0, ID_XF_ROTATE), S("Skew", 0, ID_XF_SKEW),
   S("Distort", 0, ID_XF_DISTORT), S("Perspective", 0, ID_XF_PERSPECTIVE), SBAR, S("Rotate 180\260", 0, ID_ROTATE180), S("Rotate 90\260 Clockwise", 0, ID_ROTATE90R), S("Rotate 90\260 Anticlockwise", 0, ID_ROTATE90L), SBAR,
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
-  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
+  I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), I("History Options...", 0, ID_HISTOPTS), I("Rename Snapshot...", 0, ID_SNAPRENAME), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
   I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
   I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
   M("Image"),
@@ -190,7 +208,7 @@ static struct NewMenu menus[] = {
   H("Layer Style"), S("Blending Options...", 0, ID_FXBLENDOPT), SBAR, S("Drop Shadow...", 0, ID_FX0 + FX_DROPSHADOW), S("Inner Shadow...", 0, ID_FX0 + FX_INNERSHADOW),
   S("Outer Glow...", 0, ID_FX0 + FX_OUTERGLOW), S("Inner Glow...", 0, ID_FX0 + FX_INNERGLOW), S("Bevel & Emboss...", 0, ID_FX0 + FX_BEVEL),
   S("Satin...", 0, ID_FX0 + FX_SATIN), S("Color Overlay...", 0, ID_FX0 + FX_COLOR), S("Gradient Overlay...", 0, ID_FX0 + FX_GRADIENT),
-  S("Stroke...", 0, ID_FX0 + FX_STROKE), SBAR, S("Copy Layer Style", 0, ID_FXCOPY), S("Paste Layer Style", 0, ID_FXPASTE), S("Clear Layer Style", 0, ID_FXCLEAR), SBAR,
+  S("Stroke...", 0, ID_FX0 + FX_STROKE), S("Pattern Overlay...", 0, ID_FXPATTERN), SBAR, S("Copy Layer Style", 0, ID_FXCOPY), S("Paste Layer Style", 0, ID_FXPASTE), S("Clear Layer Style", 0, ID_FXCLEAR), SBAR,
   S("Global Light...", 0, ID_FXLIGHT), S("Create Layers", 0, ID_FXLAYERS), { NM_SUB, (STRPTR)"Hide All Effects", 0, CHECKIT | MENUTOGGLE, 0, (APTR)ID_FXHIDEALL },
   S("Scale Effects...", 0, ID_FXSCALE),
   H("Layer Color"), LC("None", 0), LC("Red", 1), LC("Orange", 2), LC("Yellow", 3), LC("Green", 4), LC("Blue", 5), LC("Violet", 6), LC("Gray", 7),
@@ -203,7 +221,7 @@ static struct NewMenu menus[] = {
   S("Channel Mixer...", 0, ID_NEWADJ0 + AK_CHANNELMIXER), SBAR, S("Invert", 0, ID_NEWADJ0 + AK_INVERT), S("Posterize...", 0, ID_NEWADJ0 + AK_POSTERIZE),
   S("Threshold...", 0, ID_NEWADJ0 + AK_THRESHOLD), S("Gradient Map...", 0, ID_NEWADJ0 + AK_GRADIENTMAP), S("Selective Color...", 0, ID_NEWADJ0 + AK_SELECTIVECOLOR),
   S("Replace Color...", 0, ID_NEWADJ0 + AK_REPLACECOLOR),
-  H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
+  H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD), S("Pattern...", 0, ID_NEWFILLPAT),
   I("Layer Content Options...", 0, ID_FILLSETTINGS),
   H("Type"), S("Edit Type", 0, ID_EDITTYPE), S("Character...", 0, ID_TYPECHAR), S("Paragraph...", 0, ID_TYPEPARA), SBAR, S("Create Work Path", 0, ID_TYPEWORKPATH),
   S("Warp Text...", 0, ID_WARPTEXT), S("Paste Lorem Ipsum", 0, ID_LOREM), SBAR, S("Convert to Paragraph Text", 0, ID_TOPARA), S("Convert to Point Text", 0, ID_TOPOINT), S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
@@ -211,7 +229,16 @@ static struct NewMenu menus[] = {
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
+  H("Vector Mask"), S("Reveal All", 0, ID_VM_REVEAL), S("Hide All", 0, ID_VM_HIDE), S("Current Path", 0, ID_VM_PATH), SBAR,      /* 1.2 */
+  S("Delete", 0, ID_VM_DELETE), S("Enable/Disable", 0, ID_VM_ENABLE), S("Link/Unlink", 0, ID_VM_LINK), S("Rasterize", 0, ID_VM_RASTER),
   I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
+  H("Smart Objects"), S("Convert to Smart Object", 0, ID_SO_CONVERT), S("New Smart Object via Copy", 0, ID_SO_COPY), SBAR,      /* 1.2 */
+  S("Edit Contents", 0, ID_SO_EDIT), S("Show in Drawer", 0, ID_SO_SHOW), S("Update Modified Content", 0, ID_SO_UPDATE), S("Update All Modified Content", 0, ID_SO_UPDATEALL),
+  S("Replace Contents...", 0, ID_SO_REPLACE), S("Relink to File...", 0, ID_SO_RELINK), S("Export Contents...", 0, ID_SO_EXPORT), SBAR,
+  S("Convert to Linked...", 0, ID_SO_TOLINKED), S("Convert to Embedded", 0, ID_SO_TOEMBEDDED), S("Convert to Layers", 0, ID_SO_TOLAYERS), SBAR,
+  S("Reset Transform", 0, ID_SO_RESET), S("Rasterize", 0, ID_SO_RASTER),
+  H("Links and Artboards"), S("Link Layers", 0, ID_LINK), S("Unlink Layers", 0, ID_UNLINK), S("Select Linked Layers", 0, ID_SELLINKED), SBAR,
+  S("New Artboard", 0, ID_NEWARTBOARD), S("Artboard from Group", 0, ID_ARTBOARDGROUP), S("Place in Frame", 0, ID_FRAMEPLACE),
   I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP),
   H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE), S("Layer Style", 0, ID_FXRASTER),
   H("Stack Mode"), S("Mean", 0, ID_STACKMODE0 + STK_MEAN), S("Median", 0, ID_STACKMODE0 + STK_MEDIAN), S("Minimum", 0, ID_STACKMODE0 + STK_MIN),
@@ -277,11 +304,18 @@ static struct NewMenu menus[] = {
   H("Snap To"), ST("Guides", ID_SNAPTO0), ST("Grid", ID_SNAPTO0 + 1), ST("Document Bounds", ID_SNAPTO0 + 2), ST("Centre Lines", ID_SNAPTO0 + 3), ST("Pixels", ID_SNAPTO0 + 4),
   I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), T("Lock Guides", 0, ID_LOCKGUIDES), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
   I("Hide/Show Panels (Tab)", 0, ID_TOGGLEPANELS), I("Hide/Show Right Panels (Shift-Tab)", 0, ID_TOGGLERIGHT), BAR,
+  T("Pixel Aspect Ratio Correction", 0, ID_PIXASPECT),                                      /* 1.2 */
+  H("Screen Dither"), ST("Ordered", ID_DITHER0), ST("None", ID_DITHER1), ST("Error Diffusion", ID_DITHER2),
+  H("Rotate View"), S("90\260 Clockwise", 0, ID_ROT_CW), S("90\260 Anticlockwise", 0, ID_ROT_CCW), S("180\260", 0, ID_ROT_180), SBAR, S("Reset View", 0, ID_ROT_RESET),
+  H("Show"), ST("Notes", ID_SHOWNOTES), ST("Count", ID_SHOWCOUNT), ST("Slices", ID_SHOWSLICES), SBAR, S("Guides from TV Safe Areas", 0, ID_SAFEGUIDES), BAR,
   T("Dark Interface", 0, ID_DARKUI),
   H("Screen Mode"), S("Window", 0, ID_SCR_WINDOW), S("Easel's Own Screen", 0, ID_SCR_OWN), S("Full Screen", 0, ID_SCR_FULL), SBAR, S("Choose Screen Mode...", 0, ID_SCR_CHOOSE),
   M("Window"),
   I("Next Document", "`", ID_NEXTDOC), I("Previous Document", 0, ID_PREVDOC), BAR,
-  I("Palette", 0, ID_WIN_PALETTE), I("Brush Settings", 0, ID_WIN_BRUSHSET), I("DPaint Brush", 0, ID_WIN_DPAINT),
+  I("Palette", 0, ID_WIN_PALETTE), I("Brush Settings", 0, ID_WIN_BRUSHSET), I("DPaint Brush", 0, ID_WIN_DPAINT), BAR,
+  H("Animation"), S("Previous Frame", 0, ID_FRAMEPREV), S("Next Frame", 0, ID_FRAMENEXT), S("Play Frames", 0, ID_FRAMEPLAY), SBAR,      /* 1.2 */
+  ST("Onion Skin", ID_ONION), S("Onion Skin Settings...", 0, ID_ONIONSET), S("Frame Time...", 0, ID_FRAMETIME),
+  I("Spare Page", 0, ID_SPARE), I("Copy to Spare", 0, ID_COPYSPARE),
   { NM_END, 0, 0, 0, 0, 0 }
 };
 
@@ -541,7 +575,8 @@ Brush tool_brush(int t)
   b.tool = t == TL_PENCIL ? PT_PENCIL : t == TL_ERASER ? PT_ERASER : t == TL_CLONE ? PT_CLONE : t == TL_BLUR ? PT_BLUR :
            t == TL_SHARPEN ? PT_SHARPEN : t == TL_SMUDGE ? PT_SMUDGE : t == TL_DODGE ? PT_DODGE : t == TL_BURN ? PT_BURN :
            t == TL_SPONGE ? PT_SPONGE : t == TL_PATTERN ? PT_PATTERN : t == TL_HISTORY ? PT_HISTORY : t == TL_REPLACE ? PT_REPLACE :
-           t == TL_BGERASE ? PT_BGERASE : t == TL_HEAL ? PT_HEAL : t == TL_SPOTHEAL ? PT_SPOTHEAL : PT_BRUSH;
+           t == TL_BGERASE ? PT_BGERASE : t == TL_HEAL ? PT_HEAL : t == TL_SPOTHEAL ? PT_SPOTHEAL :
+           t == TL_MIXER ? PT_MIXER : t == TL_REMOVE ? PT_SPOTHEAL : PT_BRUSH;      /* (1.2) */
   b.size = opt.size[t]; b.hardness = opt.hardness[t]; b.opacity = opt.opacity[t]; b.flow = opt.flow[t];
   b.spacing = 25; b.blend = opt.mode[t]; b.strength = opt.strength[t];
   /* 0.5: the tip, dynamics and symmetry from the Brush Settings window; then the options bar's */
@@ -553,7 +588,14 @@ Brush tool_brush(int t)
   if (t == TL_DODGE || t == TL_BURN) { b.tone_range = TR_SHADOWS + (opt.range > 2 ? 1 : opt.range); b.protect_tones = opt.protect_tones; }
   if (t == TL_SPONGE) { b.sponge_saturate = opt.sponge_mode == 1; b.vibrance = opt.vibrance; }
   if (t == TL_CLONE || t == TL_HEAL) b.sample_all = sample_layers[opt.clone_sample % 3];
-  if (t == TL_HEAL) b.blend = BM_NORMAL;
+  if (t == TL_HEAL) { b.blend = opt.mode[t] < BM_N ? opt.mode[t] : BM_NORMAL; b.heal_source = opt.heal_source; b.heal_diffusion = opt.heal_diffusion; }   /* (1.2: Mode, Source, Diffusion) */
+  if (t == TL_SPOTHEAL) b.spot_type = opt.spot_type;
+  if (t == TL_REMOVE) { b.spot_type = SPOT_CONTENT; b.blend = BM_NORMAL; }
+  if (t == TL_MIXER) {
+    /* 1.2: the Mixer Brush's paint and settings */
+    tool_mixer.auto_load = opt.mix_autoload; tool_mixer.auto_clean = opt.mix_autoclean; tool_mixer.sample_all = opt.mix_all;
+    b.mixer = &tool_mixer; b.mix_wet = opt.mix_wet; b.mix_load = opt.mix_load; b.mix_mix = opt.mix_mix;
+  }
   if (t == TL_BLUR || t == TL_SHARPEN || t == TL_SMUDGE) b.blend = retouch_blend(opt.mode[t]);
   if (t == TL_SHARPEN) b.protect_detail = opt.protect_detail;
   if (t == TL_SMUDGE) b.finger_painting = opt.finger_paint;
@@ -609,6 +651,11 @@ static void opts_defaults(void)
   opt.poly_sides = 5; opt.poly_indent = 50; opt.round_radius = 10; opt.arrow_end = 1;
   /* 1.1 */
   opt.range = 1; opt.protect_tones = 1; opt.vibrance = 1; opt.clone_aligned = 1; opt.crop_overlay = CO_THIRDS;
+  /* 1.2 */
+  opt.qs_enhance = 1; opt.size[TL_QUICKSEL] = 12; opt.frame_stroke = 0;
+  opt.mix_wet = 50; opt.mix_load = 50; opt.mix_mix = 50; opt.mix_autoload = 1; opt.mix_autoclean = 1; opt.size[TL_MIXER] = 20;
+  opt.ah_style = AH_TIGHT_SHORT; opt.ah_area = 50; opt.size[TL_ARTHIST] = 4; opt.size[TL_REMOVE] = 30;
+  opt.cam_structure = 4; opt.cam_color = 0; opt.patch_structure = 4; opt.patch_color = 0; opt.heal_diffusion = 5;
 }
 const int sample_layers[3] = { SAMPLE_CURRENT, SAMPLE_BELOW, SAMPLE_ALL };
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
@@ -767,6 +814,8 @@ void refresh_panels(void)
   DoMethod(statusbar, MUIM_Status_Refresh);
   set_title();
   update_menus();
+  tools2_menus();                                          /* 1.2 */
+  t2_log_steps();                                          /* 1.2: the History Log */
 }
 void refresh_all(void)
 {
@@ -781,6 +830,7 @@ static void base_name(const char *path, char *out, size_t cap)
   strncpy(out, f, cap - 1); out[cap - 1] = 0;
 }
 /* a document added as a tab and shown (takes d) */
+static Doc *state_copy(Doc *d);
 static int doc_show(Doc *d, const char *path, int fmt)
 {
   DocView *v;
@@ -796,6 +846,12 @@ static int doc_show(Doc *d, const char *path, int fmt)
   if (!d->guides.grid_x) { d->guides.grid_x = d->guides.grid_y = (u16)prefs.grid_spacing; d->guides.grid_sub = (u8)prefs.grid_sub; }   /* (0.8: the preferences' grid) */
   /* the History Brush's source: the picture as it opened, if there is room for a copy */
   if (AvailMem(MEMF_ANY | MEMF_LARGEST) > (ULONG)d->w * d->h * 8) v->snap = snapshot_take(d);
+  /* 1.2: History Options: the first snapshot made at once (when there is room); the History Log */
+  if (hist_opts.auto_snapshot && AvailMem(MEMF_ANY | MEMF_LARGEST) > (ULONG)d->w * d->h * 12 && (v->hsnap[0] = state_copy(d)) != NULL) {
+    strncpy(v->hsnap_name[0], v->name, sizeof v->hsnap_name[0] - 1); v->nhsnap = 1;
+  }
+  t2_log_event(d, "Opened", v->name);
+  if (curdoc >= 0) t2_spare = curdoc;
   curdoc = ndocs++;
   refresh_all();
   return 1;
@@ -804,6 +860,7 @@ static void doc_switch(int i)
 {
   if (i < 0 || i >= ndocs || i == curdoc) return;
   DoMethod(canvas, MUIM_Canvas_Tool);
+  t2_spare = curdoc;                                       /* (1.2: the spare page is the one before) */
   curdoc = i;
   refresh_all();
 }
@@ -1161,6 +1218,11 @@ static int save(void)
   icon_for(v->doc, v->path);
   v->doc->dirty = 0;
   recovery_drop(v);
+  /* 1.2: History Options' New Snapshot When Saving, and the History Log */
+  if (hist_opts.snapshot_on_save && v->nhsnap < MAXHSNAP && (v->hsnap[v->nhsnap] = state_copy(v->doc)) != NULL) {
+    snprintf(v->hsnap_name[v->nhsnap], sizeof v->hsnap_name[0], "%.12s %s", tr("Saved"), v->name); v->nhsnap++;
+  }
+  t2_log_event(v->doc, "Saved", v->name);
   refresh_panels();
   return 1;
 }
@@ -1682,6 +1744,12 @@ static int state_restore(Doc *d, Doc *s, const char *name)
   free(c);                              /* (its buffers are the picture's now) */
   return 1;
 }
+/* 1.2: (tools2.h) main.c's helpers for tools2.c */
+int  t2_file_request(int save, const char *title, char *path, size_t cap, const char *pattern) { return file_request(save, title, path, cap, pattern); }
+int  t2_doc_show(Doc *d, const char *path) { return doc_show(d, path, FMT_ORA); }
+void t2_open_path(const char *path) { open_path(path); }
+void t2_doc_switch(int i) { doc_switch(i); }
+Doc *t2_state_copy(Doc *d) { return state_copy(d); }
 static void hsnaps_free(DocView *v)
 {
   int i;
@@ -1894,6 +1962,7 @@ static void command(ULONG id)
 {
   Doc *d = cur_doc();
   Box ch;
+  if (id > ID_T2_FIRST && id < ID_T2_LAST) { if (tools2_command(id)) refresh_all(); return; }   /* 1.2 (tools2.c) */
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
@@ -2301,6 +2370,7 @@ static void command(ULONG id)
     if (!(c = state_copy(v->doc))) { ask("OK", "%s", tr("There isn't enough memory for a snapshot.")); return; }
     v->hsnap[v->nhsnap] = c;
     sprintf(v->hsnap_name[v->nhsnap], "%s %d", tr("Snapshot"), ++nsnap);
+    if (hist_opts.ask_snapshot_name) ask_string("New Snapshot", "Name:", v->hsnap_name[v->nhsnap], sizeof v->hsnap_name[0]);   /* (1.2) */
     hist_pick = v->nhsnap++;
     refresh_panels();
     return; }
@@ -2736,6 +2806,8 @@ int main(int argc, char **argv)
   if (!(MUIMasterBase = OpenLibrary((STRPTR)MUIMASTER_NAME, 19))) { printf("Easel needs MUI (muimaster.library 19 or later).\n"); goto done; }
   CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 40);
   adjlayer_init();                       /* adjustment layers composite through adjust.c */
+  layerx_init(); cafill_init();          /* 1.2: vector masks, patterns, group effects; Spot Healing's Content-Aware type */
+  mixer_init(&tool_mixer);
   find_home(argc > 0 ? argv[0] : NULL);
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");
@@ -2884,6 +2956,7 @@ done:
   panels2_free();
   paths_free();
   jobs_free();
+  tools2_free();                         /* 1.2: the tablet's handler, the smart objects' scratch copies */
   popup_free();
   qbutton_class_free();
   text_cache_flush();                    /* 0.9: the type layers' open font files */

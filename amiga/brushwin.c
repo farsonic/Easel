@@ -22,6 +22,7 @@
 #include <proto/muimaster.h>
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
+#include "../core/brushx.h"              /* 1.2 */
 #include "easel.h"
 #include "theme.h"
 #include "lang.h"
@@ -78,7 +79,7 @@ typedef struct {
   const char *suffix;
   const char *const *choices; int nchoices;   /* a choice's entries; the buttons' labels */
 } PItem;
-#define MAXITEMS 100
+#define MAXITEMS 128
 #define MAXSEC 16
 struct SData {
   struct MUI_EventHandlerNode ehn;
@@ -107,6 +108,7 @@ static const char *const lim_list[3] = { "Contiguous", "Discontiguous", "Find Ed
 static const char *const rpl_list[4] = { "Hue", "Saturation", "Color", "Luminosity" };
 static const char *const cb_list[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle", "Tint" };
 static const char *const b_tip[] = { "Round Tip" };
+static const char *const dual_tips[7] = { "Round", "Chalk", "Spatter", "Bristle", "Star", "Leaf", "Grass" };   /* (1.2) */
 static const char *const b_sym[] = { "Centre on Canvas" };
 static const char *const b_seed[] = { "New Seed" };
 static const char *const b_pick[] = { "Pick Up", "Pick Up Selection", "Release" };
@@ -193,6 +195,24 @@ static int build_settings(PItem *it)
   if (dy->sym_center_set) BUTTONS(b_sym, 1, C_SYMCENTRE);
   SEC("Airbrush", &dy->buildup);
   SCRUB("Rate", ui_rate, 1, 100, "/s");
+  /* 1.2: Texture, Dual Brush, Noise, Wet Edges, Brush Pose */
+  SEC("Texture", &brushui.tex_on);
+  if (npat_names) CHOICE("Pattern", brushui.tex_pat, pat_names, npat_names);
+  SCRUB("Scale", b->tex_scale, 1, 1000, "%"); SCRUB("Depth", b->tex_depth, 0, 100, "%");
+  CHOICE("Mode", b->tex_mode, txm_names, TXM_N); CHECK("Invert", b->tex_invert);
+  SCRUB("Brightness", b->tex_brightness, -150, 150, ""); SCRUB("Contrast", b->tex_contrast, -50, 100, "");
+  CHECK("Protect Texture", brushui.protect_texture);
+  SEC("Dual Brush", &b->dual_on);
+  CHOICE("Tip", brushui.dual_tip, dual_tips, 7); CHOICE("Mode", b->dual_mode, dbm_names, DBM_N);
+  SCRUB("Size", b->dual_size, 1, 500, "px"); SCRUB("Scatter", b->dual_scatter, 0, 1000, "%"); SCRUB("Count", b->dual_count, 1, 16, "");
+  SEC("Noise", &brushui.noise_on);
+  LABEL("Grain in the brush's soft edge");
+  SEC("Wet Edges", &brushui.wet_on);
+  LABEL("Paint gathers at the stroke's edges");
+  SEC("Brush Pose", &brushui.pose_on);
+  CHECK("Override Tilt", brushui.pose_tilt); SCRUB("Tilt X", b->pose_tilt_x, -100, 100, "%"); SCRUB("Tilt Y", b->pose_tilt_y, -100, 100, "%");
+  CHECK("Override Rotation", brushui.pose_rot); SCRUB("Rotation", b->pose_rotation, -180, 180, "");
+  CHECK("Override Pressure", brushui.pose_press); SCRUB("Pressure", b->pose_pressure, 0, 100, "%");
   SEC("Tool Options", NULL);
   CHOICE("Eraser Mode", b->eraser_mode, erase_list, 3);
   CHECK("Pencil Auto Erase", b->auto_erase);
@@ -204,6 +224,7 @@ static int build_settings(PItem *it)
   CHECK("Protect Foreground Color", b->protect_fg);
   CHOICE("Replace Mode", b->replace_mode, rpl_list, 4);
   CHOICE("Stencil", brushui.stencil, stc_list, 3); CHECK("Stencil Inverted", b->stencil_invert);
+  CHOICE("Draw Mode", brushui.draw_mode, cb_list, CB_N);      /* (1.2: DPaint's modes for any brush) */
   SCRUB("Seed (0: new each stroke)", ui_seed, 0, 99999, "");
   BUTTONS(b_seed, 1, C_NEWSEED);
   return n;
@@ -756,7 +777,7 @@ static int panel_hit(struct PData *d, Object *obj, LONG mx, LONG my, int *btn)
 static void pick_preset(int i)
 {
   if (i < 0 || i >= brushui.presets.n) return;
-  brushui.b = preset_pick(&brushui.presets.p[i], &brushui.b);
+  { Brush prev = brushui.b; brushui.b = preset_pick(&brushui.presets.p[i], &brushui.b); if (brushui.protect_texture) brushx_protect_texture(&brushui.b, &prev); }   /* (1.2: Protect Texture) */
   brushui.current = i;
   if (brushui.picked) brushui.picked(&brushui.b);
   changed_all();
@@ -945,7 +966,23 @@ void brushwin_apply(Brush *b)
   if (!s->dyn.seed) { static u32 strokes; b->dyn.seed = brush_hash(0x45534C, ++strokes, (u32)(size_t)b) | 1; }
   b->eraser_mode = s->eraser_mode; b->auto_erase = s->auto_erase; b->sample_all = s->sample_all; b->pattern_aligned = s->pattern_aligned;
   b->sampling = s->sampling; b->limits = s->limits; b->tolerance = s->tolerance; b->protect_fg = s->protect_fg; b->replace_mode = s->replace_mode;
-  b->custom_mode = s->custom_mode;
+  b->custom = brushui.use_custom && brushui.custom && (b->tool == PT_BRUSH || b->tool == PT_PENCIL) ? brushui.custom : NULL;
+  b->custom_mode = b->custom ? s->custom_mode : brushui.draw_mode;   /* (1.2: the draw mode for a plain brush) */
+  /* 1.2: Texture, Dual Brush, Noise, Wet Edges, Brush Pose */
+  if (brushui.tex_on && s->tex_depth > 0 && brushui.tex_pat >= 0 && brushui.tex_pat < patterns.n) {
+    b->texture = patterns.p[brushui.tex_pat]; b->tex_scale = s->tex_scale; b->tex_depth = s->tex_depth; b->tex_mode = s->tex_mode;
+    b->tex_invert = s->tex_invert; b->tex_brightness = s->tex_brightness; b->tex_contrast = s->tex_contrast;
+  }
+  if (s->dual_on) {
+    static Tip *dt[7];
+    int k = brushui.dual_tip > 0 && brushui.dual_tip < 7 ? brushui.dual_tip : 0;
+    if (k && !dt[k]) dt[k] = tip_procedural(k - 1, 48, 7);
+    b->dual_on = 1; b->dual_tip = k ? dt[k] : NULL; b->dual_mode = s->dual_mode;
+    b->dual_size = s->dual_size > 0 ? s->dual_size : 10; b->dual_scatter = s->dual_scatter; b->dual_count = s->dual_count > 0 ? s->dual_count : 1;
+  }
+  b->noise = brushui.noise_on ? 100 : 0; b->wet_edges = brushui.wet_on ? 100 : 0;
+  b->pose_flags = brushui.pose_on ? (brushui.pose_tilt ? POSE_TILT : 0) | (brushui.pose_rot ? POSE_ROTATION : 0) | (brushui.pose_press ? POSE_PRESSURE : 0) : 0;
+  b->pose_tilt_x = s->pose_tilt_x; b->pose_tilt_y = s->pose_tilt_y; b->pose_rotation = s->pose_rotation; b->pose_pressure = s->pose_pressure;
   /* 1.1: the stencil's colours, from the picture as it is now */
   {
     static u32 stc[256];

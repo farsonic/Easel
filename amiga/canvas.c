@@ -40,6 +40,11 @@
 #include "../core/crop.h"
 #include "../core/type.h"
 #include "../core/path.h"
+#include "tools2.h"                     /* 1.2 */
+#include "tools2ids.h"
+#include "../core/selsmart.h"
+#include "../core/cafill.h"
+#include "../core/layerx.h"
 #include "../core/pathops.h"
 #include "../core/shape.h"
 #include "../core/live.h"
@@ -59,7 +64,8 @@ static Doc *ruler_doc;                   /* the picture the Ruler's line was dra
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
        DR_XFORM, DR_RULER, DR_SAMPLE,
        DR_TYPEBOX, DR_TYPESEL, DR_PATH,
-       DR_STRAIGHTEN, DR_ZOOMSCRUB };                   /* 1.1: the Crop tool's straightening line; scrubby zoom */              /* 0.9: a paragraph box dragged out, text selected, a path edited */
+       DR_STRAIGHTEN, DR_ZOOMSCRUB,
+       DR_QSEL, DR_ARTHIST, DR_PCROP, DR_ANMOVE, DR_ROTVIEW, DR_CROPROT };     /* 1.2 */                   /* 1.1: the Crop tool's straightening line; scrubby zoom */              /* 0.9: a paragraph box dragged out, text selected, a path edited */
 /* 0.9: what a path tool's drag does */
 enum { PE_NONE, PE_HANDLES, PE_ANCHOR, PE_SELMOVE, PE_HANDLE, PE_SUBMOVE, PE_BOX };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
@@ -128,14 +134,23 @@ struct Data {
   double zs_z; LONG zs_mx, zs_my; int zs_moved;
   int tilde;                             /* 1.1: the ` key held: the Brush erases */
   int shape_centre;                      /* 1.1: Alt held while a shape is dragged out: from its centre */
+  /* 1.2: the vertical zoom (the zoom times the pixel aspect, View > Pixel Aspect Ratio) and the
+     view's turn (Rotate View); the new tools' state (tools2.h) */
+  double zy, rot;
+  double pq[8]; int pq_on, pq_handle;    /* Perspective Crop's corners (image), clockwise from the top left */
+  int qs_open, ah_open; u32 ah_seed; double ah_x, ah_y;   /* Quick Selection's and Art History's steps in one */
+  int an_pick;                           /* the note, count marker or slice being dragged */
+  double rot0, rotstart;                 /* Rotate View's drag: the angle when it began, and the pointer's */
+  int ab_pick;                           /* the artboard being moved */
 };
+int view_aspect;                         /* 1.2: (tools2.h) View > Pixel Aspect Ratio Correction */
 
 static struct MUI_CustomClass *ccls;
 static const double zooms[] = { 1.0 / 32, 1.0 / 24, 1.0 / 16, 1.0 / 12, 1.0 / 8, 1.0 / 6, 1.0 / 4, 1.0 / 3, 1.0 / 2, 2.0 / 3, 1, 1.5, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32 };
 #define NZOOMS (int)(sizeof zooms / sizeof zooms[0])
 
 static int brushlike(int t) { return t == TL_BRUSH || t == TL_PENCIL || t == TL_ERASER || t == TL_CLONE || (t >= TL_BLUR && t <= TL_SPONGE) || (t >= TL_PATTERN && t <= TL_BGERASE) ||
-                                     t == TL_HEAL || t == TL_SPOTHEAL; }
+                                     t == TL_HEAL || t == TL_SPOTHEAL || t == TL_MIXER || t == TL_REMOVE; }   /* (1.2: the Mixer Brush, Remove) */
 /* 0.3: painting a layer mask: its feathered copy made again so the composite shows it */
 static void mask_painted(Doc *doc)
 {
@@ -170,7 +185,9 @@ static void place(struct Data *d, Object *obj)
     v->placed = 1;
   }
   d->z = v->zoom;
-  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->z);
+  d->zy = view_aspect && v->doc->aspect_x && v->doc->aspect_y ? d->z * v->doc->aspect_y / v->doc->aspect_x : d->z;   /* 1.2 */
+  d->rot = v->vrot;
+  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->zy);
   if (iw <= W) { v->sx = 0; d->ox = (W - iw) / 2; }
   else { if (v->sx > iw - W) v->sx = iw - W; if (v->sx < 0) v->sx = 0; d->ox = -v->sx; }
   if (ih <= H) { v->sy = 0; d->oy = (H - ih) / 2; }
@@ -178,14 +195,24 @@ static void place(struct Data *d, Object *obj)
 }
 /* window pixel to image (fractional) and back */
 static double to_ix(struct Data *d, Object *obj, LONG mx) { return (mx - _mleft(obj) - d->ox) / d->z; }
-static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->z; }
+static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->zy; }
 static LONG to_sx(struct Data *d, Object *obj, double ix) { return _mleft(obj) + d->ox + (LONG)floor(ix * d->z + 0.5); }
-static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->z + 0.5); }
+static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->zy + 0.5); }
+/* 1.2: a window point to the image with the view turned (Rotate View): about the area's middle */
+static void to_img(struct Data *d, Object *obj, LONG mx, LONG my, double *ix, double *iy)
+{
+  if (d->rot) {
+    double cx = _mleft(obj) + _mwidth(obj) / 2.0, cy = _mtop(obj) + _mheight(obj) / 2.0, sx, sy;
+    view_rotate(d->rot, mx - cx, my - cy, &sx, &sy);
+    mx = (LONG)floor(cx + sx + 0.5); my = (LONG)floor(cy + sy + 0.5);
+  }
+  *ix = to_ix(d, obj, mx); *iy = to_iy(d, obj, my);
+}
 static void update_props(struct Data *d, Object *obj)
 {
   DocView *v = cur_view();
   if (!v || !v->doc) return;
-  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->z), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
+  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->zy), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
   if (d->hprop) SetAttrs(d->hprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->w * d->z), MUIA_Prop_Visible, _mwidth(obj), MUIA_Prop_First, v->sx, TAG_DONE);
 }
 
@@ -200,7 +227,7 @@ static int comp_ready(struct Data *d)
   comp_free(d);
   if (!(d->comp = (u8 *)AllocVec((ULONG)doc->w * doc->h * 4, MEMF_ANY))) return 0;
   d->doc = doc; d->cw = doc->w; d->ch = doc->h;
-  doc_composite(doc, doc_box(doc), d->comp, (long)doc->w * 4);
+  view_composite(doc, doc_box(doc), d->comp, (long)doc->w * 4);   /* (1.2: with onion skins when they are on) */
   return 1;
 }
 static int view_ready(struct Data *d, Object *obj)
@@ -235,7 +262,7 @@ static const u8 *comp_row(struct Data *d, Doc *doc, LONG iy, LONG ix0, LONG ix1)
     if (ix0 < 0) ix0 = 0;
     if (ix1 > doc->w) ix1 = doc->w;
     if (ix1 <= ix0) return NULL;
-    doc_composite(doc, box_make((i32)ix0, (i32)iy, (i32)ix1, (i32)iy + 1), d->rowbuf + ix0 * 4, (long)doc->w * 4);
+    view_composite(doc, box_make((i32)ix0, (i32)iy, (i32)ix1, (i32)iy + 1), d->rowbuf + ix0 * 4, (long)doc->w * 4);
     d->rowdoc = doc; d->rowy = (i32)iy;
   }
   return d->rowbuf;
@@ -252,17 +279,17 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
 {
   GuideSet *g = &doc->guides;
   LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
-  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
+  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->zy), x, y;
   int i, k;
   if (extras_hidden) return;                             /* (1.1: View > Extras off) */
   if (ix1 > x1) ix1 = x1;
   if (iy1 > y1) iy1 = y1;
   if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
     for (k = 0; k < 2; k++) {
-      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->z, 1, &step);
-      if (step * d->z < 4) continue;                     /* (too close together to see) */
+      double zk = k == 0 ? d->z : d->zy, step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->zy, 1, &step);
+      if (step * zk < 4) continue;                     /* (too close together to see) */
       for (; ; p += step) {
-        LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
+        LONG s = (LONG)floor(p * zk) + (k == 0 ? d->ox : d->oy);
         if (s >= (k == 0 ? ix1 : iy1)) break;
         if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, prefs.grid_color, 1); }
         else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, prefs.grid_color, 1);
@@ -271,7 +298,7 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
   }
   if (g->show_guides) {
     for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, prefs.guide_color, 0); }
-    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->zy) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
   }
   if (g->show_rulers) {
     int minor, major = ruler_step(d->z, 50, &minor);
@@ -281,9 +308,9 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
       double p;
       if (b0 >= RULER) continue;
       for (s = a0; s < a1; s++) for (b = b0; b < b1 && b < RULER; b++) { if (k == 0) vpix(d, s, b, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); else vpix(d, b, s, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); }
-      for (p = floor((a0 - off) / d->z / mstep) * mstep; ; p += mstep) {
+      for (p = floor((a0 - off) / (k == 0 ? d->z : d->zy) / mstep) * mstep; ; p += mstep) {
         LONG len;
-        s = (LONG)floor(p * d->z) + off;
+        s = (LONG)floor(p * (k == 0 ? d->z : d->zy)) + off;
         if (s >= a1) break;
         if (s < a0) continue;
         len = fmod(fabs(p) + 0.001, major) < 0.01 ? RULER : RULER / 3;
@@ -313,13 +340,105 @@ static void ruler_labels(struct Data *d, Object *obj)
     unit_text(buf, p, doc->w, doc->dpi, 0);             /* (0.8: in the preferences' units) */
     Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
   }
-  for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
-    LONG s = (LONG)floor(p * d->z) + d->oy;
+  for (p = floor(-d->oy / d->zy / major) * major; (LONG)(p * d->zy) + d->oy < d->vh; p += major) {
+    LONG s = (LONG)floor(p * d->zy) + d->oy;
     int c, n;
     if (s < RULER) continue;
     unit_text(buf, p, doc->h, doc->dpi, 0);
     /* (the digits one under another, as the ruler is narrow) */
     for (c = 0, n = (int)strlen(buf); c < n; c++) { Move(rp, _mleft(obj) + 3, _mtop(obj) + s + 2 + c * rp->TxHeight + rp->TxBaseline); Text(rp, (STRPTR)buf + c, 1); }
+  }
+  MUI_RemoveClipping(muiRenderInfo(obj), (struct Region *)clip);
+}
+/* 1.2: the view turned (Rotate View): each of the area's pixels from the image point under it once
+   turned back about the area's middle (needs the whole composite) */
+static void render_turned(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, LONG y1)
+{
+  ULONG bc = board();
+  double a = -d->rot * 3.14159265358979 / 180, ca = cos(a), sa = sin(a), cx = d->vw / 2.0, cy = d->vh / 2.0;
+  LONG x, y;
+  for (y = y0; y < y1; y++) {
+    UBYTE *o = d->view + (y * d->vw + x0) * 3;
+    for (x = x0; x < x1; x++, o += 3) {
+      double sx = cx + (x - cx) * ca - (y - cy) * sa, sy = cy + (x - cx) * sa + (y - cy) * ca;
+      double fx = floor((sx - d->ox) / d->z), fy = floor((sy - d->oy) / d->zy);
+      const u8 *p;
+      int al, c;
+      if (fx < 0 || fy < 0 || fx >= doc->w || fy >= doc->h) { o[0] = (UBYTE)(bc >> 16); o[1] = (UBYTE)(bc >> 8); o[2] = (UBYTE)bc; continue; }
+      p = d->comp + ((long)fy * doc->w + (long)fx) * 4;
+      al = p[3]; c = ((((long)fx >> 3) + ((long)fy >> 3)) & 1) ? 0xCC : 0xFF;
+      o[0] = (UBYTE)((p[0] * al + c * (255 - al) + 127) / 255);
+      o[1] = (UBYTE)((p[1] * al + c * (255 - al) + 127) / 255);
+      o[2] = (UBYTE)((p[2] * al + c * (255 - al) + 127) / 255);
+    }
+  }
+}
+/* 1.2: the notes (small sheets in their colour), count marks (crosses) and slices (outlines) drawn into
+   the view's pixels; their numbers are drawn after (annot_labels) */
+static void view_box(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1, LONG cx0, LONG cy0, LONG cx1, LONG cy1, ULONG c, int fill)
+{
+  LONG x, y;
+  for (y = y0 < cy0 ? cy0 : y0; y <= y1 && y < cy1; y++)
+    for (x = x0 < cx0 ? cx0 : x0; x <= x1 && x < cx1; x++)
+      if (fill || x == x0 || x == x1 || y == y0 || y == y1) vpix(d, x, y, c, 0);
+}
+static void annots_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, LONG y1)
+{
+  Annots *a = doc->annot;
+  int i;
+  if (extras_hidden || d->rot) return;
+  if (a->show_slices)
+    for (i = 0; i < a->nslice; i++) {
+      Box b = a->slice[i].b;
+      view_box(d, d->ox + (LONG)floor(b.x0 * d->z), d->oy + (LONG)floor(b.y0 * d->zy), d->ox + (LONG)floor(b.x1 * d->z) - 1, d->oy + (LONG)floor(b.y1 * d->zy) - 1,
+               x0, y0, x1, y1, i == slice_pick ? 0xFF8000 : 0x2060FF, 0);
+    }
+  if (a->show_count)
+    for (i = 0; i < a->nmark; i++) {
+      const CountGroup *g = &a->group[a->mark[i].group];
+      LONG sx = d->ox + (LONG)floor((a->mark[i].x + 0.5) * d->z), sy = d->oy + (LONG)floor((a->mark[i].y + 0.5) * d->zy), r = g->size + 2, k;
+      if (!g->visible) continue;
+      for (k = -r; k <= r; k++) {
+        if (sx + k >= x0 && sx + k < x1 && sy >= y0 && sy < y1) vpix(d, sx + k, sy, g->color, 0);
+        if (sy + k >= y0 && sy + k < y1 && sx >= x0 && sx < x1) vpix(d, sx, sy + k, g->color, 0);
+      }
+    }
+  if (a->show_notes)
+    for (i = 0; i < a->nnote; i++) {
+      LONG sx = d->ox + (LONG)floor(a->note[i].x * d->z), sy = d->oy + (LONG)floor(a->note[i].y * d->zy);
+      view_box(d, sx, sy, sx + 11, sy + 11, x0, y0, x1, y1, a->note[i].color, 1);
+      view_box(d, sx, sy, sx + 11, sy + 11, x0, y0, x1, y1, 0x404040, 0);
+      view_box(d, sx + 3, sy + 4, sx + 8, sy + 4, x0, y0, x1, y1, 0x404040, 1);
+      view_box(d, sx + 3, sy + 7, sx + 8, sy + 7, x0, y0, x1, y1, 0x404040, 1);
+    }
+}
+/* the count marks' and slices' numbers, over the view once it is on the screen */
+static void annot_labels(struct Data *d, Object *obj)
+{
+  Doc *doc = cur_doc();
+  Annots *a = doc ? doc->annot : NULL;
+  struct RastPort *rp = _rp(obj);
+  APTR clip;
+  char buf[12];
+  int i;
+  if (!a || extras_hidden || d->rot || !d->shown || (!(a->show_count && a->nmark) && !(a->show_slices && a->nslice))) return;
+  clip = (APTR)MUI_AddClipping(muiRenderInfo(obj), _mleft(obj), _mtop(obj), _mwidth(obj), _mheight(obj));
+  SetFont(rp, theme_small());
+  SetDrMd(rp, JAM1);
+  if (a->show_count)
+    for (i = 0; i < a->nmark; i++) {
+      const CountGroup *g = &a->group[a->mark[i].group];
+      if (!g->visible) continue;
+      sprintf(buf, "%d", count_number(doc, i));
+      SetAPen(rp, tpen(T_RED));
+      Move(rp, to_sx(d, obj, a->mark[i].x + 0.5) + g->size + 4, to_sy(d, obj, a->mark[i].y + 0.5) - 2); Text(rp, (STRPTR)buf, strlen(buf));
+    }
+  if (a->show_slices) {
+    SetAPen(rp, tpen(T_ACCENT));
+    for (i = 0; i < a->nslice; i++) {
+      sprintf(buf, "%02d", i + 1);
+      Move(rp, to_sx(d, obj, a->slice[i].b.x0) + 3, to_sy(d, obj, a->slice[i].b.y0) + rp->TxBaseline + 2); Text(rp, (STRPTR)buf, strlen(buf));
+    }
   }
   MUI_RemoveClipping(muiRenderInfo(obj), (struct Region *)clip);
 }
@@ -335,6 +454,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
   if (x1 > d->vw) x1 = d->vw;
   if (y1 > d->vh) y1 = d->vh;
   if (x1 <= x0 || y1 <= y0) return;
+  if (d->rot && d->comp && doc) { render_turned(d, doc, x0, y0, x1, y1); return; }   /* 1.2: Rotate View */
   for (x = x0; x < x1; x++) {
     double ix = floor((x - d->ox) / d->z);
     d->xmap[x] = doc && ix >= 0 && ix < doc->w ? (LONG)ix : -1;
@@ -343,7 +463,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
   d->rowdoc = NULL;                    /* (the row cache is for this pass's columns only) */
   for (y = y0; y < y1; y++) {
     UBYTE *o = d->view + (y * d->vw + x0) * 3;
-    double iyf = floor((y - d->oy) / d->z);
+    double iyf = floor((y - d->oy) / d->zy);
     LONG iy = doc && iyf >= 0 && iyf < doc->h ? (LONG)iyf : -1;
     const u8 *row = iy < 0 ? NULL : d->comp ? d->comp + (long)iy * doc->w * 4 : comp_row(d, doc, iy, cx0, cx1);
     for (x = x0; x < x1; x++, o += 3) {
@@ -369,6 +489,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
     }
   }
   if (doc) guides_render(d, doc, x0, y0, x1, y1);
+  if (doc && doc->annot) annots_render(d, doc, x0, y0, x1, y1);   /* 1.2: notes, counts, slices */
 }
 static void blit(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1)
 {
@@ -397,7 +518,7 @@ static void ants(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1
   struct RastPort *rp = _rp(obj);
   int i;
   UWORD pat;
-  if (!d->nedges || !d->edges || extras_hidden) return;
+  if (!d->nedges || !d->edges || extras_hidden || d->rot) return;   /* (1.2: not on a turned view) */
   pat = (UWORD)((0xF0F0F0F0UL >> (d->phase & 7)) & 0xFFFF);
   SetDrMd(rp, JAM2);
   SetAPen(rp, theme_is_dark() ? tpen(T_WHITE) : tpen(T_TEXT));
@@ -625,6 +746,20 @@ static void bounds_handles(LONG x0, LONG y0, LONG x1, LONG y1, LONG *hx, LONG *h
   hx[4] = mx; hy[4] = y0; hx[5] = x1; hy[5] = my; hx[6] = mx; hy[6] = y1; hx[7] = x0; hy[7] = my;
 }
 static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1);
+/* 1.2: the box of what the Note, Count, Slice Select or Artboard tool is dragging */
+static Box an_box(struct Data *d)
+{
+  Doc *doc = cur_doc();
+  Annots *a = doc ? doc->annot : NULL;
+  int k = d->an_pick;
+  if (!doc) return box_make(0, 0, 0, 0);
+  if (tool == TL_ARTBOARD) return d->ab_pick >= 0 && d->ab_pick < doc->nlay ? doc->lay[d->ab_pick]->abox : box_make(0, 0, 0, 0);
+  if (!a || k < 0) return box_make(0, 0, 0, 0);
+  if (tool == TL_SLICESEL && k < a->nslice) return a->slice[k].b;
+  if (tool == TL_NOTE && k < a->nnote) { i32 sz = (i32)(12 / d->z) + 1; return box_make(a->note[k].x, a->note[k].y, a->note[k].x + sz, a->note[k].y + sz); }
+  if (tool == TL_COUNT && k < a->nmark) { i32 sz = (i32)(4 / d->z) + 1; return box_make(a->mark[k].x - sz, a->mark[k].y - sz, a->mark[k].x + sz + 1, a->mark[k].y + sz + 1); }
+  return box_make(0, 0, 0, 0);
+}
 /* everything in the overlay drawn (or, drawn again, taken away) */
 static void ov_draw(struct Data *d, Object *obj)
 {
@@ -744,7 +879,13 @@ static void ov_draw(struct Data *d, Object *obj)
     xline(rp, a - 4, b - 4, a - 1, b - 1); xline(rp, a + 1, b + 1, a + 4, b + 4);
     xline(rp, c - 4, e + 4, c - 1, e + 1); xline(rp, c + 1, e - 1, c + 4, e - 4);
   }
-  if (d->crop_on) {
+  if (d->crop_on && opt.crop_angle) {
+    /* 1.2: the turned crop box */
+    double c[8];
+    int k;
+    crop_corners((d->c0x + d->c1x) / 2, (d->c0y + d->c1y) / 2, d->c1x - d->c0x, d->c1y - d->c0y, opt.crop_angle, c);
+    for (k = 0; k < 4; k++) xline(rp, to_sx(d, obj, c[k * 2]), to_sy(d, obj, c[k * 2 + 1]), to_sx(d, obj, c[(k + 1) % 4 * 2]), to_sy(d, obj, c[(k + 1) % 4 * 2 + 1]));
+  } else if (d->crop_on) {
     LONG x0 = to_sx(d, obj, d->c0x), y0 = to_sy(d, obj, d->c0y), x1 = to_sx(d, obj, d->c1x) - 1, y1 = to_sy(d, obj, d->c1y) - 1, k;
     xrect(rp, x0, y0, x1, y1);
     /* the overlay (1.1: the one chosen; the rule of thirds at first), and the handles at the corners and sides */
@@ -761,6 +902,21 @@ static void ov_draw(struct Data *d, Object *obj)
       if (k >= 5) hx = k == 5 ? x0 : k == 6 ? (x0 + x1) / 2 : x1;
       RectFill(rp, hx - 3, hy - 3, hx + 3, hy + 3);
     }
+  }
+  if (d->pq_on) {
+    /* 1.2: Perspective Crop's quad and its corner handles */
+    int k;
+    for (k = 0; k < 4; k++) {
+      LONG ax = to_sx(d, obj, d->pq[k * 2]), ay = to_sy(d, obj, d->pq[k * 2 + 1]);
+      xline(rp, ax, ay, to_sx(d, obj, d->pq[(k + 1) % 4 * 2]), to_sy(d, obj, d->pq[(k + 1) % 4 * 2 + 1]));
+      RectFill(rp, ax - 3, ay - 3, ax + 3, ay + 3);
+    }
+  }
+  if (d->drag == DR_ANMOVE) {
+    /* 1.2: a note, count mark, slice or artboard being dragged: where it would go */
+    Box b = an_box(d);
+    double dx = d->bx - d->ax, dy = d->by - d->ay;
+    if (!box_empty(b)) xrect(rp, to_sx(d, obj, b.x0 + dx), to_sy(d, obj, b.y0 + dy), to_sx(d, obj, b.x1 + dx) - 1, to_sy(d, obj, b.y1 + dy) - 1);
   }
   SetDrMd(rp, JAM1);
   MUI_RemoveClipping(muiRenderInfo(obj), (struct Region *)clip);
@@ -802,6 +958,7 @@ static void draw_all(struct Data *d, Object *obj)
   d->ov_on = 0;
   blit(d, obj, 0, 0, d->vw, d->vh);
   ruler_labels(d, obj);
+  annot_labels(d, obj);                  /* 1.2 */
   ants(d, obj, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj));
   ov_show(d, obj);
   update_props(d, obj);
@@ -815,13 +972,15 @@ static void update_box(struct Data *d, Object *obj, Box b)
   b = box_clip(b, doc_box(doc));
   if (box_empty(b)) return;
   /* (without comp, render composites the rows itself) */
-  if (comp_ready(d)) doc_composite(doc, b, d->comp + ((long)b.y0 * doc->w + b.x0) * 4, (long)doc->w * 4);
-  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->z) + d->oy - 1;
-  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->z) + d->oy + 1;
+  if (comp_ready(d)) view_composite(doc, b, d->comp + ((long)b.y0 * doc->w + b.x0) * 4, (long)doc->w * 4);
+  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->zy) + d->oy - 1;
+  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->zy) + d->oy + 1;
+  if (d->rot) { x0 = y0 = 0; x1 = d->vw; y1 = d->vh; }   /* (1.2: a turned view is drawn again whole) */
   render(d, x0, y0, x1, y1);
   ov_hide(d, obj);
   blit(d, obj, x0, y0, x1, y1);
   if (x0 < RULER || y0 < RULER) ruler_labels(d, obj);
+  if (doc->annot) annot_labels(d, obj);  /* 1.2 */
   ants(d, obj, _mleft(obj) + x0 - 1, _mtop(obj) + y0 - 1, _mleft(obj) + x1 + 1, _mtop(obj) + y1 + 1);
   ov_show(d, obj);
 }
@@ -846,7 +1005,7 @@ static void zoom_to(struct Data *d, Object *obj, double z, LONG mx, LONG my)
   ix = to_ix(d, obj, mx); iy = to_iy(d, obj, my);
   v->zoom = z;
   v->sx = (LONG)(ix * z) - (mx - _mleft(obj));
-  v->sy = (LONG)(iy * z) - (my - _mtop(obj));
+  v->sy = (LONG)(iy * z * (d->zy / d->z)) - (my - _mtop(obj));   /* (1.2: the pixel aspect kept) */
   draw_all(d, obj);
   set(obj, MUIA_Canvas_Zoomed, TRUE);
 }
@@ -926,6 +1085,16 @@ static void crop_apply(struct Data *d, Object *obj, int apply)
   Doc *doc = cur_doc();
   ov_hide(d, obj);
   d->crop_on = 0; crop_pending = 0;
+  if (apply && doc && opt.crop_angle && d->c1x - d->c0x >= 1 && d->c1y - d->c0y >= 1) {
+    /* 1.2: the turned box: what is in it becomes the upright canvas */
+    image_crop_rotated(doc, (d->c0x + d->c1x) / 2, (d->c0y + d->c1y) / 2, d->c1x - d->c0x, d->c1y - d->c0y, opt.crop_angle, RS_BICUBIC);
+    opt.crop_angle = 0;
+    changed(d, obj);
+    d->edges_ok = 0;
+    draw_all(d, obj);
+    tell_changed(d, obj);
+    return;
+  }
   if (apply && doc && d->c1x - d->c0x >= 1 && d->c1y - d->c0y >= 1) {
     image_crop_preset(doc, box_make((i32)d->c0x, (i32)d->c0y, (i32)d->c1x, (i32)d->c1y), &crop_presets[opt.crop_preset], opt.crop_swap, RS_BICUBIC);
     changed(d, obj);
@@ -1138,6 +1307,17 @@ static void xf_finish(struct Data *d, Object *obj, int apply)
         doc_end(doc);
         d->path_dirty = 1;
       }
+    } else if (!d->xf_sel && !doc->sel && doc->active >= 0 && layer_is_smart(doc->lay[doc->active])) {
+      /* 1.2: a smart object: the affine part of the quad applied to its source, so nothing is lost */
+      double m[6], w = d->xf.src.x1 - d->xf.src.x0, h = d->xf.src.y1 - d->xf.src.y0, x0 = d->xf.src.x0, y0 = d->xf.src.y0;
+      const double *q = d->xf.q;
+      m[0] = (q[2] - q[0]) / w; m[1] = (q[6] - q[0]) / h; m[2] = q[0] - m[0] * x0 - m[1] * y0;
+      m[3] = (q[3] - q[1]) / w; m[4] = (q[7] - q[1]) / h; m[5] = q[1] - m[3] * x0 - m[4] * y0;
+      set(_app(obj), MUIA_Application_Sleep, TRUE);
+      job_begin(doc, "Free Transform");
+      ok = doc_smart_transform(doc, doc->active, m);
+      if (job_end()) ok = -1;
+      set(_app(obj), MUIA_Application_Sleep, FALSE);
     } else {
     set(_app(obj), MUIA_Application_Sleep, TRUE);
     job_begin(doc, d->xf_sel ? "Transform Selection" : "Free Transform");     /* (0.8: progress and Abort) */
@@ -1849,6 +2029,249 @@ static int layer_has(Doc *doc, Layer *l, i32 x, i32 y)
 }
 
 /* the mouse button down at window mx, my (inside the area) */
+/* ------------------------------------------------------------------ 1.2: the new tools */
+int slice_pick = -1;                     /* (tools2.h) */
+/* the tools that work on a turned view (the others ask for it to be put straight first) */
+static int rot_ok(int t) { return brushlike(t) || t == TL_HAND || t == TL_ZOOM || t == TL_ROTVIEW || t == TL_EYEDROPPER || t == TL_ARTHIST || t == TL_QUICKSEL; }
+/* the box dragged out, in whole pixels */
+static Box drag_ibox(struct Data *d)
+{
+  double x0, y0, x1, y1;
+  drag_box(d, &x0, &y0, &x1, &y1);
+  return box_make((i32)floor(x0 < x1 ? x0 : x1), (i32)floor(y0 < y1 ? y0 : y1), (i32)ceil(x0 < x1 ? x1 : x0), (i32)ceil(y0 < y1 ? y1 : y0));
+}
+/* everything drawn again (after a change throughout, or to the annotations) */
+static void all_changed(struct Data *d, Object *obj) { changed(d, obj); comp_free(d); d->edges_ok = 0; draw_all(d, obj); tell_changed(d, obj); }
+/* the Art History Brush at x, y */
+static void art_step(struct Data *d, Object *obj, Doc *doc, double x, double y)
+{
+  DocView *v = cur_view();
+  Brush b = tool_brush(TL_ARTHIST);
+  Box ch;
+  if (!v || !v->snap) return;
+  b.tool = PT_BRUSH;
+  ch = art_history(doc, &b, v->snap->px, x, y, opt.ah_style, opt.ah_area, opt.ah_tolerance, ++d->ah_seed);
+  d->ah_x = x; d->ah_y = y;
+  if (!box_empty(ch)) { changed(d, obj); update_box(d, obj, ch); }
+}
+static void pcrop_apply(struct Data *d, Object *obj, int apply)
+{
+  Doc *doc = cur_doc();
+  ov_hide(d, obj);
+  d->pq_on = 0;
+  if (apply && doc) {
+    int ok;
+    job_begin(doc, "Perspective Crop Tool");
+    ok = image_perspective_crop(doc, d->pq, opt.pcrop_w, opt.pcrop_h, RS_BICUBIC);
+    if (job_end()) ok = 0;
+    if (ok) { all_changed(d, obj); return; }
+    if (!progress_aborted) ask("OK", "%s", tr("The corners don't make a shape that can be cropped (or there isn't the memory for it)."));
+  }
+  ov_show(d, obj);
+}
+/* a press with one of 1.2's tools: 1 if it was one (what it starts is in d->drag) */
+static int t2_press(struct Data *d, Object *obj, Doc *doc, int t, LONG mx, LONG my, double x, double y, UWORD qual, int dbl)
+{
+  int alt = (qual & QALT) != 0, shift = (qual & QSHIFT) != 0, k;
+  Annots *a;
+  switch (t) {
+  case TL_QUICKSEL: {
+    double pt[2];
+    int op = sel_op_of(qual);
+    if (op == SEL_REPLACE && doc->sel) op = SEL_ADD;          /* (after the first stroke it adds, as Photoshop's does) */
+    if (opt.sel_op == SEL_SUBTRACT) op = SEL_SUBTRACT;
+    d->modifiers = (UWORD)(op == SEL_SUBTRACT ? QALT : op == SEL_ADD ? QSHIFT : 0);
+    doc_begin(doc, "Quick Selection"); d->qs_open = 1;
+    pt[0] = x; pt[1] = y;
+    quick_select(doc, pt, 1, opt.size[TL_QUICKSEL] / 2 + 1, op, opt.all_layers, opt.qs_enhance);
+    d->bx = x; d->by = y;
+    changed(d, obj); selection_changed(d, obj);
+    d->drag = DR_QSEL;
+    return 1; }
+  case TL_OBJSEL: case TL_SLICE: case TL_FRAME: d->drag = DR_SHAPE; d->prev_on = 0; return 1;
+  case TL_ARTBOARD:
+    if ((d->ab_pick = doc_artboard_at(doc, (i32)x, (i32)y)) >= 0) { doc->active = d->ab_pick; d->drag = DR_ANMOVE; tell_changed(d, obj); }
+    else { d->drag = DR_SHAPE; d->prev_on = 0; }
+    return 1;
+  case TL_PCROP:
+    if (d->pq_on) {
+      for (k = 0; k < 4; k++) if (labs(to_sx(d, obj, d->pq[k * 2]) - mx) <= 6 && labs(to_sy(d, obj, d->pq[k * 2 + 1]) - my) <= 6) break;
+      if (k < 4) { d->pq_handle = k; d->drag = DR_PCROP; return 1; }
+      if (dbl) { pcrop_apply(d, obj, 1); return 1; }
+    }
+    d->pq_on = 1; d->pq_handle = -1;
+    for (k = 0; k < 4; k++) { d->pq[k * 2] = x; d->pq[k * 2 + 1] = y; }
+    d->drag = DR_PCROP;
+    return 1;
+  case TL_SLICESEL:
+    slice_pick = slice_at(doc, (i32)x, (i32)y);
+    d->an_pick = slice_pick;
+    if (slice_pick >= 0) d->drag = DR_ANMOVE;
+    draw_all(d, obj);
+    return 1;
+  case TL_NOTE:
+    k = note_at(doc, (i32)x, (i32)y, (i32)(2 / d->z) + 1);
+    if (k >= 0 && alt) { note_delete(doc, k); all_changed(d, obj); return 1; }
+    if (k >= 0 && dbl) {
+      char text[NOTE_LEN];
+      strcpy(text, doc->annot->note[k].text);
+      if (ask_string("Note", "Text:", text, sizeof text)) note_set(doc, k, text);
+      all_changed(d, obj);
+      return 1;
+    }
+    if (k >= 0) { d->an_pick = k; d->drag = DR_ANMOVE; return 1; }
+    if (x < 0 || y < 0 || x >= doc->w || y >= doc->h) return 1;
+    {
+      char text[NOTE_LEN];
+      text[0] = 0;
+      if (ask_string("New Note", "Text:", text, sizeof text) && note_add(doc, (i32)x, (i32)y, "", text, 0xFFFF80) < 0) ask("OK", "%s", tr("There can be 64 notes."));
+    }
+    all_changed(d, obj);
+    return 1;
+  case TL_COUNT:
+    k = count_at(doc, (i32)x, (i32)y, (i32)(4 / d->z) + 1);
+    if (k >= 0 && alt) { count_delete(doc, k); all_changed(d, obj); return 1; }
+    if (k >= 0) { d->an_pick = k; d->drag = DR_ANMOVE; return 1; }
+    if (x >= 0 && y >= 0 && x < doc->w && y < doc->h && count_add(doc, (i32)x, (i32)y) < 0) ask("OK", "%s", tr("There can be 999 count marks."));
+    all_changed(d, obj);
+    return 1;
+  case TL_ARTHIST: {
+    DocView *v = cur_view();
+    if (!v || !v->snap) { ask("OK", "%s", tr("There is no snapshot to paint from (Edit > Take Snapshot).")); return 1; }
+    if (v->snap->w != doc->w || v->snap->h != doc->h) { ask("OK", "%s", tr("The snapshot is another size from the picture now: take a new one (Edit > Take Snapshot).")); return 1; }
+    doc_begin(doc, "Art History Brush"); d->ah_open = 1;
+    art_step(d, obj, doc, x, y);
+    d->drag = DR_ARTHIST;
+    return 1; }
+  case TL_CAMOVE:
+    if (doc->sel && x >= 0 && y >= 0 && x < doc->w && y < doc->h && sel_at(doc, (i32)x, (i32)y) > 0) d->drag = DR_MOVE;
+    else { d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); }
+    return 1;
+  case TL_ROTVIEW: {
+    DocView *v = cur_view();
+    double cx = _mleft(obj) + _mwidth(obj) / 2.0, cy = _mtop(obj) + _mheight(obj) / 2.0;
+    if (!v) return 1;
+    if (dbl) { v->vrot = 0; draw_all(d, obj); return 1; }
+    if (!d->comp && !comp_ready(d)) { ask("OK", "%s", tr("There isn't the memory to turn the view (it needs a copy of the whole picture).")); return 1; }
+    d->rot0 = v->vrot; d->rotstart = atan2(my - cy, mx - cx) * 180 / 3.14159265358979;
+    (void)shift;
+    d->drag = DR_ROTVIEW;
+    return 1; }
+  }
+  (void)a;
+  return 0;
+}
+static int t2_motion(struct Data *d, Object *obj, Doc *doc, LONG mx, LONG my, double x, double y)
+{
+  switch (d->drag) {
+  case DR_QSEL: {
+    double pt[4];
+    int op = d->modifiers & QALT ? SEL_SUBTRACT : SEL_ADD;
+    if (fabs(x - d->bx) + fabs(y - d->by) < opt.size[TL_QUICKSEL] / 4.0 + 1) return 1;
+    pt[0] = d->bx; pt[1] = d->by; pt[2] = x; pt[3] = y;
+    quick_select(doc, pt, 2, opt.size[TL_QUICKSEL] / 2 + 1, op, opt.all_layers, opt.qs_enhance);
+    d->bx = x; d->by = y;
+    selection_changed(d, obj);
+    return 1; }
+  case DR_ARTHIST:
+    if (fabs(x - d->ah_x) + fabs(y - d->ah_y) >= opt.ah_area / 3.0 + 1) art_step(d, obj, doc, x, y);
+    return 1;
+  case DR_PCROP:
+    ov_hide(d, obj);
+    if (d->pq_handle >= 0) { d->pq[d->pq_handle * 2] = x; d->pq[d->pq_handle * 2 + 1] = y; }
+    else {
+      double x0 = d->ax < x ? d->ax : x, y0 = d->ay < y ? d->ay : y, x1 = d->ax < x ? x : d->ax, y1 = d->ay < y ? y : d->ay;
+      d->pq[0] = x0; d->pq[1] = y0; d->pq[2] = x1; d->pq[3] = y0; d->pq[4] = x1; d->pq[5] = y1; d->pq[6] = x0; d->pq[7] = y1;
+    }
+    ov_show(d, obj);
+    return 1;
+  case DR_ANMOVE: ov_hide(d, obj); d->bx = x; d->by = y; ov_show(d, obj); return 1;
+  case DR_ROTVIEW: {
+    DocView *v = cur_view();
+    double cx = _mleft(obj) + _mwidth(obj) / 2.0, cy = _mtop(obj) + _mheight(obj) / 2.0, an = atan2(my - cy, mx - cx) * 180 / 3.14159265358979;
+    if (!v) return 1;
+    v->vrot = view_angle_snap(d->rot0 + an - d->rotstart, (d->qual & QSHIFT) != 0);
+    draw_all(d, obj);
+    return 1; }
+  case DR_CROPROT: {
+    double cx = (d->c0x + d->c1x) / 2, cy = (d->c0y + d->c1y) / 2;
+    ov_hide(d, obj);
+    opt.crop_angle = (int)floor(view_angle_snap(d->rot0 + crop_drag_angle(cx, cy, d->ax, d->ay, x, y), (d->qual & QSHIFT) != 0) + 0.5);
+    ov_show(d, obj);
+    return 1; }
+  }
+  return 0;
+}
+/* a release with one of 1.2's drags or tools: 1 if it was one */
+static int t2_release(struct Data *d, Object *obj, Doc *doc, int drag)
+{
+  Box b, ch;
+  int stopped;
+  switch (drag) {
+  case DR_QSEL: if (d->qs_open) { doc_end(doc); d->qs_open = 0; } selection_changed(d, obj); tell_changed(d, obj); return 1;
+  case DR_ARTHIST: if (d->ah_open) { doc_end(doc); d->ah_open = 0; } tell_changed(d, obj); return 1;
+  case DR_PCROP:
+    if (d->pq_handle < 0 && (fabs(d->pq[2] - d->pq[0]) < 2 || fabs(d->pq[5] - d->pq[1]) < 2)) { ov_hide(d, obj); d->pq_on = 0; }
+    return 1;
+  case DR_ROTVIEW: return 1;
+  case DR_CROPROT: return 1;
+  case DR_ANMOVE: {
+    i32 dx = (i32)floor(d->bx - d->ax + 0.5), dy = (i32)floor(d->by - d->ay + 0.5);
+    Annots *a = doc->annot;
+    d->drag = DR_ANMOVE; ov_hide(d, obj); d->drag = DR_NONE;
+    if (!dx && !dy) return 1;
+    if (tool == TL_ARTBOARD && d->ab_pick >= 0 && d->ab_pick < doc->nlay) {
+      Box ab = doc->lay[d->ab_pick]->abox;
+      doc_begin(doc, "Move Artboard");
+      doc_move_group(doc, d->ab_pick, dx, dy);
+      doc_artboard_set(doc, d->ab_pick, box_make(ab.x0 + dx, ab.y0 + dy, ab.x1 + dx, ab.y1 + dy), -2);
+      doc_end(doc);
+    } else if (a && tool == TL_SLICESEL && d->an_pick >= 0 && d->an_pick < a->nslice) {
+      Box sb = a->slice[d->an_pick].b;
+      slice_set(doc, d->an_pick, box_make(sb.x0 + dx, sb.y0 + dy, sb.x1 + dx, sb.y1 + dy));
+    } else if (a && tool == TL_NOTE && d->an_pick >= 0) note_move(doc, d->an_pick, a->note[d->an_pick].x + dx, a->note[d->an_pick].y + dy);
+    else if (a && tool == TL_COUNT && d->an_pick >= 0) count_move(doc, d->an_pick, a->mark[d->an_pick].x + dx, a->mark[d->an_pick].y + dy);
+    all_changed(d, obj);
+    return 1; }
+  case DR_SHAPE:
+    if (tool != TL_OBJSEL && tool != TL_SLICE && tool != TL_FRAME && tool != TL_ARTBOARD) return 0;
+    d->drag = DR_SHAPE; ov_hide(d, obj); d->drag = DR_NONE;
+    b = drag_ibox(d);
+    if (b.x1 - b.x0 < 3 || b.y1 - b.y0 < 3) return 1;
+    if (tool == TL_OBJSEL) {
+      set(_app(obj), MUIA_Application_Sleep, TRUE);
+      job_begin(doc, "Object Selection Tool");
+      stopped = !object_select(doc, b, sel_op_of(d->modifiers), opt.all_layers, opt.obj_hard);
+      if (job_end()) stopped = 0;
+      else if (stopped) ask("OK", "%s", tr("No object was found in the box."));
+      set(_app(obj), MUIA_Application_Sleep, FALSE);
+      changed(d, obj); selection_changed(d, obj); tell_changed(d, obj);
+      return 1;
+    }
+    if (tool == TL_SLICE) { if (slice_add(doc, b) < 0) ask("OK", "%s", tr("There can be 64 slices.")); all_changed(d, obj); return 1; }
+    if (tool == TL_FRAME) { if (doc_new_frame(doc, b, opt.frame_kind ? FR_ELLIPSE : FR_RECT, opt.frame_stroke, doc->fg) < 0) ask("OK", "%s", tr("There isn't room for another layer.")); all_changed(d, obj); return 1; }
+    if (doc_new_artboard(doc, b, 0xFFFFFF, NULL) < 0) ask("OK", "%s", tr("There isn't room for another layer."));
+    all_changed(d, obj);
+    return 1;
+  case DR_MOVE: {
+    LONG dx = (LONG)floor(d->bx - d->ax + 0.5), dy = (LONG)floor(d->by - d->ay + 0.5);
+    if (tool != TL_CAMOVE && !(tool == TL_PATCH && opt.patch_mode)) return 0;
+    d->drag = DR_MOVE; ov_hide(d, obj); d->drag = DR_NONE;
+    if (!dx && !dy) return 1;
+    set(_app(obj), MUIA_Application_Sleep, TRUE);
+    job_begin(doc, tool == TL_CAMOVE ? "Content-Aware Move Tool" : "Patch Tool");
+    if (tool == TL_CAMOVE) ch = doc_ca_move(doc, dx, dy, opt.cam_extend, opt.cam_structure, opt.cam_color);
+    else if (opt.patch_mode == 1) ch = patch_dest(doc, dx, dy, opt.patch_transparent);
+    else ch = patch_content(doc, dx, dy, opt.patch_structure, opt.patch_color);
+    stopped = job_end();
+    set(_app(obj), MUIA_Application_Sleep, FALSE);
+    if (!box_empty(ch) && !stopped) { changed(d, obj); edges_make(d); update_box(d, obj, ch); selection_changed(d, obj); }
+    else if (!stopped) ask("OK", "%s", tr("That didn't work: the layer must be a visible pixel layer that isn't locked."));
+    tell_changed(d, obj);
+    return 1; }
+  }
+  return 0;
+}
 static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULONG secs, ULONG micros)
 {
   Doc *doc = cur_doc();
@@ -1860,6 +2283,11 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   else if ((qual & IEQUALIFIER_CONTROL) && !d->xf_on && (brushlike(t) || t == TL_GRADIENT || t == TL_BUCKET || t == TL_EYEDROPPER || t == TL_MAGICERASE)) t = TL_MOVE;
   int shift = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0, alt = (qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
   Box ch;
+  if (d->rot) {
+    /* 1.2: a turned view: the point under the pointer turned back; the tools that can't follow ask */
+    to_img(d, obj, mx, my, &x, &y);
+    if (doc && !rot_ok(t)) { ask("OK", "%s", tr("This tool needs the view put straight first (View > Rotate View > Reset View).")); return; }
+  }
   d->secs = secs; d->micros = micros;
   d->modifiers = qual;
   if (d->spring_code) d->spring_used = 1;               /* (0.8: the spring-loaded tool used) */
@@ -1884,6 +2312,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     return;
   }
   if (brushlike(t) && alt && t != TL_CLONE && t != TL_HEAL && t != TL_ERASER) t = TL_EYEDROPPER;    /* (Alt: the eyedropper for a moment) */
+  if (t2_press(d, obj, doc, t, mx, my, x, y, qual, dbl)) { ov_show(d, obj); return; }   /* 1.2 */
   switch (t) {
   case TL_HAND: d->drag = DR_PAN; d->pmx = mx; d->pmy = my; break;
   case TL_ZOOM:
@@ -2046,8 +2475,12 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (opt.crop_straighten) { d->drag = DR_STRAIGHTEN; break; }      /* 1.1: a line to straighten by */
     if (d->crop_on) {
       int h = crop_hit(d, obj, mx, my);
+      if (opt.crop_angle) h = crop_inside((d->c0x + d->c1x) / 2, (d->c0y + d->c1y) / 2, d->c1x - d->c0x, d->c1y - d->c0y, opt.crop_angle, x, y) ? 8 : -1;
       if (dbl && h == 8) { ov_show(d, obj); crop_apply(d, obj, 1); return; }
       if (h >= 0) { d->drag = DR_CROPMOVE; d->crop_handle = h; break; }
+      /* 1.2: a drag outside the box turns it */
+      d->rot0 = opt.crop_angle; d->drag = DR_CROPROT;
+      break;
     }
     d->crop_on = 1; crop_pending = 1;
     d->c0x = d->c1x = x; d->c0y = d->c1y = y;
@@ -2079,7 +2512,12 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
         /* a straight line from the last stroke's end */
         d->stroke = stroke_begin(doc, &b, color, d->lastx, d->lasty, &ch);
         if (d->stroke) { update_box(d, obj, ch); stroke_to(d->stroke, x, y, &ch); }
-      } else d->stroke = stroke_begin(doc, &b, color, x, y, &ch);
+      } else {
+        /* 1.2: a pen tablet's pressure and tilt */
+        double tx, ty, pr = tablet_pressure(&tx, &ty);
+        d->stroke = stroke_begin_p(doc, &b, color, x, y, pr, &ch);
+        if (d->stroke) stroke_tilt(d->stroke, tx, ty);
+      }
       if (!d->stroke) {
         Layer *al = doc->lay[doc->active];
         if (al->locked || al->lock_all) ask("OK", "%s", tr("The layer is locked."));
@@ -2113,6 +2551,8 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
   double x = to_ix(d, obj, mx), y = to_iy(d, obj, my);
   Box ch;
   if (!doc || !v) return;
+  if (d->rot) to_img(d, obj, mx, my, &x, &y);              /* 1.2: a turned view */
+  if (t2_motion(d, obj, doc, mx, my, x, y)) return;
   switch (d->drag) {
   case DR_PAN:
     v->sx -= mx - d->pmx; v->sy -= my - d->pmy;
@@ -2128,7 +2568,11 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
   case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
   case DR_STROKE:
     if (doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);   /* (1.1) */
-    if (d->stroke) { stroke_to(d->stroke, x, y, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch); }
+    if (d->stroke) {
+      double tx, ty, pr = tablet_pressure(&tx, &ty);       /* (1.2: the pen's pressure and tilt) */
+      stroke_tilt(d->stroke, tx, ty);
+      stroke_to_p(d->stroke, x, y, pr, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch);
+    }
     d->bx = x; d->by = y;
     break;
   case DR_LASSO:
@@ -2235,9 +2679,19 @@ static void release(struct Data *d, Object *obj)
   int drag = d->drag;
   if (!doc) { d->drag = DR_NONE; return; }
   d->drag = DR_NONE;
+  if (t2_release(d, obj, doc, drag)) { ov_show(d, obj); return; }   /* 1.2 */
   switch (drag) {
   case DR_STROKE:
     stroke_timer_off(d, obj);
+    if (d->stroke && (tool == TL_REMOVE || (tool == TL_SPOTHEAL && opt.spot_type == SPOT_CONTENT))) {
+      /* 1.2: the content-aware fill at the stroke's end, with progress and Abort */
+      set(_app(obj), MUIA_Application_Sleep, TRUE);
+      job_begin(doc, tool_names[tool]);
+      stroke_end(d->stroke); d->stroke = NULL;
+      job_end();
+      set(_app(obj), MUIA_Application_Sleep, FALSE);
+      update_box(d, obj, d->sbox);
+    }
     if (d->stroke) { stroke_end(d->stroke); d->stroke = NULL; mask_painted(doc);
       /* (smoothing finishes the stroke at the pointer; an indexed or grey picture was brought back to its colours) */
       if (brushui.b.dyn.smoothing || brushui.b.dyn.pulled_string) DoMethod(obj, MUIM_Canvas_Update, 0, 0, doc->w, doc->h);
@@ -2300,7 +2754,8 @@ static void release(struct Data *d, Object *obj)
     } else if (dx || dy) {
       /* 0.7: Alt-drag moves a copy (of the selected pixels, or of the whole layer) */
       if ((d->modifiers & QALT) && doc->lay[doc->active]->kind != LK_GROUP) ch = move_selection_copy(doc, dx, dy);
-      else ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx, dy) : move_layer(doc, dx, dy);
+      else ch = doc->lay[doc->active]->kind == LK_GROUP ? doc_move_group(doc, doc->active, dx, dy) :
+                doc->lay[doc->active]->link && !doc->sel ? doc_move_linked(doc, dx, dy) : move_layer(doc, dx, dy);   /* (1.2: linked layers go together) */
       if (!box_empty(ch)) {
         changed(d, obj);
         if (doc->sel) edges_make(d);
@@ -2683,7 +3138,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
-    d->obj = obj; d->z = 1;
+    d->obj = obj; d->z = 1; d->zy = 1;
     poly_init(&d->prev); poly_init(&d->pp); d->path_dirty = 1;
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = EV;
     d->ihn.ihn_Object = obj; d->ihn.ihn_Flags = MUIIHNF_TIMER; d->ihn.ihn_Method = MUIM_Canvas_Tick;
@@ -2825,6 +3280,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     else if (d->ml) ml_finish(d, obj, 1);
     else if (d->poly_on) poly_finish(d, obj, 1);
     else if (d->crop_on) crop_apply(d, obj, 1);
+    else if (d->pq_on) pcrop_apply(d, obj, 1);             /* 1.2 */
     return 0;
   case MUIM_Canvas_TypeCmd: {
     struct MUIP_Canvas_TypeCmd *m = (struct MUIP_Canvas_TypeCmd *)msg;
@@ -2845,7 +3301,8 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     ov_hide(d, obj);
     if (!PATH_TOOL(tool) || msg->MethodID == MUIM_Canvas_Cancel) d->pen_on = 0;
     if (d->poly_on) { d->poly_on = 0; d->npoly = 0; }
-    if (d->crop_on && (msg->MethodID == MUIM_Canvas_Cancel || tool != TL_CROP)) { d->crop_on = 0; crop_pending = 0; }
+    if (d->crop_on && (msg->MethodID == MUIM_Canvas_Cancel || tool != TL_CROP)) { d->crop_on = 0; crop_pending = 0; opt.crop_angle = 0; }
+    if (d->pq_on && (msg->MethodID == MUIM_Canvas_Cancel || tool != TL_PCROP)) d->pq_on = 0;   /* 1.2 */
     if (d->xf_on) { d->xf_on = 0; xform_pending = 0; DoMethod(optbar, MUIM_Opts_Refresh); }
     if (d->ml && (msg->MethodID == MUIM_Canvas_Cancel || tool != TL_MAGLASSO)) { maglasso_free(d->ml); d->ml = NULL; d->mlpath = NULL; d->nmlpath = 0; }
     d->has_last = 0;
