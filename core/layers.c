@@ -221,7 +221,7 @@ int doc_arrange(Doc *d, int i, int how)
 }
 
 /* ------------------------------------------------------------------ masks */
-void layer_mask_changed(Layer *l) { l->maskfx_ok = 0; }
+void layer_mask_changed(Layer *l) { l->maskfx_ok = 0; l->xc_ok = 0; }   /* (1.2: the vector mask's combined copy too) */
 int doc_mask_add(Doc *d, int i, int how)
 {
   Layer *l;
@@ -522,6 +522,7 @@ static void shift_layer(Doc *d, int i, i32 dx, i32 dy)
   u8 *n;
   i32 x, y;
   if ((!dx && !dy) || l->lock_pos || l->lock_all) return;
+  if (l->x && layerx_move_hook) layerx_move_hook(d, i, dx, dy);   /* 1.2: a linked vector mask, a smart object's place */
   if (!l->px && l->live) { double m[6] = { 1, 0, 0, 0, 1, 0 }; m[2] = dx; m[5] = dy; live_transform(l, m); return; }   /* 0.9 */
   if (!l->px) return;
   if ((n = (u8 *)calloc((size_t)d->w * d->h, 4)) == NULL) return;

@@ -66,6 +66,8 @@ void layer_free(Layer *l)
   if (l->adjprog) { if (adjlayer_free) adjlayer_free(l->adjprog); else free(l->adjprog); }
   free(l->live); free(l->livepx);                          /* 0.9 */
   fx_free(l);                                              /* 1.1 */
+  if (layerx_free_hook) layerx_free_hook(l);               /* 1.2 (its cache) */
+  free(l->x); free(l->xc);
   free(l);
 }
 Layer *layer_copy(const Layer *l, i32 w, i32 h)
@@ -77,6 +79,9 @@ Layer *layer_copy(const Layer *l, i32 w, i32 h)
   c->adjprog = NULL; c->adjprog_ok = 0;
   c->live = NULL; c->livepx = NULL;                        /* 0.9: the settings and their rendering copied too */
   c->fxc = NULL; c->fx_ok = 0;                             /* 1.1: the effects drawn again when wanted */
+  c->x = NULL; c->xc = NULL; c->xc_ok = 0;                 /* 1.2 */
+  if (l->x && (c->x = malloc(l->xlen)) != NULL) memcpy(c->x, l->x, l->xlen);
+  if (l->x && !c->x) { free(c->live); free(c->livepx); free(c); return NULL; }
   if (l->live && (c->live = malloc(l->livelen)) != NULL) memcpy(c->live, l->live, l->livelen);
   if (l->live && !c->live) { free(c); return NULL; }
   if (l->livepx && l->live_ok && (c->livepx = (u8 *)malloc((size_t)(l->livebox.x1 - l->livebox.x0) * (l->livebox.y1 - l->livebox.y0) * 4)) != NULL)
@@ -341,8 +346,15 @@ static void box_blur_u8(u8 *m, i32 w, i32 h, int r)
   }
   free(t);
 }
+const u8 *(*layerx_vmask)(Doc *d, Layer *l);
+void (*layerx_overlay_row)(Doc *d, Layer *l, i32 y, i32 x0, i32 n, u8 *acc, const u8 *shape, int keep);
+void (*layerx_fill_row)(Doc *d, Layer *l, i32 y, i32 x0, i32 n, u8 *out);
+void (*layerx_free_hook)(Layer *l);
+void (*layerx_move_hook)(Doc *d, int i, i32 dx, i32 dy);
+void (*layerx_remap_hook)(Doc *d, const double *m);
 const u8 *layer_mask_used(Doc *d, Layer *l)
 {
+  if (l->x && layerx_vmask) { const u8 *v = layerx_vmask(d, l); if (v) return v; }   /* 1.2: the vector mask (with the layer mask in it) */
   if (!l->mask || !l->mask_on) return NULL;
   if (!l->mask_feather) return l->mask;
   if (!l->maskfx_ok) {
@@ -372,6 +384,7 @@ static void fill_row(Comp *c, const Layer *l, u8 *o)
 {
   const FillParams *f = &l->fillp;
   i32 x;
+  if (f->kind == 2 && layerx_fill_row) { layerx_fill_row(c->d, (Layer *)l, c->y, c->x0, c->n, o); return; }   /* 1.2: a pattern */
   if (f->kind == 0) {
     for (x = 0; x < c->n; x++) { o[x * 4] = (u8)(f->c0 >> 16); o[x * 4 + 1] = (u8)(f->c0 >> 8); o[x * 4 + 2] = (u8)f->c0; o[x * 4 + 3] = 255; }
     return;
@@ -470,6 +483,16 @@ static void put_layer(Comp *c, Layer *l, u8 *acc, int keep)
       else blend_pixel_at(p, s, op, l->blend, c->x0 + x, c->y);
     }
   }
+  if (s && l->x && layerx_overlay_row) {
+    /* 1.2: Pattern Overlay, over the content where it covers (below the colour and gradient overlays) */
+    u8 *shp = row_get(c);
+    if (shp) {
+      const u8 *q = s - (long)c->n * 4;
+      for (x = 0; x < c->n; x++) shp[x] = q[x * 4 + 3] ? (u8)(mask ? px_cover(c, l, mask, 255, x, NULL, NULL) * q[x * 4 + 3] / 255 : q[x * 4 + 3]) : 0;
+      layerx_overlay_row(c->d, l, c->y, c->x0, c->n, acc, shp, keep);
+      c->used--;
+    }
+  }
   if (tmp) c->used--;
   if (fx) fx_over(c->d, l, c->y, c->x0, c->n, acc, keep);      /* 1.1: the effects on it */
 }
@@ -502,6 +525,16 @@ static void adj_mix(Comp *c, Layer *l, u8 *acc, int keep)
   c->used--;
 }
 static void comp_range(Comp *c, int lo, int hi, int depth, u8 *acc);
+/* 1.2: an artboard's background colour (the group's fillp.c0) in its box */
+static void artboard_bg(Comp *c, const Layer *G, u8 *t)
+{
+  i32 x;
+  for (x = 0; x < c->n; x++)
+    if (c->x0 + x >= G->abox.x0 && c->x0 + x < G->abox.x1) {
+      u8 *p = t + x * 4;
+      p[0] = (u8)(G->fillp.c0 >> 16); p[1] = (u8)(G->fillp.c0 >> 8); p[2] = (u8)G->fillp.c0; p[3] = 255;
+    }
+}
 /* group g (members lo..g-1) onto acc */
 static void put_group(Comp *c, int lo, int g, u8 *acc)
 {
@@ -511,25 +544,30 @@ static void put_group(Comp *c, int lo, int g, u8 *acc)
   i32 x;
   if (!G->visible || !G->opacity) return;
   mask = layer_mask_used(c->d, G);
-  if (G->blend == BM_PASS && G->opacity == 255 && !mask) { comp_range(c, lo, g, G->depth + 1, acc); return; }
+  if (G->artboard && (c->y < G->abox.y0 || c->y >= G->abox.y1)) return;   /* 1.2: an artboard shows only in its box */
+  if (G->blend == BM_PASS && G->opacity == 255 && !mask && !G->artboard) { comp_range(c, lo, g, G->depth + 1, acc); return; }
   if (!(t = row_get(c))) { comp_range(c, lo, g, G->depth + 1, acc); return; }
   if (G->blend == BM_PASS) {
     /* the members straight onto a copy of what's below, then mixed in by the group's opacity and mask */
     memcpy(t, acc, (size_t)c->n * 4);
+    if (G->artboard == 2) artboard_bg(c, G, t);
     comp_range(c, lo, g, G->depth + 1, t);
     for (x = 0; x < c->n; x++) {
       int op = mask ? px_cover(c, G, mask, G->opacity, x, NULL, NULL) : G->opacity, k;
       u8 *p = acc + x * 4, *q = t + x * 4;
+      if (G->artboard && (c->x0 + x < G->abox.x0 || c->x0 + x >= G->abox.x1)) continue;
       if (op == 255) memcpy(p, q, 4);
       else if (op) for (k = 0; k < 4; k++) p[k] = (u8)(p[k] + ((q[k] - p[k]) * op + (q[k] >= p[k] ? 127 : -127)) / 255);
     }
   } else {
     memset(t, 0, (size_t)c->n * 4);
+    if (G->artboard == 2) artboard_bg(c, G, t);
     comp_range(c, lo, g, G->depth + 1, t);
     for (x = 0; x < c->n; x++) {
       u8 *q = t + x * 4;
       int op;
       if (!q[3]) continue;
+      if (G->artboard && (c->x0 + x < G->abox.x0 || c->x0 + x >= G->abox.x1)) continue;
       op = mask ? px_cover(c, G, mask, G->opacity, x, NULL, NULL) : G->opacity;
       if (op) blend_pixel_at(acc + x * 4, q, op, G->blend, c->x0 + x, c->y);
     }
@@ -585,7 +623,7 @@ static int doc_plain(const Doc *d)
   int i;
   for (i = 0; i < d->nlay; i++) {
     const Layer *l = d->lay[i];
-    if (l->kind != LK_PIXEL || l->depth || l->clip || (l->mask && l->mask_on) || l->fill_cut || fx_any(l) ||
+    if (l->kind != LK_PIXEL || l->depth || l->clip || (l->mask && l->mask_on) || l->fill_cut || fx_any(l) || l->x ||
         l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3] || !l->px) return 0;
   }
   return 1;
@@ -687,6 +725,7 @@ struct UndoStep {
   int has_pal; PalState *pal;         /* 0.4: the palette as it was (malloc'd) */
   int has_chan; ChanState *chan;      /* 0.7: the channels as they were (malloc'd) */
   LiveSave *lives; int nlives;        /* 0.9: live layers' settings as they were */
+  LiveSave *xs; int nxs;              /* 1.2: layers' x blocks as they were (live NULL for none) */
   int has_paths; PathState *paths;    /* 0.9: the paths as they were (malloc'd) */
   long bytes;
   UndoStep *next;
@@ -711,6 +750,8 @@ static void step_free(UndoStep *u)
   free(u->props);
   for (i = 0; i < u->nlives; i++) free(u->lives[i].live);   /* 0.9 */
   free(u->lives);
+  for (i = 0; i < u->nxs; i++) free(u->xs[i].live);       /* 1.2 */
+  free(u->xs);
   if (u->paths) { for (i = 0; i < u->paths->n; i++) path_free(u->paths->path[i]); path_free(u->paths->work); free(u->paths); }
   free(u);
 }
@@ -724,6 +765,7 @@ static void props_of(const Layer *l, Props *p)
   p->maskfx_ok = p->adjprog_ok = 0; p->picked = 0; p->edit_mask = 0;
   p->live = NULL; p->livelen = 0; p->livepx = NULL; p->livebox = box_make(0, 0, 0, 0); p->live_ok = 0;   /* 0.9 (doc_note_live keeps those) */
   p->fxc = NULL; p->fx_ok = 0;                             /* 1.1 */
+  p->x = NULL; p->xlen = 0; p->xc = NULL; p->xc_ok = 0;    /* 1.2 (doc_note_x keeps those) */
 }
 /* settings p put back on layer l (its buffers, caches and panel state kept) */
 static void props_set(Layer *l, const Props *p)
@@ -734,6 +776,7 @@ static void props_set(Layer *l, const Props *p)
   l->live = keep.live; l->livelen = keep.livelen; l->livepx = keep.livepx; l->livebox = keep.livebox; l->live_ok = keep.live_ok;   /* 0.9 */
   l->picked = keep.picked; l->edit_mask = keep.edit_mask;
   l->fxc = keep.fxc; l->fx_ok = 0;                         /* 1.1: the effects drawn again */
+  l->x = keep.x; l->xlen = keep.xlen; l->xc = keep.xc; l->xc_ok = 0;   /* 1.2 */
   l->maskfx_ok = keep.maskfx_ok && p->mask_feather == keep.mask_feather;
   l->adjprog_ok = 0;
 }
@@ -852,6 +895,27 @@ void doc_note_live(Doc *d, int li)
   u->nlives++;
   u->bytes += (long)l->livelen;
 }
+/* 1.2: a layer's x block, once a step */
+void doc_note_x(Doc *d, int li)
+{
+  UndoStep *u = open_step(d);
+  LiveSave *n;
+  Layer *l;
+  int k;
+  if (!u || u->whole || li < 0 || li >= d->nlay) return;
+  l = d->lay[li];
+  for (k = 0; k < u->nxs; k++) if (u->xs[k].layer == li) return;
+  if (!(n = (LiveSave *)realloc(u->xs, (size_t)(u->nxs + 1) * sizeof *n))) return;
+  u->xs = n;
+  n[u->nxs].live = NULL; n[u->nxs].len = 0; n[u->nxs].layer = li;
+  if (l->x) {
+    if (!(n[u->nxs].live = malloc(l->xlen))) return;
+    memcpy(n[u->nxs].live, l->x, l->xlen);
+    n[u->nxs].len = l->xlen;
+  }
+  u->nxs++;
+  u->bytes += (long)l->xlen + 16;
+}
 /* 0.9: every path copied */
 void doc_note_paths(Doc *d)
 {
@@ -930,6 +994,8 @@ void doc_note_all(Doc *d)
   doc_note_paths(d);                                       /* 0.9: and the paths */
   for (i = 0; i < u->nlives; i++) free(u->lives[i].live);  /* (0.9: live settings are in the copy) */
   free(u->lives); u->lives = NULL; u->nlives = 0;
+  for (i = 0; i < u->nxs; i++) free(u->xs[i].live);        /* (1.2: and the x blocks) */
+  free(u->xs); u->xs = NULL; u->nxs = 0;
 }
 /* ------------------------------------------------------------------ 0.8: the scratch drawer */
 /* a buffer of a step: where its pointer is kept and how many bytes it holds */
@@ -1050,7 +1116,7 @@ void doc_end(Doc *d)
   int k;
   if (!u || --u->open > 0) return;
   /* nothing noted and nothing about the layers changed: no step */
-  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal && !u->has_chan && !u->nlives && !u->has_paths) {
+  if (!u->whole && !u->ntiles && !u->has_sel && !u->has_pal && !u->has_chan && !u->nlives && !u->nxs && !u->has_paths) {
     int same = u->nprops == d->nlay && u->pactive == d->active, i;
     for (i = 0; same && i < d->nlay; i++) {
       Props now;
@@ -1109,7 +1175,7 @@ static void swap_step(Doc *d, UndoStep *u)
       if (t->layer >= d->nlay) continue;
       buf = plane_buf(d, t->layer, t->plane);              /* (0.7: or a channel's plane) */
       if (!buf) continue;
-      if (t->plane == 1) d->lay[t->layer]->maskfx_ok = 0;
+      if (t->plane == 1) { d->lay[t->layer]->maskfx_ok = 0; d->lay[t->layer]->xc_ok = 0; }
       for (row = 0; row < th; row++) {
         u8 *a = t->px + (long)row * tw * bpp, *b = buf + ((long)(y0 + row) * d->w + x0) * bpp;
         memcpy(tmp, a, (size_t)tw * bpp); memcpy(a, b, (size_t)tw * bpp); memcpy(b, tmp, (size_t)tw * bpp);
@@ -1160,6 +1226,19 @@ static void swap_step(Doc *d, UndoStep *u)
       l->live = v->live; l->livelen = v->len;
       v->live = tp; v->len = tl;
       l->live_ok = 0;
+    }
+  if (!u->whole)                                           /* 1.2: x blocks swapped */
+    for (i = 0; i < u->nxs; i++) {
+      LiveSave *v = &u->xs[i];
+      Layer *l;
+      void *tp;
+      u32 tl;
+      if (v->layer >= d->nlay) continue;
+      l = d->lay[v->layer];
+      tp = l->x; tl = l->xlen;
+      l->x = v->live; l->xlen = v->len;
+      v->live = tp; v->len = tl;
+      l->xc_ok = 0; l->fx_ok = 0;
     }
   if (u->has_paths && u->paths) {                          /* 0.9: the paths swapped */
     PathState *p = u->paths;

@@ -94,6 +94,16 @@ typedef struct {
   u8 fx_ok;                           /* fxc matches the layer (cleared when its pixels or mask change) */
   void *fxc;                          /* the effects drawn (fx.c), worked out when needed, never saved */
   /* ---- end of 1.1 ---- */
+  /* ---- 1.2 (layerx.h): vector mask, pattern fill and Pattern Overlay, smart object, frame settings in
+     one flat malloc'd block (x, xlen bytes; NULL for none), copied and freed whole; doc_note_x saves it
+     for undo. xc is what is worked out from it (the vector mask's coverage, the pattern scaled), never
+     saved; xc_ok is cleared when the block changes ---- */
+  void *x; u32 xlen;
+  void *xc; u8 xc_ok;
+  u16 link;                           /* linked layers: layers with the same nonzero number move together */
+  u8 artboard;                        /* a group that is an artboard: its members are clipped to abox */
+  Box abox;
+  /* ---- end of 1.2 ---- */
 } Layer;
 
 typedef struct UndoStep UndoStep;
@@ -245,6 +255,16 @@ void   doc_note_qmask(Doc *d, Box r);
    (the saved ones, their names and the work path). doc_note_all does both */
 void   doc_note_live(Doc *d, int i);
 void   doc_note_paths(Doc *d);
+/* 1.2: layer i's x block (layerx.h) as it is, before it changes (also when it has none yet) */
+void   doc_note_x(Doc *d, int i);
+/* 1.2: hooks layerx.c sets (layerx_init): a layer's vector mask coverage (w * h, or NULL for none), and
+   Pattern Overlay drawn on a row of a layer's content (row y from x0, n pixels; shape: its coverage) */
+extern const u8 *(*layerx_vmask)(Doc *d, Layer *l);
+extern void (*layerx_overlay_row)(Doc *d, Layer *l, i32 y, i32 x0, i32 n, u8 *acc, const u8 *shape, int keep);
+extern void (*layerx_fill_row)(Doc *d, Layer *l, i32 y, i32 x0, i32 n, u8 *out);
+extern void (*layerx_free_hook)(Layer *l);
+extern void (*layerx_move_hook)(Doc *d, int i, i32 dx, i32 dy);
+extern void (*layerx_remap_hook)(Doc *d, const double *m);       /* the canvas remapped by m (live_remap) */   /* layer i moved by dx, dy (inside its step) */
 void   doc_end(Doc *d);
 int    doc_fade(Doc *d, int opacity, int blend);   /* Edit > Fade (0.6): the last change mixed back */
 int    doc_undo(Doc *d);

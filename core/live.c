@@ -343,6 +343,7 @@ void live_remap(Doc *d, const double *m)
   for (i = 0; i < d->nlay; i++) if (d->lay[i]->live) live_transform(d->lay[i], m);
   for (i = 0; i < d->npaths; i++) path_transform(d->path[i], m);
   if (d->workpath) path_transform(d->workpath, m);
+  if (layerx_remap_hook) layerx_remap_hook(d, m);         /* 1.2: vector masks, smart objects, artboards, frames */
 }
 int doc_live_transform(Doc *d, int i, const double *m)
 {

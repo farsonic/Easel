@@ -805,6 +805,7 @@ Box move_layer(Doc *d, i32 dx, i32 dy)
   doc_begin(d, "Move");
   doc_note_layer(d, d->active, doc_box(d));
   if (d->sel) doc_note_sel(d);
+  if (l->x && layerx_move_hook && !d->sel) layerx_move_hook(d, d->active, dx, dy);   /* 1.2 */
   /* a linked mask moves with the layer (0.3) */
   if (l->mask && l->mask_linked && !d->sel) {
     u8 *m = (u8 *)malloc((size_t)d->w * d->h);

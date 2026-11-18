@@ -24,6 +24,7 @@
 #include "zip.h"
 #include "xml.h"
 #include "live.h"                     /* 0.9 */
+#include "layerx.h"                   /* 1.2 */
 #include "path.h"
 #include "fx.h"                       /* 1.1 */
 
@@ -58,6 +59,8 @@ typedef struct {
   AdjParams adj; FillParams fillp;
   char *live;                         /* 0.9: a type or shape layer's settings (easel:text, easel:shape), malloc'd */
   LayerFx fx; int label;              /* 1.1: the layer style (easel:effects) and colour label (easel:label) */
+  char *xnums, *xvpath, *xspath; char xpat[64];   /* 1.2: layerx.h's settings (easel:layerx, -path, -smart, -pattern) */
+  int link, artboard; Box abox; long abg;          /* 1.2: easel:link, easel:artboard */
 } OraLayer;
 
 /* a 0-1 attribute as 0-255 (absent: 255) */
@@ -159,9 +162,17 @@ static void common_attrs(Xml *x, OraLayer *l)
       if (l->adj.npts * 2 > m) l->adj.npts = m / 2;
     }
   }
+  if ((a = xml_attr(x, "layerx"))) l->xnums = str_dup(a);                        /* 1.2 */
+  if ((a = xml_attr(x, "layerx-path"))) l->xvpath = str_dup(a);
+  if ((a = xml_attr(x, "layerx-smart"))) l->xspath = str_dup(a);
+  if ((a = xml_attr(x, "layerx-pattern"))) copy_name(l->xpat, sizeof l->xpat, a);
+  if ((a = xml_attr(x, "link"))) l->link = atoi(a) & 0xFFFF;
+  if ((a = xml_attr(x, "artboard")) && read_ints(a, v, 6) == 6) {
+    l->artboard = v[0] == 2 ? 2 : 1; l->abox = box_make(v[1], v[2], v[3], v[4]); l->abg = v[5];
+  }
   if ((a = xml_attr(x, "fill-layer")) && read_ints(a, v, 7) == 7) {
     l->kind = LK_FILL;
-    l->fillp.kind = (u8)(v[0] != 0); l->fillp.c0 = (u32)v[1] & 0xFFFFFF; l->fillp.c1 = (u32)v[2] & 0xFFFFFF;
+    l->fillp.kind = (u8)(v[0] == 2 ? 2 : v[0] != 0); l->fillp.c0 = (u32)v[1] & 0xFFFFFF; l->fillp.c1 = (u32)v[2] & 0xFFFFFF;
     l->fillp.gkind = v[3] < 0 || v[3] > 4 ? 0 : v[3]; l->fillp.angle = v[4] % 360; l->fillp.scale = v[5] < 1 ? 100 : v[5] > 1000 ? 1000 : v[5];
     l->fillp.reverse = v[6] != 0;
   }
@@ -309,6 +320,15 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
       if (o->kind == LK_GROUP && !o->isolate) l->blend = BM_PASS;
       if (o->kind == LK_ADJUST) l->adj = o->adj;
       if (o->kind == LK_FILL) { l->fillp = o->fillp; free(l->px); l->px = NULL; }
+      /* 1.2: links, artboards, and layerx.h's settings (with their pattern) */
+      l->link = (u16)o->link;
+      if (o->artboard && o->kind == LK_GROUP) { l->artboard = (u8)o->artboard; l->abox = box_clip(o->abox, box_make(0, 0, w, h)); l->fillp.c0 = (u32)o->abg & 0xFFFFFF; }
+      if (o->xnums) {
+        Rgba pim;
+        int hp = o->xpat[0] && read_picture(&z, o->xpat, &pim);
+        layerx_from_text(l, o->xnums, o->xvpath, o->xspath, hp ? pim.px : NULL, hp ? pim.w : 0, hp ? pim.h : 0);
+        if (hp) rgba_free(&pim);
+      }
       /* a layer whose picture is missing or damaged stays empty rather than losing the rest */
       if (l->px && read_picture(&z, o->src, &im)) {
         for (y = 0; y < im.h && !progress(y, im.h); y++) {
@@ -366,7 +386,7 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
   doc_forget_undo(doc);
   doc->dirty = 0;
 fail:
-  for (i = 0; ls && i < cnt; i++) free(ls[i].live);       /* 0.9 */
+  for (i = 0; ls && i < cnt; i++) { free(ls[i].live); free(ls[i].xnums); free(ls[i].xvpath); free(ls[i].xspath); }   /* 0.9, 1.2 */
   free(xml);
   free(ls);
   zip_close(&z);
@@ -451,6 +471,23 @@ static void put_common(Buf *xml, ZipWriter *zw, Doc *doc, int i, int *ok)
                l->mask_on ? "true" : "false", l->mask_linked ? "true" : "false");
     put_unit(xml, 255 - l->mask_fade);
     buf_printf(xml, "\" easel:mask-feather=\"%d\"", l->mask_feather);
+  }
+  /* 1.2 */
+  if (l->link) buf_printf(xml, " easel:link=\"%d\"", l->link);
+  if (l->artboard) buf_printf(xml, " easel:artboard=\"%d %ld %ld %ld %ld %ld\"", l->artboard, (long)l->abox.x0, (long)l->abox.y0, (long)l->abox.x1, (long)l->abox.y1, (long)(l->fillp.c0 & 0xFFFFFF));
+  {
+    LayerXText t;
+    if (layerx_to_text(l, &t)) {
+      buf_adds(xml, " easel:layerx=\""); xml_escape(xml, t.nums, strlen(t.nums)); buf_adds(xml, "\"");
+      if (*t.vpath) { buf_adds(xml, " easel:layerx-path=\""); xml_escape(xml, t.vpath, strlen(t.vpath)); buf_adds(xml, "\""); }
+      if (*t.spath) { buf_adds(xml, " easel:layerx-smart=\""); xml_escape(xml, t.spath, strlen(t.spath)); buf_adds(xml, "\""); }
+      if (t.pat) {
+        sprintf(name, "data/pattern%d.png", i);
+        if (!store_png(zw, name, t.pat, NULL, t.pw, box_make(0, 0, t.pw, t.ph))) *ok = 0;
+        buf_printf(xml, " easel:layerx-pattern=\"%s\"", name);
+      }
+      layerx_text_free(&t);
+    }
   }
 }
 /* layers lo..hi-1 at depth, topmost first; groups as nested stacks */
