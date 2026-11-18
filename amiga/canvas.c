@@ -56,6 +56,7 @@
 #include "../core/viewx.h"                 /* 1.2 */
 #include "../core/guides.h"
 #include "mxids.h"
+#include "r3ids.h"                    /* r3: the brush hook (Liquify) */
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -3132,6 +3133,22 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
 
 /* ------------------------------------------------------------------ events */
 #define EV (IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE)
+/* r3 (r3image.c): while a brush window (Liquify) is open the picture's presses and drags go to it */
+Box (*canvas_brush_hook)(int phase, double x, double y);
+static int brush_hook_down;
+static ULONG brush_hooked(struct Data *d, Object *obj, struct IntuiMessage *im, LONG mx, LONG my, int in)
+{
+  Box b = box_make(0, 0, 0, 0);
+  int phase = -1;
+  if (im->Class == IDCMP_RAWKEY) return MUI_EventHandlerRC_Eat;            /* (no tool keys meanwhile) */
+  if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && in) { phase = 0; brush_hook_down = 1; }
+  else if (im->Class == IDCMP_MOUSEMOVE && brush_hook_down) phase = 1;
+  else if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP && brush_hook_down) { phase = 2; brush_hook_down = 0; }
+  if (phase < 0) return 0;
+  b = canvas_brush_hook(phase, to_ix(d, obj, mx), to_iy(d, obj, my));
+  if (!box_empty(b)) update_box(d, obj, b);
+  return MUI_EventHandlerRC_Eat;
+}
 static ULONG handle(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *m)
 {
   struct Data *d = INST_DATA(cl, obj);
@@ -3139,6 +3156,11 @@ static ULONG handle(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *m)
   LONG mx, my;
   int in;
   if (!im || !d->shown) return 0;
+  if (canvas_brush_hook && !d->drag) {
+    mx = im->MouseX; my = im->MouseY;
+    return brush_hooked(d, obj, im, mx, my, mx >= _mleft(obj) && mx <= _mright(obj) && my >= _mtop(obj) && my <= _mbottom(obj));
+  }
+  brush_hook_down = 0;
   if (im->Class == IDCMP_RAWKEY) return keys(d, obj, im) ? MUI_EventHandlerRC_Eat : 0;
   mx = im->MouseX; my = im->MouseY;
   in = mx >= _mleft(obj) && mx <= _mright(obj) && my >= _mtop(obj) && my <= _mbottom(obj);

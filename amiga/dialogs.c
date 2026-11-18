@@ -854,7 +854,6 @@ static void f_wave(Doc *d, const LONG *v, int c, int t) { flt_wave_ex(d, (int)v[
 static void f_min(Doc *d, const LONG *v, int c, int t) { (void)t; flt_minmax(d, (int)v[0], 0, c); }
 static void f_max(Doc *d, const LONG *v, int c, int t) { (void)t; flt_minmax(d, (int)v[0], 1, c); }
 static void f_offset(Doc *d, const LONG *v, int c, int t) { (void)t; flt_offset_ex(d, v[0], v[1], c, d->bg); }
-static void f_oil(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_oil_paint(d, (int)v[0], (int)v[1]); }
 static void f_vignette(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_vignette(d, (int)v[0]); }
 /* 0.2.1's filters (filters2.c) */
 static void f_dust(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_dust_scratches(d, (int)v[0], (int)v[1]); }
@@ -896,7 +895,6 @@ static void f_tilt(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_
 static void f_iris(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_iris_blur(d, (int)v[0], (i32)(d->w * v[1] / 100), (i32)(d->h * v[2] / 100), (i32)(d->w * v[3] / 200), (i32)(d->h * v[4] / 200), (int)v[5]); }
 static void f_smartsh(Doc *d, const LONG *v, int c, int t) { (void)t; flt_smart_sharpen(d, (int)v[0], (int)v[1], (int)v[2], c, (int)v[3]); }
 static void f_displace(Doc *d, const LONG *v, int c, int t) { flt_displace(d, displace_map.px, displace_map.w, displace_map.h, (int)v[0], (int)v[1], c == 0, t); }
-static void f_lenscorr(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_lens_correction(d, (int)v[0], (int)v[1], (int)v[2], (int)v[3], (int)v[4], (int)v[5]); }
 static void f_extrude(Doc *d, const LONG *v, int c, int t) { flt_extrude(d, c, (int)v[0], (int)v[1], v[SDMAX - 1] == 0, t, 1, 4242); }
 static void f_glowedges(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_glowing_edges(d, (int)v[0], (int)v[1], (int)v[2]); }
 static void f_plastic(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_plastic_wrap(d, (int)v[0], (int)v[1], (int)v[2]); }
@@ -990,9 +988,6 @@ void dlg_filter(ULONG id)
     slider_dialog("Displace", p, 2, dmaps, "Displacement Map:", "Wrap Around (else repeat edge pixels)", 0, f_displace,
                   TextObject, MUIA_Text_Contents, (ULONG)tr("The map's red moves the picture across, its green up and down;\nmid-grey stays put. 100% moves up to 128 pixels."), MUIA_Font, MUIV_Font_Tiny, End);
     break; }
-  case ID_F_LENSCORR: { static const Param p[] = { { "Remove Distortion:", -100, 100, 0 }, { "Fix Red/Cyan Fringe:", -100, 100, 0 }, { "Fix Blue/Yellow Fringe:", -100, 100, 0 },
-                                                   { "Vignette Amount:", -100, 100, 0 }, { "Vignette Midpoint:", 0, 100, 50 }, { "Scale (%):", 50, 150, 100 } };
-    slider_dialog("Lens Correction", p, 6, NULL, NULL, NULL, 0, f_lenscorr, NULL); break; }
   case ID_F_EXTRUDE: { static const Param p[] = { { "Size (px):", 2, 255, 30 }, { "Depth:", 1, 255, 30 } };
     sd_cfg_cyc2 = exdepth; sd_cfg_cyc2label = "Depth:"; sd_cfg_cyc2init = 1;
     slider_dialog("Extrude", p, 2, extypes, "Type:", "Solid Front Faces", 0, f_extrude, NULL); break; }
@@ -1083,7 +1078,6 @@ void dlg_filter(ULONG id)
   case ID_F_OFFSET: { static const Param p[] = { { "Horizontal (px):", -2000, 2000, 0 }, { "Vertical (px):", -2000, 2000, 0 } };
     sd_init_set = 1; sd_init_v[0] = sd_init_v[1] = 0; sd_init_choice = 3;
     slider_dialog("Offset", p, 2, offmodes, "Undefined Areas:", NULL, 0, f_offset, NULL); sd_init_set = 0; sd_init_choice = 0; break; }
-  case ID_F_OIL: { static const Param p[] = { { "Radius (px):", 1, 10, 3 }, { "Levels:", 2, 64, 20 } }; slider_dialog("Oil Paint", p, 2, NULL, NULL, NULL, 0, f_oil, NULL); break; }
   case ID_F_VIGNETTE: { static const Param p[] = { { "Amount (%):", -100, 100, 50 } }; slider_dialog("Vignette", p, 1, NULL, NULL, NULL, 0, f_vignette, NULL); break; }
   case ID_F_BLUR: flt_blur(d); break;
   case ID_F_SHARPEN: flt_sharpen(d); break;
@@ -1676,4 +1670,8 @@ int dlg_sliders(const char *title, const DlgParam *p, int n, const char *const *
   sd_remember = 0; sd_init_set = 0; sd_init_choice = 0; sd_init_tick = -1;
   return ok;
 }
+/* r3: the call when the first list's choice changes (for the next dlg_sliders), and the sliders
+   shown with other values from it */
+void dlg_set_choice_hook(void (*hook)(int choice)) { sd_cfg_cychook = hook; }
+void dlg_show_values(const LONG *v, int n) { sd_show(v, n); }
 void dlg_set_last(DlgApplyFn fn) { last_fn = fn; last_plain = 0; memset(last_v, 0, sizeof last_v); last_choice = last_tick = 0; }

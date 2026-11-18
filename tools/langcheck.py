@@ -138,7 +138,8 @@ CORE_LISTS = [('core/adjust10.c', 'photo_filter_names', 'all'), ('core/adjust10.
              [('core/viewx.c', n, 'all') for n in ('checker_names', 'checker_size_names', 'line_style_names')] + \
              [('core/actions.c', 'histo_channel_names', 'all')] + \
              [('core/cms.c', 'cms_intent_names', 'all')] + \
-             [('core/vecx.c', 'shape_lib', 'first')]   # (r2-colour: the intents; r3-image: the custom shape library)
+             [('core/vecx.c', 'shape_lib', 'first')] + \
+             [('core/filtr3.c', n, 'all') for n in ('tree_names', 'frame_names', 'liquify_tool_names')]   # (r2-colour: the intents; r3-image: shapes, trees, frames, Liquify)
 def core_list_names():
     """the names in CORE_LISTS: (file, line, text)"""
     out = []

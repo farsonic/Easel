@@ -18,6 +18,10 @@ typedef void (*DlgApplyFn)(Doc *d, const LONG *v, int choice, int tick);
 int  dlg_sliders(const char *title, const DlgParam *p, int n, const char *const *choices, const char *choicelabel, int choiceinit,
                  const char *const *choices2, const char *choice2label, int choice2init, const char *ticklabel, int tickinit,
                  const LONG *init, DlgApplyFn fn, Object *extra, int remember);
+/* r3: hook is called when the next dialog's first list changes; dlg_show_values shows other
+   values in its sliders (as Selective Color shows each colour range's) */
+void dlg_set_choice_hook(void (*hook)(int choice));
+void dlg_show_values(const LONG *v, int n);
 /* Filter > Last Filter will call fn (with nothing in the values) */
 void dlg_set_last(DlgApplyFn fn);
 

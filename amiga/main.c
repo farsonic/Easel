@@ -210,7 +210,7 @@ static struct NewMenu menus[] = {
   S("Photo Filter...", 0, ID_ADJ_PHOTO), S("Channel Mixer...", 0, ID_ADJ_MIXER), S("Color Lookup...", 0, ID_FX_LOOKUP), S("Gradient Map...", 0, ID_ADJ_GRADMAP), S("Selective Color...", 0, ID_ADJ_SELCOLOR), SBAR,
   S("Invert", "I", ID_ADJ_INVERT), S("Posterize...", 0, ID_ADJ_POSTERIZE), S("Threshold...", 0, ID_ADJ_THRESHOLD), SBAR,
   S("Desaturate", 0, ID_ADJ_DESAT), S("Equalize", 0, ID_ADJ_EQUALIZE), SBAR,
-  S("Shadows/Highlights...", 0, ID_ADJ_SHADOWHI), S("Match Color...", 0, ID_ADJ_MATCH), S("Replace Color...", 0, ID_ADJ_REPLACE),     /* 1.0 */
+  S("Shadows/Highlights...", 0, ID_ADJ_SHADOWHI), S("HDR Toning...", 0, ID_HDRTONING), S("Match Color...", 0, ID_ADJ_MATCH), S("Replace Color...", 0, ID_ADJ_REPLACE),     /* 1.0; r3: HDR Toning */
   I("Auto Tone", 0, ID_AUTOTONE), I("Auto Contrast", 0, ID_AUTOCONTRAST), I("Auto Color", 0, ID_AUTOCOLOR), BAR,
   I("Image Size...", 0, ID_IMAGESIZE), I("Canvas Size...", 0, ID_CANVASSIZE),
   H("Image Rotation"), S("180\260", 0, ID_IMG_R180), S("90\260 Clockwise", 0, ID_IMG_R90R), S("90\260 Anticlockwise", 0, ID_IMG_R90L), S("Arbitrary...", 0, ID_IMG_RANY), SBAR,
@@ -290,12 +290,12 @@ static struct NewMenu menus[] = {
   I("Load Selection...", 0, ID_LOADSEL), I("Save Selection...", 0, ID_SAVESEL),
   M("Filter"),
   I("Last Filter", "F", ID_F_AGAIN), BAR, I("Filter Gallery...", 0, ID_FX_GALLERY),
-  I("Lens Correction...", 0, ID_F_LENSCORR), BAR,
+  I("Lens Correction...", 0, ID_F_LENSCORR), I("Liquify...", 0, ID_LIQUIFY), BAR,
   H("Blur"), S("Average", 0, ID_F_AVERAGE), S("Blur", 0, ID_F_BLUR), S("Blur More", 0, ID_F_BLURMORE), SBAR,
   S("Gaussian Blur...", 0, ID_F_GAUSS), S("Box Blur...", 0, ID_F_BOX), S("Motion Blur...", 0, ID_F_MOTION), S("Radial Blur...", 0, ID_F_RADIAL),
   S("Spin Blur...", 0, ID_F_SPINBLUR), S("Lens Blur...", 0, ID_F_LENSBLUR), S("Shape Blur...", 0, ID_F_SHAPEBLUR), S("Smart Blur...", 0, ID_F_SMARTBLUR),
   S("Surface Blur...", 0, ID_F_SURFACEBLUR),
-  H("Blur Gallery"), S("Iris Blur...", 0, ID_F_IRIS), S("Tilt-Shift...", 0, ID_F_TILTSHIFT),
+  H("Blur Gallery"), S("Field Blur...", 0, ID_FIELDBLUR), S("Iris Blur...", 0, ID_F_IRIS), S("Tilt-Shift...", 0, ID_F_TILTSHIFT),
   H("Sharpen"), S("Smart Sharpen...", 0, ID_F_SMARTSHARPEN), S("Unsharp Mask...", 0, ID_F_UNSHARP), SBAR, S("Sharpen", 0, ID_F_SHARPEN), S("Sharpen Edges", 0, ID_F_SHARPENEDGES), S("Sharpen More", 0, ID_F_SHARPENMORE),
   H("Noise"), S("Add Noise...", 0, ID_F_NOISE), S("Dust & Scratches...", 0, ID_F_DUST), S("Median...", 0, ID_F_MEDIAN), S("Reduce Noise...", 0, ID_F_REDUCENOISE),
   S("Despeckle", 0, ID_F_DESPECKLE),
@@ -319,7 +319,8 @@ static struct NewMenu menus[] = {
   S("Stamp...", 0, ID_GX0 + GX_STAMP), S("Torn Edges...", 0, ID_GX0 + GX_TORN_EDGES), S("Water Paper...", 0, ID_GX0 + GX_WATER_PAPER),
   H("Texture"), S("Craquelure...", 0, ID_GX0 + GX_CRAQUELURE), S("Grain...", 0, ID_GX0 + GX_GRAIN), S("Mosaic Tiles...", 0, ID_F_MOSAICTILES), S("Patchwork...", 0, ID_F_PATCHWORK),
   S("Stained Glass...", 0, ID_F_STAINEDGLASS), S("Texturizer...", 0, ID_F_TEXTURIZER),
-  H("Render"), S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
+  H("Render"), S("Flame...", 0, ID_FLAME), S("Picture Frame...", 0, ID_PICFRAME), S("Tree...", 0, ID_TREE), SBAR,
+  S("Clouds", 0, ID_F_CLOUDS), S("Difference Clouds", 0, ID_F_DIFFCLOUDS), S("Fibers...", 0, ID_F_FIBERS), S("Lens Flare...", 0, ID_F_FLARE),
   S("Lighting Effects...", 0, ID_F_LIGHTING), S("Vignette...", 0, ID_F_VIGNETTE),
   H("Video"), S("De-Interlace...", 0, ID_F_DEINTERLACE), S("NTSC Colors", 0, ID_F_NTSC), S("PAL Colors", 0, ID_F_PAL),
   H("Other"), S("Custom...", 0, ID_F_CUSTOM), S("High Pass...", 0, ID_F_HIGHPASS), S("Minimum...", 0, ID_F_MIN), S("Maximum...", 0, ID_F_MAX), S("Offset...", 0, ID_F_OFFSET),
@@ -2068,6 +2069,7 @@ static void command(ULONG id)
   if (mx_recording) mx_record(id, menu_label(id));   /* 1.2: into the action being recorded (the History Log is t2_log_steps') */
   if (id > ID_T2_FIRST && id < ID_T2_LAST) { if (tools2_command(id)) refresh_all(); return; }   /* 1.2 (tools2.c) */
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
+  if (id == ID_F_OIL || id == ID_F_LENSCORR) { r3_command(d, id); refresh_all(); return; }               /* (r3: their new dialogs) */
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }

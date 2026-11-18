@@ -2762,3 +2762,93 @@ Banner	Banner	Bannière	Pancarta	Striscione
 Shield	Schild	Bouclier	Escudo	Scudo
 Paw Print	Pfotenabdruck	Empreinte de patte	Huella	Impronta di zampa
 Gear	Zahnrad	Engrenage	Engranaje	Ingranaggio
+HDR Toning...	HDR-Tonung...	Virage HDR...	Tonificación HDR...	Tonalità HDR...
+Liquify...	Verflüssigen...	Fluidité...	Licuar...	Fluidifica...
+Field Blur...	Feld-Weichzeichnung...	Flou de champ...	Desenfoque de campo...	Sfocatura campo...
+Flame...	Flamme...	Flamme...	Llama...	Fiamma...
+Picture Frame...	Bilderrahmen...	Cadre...	Marco...	Cornice...
+Tree...	Baum...	Arbre...	Árbol...	Albero...
+Pin X (%):	Pin X (%):	Épingle X (%) :	Chincheta X (%):	Puntina X (%):
+Pin Y (%):	Pin Y (%):	Épingle Y (%) :	Chincheta Y (%):	Puntina Y (%):
+Pin 1	Pin 1	Épingle 1	Chincheta 1	Puntina 1
+Pin 2	Pin 2	Épingle 2	Chincheta 2	Puntina 2
+Pin 3	Pin 3	Épingle 3	Chincheta 3	Puntina 3
+Pin 4	Pin 4	Épingle 4	Chincheta 4	Puntina 4
+Field Blur	Feld-Weichzeichnung	Flou de champ	Desenfoque de campo	Sfocatura campo
+Pin:	Pin:	Épingle :	Chincheta:	Puntina:
+Pins:	Pins:	Épingles :	Chinchetas:	Puntine:
+Each pin blurs the picture around it; between the pins\nthe blur changes smoothly. Place them in per cent of the picture.	Jeder Pin zeichnet das Bild um sich weich; zwischen den Pins\nändert sich die Weichzeichnung fließend. Position in Prozent des Bildes.	Chaque épingle floute l'image autour d'elle ; entre les épingles,\nle flou varie en douceur. Placez-les en pourcentage de l'image.	Cada chincheta desenfoca la imagen a su alrededor; entre ellas\nel desenfoque cambia suavemente. Colóquelas en % de la imagen.	Ogni puntina sfoca l'immagine intorno; tra le puntine\nla sfocatura cambia dolcemente. Posizione in % dell'immagine.
+Strength (x0.1):	Stärke (x0,1):	Intensité (x0,1) :	Intensidad (x0,1):	Intensità (x0,1):
+Detail (%):	Details (%):	Détails (%) :	Detalle (%):	Dettagli (%):
+Shadow:	Tiefen:	Ombre :	Sombra:	Ombre:
+Highlight:	Lichter:	Tons clairs :	Iluminación:	Luci:
+HDR Toning	HDR-Tonung	Virage HDR	Tonificación HDR	Tonalità HDR
+Stylization (x0.1):	Stilisierung (x0,1):	Stylisation (x0,1) :	Estilización (x0,1):	Stilizzazione (x0,1):
+Cleanliness (x0.1):	Sauberkeit (x0,1):	Propreté (x0,1) :	Limpieza (x0,1):	Pulizia (x0,1):
+Scale (x0.1):	Skalierung (x0,1):	Échelle (x0,1) :	Escala (x0,1):	Scala (x0,1):
+Bristle Detail (x0.1):	Borstendetails (x0,1):	Détail des poils (x0,1) :	Detalle de cerdas (x0,1):	Dettaglio setole (x0,1):
+Shine (x0.1):	Glanz (x0,1):	Brillance (x0,1) :	Brillo (x0,1):	Brillantezza (x0,1):
+Lighting	Beleuchtung	Éclairage	Iluminación	Illuminazione
+Vertical Perspective:	Vertikale Perspektive:	Perspective verticale :	Perspectiva vertical:	Prospettiva verticale:
+Horizontal Perspective:	Horizontale Perspektive:	Perspective horizontale :	Perspectiva horizontal:	Prospettiva orizzontale:
+Auto Scale	Automatisch skalieren	Mise à l'échelle auto	Escala automática	Scala automatica
+Length (px):	Länge (px):	Longueur (px) :	Longitud (px):	Lunghezza (px):
+Interval (px):	Abstand (px):	Intervalle (px) :	Intervalo (px):	Intervallo (px):
+Turbulence:	Turbulenz:	Turbulence :	Turbulencia:	Turbolenza:
+Jag:	Zacken:	Dents :	Dentado:	Frastagliatura:
+One Flame Along Path	Eine Flamme entlang des Pfades	Une flamme le long du tracé	Una llama a lo largo del trazado	Una fiamma lungo il tracciato
+Multiple Flames Along Path	Mehrere Flammen entlang des Pfades	Plusieurs flammes le long du tracé	Varias llamas a lo largo del trazado	Più fiamme lungo il tracciato
+Multiple Flames One Direction	Mehrere Flammen in eine Richtung	Plusieurs flammes dans une direction	Varias llamas en una dirección	Più fiamme in una direzione
+Violent	Heftig	Violent	Violento	Violento
+Flat	Flach	Plat	Plano	Piatto
+Flame	Flamme	Flamme	Llama	Fiamma
+Flame Type:	Flammenart:	Type de flamme :	Tipo de llama:	Tipo di fiamma:
+The flames follow the path chosen in the Paths panel,\nor a line across the lower part of the picture.	Die Flammen folgen dem im Pfade-Bedienfeld gewählten Pfad\noder einer Linie durch den unteren Teil des Bildes.	Les flammes suivent le tracé choisi dans le panneau Tracés,\nou une ligne dans la partie basse de l'image.	Las llamas siguen el trazado elegido en el panel Trazados,\no una línea en la parte inferior de la imagen.	Le fiamme seguono il tracciato scelto nel pannello Tracciati,\no una linea nella parte bassa dell'immagine.
+Base Position (%):	Grundposition (%):	Position de la base (%) :	Posición de la base (%):	Posizione della base (%):
+Size (%):	Größe (%):	Taille (%) :	Tamaño (%):	Dimensione (%):
+Branch Height (%):	Asthöhe (%):	Hauteur des branches (%) :	Altura de las ramas (%):	Altezza dei rami (%):
+Branch Thickness (%):	Aststärke (%):	Épaisseur des branches (%) :	Grosor de las ramas (%):	Spessore dei rami (%):
+Leaves Amount (%):	Blattmenge (%):	Quantité de feuilles (%) :	Cantidad de hojas (%):	Quantità di foglie (%):
+Leaves Size (%):	Blattgröße (%):	Taille des feuilles (%) :	Tamaño de las hojas (%):	Dimensione delle foglie (%):
+Light Direction:	Lichtrichtung:	Direction de la lumière :	Dirección de la luz:	Direzione della luce:
+Arrangement:	Anordnung:	Disposition :	Disposición:	Disposizione:
+Tree	Baum	Arbre	Árbol	Albero
+Base Tree Type:	Baumart:	Type d'arbre :	Tipo de árbol:	Tipo di albero:
+Custom Colors (foreground leaves, background branches)	Eigene Farben (Vordergrund Blätter, Hintergrund Äste)	Couleurs perso. (premier plan feuilles, arrière-plan branches)	Colores propios (frontal hojas, fondo ramas)	Colori personali (primo piano foglie, sfondo rami)
+Margin (px):	Rand (px):	Marge (px) :	Margen (px):	Margine (px):
+Number:	Anzahl:	Nombre :	Número:	Numero:
+Arrangement (%):	Anordnung (%):	Disposition (%) :	Disposición (%):	Disposizione (%):
+Picture Frame	Bilderrahmen	Cadre	Marco	Cornice
+Frame:	Rahmen:	Cadre :	Marco:	Cornice:
+Vine	Ranke	Vigne	Enredadera	Vite
+The flowers and stars take the foreground colour.	Blumen und Sterne erhalten die Vordergrundfarbe.	Les fleurs et étoiles prennent la couleur de premier plan.	Las flores y estrellas toman el color frontal.	Fiori e stelle prendono il colore di primo piano.
+Tool:	Werkzeug:	Outil :	Herramienta:	Strumento:
+Brush Size (px):	Pinselgröße (px):	Taille de l'outil (px) :	Tamaño del pincel (px):	Dimensione pennello (px):
+Brush Density:	Pinseldichte:	Densité de l'outil :	Densidad del pincel:	Densità pennello:
+Brush Pressure:	Pinseldruck:	Pression de l'outil :	Presión del pincel:	Pressione pennello:
+Brush Rate:	Pinselrate:	Vitesse de l'outil :	Velocidad del pincel:	Velocità pennello:
+Restore All	Alles wiederherstellen	Tout restaurer	Restaurar todo	Ripristina tutto
+Drag on the picture with the brush; OK applies the warp.	Ziehen Sie mit dem Pinsel im Bild; OK wendet die Verformung an.	Faites glisser l'outil sur l'image ; OK applique la déformation.	Arrastre el pincel sobre la imagen; OK aplica la deformación.	Trascinare il pennello sull'immagine; OK applica la deformazione.
+Liquify	Verflüssigen	Fluidité	Licuar	Fluidifica
+Oak	Eiche	Chêne	Roble	Quercia
+Pine	Kiefer	Pin	Pino	Pino
+Maple	Ahorn	Érable	Arce	Acero
+Birch	Birke	Bouleau	Abedul	Betulla
+Willow	Weide	Saule	Sauce	Salice
+Palm	Palme	Palmier	Palmera	Palma
+Bush	Busch	Buisson	Arbusto	Cespuglio
+Cherry Blossom	Kirschblüte	Cerisier en fleurs	Cerezo en flor	Ciliegio in fiore
+Bare Tree	Kahler Baum	Arbre nu	Árbol desnudo	Albero spoglio
+Cypress	Zypresse	Cyprès	Ciprés	Cipresso
+Flowers	Blumen	Fleurs	Flores	Fiori
+Leaves	Blätter	Feuilles	Hojas	Foglie
+Waves	Wellen	Vagues	Olas	Onde
+Stars	Sterne	Étoiles	Estrellas	Stelle
+Simple Border	Einfacher Rand	Bordure simple	Borde simple	Bordo semplice
+Forward Warp	Vorwärts-krümmen	Déformation avant	Deformar hacia delante	Distorsione in avanti
+Reconstruct	Rekonstruieren	Reconstruction	Reconstruir	Ricostruisci
+Twirl Clockwise	Strudel im Uhrzeigersinn	Tourbillon horaire	Molinete a la derecha	Vortice in senso orario
+Twirl Counterclockwise	Strudel gegen den Uhrzeigersinn	Tourbillon antihoraire	Molinete a la izquierda	Vortice in senso antiorario
+Pucker	Zusammenziehen	Contraction	Fruncir	Contrazione
+Bloat	Aufblasen	Dilatation	Inflar	Gonfiamento
+Push Left	Nach links schieben	Repousser à gauche	Empujar a la izquierda	Spingi a sinistra
