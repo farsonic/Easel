@@ -1917,7 +1917,7 @@ static void command(ULONG id)
 {
   Doc *d = cur_doc();
   Box ch;
-  mx_record(id, menu_label(id));                         /* 1.2: into the action being recorded, and the history log */
+  if (mx_recording || prefs.history_log) mx_record(id, menu_label(id));   /* 1.2: into the action being recorded, and the history log */
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }

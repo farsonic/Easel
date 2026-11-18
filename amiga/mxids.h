@@ -63,6 +63,7 @@ extern int vx_seledges, vx_layeredges, vx_path;   /* Show > Selection Edges, Lay
 extern int vx_hist_channel;            /* the Info panel's histogram: HC_ (core/actions.h) */
 /* the canvas's context menu (a menustrip made by menux.c, disposed with the canvas) */
 Object *mx_context_menu(void);
+void    mx_context_free(void);
 
 /* main.c's services for menux.c and panelsx.c */
 void do_command(ULONG id);             /* a menu command, as if chosen */

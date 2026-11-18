@@ -82,6 +82,7 @@ void mx_free(void)
   actlib_free(&mx_actions);
   if (styles_read) file_save_text(STYLES_FILE, stylelib_save(&styles));
   stylelib_free(&styles);
+  mx_context_free();
 }
 static void styles_ready(void)
 {

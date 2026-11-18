@@ -297,6 +297,7 @@ extern ActionLib mx_actions;           /* (panelsx.c) */
 extern int mx_rec_action;
 void mx_record(ULONG id, const char *label)
 {
+  if (!label) return;
   history_log(id, label);
   if (!mx_recording || !label || mx_rec_action < 0 || mx_rec_action >= mx_actions.n) return;
   /* not recorded: the Actions window's own items, the view, the windows and the open, quit and recent items */
@@ -330,6 +331,8 @@ Object *mx_context_menu(void)
   ctx = MUI_MakeObject(MUIO_MenustripNM, (ULONG)ctxmenu, 0);
   return ctx;
 }
+/* (MUI doesn't dispose a context menu with its object: done after the application is gone) */
+void mx_context_free(void) { if (ctx) MUI_DisposeObject(ctx); ctx = NULL; }
 
 /* ------------------------------------------------------------------ the menu items */
 int mx_command(Doc *d, ULONG id)
