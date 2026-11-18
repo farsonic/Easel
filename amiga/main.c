@@ -1653,6 +1653,7 @@ static Doc *state_copy(Doc *d)
   *c = *d;
   c->undo = c->redo = NULL; c->undo_depth = 0; c->undo_bytes = 0;
   c->sel = c->lastsel = c->qmask = NULL; c->nlay = 0; c->nchan = 0;
+  c->npaths = 0; c->workpath = NULL; c->annot = NULL;     /* (1.2: the paths and notes stay the picture's: doc_free(c) mustn't free them) */
   for (i = 0; i < d->nlay && ok; i++) if ((c->lay[i] = layer_copy(d->lay[i], d->w, d->h)) != NULL) c->nlay++; else ok = 0;
   for (i = 0; i < d->nchan && ok; i++) if ((c->chan[i] = (u8 *)malloc(n)) != NULL) { memcpy(c->chan[i], d->chan[i], n); c->nchan++; } else ok = 0;
   if (ok && d->sel && (c->sel = (u8 *)malloc(n)) != NULL) memcpy(c->sel, d->sel, n);

@@ -10,6 +10,7 @@ CORE="$CORE core/toolopts.c"     # 1.1: tool options
 CORE="$CORE core/layerx.c"       # 1.2: vector masks, links, patterns, smart objects, artboards, frames
 CORE="$CORE core/brushx.c"       # 1.2: brush extras, Mixer and Art History brushes, tablets, .abr/.grd/.pat
 CORE="$CORE core/cafill.c core/selsmart.c"   # 1.2: content-aware fill, Quick and Object Selection
+CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Amiga-era extras
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }
@@ -59,3 +60,5 @@ CORE="$CORE core/cafill.c core/selsmart.c"   # 1.2: content-aware fill, Quick an
   t brushxtest;   $T/easel_brushxtest | tail -1
   # 1.2: content-aware fill (PatchMatch), Remove, Patch, Content-Aware Move; Quick and Object Selection
   t smarttest;    $T/easel_smarttest | tail -1
+  # 1.2: Perspective Crop, notes, counts, slices, Rotate View, history log; Amiga-era extras
+  t toolsxtest;   $T/easel_toolsxtest $T | tail -1

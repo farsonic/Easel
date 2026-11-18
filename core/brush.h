@@ -44,7 +44,7 @@ Tip  *tip_procedural(int kind, int n, u32 seed);
 /* RGBA pixels (straight), w x h, handle hx, hy (the pixel that sits under the pointer; DPaint's
    GRAB). Transparent pixels (alpha 0) are the brush's background */
 typedef struct { i32 w, h, hx, hy; u8 *px; } CustomBrush;
-enum { CB_MATTE, CB_COLOR, CB_REPLACE, CB_SMEAR, CB_SHADE, CB_BLEND, CB_CYCLE, CB_N };
+enum { CB_MATTE, CB_COLOR, CB_REPLACE, CB_SMEAR, CB_SHADE, CB_BLEND, CB_CYCLE, CB_TINT /* 1.2 */, CB_N };
 extern const char *const cb_mode_names[CB_N];
 CustomBrush *cbrush_new(i32 w, i32 h);             /* transparent, handle in the middle */
 CustomBrush *cbrush_copy(const CustomBrush *b);
@@ -63,6 +63,11 @@ CustomBrush *cbrush_half(const CustomBrush *b);
 CustomBrush *cbrush_double(const CustomBrush *b);
 /* DPaint's Outline: a one-pixel ring of colour (0xRRGGBB) round the brush's shape */
 CustomBrush *cbrush_outline(const CustomBrush *b, u32 color);
+/* 1.2: DPaint's Shear (each row moved across by kx times its distance from the handle, each column
+   down by ky; nearest pixel) and Bend (rows moved across along a parabola, amount pixels at the
+   ends; vertical: columns moved down) */
+CustomBrush *cbrush_shear(const CustomBrush *b, double kx, double ky);
+CustomBrush *cbrush_bend(const CustomBrush *b, double amount, int vertical);
 /* the brush's shape as a tip (alpha), for painting it in a single colour */
 Tip         *cbrush_to_tip(const CustomBrush *b);
 /* ILBM brush files: FORM ILBM with BMHD, CMAP, GRAB and BODY; a mask plane (masking 1), or a
@@ -86,7 +91,9 @@ extern const char *const ctl_names[CTL_N];
    (0: 25) and the floor 0-100 % the control and jitter may take it down to */
 typedef struct { int jitter, control, fade_steps, minimum; } Dynamic;
 /* painting symmetry */
-enum { SYM_OFF, SYM_VERTICAL, SYM_HORIZONTAL, SYM_BOTH, SYM_RADIAL, SYM_MANDALA, SYM_N };
+enum { SYM_OFF, SYM_VERTICAL, SYM_HORIZONTAL, SYM_BOTH, SYM_RADIAL, SYM_MANDALA,
+       SYM_DIAGONAL, SYM_TILE,         /* 1.2: both diagonals; tiled (sym_segments across and down, DPaint's tile) */
+       SYM_N };
 extern const char *const sym_names[SYM_N];
 #define SYM_MAXCOPIES 64
 typedef struct {

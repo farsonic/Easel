@@ -22,9 +22,9 @@
 #endif
 
 #define MAXTIP 8192
-const char *const cb_mode_names[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle" };
+const char *const cb_mode_names[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle", "Tint" };
 const char *const ctl_names[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction", "Pen Tilt" };
-const char *const sym_names[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala" };
+const char *const sym_names[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile" };
 
 static int clamp255(double v) { return v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5); }
 static double clampf(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -96,6 +96,29 @@ int brush_symmetry(const BrushDynamics *dy, i32 w, i32 h, double x, double y, do
     }
     c = 2 * n;
     break;
+  case SYM_DIAGONAL:                                       /* 1.2: mirrored across both diagonals through the centre */
+    mirror(x, y, cx, cy, 45 + th, &ox[1], &oy[1]); rot[1] = 2 * (45 + th); mir[1] = 1;
+    mirror(x, y, cx, cy, 135 + th, &ox[2], &oy[2]); rot[2] = 2 * (135 + th); mir[2] = 1;
+    turn(x, y, cx, cy, 180, &ox[3], &oy[3]); rot[3] = 180; mir[3] = 0;
+    if (dy->sym_angle % 360 == 0) {
+      /* (exact: x and y swapped about the centre) */
+      ox[1] = cx - (y - cy); oy[1] = cy - (x - cx); ox[2] = cx + (y - cy); oy[2] = cy + (x - cx); ox[3] = 2 * cx - x; oy[3] = 2 * cy - y;
+    }
+    c = 4;
+    break;
+  case SYM_TILE: {                                         /* 1.2: the canvas as n x n tiles, the dab in each */
+    int t = dy->sym_segments < 2 ? 2 : dy->sym_segments > 8 ? 8 : dy->sym_segments, i, j;
+    double tw = (double)w / t, tht = (double)h / t, fx = fmod(x, tw), fy = fmod(y, tht);
+    if (fx < 0) fx += tw;
+    if (fy < 0) fy += tht;
+    c = 1;
+    for (j = 0; j < t; j++) for (i = 0; i < t; i++) {
+      double px = fx + i * tw, py = fy + j * tht;
+      if (fabs(px - x) < 1e-9 && fabs(py - y) < 1e-9) continue;
+      if (c >= SYM_MAXCOPIES) break;
+      ox[c] = px; oy[c] = py; rot[c] = 0; mir[c] = 0; c++;
+    }
+    break; }
   }
   return c > SYM_MAXCOPIES ? SYM_MAXCOPIES : c;
 }

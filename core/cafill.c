@@ -307,7 +307,7 @@ int ca_fill_canvas(u8 *px, i32 w, i32 h, const u8 *hole, const u8 *allow, const 
 {
   Box hb, b;
   i32 bw, bh, y;
-  u8 *img, *ho, *al = NULL;
+  u8 *img, *ho = NULL, *al = NULL;
   int ok;
   if (changed) *changed = box_make(0, 0, 0, 0);
   if (!hole_box(hole, w, h, o, &hb, &b)) return 1;

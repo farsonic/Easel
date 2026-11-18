@@ -134,6 +134,7 @@ void doc_free(Doc *d)
   free(d->qmask);
   for (i = 0; i < d->npaths; i++) path_free(d->path[i]);  /* 0.9 */
   path_free(d->workpath);
+  free(d->annot);                                          /* 1.2 */
   free(d);
 }
 

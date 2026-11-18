@@ -97,15 +97,15 @@ enum { C_ROUNDTIP = 1, C_SYMCENTRE, C_NEWSEED, C_PICKUP, C_PICKUPSEL, C_RELEASE,
 
 /* values shown differently from how they are kept */
 static int ui_round, ui_fade, ui_seed, ui_rate, ui_count, ui_segments;
-static const char *const ctl_list[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction" };
+static const char *const ctl_list[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction", "Pen Tilt" };
 static const char *const ctl_list3[3] = { "Off", "Fade", "Pen Pressure" };
-static const char *const sym_list[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala" };
+static const char *const sym_list[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile" };
 static const char *const erase_list[3] = { "Brush", "Pencil", "Block" };
 static const char *const smp_list[3] = { "Continuous", "Once", "Background Swatch" };
 static const char *const stc_list[3] = { "Off", "Background Colour", "Locked Palette Colours" };   /* (1.1) */
 static const char *const lim_list[3] = { "Contiguous", "Discontiguous", "Find Edges" };
 static const char *const rpl_list[4] = { "Hue", "Saturation", "Color", "Luminosity" };
-static const char *const cb_list[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle" };
+static const char *const cb_list[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle", "Tint" };
 static const char *const b_tip[] = { "Round Tip" };
 static const char *const b_sym[] = { "Centre on Canvas" };
 static const char *const b_seed[] = { "New Seed" };

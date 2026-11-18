@@ -318,6 +318,11 @@ u8 *icon_write_ex(const Rgba *pic, const IconOpts *o, size_t *len, char *err, si
     return png;
   }
   buf_init(&b);
+  {
+    /* 1.2: the icon's own tool types first */
+    int k;
+    for (k = 0; k < o->ntooltypes && o->tooltypes; k++) if (o->tooltypes[k] && o->tooltypes[k][0]) lines_add(&tt, o->tooltypes[k], strlen(o->tooltypes[k]) > 200 ? 200 : strlen(o->tooltypes[k]));
+  }
   ncp = icon_classic_palette(o->kind == ICON_CLASSIC ? o->classic_pal : ICONPAL_WB20, cpal);
   if (!(cidx = (u8 *)malloc((size_t)t.w * t.h)) || !classic_indices(&t, cpal, ncp, o->dither, cidx)) goto done;
   img.w = t.w; img.h = t.h; img.depth = ncp == 8 ? 3 : 2; img.idx = cidx;
@@ -335,11 +340,11 @@ u8 *icon_write_ex(const Rgba *pic, const IconOpts *o, size_t *len, char *err, si
       if (tt.oom) goto done;
       put_diskobject(&b, &img, o->deftool, tt.s, tt.n);
     } else {
-      put_diskobject(&b, &img, o->deftool, NULL, 0);
+      put_diskobject(&b, &img, o->deftool, tt.s, tt.n);
       glow_form(&b, ridx, t.w, t.h, rpal, o->selected ? selpal : NULL, ncol, transp);
     }
-  } else put_diskobject(&b, &img, o->deftool, NULL, 0);
-  ok = !b.oom;
+  } else put_diskobject(&b, &img, o->deftool, tt.s, tt.n);
+  ok = !b.oom && !tt.oom;
 done:
   free(cidx); free(ridx); free(rpal);
   lines_free(&tt);

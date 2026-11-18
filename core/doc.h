@@ -186,6 +186,8 @@ typedef struct {
   /* ---- end of 0.9 ---- */
   /* 1.1: Layer Style > Global Light (degrees; light_set 0 means the default 120, 30) */
   i16 light_angle; u8 light_alt, light_set;
+  /* 1.2: notes, counts and slices (toolsx.h; one flat malloc'd block, NULL for none; not part of undo) */
+  struct Annots *annot;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */

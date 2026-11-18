@@ -39,6 +39,8 @@
 
 #define TS 64
 #define NCACHE 12
+/* 1.2: the draw mode (CB_) the Brush and Pencil paint in, also without a custom brush */
+#define DMODE(s) ((s)->b.custom || (s)->b.tool == PT_BRUSH || (s)->b.tool == PT_PENCIL ? (s)->b.custom_mode : CB_MATTE)
 static int mul255(int a, int b) { int t = a * b + 128; return (t + (t >> 8)) >> 8; }
 static int clamp255(double v) { return v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5); }
 static void rgb_of(u32 c, u8 *p) { p[0] = (u8)(c >> 16); p[1] = (u8)(c >> 8); p[2] = (u8)c; }
@@ -419,7 +421,7 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   t = (j / TS) * s->ntx + i / TS;
   mp = s->mask[t] + (j % TS) * TS + i % TS;
   m = *mp;
-  if ((tool >= PT_BLUR && tool <= PT_SPONGE) || (s->b.custom && (s->b.custom_mode == CB_SMEAR || s->b.custom_mode == CB_SHADE))) {
+  if ((tool >= PT_BLUR && tool <= PT_SPONGE) || DMODE(s) == CB_SMEAR || DMODE(s) == CB_SHADE) {
     /* the retouching tools act on each pass */
     cov = mul255(mul255(mul255(a, dp->flow), dp->ceil), sel);
   } else if (s->cmode) {
@@ -437,8 +439,11 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   tp = s->t.px + ((long)j * s->t.w + i) * bpp;
   if (bpp == 4) memcpy(p, tp, 4); else { p[0] = p[1] = p[2] = *tp; p[3] = 255; }
   memcpy(before, p, 4);
-  if (s->b.custom) {
+  if (s->b.custom || DMODE(s) != CB_MATTE) {
+    u8 col4[4];
+    if (!s->b.custom || !src) { memcpy(col4, dp->col, 3); col4[3] = 255; src = col4; }   /* 1.2: a plain brush's colour */
     switch (s->b.custom_mode) {
+    case CB_TINT: memcpy(p, o, 4); put_px(lock, p, dp->col, cov, BM_COLOR); break;   /* 1.2: the colour's hue and saturation */
     case CB_COLOR: case CB_CYCLE: memcpy(p, o, 4); put_px(lock, p, dp->col, cov, s->b.blend); break;
     case CB_BLEND: memcpy(p, o, 4); put_px(lock, p, src, cov / 2, s->b.blend); break;
     case CB_SMEAR: {
@@ -891,9 +896,9 @@ static void emit_step(Stroke *s, double x, double y, double pressure, Box *chang
     dp.flow = clamp255(clampd(flow, 0, 1) * 255);
     dp.ceil = s->cmode ? clamp255(opac * s->b.opacity / 100.0 * 255) : 255;
     if (s->b.tool >= PT_BLUR && s->b.tool <= PT_SPONGE) dp.ceil = clamp255(opac * s->b.opacity / 100.0 * 255);
-    if (s->b.custom && (s->b.custom_mode == CB_SMEAR || s->b.custom_mode == CB_SHADE)) dp.ceil = clamp255(opac * s->b.opacity / 100.0 * 255);
+    if (DMODE(s) == CB_SMEAR || DMODE(s) == CB_SHADE) dp.ceil = clamp255(opac * s->b.opacity / 100.0 * 255);
     /* the colour */
-    if (s->b.custom && s->b.custom_mode == CB_CYCLE) cycle_color(s, dp.col);
+    if (DMODE(s) == CB_CYCLE) cycle_color(s, dp.col);
     else if (dy->color_on) {
       if (dy->per_stroke) {
         if (!s->have_scol) { dyn_color(s, 0, pressure, s->scol); s->have_scol = 1; }

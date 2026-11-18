@@ -37,6 +37,8 @@ typedef struct {
   int selected;                       /* also a selected image (the picture darkened); classic icons
                                          are complemented by Workbench instead */
   const char *deftool;                /* the default tool (NULL or "": none) */
+  const char *const *tooltypes;       /* 1.2: the icon's tool types ("NAME=value" lines), ntooltypes of them */
+  int ntooltypes;
 } IconOpts;
 void icon_opts_default(IconOpts *o, int kind);
 

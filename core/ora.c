@@ -25,6 +25,7 @@
 #include "xml.h"
 #include "live.h"                     /* 0.9 */
 #include "layerx.h"                   /* 1.2 */
+#include "toolsx.h"
 #include "path.h"
 #include "fx.h"                       /* 1.1 */
 
@@ -383,6 +384,7 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
   if (dpi > 0 && dpi < 65536) doc->dpi = (u16)dpi;
   if (xml) read_channels(&z, (const char *)xml, xlen, doc);          /* 0.7 */
   if (xml) read_paths((const char *)xml, xlen, doc);                  /* 0.9 */
+  if (xml) annots_read_xml(doc, (const char *)xml, xlen);             /* 1.2: notes, counts, slices */
   doc_forget_undo(doc);
   doc->dirty = 0;
 fail:
@@ -620,6 +622,10 @@ u8 *ora_write(Doc *doc, size_t *len)
                  doc->path_active == (k < 0 ? -1 : k + 1) ? " active=\"true\"" : "");
       free(dd); free(ty);
     }
+  }
+  {
+    char *an = annots_xml(doc);                            /* 1.2: notes, counts, slices */
+    if (an) { buf_adds(&xml, an); free(an); }
   }
   buf_adds(&xml, "</image>\n");
   if (ok) ok = !xml.oom && zip_add(&zw, "stack.xml", xml.data, xml.len);
