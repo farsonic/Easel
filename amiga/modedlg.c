@@ -21,6 +21,7 @@
 #include "modedlg.h"
 #include "../core/palette.h"
 #include "../core/amigamodes.h"
+#include "../core/modex.h"                 /* round 3: Matte */
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; if (o) get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -59,15 +60,16 @@ void modedlg_indexed_defaults(IndexedOpts *o)
 {
   memset(o, 0, sizeof *o);
   o->colors = 256; o->source = IP_ADAPTIVE; o->method = QM_MEDIAN; o->preset = PP_WB20; o->dither = DI_FS; o->forced = IF_NONE; o->keep_locked = 1;
+  o->matte = MT_NONE; o->transparency = 1;                   /* (round 3) */
 }
 int modedlg_indexed(Doc *d, IndexedOpts *o)
 {
   /* the palette list: adaptive, adaptive in OCS 12 bits, the document's own, then the presets */
   static const char *srcs[4 + PP_N + 1];
-  static const char *meths[QM_N + 1], *dits[DI_N + 1], *forced[6];
+  static const char *meths[QM_N + 1], *dits[DI_N + 1], *forced[6], *mattes[MT_N + 1];
   static const char *const forced_en[] = { "None", "Black and White", "Primaries", "Workbench (4)", "Foreground and Background", NULL };
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *cs, *ps, *ms, *ds, *fs, *kl;
+  Object *w, *cs, *ps, *ms, *ds, *fs, *kl, *mt, *tr_;
   int i, ok, src;
   if (!d) return 0;
   srcs[0] = tr("Adaptive (AGA, 24-bit)"); srcs[1] = tr("Adaptive (OCS/ECS, 12-bit)"); srcs[2] = tr("Current Palette");
@@ -76,6 +78,7 @@ int modedlg_indexed(Doc *d, IndexedOpts *o)
   labels(quant_names, meths, QM_N);                          /* (without "Fixed Palette": that is the list above) */
   labels(dither_names, dits, DI_N + 1);
   labels(forced_en, forced, 6);
+  labels(matte_names, mattes, MT_N + 1);
   src = o->source == IP_PRESET ? 3 + o->preset : o->source == IP_CURRENT ? 2 : o->source == IP_ADAPTIVE_OCS ? 1 : 0;
   w = dialog_window("Indexed Color", ColGroup(2),
         Child, QLabel(tr("Palette:"), MUIO_Label_Centered), Child, ps = cycle(srcs, src),
@@ -84,6 +87,8 @@ int modedlg_indexed(Doc *d, IndexedOpts *o)
         Child, QLabel(tr("Forced:"), MUIO_Label_Centered), Child, fs = cycle(forced, o->forced),
         Child, QLabel(tr("Dither:"), MUIO_Label_Centered), Child, ds = cycle(dits, o->dither),
         Child, kl = check(o->keep_locked), Child, QLabel(tr("Keep locked colours in their places"), 0),
+        Child, tr_ = check(o->transparency), Child, QLabel(tr("Transparency"), 0),                     /* round 3 */
+        Child, QLabel(tr("Matte:"), MUIO_Label_Centered), Child, mt = cycle(mattes, o->matte),
         Child, HSpace(0), Child, text(tr("Layers keep their pixels; each also gets palette\nindices, which painting and palette edits then follow."), 2),
       End, NULL);
   if (!w) return 0;
@@ -97,6 +102,7 @@ int modedlg_indexed(Doc *d, IndexedOpts *o)
     o->forced = (int)xget(fs, MUIA_Cycle_Active);
     o->dither = (int)xget(ds, MUIA_Cycle_Active);
     o->keep_locked = (int)xget(kl, MUIA_Selected);
+    o->matte = (int)xget(mt, MUIA_Cycle_Active); o->transparency = xget(tr_, MUIA_Selected) != 0;
   }
   MUI_DisposeObject(w);
   return ok;
@@ -112,6 +118,12 @@ int modedlg_apply_indexed(Doc *d, const IndexedOpts *o)
   doc_note_pal(d);
   if (!o->keep_locked) memset(d->pal_lock, 0, sizeof d->pal_lock);
   set(app, MUIA_Application_Sleep, TRUE);
+  /* round 3: the see-through pixels laid over the matte first (white when transparency isn't kept and no
+     matte is chosen, as Photoshop does) */
+  if (o->matte != MT_NONE || !o->transparency) {
+    doc_note_all(d);
+    layers_matte(d, o->matte != MT_NONE ? matte_color(d, o->matte) : 0xFFFFFF, o->transparency);
+  }
   if (o->source == IP_PRESET || o->source == IP_CURRENT) {
     if (o->source == IP_PRESET) nf = pal_preset(o->preset, fixed);
     else { nf = d->npal < 2 ? 2 : d->npal; memcpy(fixed, d->pal, (size_t)nf * 3); }

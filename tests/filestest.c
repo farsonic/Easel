@@ -15,6 +15,8 @@
 #include "core/adjustx.h"
 #include "core/filesx.h"
 #include "core/xread2.h"
+#include "core/modex.h"
+#include "core/palette.h"
 #include <math.h>
 
 static int fails, tests;
@@ -572,6 +574,36 @@ static void test_jpeg_size(void)
   }
 }
 
+/* Indexed Color's Matte */
+static void test_matte(void)
+{
+  Doc *d = doc_new(4, 1, 0, 1);
+  u8 *p = d->lay[0]->px;
+  static const u8 px[16] = { 200, 0, 0, 255,  200, 0, 0, 128,  200, 0, 0, 0,  0, 0, 200, 64 };
+  memcpy(p, px, 16);
+  d->fg = 0x00FF00;
+  CHECK(matte_color(d, MT_FG) == 0x00FF00 && matte_color(d, MT_GRAY50) == 0x808080 && matte_color(d, MT_NETSCAPE) == 0xC0C0C0, "matte colours");
+  doc_begin(d, "Indexed Color");
+  doc_note_all(d);
+  CHECK(layers_matte(d, 0xFFFFFF, 1) == 2, "two edge pixels matted");
+  CHECK(p[3] == 255 && p[4] == 227 && p[5] == 127 && p[7] == 255, "the half see-through red over white");
+  CHECK(p[11] == 0, "the see-through pixel stays so");
+  CHECK(p[12] == 191 && p[14] == 241 && p[15] == 255, "the faint blue over white");
+  CHECK(doc_to_indexed(d, 8, QM_MEDIAN, DI_NONE, NULL, 0), "made indexed in the same step");
+  doc_end(d);
+  CHECK(d->mode == MODE_INDEXED, "indexed");
+  doc_undo(d);
+  CHECK(!memcmp(d->lay[0]->px, px, 16) && d->mode == MODE_RGB, "one undo brings the edges and the mode back");
+  p = d->lay[0]->px;
+  doc_begin(d, "Indexed Color");
+  doc_note_all(d);
+  CHECK(layers_matte(d, 0, 0) == 3, "without transparency every pixel is matted");
+  doc_end(d);
+  p = d->lay[0]->px;
+  CHECK(p[8] == 0 && p[11] == 255, "the see-through pixel black and opaque");
+  doc_free(d);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -627,6 +659,7 @@ int main(int argc, char **argv)
   }
   test_look();
   test_jpeg_size();
+  test_matte();
   test_exif();
   test_layered();
   test_exr2();

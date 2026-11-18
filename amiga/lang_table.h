@@ -2738,3 +2738,4 @@
   { { "Convert to sRGB:", "In sRGB konvertieren:", "Convertir en sRVB :", "Convertir en sRGB:", "Converti in sRGB:" } },
   { { "Lossy WebP quality:", "Qualit\344t f\374r verlustbehaftetes WebP:", "Qualit\351 WebP avec perte :", "Calidad de WebP con p\351rdida:", "Qualit\340 WebP con perdita:" } },
   { { "(Quick Export's choices; Export As asks its own.\nJPEG's quality is on File Handling.)", "(F\374r den Schnell-Export; Exportieren als fragt selbst.\nDie JPEG-Qualit\344t steht unter Dateihandhabung.)", "(Pour l'exportation rapide ; Exporter sous demande les siens.\nLa qualit\351 JPEG est dans Gestion des fichiers.)", "(Para la exportaci\363n r\341pida; Exportar como pregunta los suyos.\nLa calidad JPEG est\341 en Gesti\363n de archivos.)", "(Per l'esportazione rapida; Esporta come chiede i suoi.\nLa qualit\340 JPEG \350 in Gestione file.)" } },
+  { { "Netscape Grey", "Netscape-Grau", "Gris Netscape", "Gris Netscape", "Grigio Netscape" } },

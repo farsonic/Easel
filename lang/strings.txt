@@ -2753,3 +2753,4 @@ Metadata kept:	Beibehaltene Metadaten:	Métadonnées conservées :	Metadatos con
 Convert to sRGB:	In sRGB konvertieren:	Convertir en sRVB :	Convertir en sRGB:	Converti in sRGB:
 Lossy WebP quality:	Qualität für verlustbehaftetes WebP:	Qualité WebP avec perte :	Calidad de WebP con pérdida:	Qualità WebP con perdita:
 (Quick Export's choices; Export As asks its own.\nJPEG's quality is on File Handling.)	(Für den Schnell-Export; Exportieren als fragt selbst.\nDie JPEG-Qualität steht unter Dateihandhabung.)	(Pour l'exportation rapide ; Exporter sous demande les siens.\nLa qualité JPEG est dans Gestion des fichiers.)	(Para la exportación rápida; Exportar como pregunta los suyos.\nLa calidad JPEG está en Gestión de archivos.)	(Per l'esportazione rapida; Esporta come chiede i suoi.\nLa qualità JPEG è in Gestione file.)
+Netscape Grey	Netscape-Grau	Gris Netscape	Gris Netscape	Grigio Netscape
