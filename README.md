@@ -21,6 +21,24 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New after 1.2: filters, selections, type and shapes (round 3)
+
+- Filters: Blur Gallery > Field Blur (up to four pins), Render > Flame (along a path), Picture Frame
+  and Tree, Liquify (Forward Warp, Reconstruct, Smooth, Twirl, Pucker, Bloat, Push Left, brushed on
+  the picture itself), Oil Paint with stylization, cleanliness, scale, bristle detail and a lit
+  relief, Lens Correction's perspective, angle and Auto Scale. Field Blur, Oil Paint and HDR Toning
+  work in bands of rows, so they need little more memory than the undo copy.
+- Image > Adjustments > HDR Toning (local adaptation); Replace Color adds and subtracts sampled
+  colours; Curves loads and saves Photoshop's .acv files.
+- Select > Subject and Sky, without trained models; Select and Mask can Decontaminate Colors when
+  it makes a new layer.
+- Type: horizontal and vertical scale (Character), Crisp and Strong anti-aliasing, hyphenation of
+  paragraph text (Paragraph; patterns from a Hyphen .dic file in the Dict drawer, as Quill's), and
+  the contextual OpenType lookups, so Contextual Alternates and Fractions work.
+- Shapes: gradient and pattern fills, a radius for each corner, Layer > Combine Shapes (Unite,
+  Subtract Front Shape, Intersect, Exclude, Merge Shape Components), sixteen built-in custom shapes
+  on the Custom Shape tool's options bar; Fill Path with a pattern or the history.
+
 ## New in 1.2: colour management, more formats and type
 
 - Colour management: ICC profiles (v2 and v4; matrix, grey and LUT profiles) are kept when a picture

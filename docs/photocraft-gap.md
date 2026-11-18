@@ -640,7 +640,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Brightness/Contrast… (brightness, contrast, Use Legacy) | **Have**: Use Legacy too (`adj10_brightness_lut`) | Done | — |
 | Levels… (per channel, input and output, gamma, Auto, eyedroppers, presets, CMYK and Lab spaces) | **Have**: RGB/R/G/B, histogram, gamma, output, Black/Grey/White Point from the foreground colour (`adj_levels_pick`), Auto (`adj_levels_auto`), built-in and saved presets (`adj_preset_*`). CMYK and Lab don't apply: Easel works in RGB | Done | — |
 | Levels: Alt-drag shows the clipping (PhotoCraft #3693) | **Missing**: the sliders are MUI sliders, with no clipping view | Easy: the preview could show clipped pixels while a slider is held | P3 |
-| Curves… (per channel, spline or pencil (`pencil`), eyedroppers, presets .acv) | **Partial**: four curves (RGB, R, G, B; `adj10_curves_lut`), up to eight points, eyedroppers (`adj_curves_pick`), Auto, presets; the pencil (freehand) mode and .acv files are missing | Easy | P3 |
+| Curves… (per channel, spline or pencil (`pencil`), eyedroppers, presets .acv) | **Partial**: four curves (RGB, R, G, B; `adj10_curves_lut`), up to eight points, eyedroppers (`adj_curves_pick`), Auto, presets; round 3 reads and writes Photoshop's .acv files (Load/Save with a name ending .acv; `curves_acv_read`, `curves_acv_write` in `E:core/adjust10.c`). The pencil (freehand) mode is missing | Easy | P3 |
 | Curves: Alt+2…6 pick the dialog's channel (PhotoCraft #10475) | **Missing**: the channel is a cycle gadget | Easy | P3 |
 | Exposure… (exposure, offset, gamma) | **Have** | Done | — |
 | Vibrance… (vibrance, saturation) | **Have** | Done | — |
@@ -656,10 +656,10 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Gradient Map… (stops, midpoints, smoothness, reverse, dither; PhotoCraft #9319, #10797) | **Have**: six ready gradients and, new in this round, Custom: any gradient made in the Gradient Editor (stops dragged on and off, midpoints, colours), sampled at 32 places so its midpoints come through (`gm_btn`/`gradmap_preset` in `E:amiga/dialogs.c`); Reverse; as pixels or an adjustment layer (`adj_gradient_map`). Dither is missing | Done | — |
 | Selective Color… (9 ranges × CMYK, relative or absolute) | **Have**: `adj_selective_color` | Done | — |
 | Shadows/Highlights… | **Have**: amounts, tones, radii, colour correction, midtone contrast (`adj_shadows_highlights`) | Done | — |
-| HDR Toning… | **Missing** | Hard: needs data above 8 bits; Easel tone-maps HDR files when it opens them | P3 |
+| HDR Toning… | **Have** (r3): Local Adaptation on the active layer: Radius, Strength (how firmly edges stop it: a guided filter of the log luminance), Gamma, Exposure, Detail, Shadow, Highlight, Vibrance and Saturation (`flt_hdr_toning` in `E:core/filtr3.c`, Image › Adjustments › HDR Toning…), worked out in bands of rows. Photoshop's other methods (Equalize Histogram, Exposure and Gamma, Highlight Compression) and its toning curve and presets are left out; the layer isn't flattened first | Done | — |
 | Desaturate | **Have** | Done | — |
 | Match Color… | **Have**: from another open picture, luminance, intensity, fade, neutralize (`adj_match_color`) | Done | — |
-| Replace Color… (fuzziness, hue, saturation, lightness; Add to and Subtract from Sample, PhotoCraft #10443) | **Partial**: one colour (the foreground's) with fuzziness, as pixels or an adjustment layer (`adj_replace_color`); sampling more colours (+ and −) is missing | Easy (Color Range's sampled colours, `E:core/selx.h`, could be reused) | P3 |
+| Replace Color… (fuzziness, hue, saturation, lightness; Add to and Subtract from Sample, PhotoCraft #10443) | **Have**: one colour (the foreground's) with fuzziness, as pixels or an adjustment layer (`adj_replace_color`); round 3 adds Add to Sample and Subtract from Sample (the dialog's Foreground Color list; up to ten colours kept with the layer, `adj_replace_color_ex`, `replace_color_sample` in `E:core/adjust10.c`) | Done | — |
 | Equalize (with a selection: the selected area only, or the whole image based on it; PhotoCraft #9604) | **Have**: with a selection, Equalize now asks which (`adj_equalize_ex` in `E:core/adjustx.c`, `dlgx_equalize`) | Done | — |
 | Bitmap documents grey out adjustments and filters, all but Invert (PhotoCraft #10545) | **Have**: new in this round (the menu update in `E:amiga/main.c`) | Done | — |
 
@@ -685,8 +685,8 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Gallery › Texture: Craquelure, Grain, Mosaic Tiles, Patchwork, Stained Glass, Texturizer (6) | **Have**: Craquelure and Grain (ten grain types) new in this round, the rest since 1.0 | Done | — |
 | Camera Raw Filter… | **Missing** | Hard: dozens of controls on float data | P3 |
 | Adaptive Wide Angle… | **Missing** | Hard | P3 |
-| Lens Correction… (distortion, chromatic aberration, vignette, perspective; Auto Scale, PhotoCraft #14367) | **Partial**: distortion, both fringes, vignette and midpoint, scale (`flt_lens_correction`); the perspective controls and Auto Scale are missing | Moderate | P3 |
-| Liquify… | **Missing** | Moderate: warp a mesh on a proxy, then resample in full | P3 |
+| Lens Correction… (distortion, chromatic aberration, vignette, perspective; Auto Scale, PhotoCraft #14367) | **Have**: distortion, both fringes, vignette and midpoint (`flt_lens_correction`); round 3 adds the Transform group (vertical and horizontal perspective, angle) and the scale with Auto Scale (the smallest scale that leaves no edge uncovered), all in one pass (`flt_lens_correction_ex`, `lens_auto_scale` in `E:core/filtr3.c`); the perspective is checked against Pillow's perspective transform (`E:tests/check_r3.py`) | Done | — |
+| Liquify… | **Have** (r3): Filter › Liquify… opens its tool window and the brush works on the picture itself (the canvas hands its drags to it): Forward Warp, Reconstruct, Smooth, Twirl Clockwise and Counterclockwise, Pucker, Bloat, Push Left, with brush size, density, pressure and rate, and Restore All; OK applies the warp mesh as one step with progress and Abort (`liquify_stroke`, `flt_liquify` in `E:core/filtr3.c`, `liquify` in `E:amiga/r3image.c`). Freeze/Thaw Mask, Face-Aware Liquify and saved meshes are left out | Done | — |
 | Vanishing Point… | **Missing** | Hard | P3 |
 | Blur › Average | **Have**: `flt_average` | Done | — |
 | Blur › Blur | **Have** | Done | — |
@@ -699,7 +699,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Blur › Shape Blur… | **Have**: five shapes (`flt_shape_blur`); custom shapes as the kernel are missing | Done | — |
 | Blur › Smart Blur… | **Have**: `flt_smart_blur` (Normal, Edge Only, Overlay Edge) | Done | — |
 | Blur › Surface Blur… | **Have**: `flt_surface_blur` | Done | — |
-| Blur Gallery › Field Blur… | **Missing** | Moderate: variable-radius blur (the tiled engine of `E:core/gallery.c` would carry it) | P3 |
+| Blur Gallery › Field Blur… | **Have** (r3): up to four pins, each placed (per cent of the picture) and with its own blur; between them the blur follows the pins inversely to the square of the distance (`flt_field_blur` in `E:core/filtr3.c`, worked out in bands); one pin matches Pillow's Gaussian blur (`E:tests/check_r3.py`). The pins are set by numbers, not dragged on the canvas | Done | — |
 | Blur Gallery › Iris Blur… | **Have**: `flt_iris_blur` (one ellipse, set by numbers) | Done | — |
 | Blur Gallery › Tilt-Shift… | **Have**: `flt_tilt_shift` | Done | — |
 | Blur Gallery › Path Blur… | **Missing** | Hard | P3 |
@@ -725,9 +725,9 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Pixelate › Mezzotint… (10 types) | **Have**: `flt_mezzotint` | Done | — |
 | Pixelate › Mosaic… | **Have** | Done | — |
 | Pixelate › Pointillize… | **Have**: `flt_pointillize` | Done | — |
-| Render › Flame… | **Missing** | Moderate | P3 |
-| Render › Picture Frame… | **Missing** | Moderate | P3 |
-| Render › Tree… | **Missing** | Moderate | P3 |
+| Render › Flame… | **Have** (r3): flames along the path chosen in the Paths panel (or a line across the lower part): One Flame Along Path, Multiple Flames Along Path, Multiple Flames One Direction; length, width, interval, angle, turbulence, jag, opacity, Normal/Violent/Flat, natural colours or the foreground colour (`flt_flame` in `E:core/filtr3.c`: strands of tapered capsules added as light) | Done | — |
+| Render › Picture Frame… | **Have** (r3): seven frames (Vine, Flowers, Leaves, Dots, Waves, Stars, Simple Border) round the picture: margin, size, number, arrangement, seed, the vine line on or off, flowers in the foreground colour (`flt_picture_frame` in `E:core/filtr3.c`). Easel's own designs; PhotoCraft's (and Photoshop's) 47 frames are not copied | Done | — |
+| Render › Tree… | **Have** (r3): ten trees (Oak, Pine, Maple, Birch, Willow, Palm, Bush, Cherry Blossom, Bare Tree, Cypress) standing on the bottom edge: base position, size, branch height and thickness, leaves amount and size, light direction, arrangement (seed), the type's colours or custom ones (`flt_tree` in `E:core/filtr3.c`: recursive branching drawn as anti-aliased capsules and ellipses) | Done | — |
 | Render › Clouds (tails compressed, not clipped: PhotoCraft #9997) | **Have**: `flt_clouds`; PhotoCraft's softer tails are not matched | Done | — |
 | Render › Difference Clouds | **Have**: `flt_difference_clouds` | Done | — |
 | Render › Fibers… | **Have**: `flt_fibers` | Done | — |
@@ -743,7 +743,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Stylize › Emboss… | **Have** | Done | — |
 | Stylize › Extrude… | **Have**: `flt_extrude` | Done | — |
 | Stylize › Find Edges | **Have** (and Detect Edges: Sobel, Prewitt, Laplacian, Roberts) | Done | — |
-| Stylize › Oil Paint… (stylization, cleanliness, scale, bristle detail, lighting) | **Partial**: radius and levels (`flt_oil_paint`); the lighting and bristle controls are missing | Moderate | P3 |
+| Stylize › Oil Paint… (stylization, cleanliness, scale, bristle detail, lighting) | **Have**: round 3 replaces 1.0's radius-and-levels version with PhotoCraft's controls: Stylization, Cleanliness, Scale, Bristle Detail, Lighting on/off, Angle and Shine (`flt_oil_paint_ex` in `E:core/filtr3.c`, ported from PhotoCraft's `algo/src/oil.rs`: a structure tensor's stroke directions, a line integral convolution along them, noise convolved the same way for the bristles, a lit relief), worked out in bands | Done | — |
 | Stylize › Solarize | **Have** | Done | — |
 | Stylize › Tiles… | **Have**: `flt_tiles` | Done | — |
 | Stylize › Trace Contour… | **Have**: `flt_trace_contour` | Done | — |
@@ -779,9 +779,9 @@ anti-aliased edges already work. PhotoCraft's commands are in `engine/src/cmd/se
 | Isolate Layers | **Missing** | Easy | P3 |
 | Color Range… (sampled colours with add and subtract, Reds…Magentas, Highlights/Midtones/Shadows, Skin Tones, Out of Gamut, localized clusters, preview modes) | **Partial**: sampled colours with + and −, the colour and tone ranges, Skin Tones, fuzziness, range, Invert, a preview (`sel_color_range_ex`, `E:core/selx.h`); Localized Color Clusters and the preview modes are missing; Out of Gamut means nothing in RGB-only Easel | Easy | P3 |
 | Focus Area… | **Have**: new in this round: In-Focus Range, Image Noise Level, Soften Edge, the current layer or all layers, output to a new, added, subtracted or intersected selection (`sel_focus_area` in `E:core/selmask.c`: Laplacian energy against the picture's own 99th percentile) | Done | — |
-| Subject | **Missing** | Hard: PhotoCraft's version is classical saliency plus GrabCut, with no AI, so it's possible, but it takes minutes on a proxy | P3 |
-| Sky | **Missing** | Hard: the same | P3 |
-| Select and Mask… (edge detection radius, smooth, feather, contrast, shift edge, decontaminate, output to mask or layer, view modes) | **Partial**: new in this round: Edge Radius (pixels in the band round the edge placed between the local colours inside and outside), Smooth, Feather, Contrast, Shift Edge, output to the selection, a layer mask or a new layer with a layer mask (`sel_refine` in `E:core/selmask.c`, `select_and_mask` in `E:amiga/filtersx.c`). Missing: the refine brushes, hair matting, Decontaminate Colors and the view modes (the preview is the marching ants) | Moderate (radius and smooth); Hard (hair matting) | P3 |
+| Subject | **Have** (r3): Select › Subject: frequency-tuned saliency (each pixel's distance in Lab from the picture's mean colour, leaning towards the middle) finds what stands out, and its box goes to Object Selection's colour clusters and smoothing (`sel_subject` in `E:core/selr3.c`). No trained model: a busy picture can pick the wrong thing | Done | — |
+| Sky | **Have** (r3): Select › Sky, PhotoCraft's classical method (`segment/sky.rs`): a sky likelihood (blue, overcast or sunset colours where the picture is smooth) grown from the top rows through gradual changes, sky seen through gaps joined by its colour, specks and holes cleaned, the edge softened by a guided filter (`sel_sky` in `E:core/selr3.c`) | Done | — |
+| Select and Mask… (edge detection radius, smooth, feather, contrast, shift edge, decontaminate, output to mask or layer, view modes) | **Partial**: Edge Radius (pixels in the band round the edge placed between the local colours inside and outside), Smooth, Feather, Contrast, Shift Edge, output to the selection, a layer mask or a new layer with a layer mask (`sel_refine` in `E:core/selmask.c`, `select_and_mask` in `E:amiga/filtersx.c`); round 3 adds Decontaminate Colors with its amount for the new layer (`doc_decontaminate` in `E:core/selr3.c`: the edge pixels take the colours of the nearest fully shown ones). Missing: the refine brushes, hair matting and the view modes (the preview is the marching ants) | Moderate (refine brushes need the canvas's brush hook, as Liquify's); Hard (hair matting) | P3 |
 | Modify › Border… | **Have** | Done | — |
 | Modify › Smooth… | **Have** | Done | — |
 | Modify › Expand… | **Have** | Done | — |
@@ -859,19 +859,19 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Size | **Have** (1-2000 px a run) | Done | — |
 | Leading | **Have** (0.9): `leading`, auto or pixels | Done | — |
 | Tracking, and kerning metric/optical/manual | **Partial**: tracking per run and the font's kerning pairs (`kern`, `text_kern`); optical and manual kerning are missing | Moderate (optical) | P3 |
-| Baseline shift, horizontal and vertical scale | **Partial**: baseline shift per run; horizontal and vertical scale are missing | Easy | P3 |
+| Baseline shift, horizontal and vertical scale | **Have**: baseline shift per run; round 3 adds horizontal and vertical scale per run (the Character dialog; `hscale`, `vscale` in `TextRun`, kept in OpenRaster), drawn through the glyphs' outlines (and Amiga bitmap fonts scaled) | Done | — |
 | Underline and strikethrough | **Have** (0.9) | Done | — |
 | All Caps, Small Caps, superscript and subscript (`Caps`, `FontBaseline`) | **Have** (1.2): the Character dialog's Case (All Caps; Small Caps from the font's `smcp`, else capitals at 75%) and Position (superscript and subscript at 58.3% of the size, 33.3% up or down, Photoshop's defaults), per glyph in the layout (`TO_` in `E:core/type.h`, `text_upper`); kept in ORA | Done | — |
 | Colour per character run (`TextRun`) | **Have** (0.9) | Done | — |
 | Alignment Left/Center/Right | **Have** | Done | — |
 | Justify Left/Center/Right/All (`TextAlign`) | **Have** (1.2): `TA_JUSTIFY` (last line left), `TA_JUSTIFY_CENTER`, `TA_JUSTIFY_RIGHT` and `TA_JUSTIFY_ALL` | Done | — |
-| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Partial**: first-line indent, space before and after, and (1.2) left and right indents (`indent_left`, `indent_right`); hyphenation is missing | Moderate (hyphenation) | P3 |
+| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Have**: first-line indent, space before and after, left and right indents; round 3 adds hyphenation of paragraph text (Paragraph › Hyphenate): a word that doesn't fit is broken at its last hyphenation point that fits, with a hyphen drawn (Liang's patterns from a Hyphen .dic file in `PROGDIR:Dict`, the interface's language's or British English: Quill's reader, `E:core/hyphen.c`) | Done | — |
 | Paragraph text in a box with wrapping (`TextShape::Box`) | **Have** (0.9): drag a box with the Type tool | Done | — |
 | Type on a path (`TextShape::Path`) | **Missing** | Moderate: paths exist (`E:core/path.h`) | P3 |
 | Area type (`TextShape::Area`) | **Missing** | Moderate | P3 |
 | Type › Orientation › Horizontal / Vertical (2 items) | **Have** (0.9): Layer › Type › Horizontal / Vertical, the Vertical Type tool | Done | — |
-| Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Have** for the Amiga's three: None, Sharp (hinted) and Smooth (`TAA_`); Crisp and Strong are missing; the Windows ones are **Left out** (they are Windows' own rendering) | Easy (Crisp, Strong) | P3 |
-| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Partial** (1.2): Layer › Type's ten toggles; GSUB single, alternate, ligature and extension lookups (`E:core/gsub.c`) for Standard and Discretionary Ligatures, Swash, Oldstyle, Stylistic and Titling Alternates, Ornaments, Ordinals and Fractions, in the font's Latin script, checked against fontTools' reading of Carlito and FreeSerif; the contextual lookups (types 5, 6, 8) aren't applied, so Contextual Alternates and the contextual half of Fractions change nothing | Moderate (contextual lookups) | P3 |
+| Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Have**: None, Sharp (hinted), Smooth and, new in round 3, Crisp (a steeper edge) and Strong (heavier) (`TAA_` in `E:core/type.h`, on the Type tool's options bar); the Windows ones are **Left out** (they are Windows' own rendering) | Done | — |
+| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Have**: Layer › Type's ten toggles; GSUB single, alternate, ligature, extension and, since round 3, contextual and chained contextual lookups (types 5 and 6, all three formats; `E:core/gsub.c`), so Contextual Alternates work and Fractions turn the figures either side of a slash into numerators and denominators (as HarfBuzz does); checked against fontTools' reading of Carlito (`E:tests/check_colour.py`, `E:tests/check_r3.py`). Type 8 (reverse chaining, for Arabic) isn't applied | Done | — |
 | Type › Panels › Character, Paragraph, Glyphs, Character Styles, Paragraph Styles (5 items; the panels are rated in section 15) | **Partial**: Character and Paragraph are dialogs (Layer › Type); Glyphs and the style panels are missing | Easy to Moderate | P3 |
 | Type › Create Work Path | **Have** (0.9): `text_to_path` | Done | — |
 | Type › Convert to Shape | **Have** (1.2): Layer › Type › Convert to Shape: the type layer becomes a custom shape layer of its outlines, in place, filled with its colour; one undo step (`doc_text_to_shape` in `E:core/typex.c`) | Done | — |
@@ -899,14 +899,14 @@ whenever wanted. Re-checked 2026-11-18 (Easel 1.1).
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Bézier paths: subpaths, path operations, fill rule, work path and saved paths | **Have** (0.9) | Done | — |
-| Fill Path (with a colour, pattern or history) | **Partial**: with a colour, opacity and mode (`path_fill`); pattern and history fills are missing | Easy | P3 |
+| Fill Path (with a colour, pattern or history) | **Have**: Fill Path's dialog (round 3): the foreground colour, the pattern chosen for the tools or the history (the picture as opened), opacity, mode and anti-aliasing, previewed (`path_fill_source` in `E:core/pathops.c`) | Done | — |
 | Stroke Path (with a painting tool, simulated pressure) | **Have** (0.9): `path_stroke` with the brush and simulated pressure | Done | — |
 | Path to selection (`path.toSelection`) | **Have** (0.9): `path_to_selection` with the four operations, feather and anti-alias | Done | — |
 | Selection to work path (tolerance) | **Have** (0.9): `path_from_selection` | Done | — |
-| Shape layers: resolution-independent, solid/gradient/pattern fill, stroke width, dashes, align inside/centre/outside, caps, joins (`StrokeAlign`, `LineCap`) | **Partial** (0.9): solid fill and stroke with opacity, width, dashes, alignment, caps, joins and miter limit; gradient and pattern fills are missing | Easy | P2 |
-| Live shape properties: per-corner radii, polygon sides and star ratio, editing in Properties | **Partial**: Shape Properties edits one corner radius, polygon sides, star indent and angle, line arrowheads; per-corner radii are missing | Easy | P3 |
-| Layer › Combine Shapes › Unite Shapes, Subtract Front Shape, Intersect Shape Areas, Exclude Overlapping Shapes, Merge Shape Components (5 items) | **Missing** | Moderate: polygon boolean operations | P3 |
-| Custom shape library (built-ins and Shapes panel; PhotoCraft can't read .csh either) | **Partial**: the Custom Shape tool draws the active path (any saved path is a shape); there's no built-in library or Shapes panel | Easy | P3 |
+| Shape layers: resolution-independent, solid/gradient/pattern fill, stroke width, dashes, align inside/centre/outside, caps, joins (`StrokeAlign`, `LineCap`) | **Have**: solid fill and stroke with opacity, width, dashes, alignment, caps, joins and miter limit (0.9); round 3 adds gradient fills (the Gradient tool's gradient, up to eight colour and opacity stops, Linear/Radial/Angle/Reflected/Diamond, angle, scale, reverse, aligned with the shape) and pattern fills (the pattern kept with the layer) in Shape Properties (`doc_set_shape_fill`, `shape_render_layer` in `E:core/shape.c`; kept in OpenRaster) | Done | — |
+| Live shape properties: per-corner radii, polygon sides and star ratio, editing in Properties | **Have**: Shape Properties edits the corner radius, now one per corner (round 3: `radii` in `ShapeParams`, `shape_rect_path4`), polygon sides, star indent and angle, line arrowheads | Done | — |
+| Layer › Combine Shapes › Unite Shapes, Subtract Front Shape, Intersect Shape Areas, Exclude Overlapping Shapes, Merge Shape Components (5 items) | **Have** (r3): Layer › Combine Shapes › Unite Shapes, Subtract Front Shape, Intersect Shape Areas, Exclude Overlapping Shapes (the picked shape layers into the lowest, one step) and Merge Shape Components (a layer's subpaths resolved into one outline): the fills drawn into a mask up to four times finer than the canvas, combined and traced back into curves (`doc_combine_shapes` in `E:core/vecx.c`), within a third of a pixel | Done | — |
+| Custom shape library (built-ins and Shapes panel; PhotoCraft can't read .csh either) | **Have**: the Custom Shape tool draws the active path or, new in round 3, one of sixteen built-in shapes (arrows, heart, speech bubble, check mark, cross, lightning, moon, raindrop, ring, puzzle piece, banner, shield, paw print, leaf, gear) chosen on its options bar (`shape_library_path` in `E:core/vecx.c`); there's no Shapes panel | Done | — |
 | Anti-aliased pixel shapes (the Pixels mode) | **Have**: every shape tool can draw pixels (or a path) instead of a layer | Done | — |
 | Snap vector tools and transforms to the pixel grid (preference) | **Have** (0.4, 1.1 in the menu): View › Snap To › Pixels (`SNAP_PIXEL` in `E:core/guides.h`) | Done | — |
 | Export › Paths to Illustrator / paths to a file, with Document Bounds (#14068 since eb6c1ab) | **Have** (1.1) as SVG: File › Export › Paths to SVG writes the saved paths, the work path and every shape layer (fill, stroke, opacity), and the document's bounds as a frame (`svg_write_paths` in `E:core/svg.c`). An Illustrator .ai isn't written | Done | — |
