@@ -186,3 +186,33 @@ int auto_select_target(const Doc *d, int i, int group)
   while ((p = layer_parent(d, i)) >= 0) i = p;
   return i;
 }
+
+/* ------------------------------------------------------------------ painting on the grid */
+void grid_snap_paint(const Doc *d, double *x, double *y)
+{
+  double gx = d->guides.grid_x ? d->guides.grid_x : 16, gy = d->guides.grid_y ? d->guides.grid_y : 16;
+  double ox = d->guides.grid_ox, oy = d->guides.grid_oy;
+  *x = floor((*x - ox) / gx + 0.5) * gx + ox + 0.5;
+  *y = floor((*y - oy) / gy + 0.5) * gy + oy + 0.5;
+}
+
+/* ------------------------------------------------------------------ the History panel */
+int doc_delete_state(Doc *d, int k)
+{
+  int cap = 256, n;
+  const char **names;
+  for (;;) {
+    if (!(names = (const char **)malloc((size_t)cap * sizeof *names))) return 0;
+    n = doc_history(d, names, cap);
+    free(names);
+    if (n < cap) break;
+    cap *= 2;
+  }
+  if (k == -1) k = n - 1;
+  if (k < 0 || k >= n) return 0;
+  while (n > k && doc_undo(d)) n--;
+  if (n > k) return 0;
+  /* (the redo list dropped a step at a time: redone and discarded) */
+  while (doc_can_redo(d)) if (!doc_redo(d) || !doc_discard_last(d)) return 0;
+  return 1;
+}

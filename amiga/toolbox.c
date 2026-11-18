@@ -418,7 +418,8 @@ static int fields_for(int t, Field *f)
     if (npat_names) CHOICE("", opt.pattern, pat_names, npat_names);
     CHECK("Aligned", opt.pattern_aligned); break;
   case TL_HISTORY: SCRUB("Size:", opt.size[t], 1, 2500, "px"); SCRUB("Hardness:", opt.hardness[t], 0, 100, "%"); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); BUTTON("Snapshot", ID_SNAPSHOT); TEXT("Paints back the snapshot"); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); SCRUB("Flow:", opt.flow[t], 1, 100, "%"); BUTTON("Snapshot", ID_SNAPSHOT);
+    BUTTON("From History", ID_HISTBRUSHSRC); TEXT("Paints back the snapshot"); break;
   case TL_REPLACE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("Mode:", opt.replace_mode, rplmodes, 4); CHOICE("", opt.sampling, samplings, 3);
     CHOICE("Limits:", opt.limits, limitlist, 3); SCRUB("Tolerance:", opt.tolerance, 0, 255, ""); break;
   case TL_BGERASE: SCRUB("Size:", opt.size[t], 1, 2500, "px"); CHOICE("", opt.sampling, samplings, 3); CHOICE("Limits:", opt.limits, limitlist, 3);
@@ -573,6 +574,8 @@ static const char *field_help(const Field *f)
     { "Airbrush", "Builds up paint while the button is held and the pointer stays still." },
     { "Straighten", "Drag along something that should be level (or upright): the picture is turned to match and cropped." },
     { "Fill Screen", "Zooms so the picture fills the whole window." },
+    { "Snapshot", "Takes a snapshot of the layer as it is now for the History Brush to paint back (Edit > Take Snapshot)." },
+    { "From History", "The History Brush paints back the snapshot clicked last in the History panel instead." },
     /* 0.9 */
     { "AA:", "How the text's edges are smoothed: None (hard), Sharp or Smooth." },
     { "Warp", "Bends the text into an arc, a wave, a flag and other shapes, and can still be edited." },

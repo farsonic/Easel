@@ -53,6 +53,7 @@ char xform_info[80];
 int ruler_on;
 double ruler_xy[4];
 char ruler_info[96];
+int extras_hidden;                       /* (1.1, easel.h) */
 static Doc *ruler_doc;                   /* the picture the Ruler's line was drawn on */
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
@@ -125,6 +126,7 @@ struct Data {
      out for); scrubby zoom's start */
   int ov_crop, ov_bounds; Box bbox; Doc *bb_doc; void *bb_undo; int bb_active, bb_nlay; u8 *bb_px; Box ov_bbox;
   double zs_z; LONG zs_mx, zs_my; int zs_moved;
+  int tilde;                             /* 1.1: the ` key held: the Brush erases */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -251,6 +253,7 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
   LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
   LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
   int i, k;
+  if (extras_hidden) return;                             /* (1.1: View > Extras off) */
   if (ix1 > x1) ix1 = x1;
   if (iy1 > y1) iy1 = y1;
   if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
@@ -393,7 +396,7 @@ static void ants(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1
   struct RastPort *rp = _rp(obj);
   int i;
   UWORD pat;
-  if (!d->nedges || !d->edges) return;
+  if (!d->nedges || !d->edges || extras_hidden) return;
   pat = (UWORD)((0xF0F0F0F0UL >> (d->phase & 7)) & 0xFFFF);
   SetDrMd(rp, JAM2);
   SetAPen(rp, theme_is_dark() ? tpen(T_WHITE) : tpen(T_TEXT));
@@ -1840,6 +1843,10 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   Doc *doc = cur_doc();
   double x = to_ix(d, obj, mx), y = to_iy(d, obj, my);
   int t = d->space ? TL_HAND : tool, dbl = DoubleClick(d->secs, d->micros, secs, micros);
+  /* 1.1: Ctrl-Space and Alt-Space zoom in and out while held; Ctrl with a painting, filling or
+     sampling tool is the Move tool for the drag */
+  if (d->space && (qual & (IEQUALIFIER_CONTROL | QALT))) t = TL_ZOOM;
+  else if ((qual & IEQUALIFIER_CONTROL) && !d->xf_on && (brushlike(t) || t == TL_GRADIENT || t == TL_BUCKET || t == TL_EYEDROPPER || t == TL_MAGICERASE)) t = TL_MOVE;
   int shift = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0, alt = (qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
   Box ch;
   d->secs = secs; d->micros = micros;
@@ -1850,6 +1857,8 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     doc->guides.snap_tol = (u16)(16 * 6 / d->z + 1);
     snap_point(doc, &x, &y, SNAP_DOC);
   }
+  /* 1.1: DPaint's grid snap: with the grid shown and snapping to it, painting goes from grid point to grid point */
+  if (doc && brushlike(t) && doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);
   d->ax = d->bx = x; d->ay = d->by = y;
   if (!doc) return;
   ov_hide(d, obj);
@@ -2036,6 +2045,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     if (brushlike(t)) {
       Brush b = tool_brush(t);
       u32 color = doc->fg;
+      if (t == TL_BRUSH && d->tilde) { b.tool = PT_ERASER; b.custom = NULL; }     /* (1.1: ` held: the Brush erases) */
       if (t == TL_CLONE || t == TL_HEAL) {
         if (alt) { d->clone_x = x; d->clone_y = y; d->clone_set = 1; d->clone_aligned_set = 0; break; }
         if (!d->clone_set) { ask("OK", "%s", tr(t == TL_HEAL ? "Alt-click where the Healing Brush should take its texture from first." : "Alt-click where the Clone Stamp should copy from first.")); break; }
@@ -2105,6 +2115,7 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     break;
   case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
   case DR_STROKE:
+    if (doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);   /* (1.1) */
     if (d->stroke) { stroke_to(d->stroke, x, y, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch); }
     d->bx = x; d->by = y;
     break;
@@ -2224,7 +2235,7 @@ static void release(struct Data *d, Object *obj)
     break;
   case DR_PICK: break;
   case DR_ZOOMSCRUB:
-    if (!d->zs_moved) { int out = opt.zoom_out ^ ((d->modifiers & QALT) != 0); ov_hide(d, obj); zoom_to(d, obj, zoom_step(d->z, out ? -1 : 1), d->zs_mx, d->zs_my); }
+    if (!d->zs_moved) { int out = d->space ? (d->modifiers & QALT) != 0 : opt.zoom_out ^ ((d->modifiers & QALT) != 0); ov_hide(d, obj); zoom_to(d, obj, zoom_step(d->z, out ? -1 : 1), d->zs_mx, d->zs_my); }
     break;
   case DR_STRAIGHTEN:
     /* 1.1: the Crop tool's Straighten: the picture turned so the line is level, and cropped */
@@ -2398,6 +2409,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     }
     return 1;
   }
+  if ((code & ~IECODE_UP_PREFIX) == 0x00) { d->tilde = !(code & IECODE_UP_PREFIX); return 1; }   /* 1.1: ` (the key left of 1) */
   if (code & IECODE_UP_PREFIX) return 0;
   if (!(q & IEQUALIFIER_REPEAT)) {
     /* 0.8: a command's extra key (Edit > Keyboard Shortcuts) */
@@ -2446,6 +2458,17 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     if (PATH_TOOL(tool) && path_delete_sel(d, obj)) return 1;          /* 0.9: the chosen anchors deleted */
     DoMethod(_app(obj), MUIM_Application_ReturnID, (q & IEQUALIFIER_CONTROL) ? ID_FILLBG : (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? ID_FILLFG : ID_CLEAR);
     return 1;
+  case 0x48: case 0x49: case 0x70: case 0x71:   /* 1.1: Page Up, Page Down (Ctrl: left, right), Home, End */
+    if (code == 0x70) { v->sx = -1000000; v->sy = -1000000; }
+    else if (code == 0x71) { v->sx = 1000000; v->sy = 1000000; }
+    else if (q & IEQUALIFIER_CONTROL) v->sx += (code == 0x49 ? 1 : -1) * (_mwidth(obj) * 9 / 10);
+    else v->sy += (code == 0x49 ? 1 : -1) * (_mheight(obj) * 9 / 10);
+    draw_all(d, obj);
+    return 1;
+  case 0x54: case 0x55: case 0x6F:               /* 1.1: Shift-F5 Fill, Shift-F6 Feather, F12 Revert */
+    if (code != 0x6F && !shift) return 0;
+    DoMethod(_app(obj), MUIM_Application_ReturnID, code == 0x54 ? ID_FILL : code == 0x55 ? ID_FEATHER : ID_REVERT);
+    return 1;
   case 0x4C: case 0x4D: case 0x4E: case 0x4F: {  /* the arrows: nudge (move tool) or scroll */
     LONG dx = code == 0x4E ? 1 : code == 0x4F ? -1 : 0, dy = code == 0x4D ? 1 : code == 0x4C ? -1 : 0;
     if (d->xf_on) { ov_hide(d, obj); xform_translate(&d->xf, dx * (shift ? 10 : 1), dy * (shift ? 10 : 1)); xf_info(d); ov_show(d, obj); DoMethod(optbar, MUIM_Opts_Refresh); }
@@ -2466,6 +2489,23 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     /* PhotoCraft's Ctrl shortcuts (the Amiga key ones are the menus') */
     int alt = (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
     ULONG id = 0;
+    /* 1.1: more of PhotoCraft's (CAT): Reselect, Fade, Last Filter, Clipping Mask, Auto Color, Black
+       & White, Auto Contrast, Rulers, Grid, Guides, Snap, Extras, Save a Copy, Close All */
+    switch (ToLower((ULONG)c)) {
+    case 'd': if (shift) id = ID_RESELECT; break;
+    case 'f': id = shift ? ID_FADE : alt ? ID_F_AGAIN : 0; break;
+    case 'g': if (alt) id = ID_CLIP; break;
+    case 'b': if (shift) id = alt ? ID_ADJ_BW : ID_AUTOCOLOR; break;
+    case 'l': if (shift && alt) id = ID_AUTOCONTRAST; break;
+    case 'r': id = ID_RULERS; break;
+    case '\'': id = ID_SHOWGRID; break;
+    case ';': id = ID_SHOWGUIDES; break;
+    case ':': id = ID_SNAP; break;
+    case 'h': id = ID_SHOWEDGES; break;
+    case 's': if (alt) id = ID_SAVECOPY; break;
+    case 'w': if (alt) id = ID_CLOSEALL; break;
+    }
+    if (id) { DoMethod(_app(obj), MUIM_Application_ReturnID, id); return 1; }
     switch (ToLower((ULONG)c)) {
     case 'z': id = shift ? ID_REDO : alt ? ID_STEPBACK : ID_UNDO; break;
     case 'y': id = ID_REDO; break;
@@ -2525,6 +2565,12 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   if (c == 'x' || c == 'X') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_SWAPCOLORS); return 1; }
   if (c == 'd' || c == 'D') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_DEFCOLORS); return 1; }
   if (c == 'q' || c == 'Q') { DoMethod(_app(obj), MUIM_Application_ReturnID, ID_QUICKMASK); return 1; }   /* 0.7: Quick Mask */
+  if ((c == 'f' || c == 'F') && tool_for_key('F') < 0) {
+    /* 1.1: F steps through the screen modes: a window, Easel's own screen, full screen */
+    static const ULONG sm[3] = { ID_SCR_OWN, ID_SCR_FULL, ID_SCR_WINDOW };
+    DoMethod(_app(obj), MUIM_Application_ReturnID, sm[prefs.screen_mode % 3]);
+    return 1;
+  }
   /* a tool's letter: that tool, or (pressed again, or with Shift) the next tool sharing the letter */
   c = ToUpper((ULONG)c);
   if ((i = tool_for_key(c)) < 0) return 0;

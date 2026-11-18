@@ -55,4 +55,13 @@ int  crop_overlay_lines(int kind, double x0, double y0, double x1, double y1, do
 /* ------------------------------------------------------------------ the Move tool */
 /* the layer Auto-Select picks for layer i: i itself, or with group the outermost group it is in */
 int  auto_select_target(const Doc *d, int i, int group);
+/* ------------------------------------------------------------------ painting on the grid */
+/* DPaint's grid snap for the painting tools: x, y moved to the nearest grid point (the picture's
+   grid spacing and offset, 16 pixels when unset; at the pixel's centre, where a dab lands) */
+void grid_snap_paint(const Doc *d, double *x, double *y);
+
+/* ------------------------------------------------------------------ the History panel */
+/* History > Delete: undo step k (0 the oldest) and every step after it taken away, the picture
+   going back to the state before k (k -1: the last step done). 0 if there is no such step */
+int  doc_delete_state(Doc *d, int k);
 #endif

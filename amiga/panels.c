@@ -923,7 +923,7 @@ static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
   case MUIM_CreateShortHelp: {
     static const char *const bn[NHB] = { "New Document from State", "New Snapshot", "Delete Snapshot" };
     static const char *const bb[NHB] = { "A new picture, a copy of this one as it is now.", "Keeps a copy of the whole picture as it is now, at the top of the list. Click it later to go back to it (as a step you can undo).",
-      "Deletes the snapshot you clicked last." };
+      "Deletes the snapshot you clicked last; or else the step in effect and the ones after it." };
     struct MUIP_CreateShortHelp *m = (struct MUIP_CreateShortHelp *)msg;
     int b = hist_button_at(obj, m->mx, m->my);
     if (!cur_doc()) return 0;
@@ -940,7 +940,7 @@ static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     if (!im || !d->shown || !doc || im->Class != IDCMP_MOUSEBUTTONS || im->Code != SELECTDOWN) return 0;
     if (im->MouseX < _mleft(obj) || im->MouseX > _mright(obj) || im->MouseY < _mtop(obj) || im->MouseY > _mbottom(obj)) return 0;
     if ((b = hist_button_at(obj, im->MouseX, im->MouseY)) >= 0) {
-      if (b != 2 || hist_pick >= 0) DoMethod(_app(obj), MUIM_Application_ReturnID, hist_ids[b]);
+      DoMethod(_app(obj), MUIM_Application_ReturnID, hist_ids[b]);     /* (1.1: the bin deletes a step too) */
       return MUI_EventHandlerRC_Eat;
     }
     if (im->MouseY >= hist_bottom(obj)) return MUI_EventHandlerRC_Eat;
@@ -954,6 +954,7 @@ static ULONG histdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
       return MUI_EventHandlerRC_Eat;
     }
     k -= ns;
+    hist_pick = -1;                     /* (1.1: the bin now means this step) */
     /* back (or forward) to that step */
     while (done - 1 > k && doc_undo(doc)) done--;
     while (done - 1 < k && doc_redo(doc)) done++;

@@ -1853,6 +1853,7 @@ static void command(ULONG id)
   /* 0.4: rulers, grid and guides */
   case ID_RULERS: d->guides.show_rulers = !d->guides.show_rulers; DoMethod(canvas, MUIM_Canvas_Refresh); break;
   case ID_SHOWGRID: d->guides.show_grid = !d->guides.show_grid; break;
+  case ID_SHOWEDGES: extras_hidden = !extras_hidden; DoMethod(canvas, MUIM_Canvas_Refresh); break;   /* (1.1: Ctrl-H, View > Extras) */
   case ID_SHOWGUIDES: d->guides.show_guides = !d->guides.show_guides; break;
   case ID_SNAP: d->guides.snap = d->guides.snap ? 0 : SNAP_GUIDES | SNAP_GRID | SNAP_EDGES | SNAP_CENTER; break;
   case ID_GRIDSET: {
@@ -2034,6 +2035,16 @@ static void command(ULONG id)
   case ID_HISTSNAPDEL: {
     DocView *v = cur_view();
     int k = hist_pick;
+    if (v && (k < 0 || k >= v->nhsnap)) {
+      /* 1.1: no snapshot picked: the step in effect deleted, with the ones after it */
+      char msg[160];
+      if (!doc_can_undo(v->doc)) return;
+      snprintf(msg, sizeof msg, tr("Delete the step \"%s\" and the steps after it?"), doc_undo_name(v->doc));
+      if (ask("Delete|Cancel", "%s", msg) != 1) return;
+      if (!doc_delete_state(v->doc, -1)) ask("OK", "%s", tr("That step can't be deleted."));
+      refresh_all();
+      return;
+    }
     if (!v || k < 0 || k >= v->nhsnap) return;
     doc_free(v->hsnap[k]);
     memmove(&v->hsnap[k], &v->hsnap[k + 1], (size_t)(v->nhsnap - k - 1) * sizeof v->hsnap[0]);
@@ -2048,6 +2059,16 @@ static void command(ULONG id)
     DoMethod(canvas, MUIM_Canvas_Cancel);
     if (!state_restore(v->doc, v->hsnap[hist_pick], v->hsnap_name[hist_pick])) ask("OK", "%s", tr("There isn't enough memory for that."));
     refresh_all();
+    return; }
+  case ID_HISTBRUSHSRC: {
+    /* 1.1: the History Brush's source: the History panel's snapshot (its layer in use) */
+    DocView *v = cur_view();
+    Snapshot *sn;
+    if (!v) return;
+    if (hist_pick < 0 || hist_pick >= v->nhsnap) { ask("OK", "%s", tr("Click a snapshot in the History panel first (or make one with its camera button).")); return; }
+    if (v->hsnap[hist_pick]->w != v->doc->w || v->hsnap[hist_pick]->h != v->doc->h) { ask("OK", "%s", tr("That snapshot is another size from the picture now, so the History Brush can't paint from it.")); return; }
+    if (!(sn = snapshot_take(v->hsnap[hist_pick]))) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+    snapshot_free(v->snap); v->snap = sn;
     return; }
   case ID_HISTNEWDOC: {
     DocView *v = cur_view();

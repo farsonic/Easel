@@ -309,8 +309,41 @@ static void overlays(void)
   ok("empty box", crop_overlay_lines(CO_THIRDS, 5, 5, 5, 9, 0, s, 100) == 0);
 }
 
+static void grid_snap(void)
+{
+  Doc *d = doc_new(100, 100, 0, 0);
+  double x = 21, y = 7.9;
+  grid_snap_paint(d, &x, &y);
+  ok("grid snap, default 16", x == 16.5 && y == 0.5);
+  d->guides.grid_x = 10; d->guides.grid_y = 20; d->guides.grid_ox = 3; d->guides.grid_oy = -5;
+  x = 21; y = 26; grid_snap_paint(d, &x, &y);
+  ok("grid snap with spacing and offset", x == 23.5 && y == 35.5);
+  doc_free(d);
+}
+
+static void delete_state(void)
+{
+  Doc *d = doc_new(20, 20, 0xFFFFFF, 0);
+  Brush b = brush(PT_BRUSH, 6, 100, 100);
+  const char *names[8];
+  doc_forget_undo(d);
+  line(d, &b, 0xFF0000, 2, 2, 18, 2);
+  line(d, &b, 0x00FF00, 2, 10, 18, 10);
+  line(d, &b, 0x0000FF, 2, 17, 18, 17);
+  ok("three steps", doc_history(d, names, 8) == 3);
+  doc_undo(d);
+  ok("delete a step past the end refused", !doc_delete_state(d, 3) && !doc_delete_state(d, -5));
+  ok("delete the second step", doc_delete_state(d, 1));
+  ok("one step left, none to redo", doc_history(d, names, 8) == 1 && !doc_can_redo(d));
+  ok("its change gone, the first kept", px(d, 0, 10, 10)[1] == 255 && px(d, 0, 10, 10)[0] == 255 && px(d, 0, 10, 2)[1] == 0);
+  ok("delete the first (the last done)", doc_delete_state(d, -2) == 0 && doc_delete_state(d, -1) && !doc_can_undo(d) && px(d, 0, 10, 2)[1] == 255);
+  doc_free(d);
+}
+
 int main(void)
 {
+  delete_state();
+  grid_snap();
   curves();
   tone_strokes();
   clone_tools();
