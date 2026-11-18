@@ -936,7 +936,7 @@ u8 *xwrite_doc(Doc *d, int fmt, int sub, int quality, size_t *len)
   im.w = d->w; im.h = d->h;
   if (!(im.px = doc_flat_rgba(d))) return NULL;
   switch (fmt) {
-  case FMT_WEBP: data = webp_encode_lossless(&im, len); break;
+  case FMT_WEBP: data = sub > 0 && sub <= 100 ? webp_encode_lossy(&im, sub, len) : webp_encode_lossless(&im, len); break;   /* (1.2: lossy) */
   case FMT_PDF_OUT: data = pdf_encode(&im, d->dpi, d->mode == MODE_GRAY || d->mode == MODE_BITMAP, quality, &d->info, len); break;
   case FMT_PNM: data = pnm_encode(&im, sub == PNM_AUTO && d->mode == MODE_BITMAP ? PNM_PBM : sub, len); break;
   case FMT_QOI: data = qoi_encode(&im, len); break;

@@ -18,6 +18,9 @@
 /* WebP lossless (VP8L): the subtract-green and predictor transforms, LZ77 with a hash chain,
    length-limited Huffman codes. Alpha is kept (and flagged) when anything isn't opaque */
 u8 *webp_encode_lossless(const Rgba *im, size_t *len);
+/* 1.2: WebP lossy (VP8 key frame: 16x16 and chroma intra prediction, default probabilities, no loop
+   filter) at quality 1-100, alpha (when anything isn't opaque) in an uncompressed ALPH chunk */
+u8 *webp_encode_lossy(const Rgba *im, int quality, size_t *len);
 
 /* PDF 1.4, one page the picture's size at dpi (0: 72), the picture as one image: Flate-compressed
    RGB (grey when gray is set) with a soft mask for transparency, or (jpeg_quality 1-100) a JPEG
@@ -69,7 +72,7 @@ int  xwrite_sub_of_ext(const char *ext);
 /* a document written as one of xwrite's formats, from its composite: PNM and PDF follow its mode
    (Bitmap as PBM, Grayscale as a grey PDF); its dpi and File Info where the format keeps them.
    sub: PNM's PNM_ kind, DDS's DDS_ kind (with mipmaps), DPX 1 for 10 bits, ICO the largest size
-   (0: 256). quality: JPEG inside the PDF (0: Flate) */
+   (0: 256); 1.2: WebP 1-100 for lossy at that quality (0 lossless). quality: JPEG inside the PDF (0: Flate) */
 u8  *xwrite_doc(Doc *d, int fmt, int sub, int quality, size_t *len);
 
 #endif

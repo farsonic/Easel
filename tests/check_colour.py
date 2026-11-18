@@ -179,6 +179,30 @@ for si, size in ((0, (37, 23)), (1, (16, 16)), (2, (1, 1))):
         mx, mean = cmp_rgb(im.convert("RGB"), base.convert("RGB"))
         check(bool(ok) and im.size == size and mx == 0, "Pillow decodes Easel's progressive JPEG %s at %d exactly as its baseline one (max %d)" % (size, q, mx))
 
+# lossy WebP: libwebp (through Pillow) decodes Easel's VP8 to exactly Easel's own decoding, and the
+# picture is within a few decibels of what libwebp itself makes at the same quality
+import math
+def psnr(a, b):
+    e = [(x - y) ** 2 for x, y in zip(a.tobytes(), b.tobytes())]
+    m = sum(e) / len(e)
+    return 99.0 if m == 0 else 10 * math.log10(255 * 255 / m)
+for si, size in ((0, (61, 45)), (1, (16, 16)), (2, (3, 2))):
+    for q in (30, 75, 95):
+        wp = os.path.join(d, "lossy_%d_%d.webp" % (si, q))
+        if not os.path.exists(wp):
+            continue
+        im = Image.open(wp).convert("RGBA")
+        ours = Image.frombytes("RGBA", im.size, rd("lossy_%d_%d.rgba" % (si, q)))
+        mx, mean = cmp_rgb(im, ours)
+        check(im.size == size and mx == 0, "libwebp decodes Easel's lossy WebP %s at %d as Easel does (max %d)" % (size, q, mx))
+        if si == 0:
+            src = Image.frombytes("RGBA", size, rd("lossy_src_%d.rgba" % q)).convert("RGB")
+            b = io.BytesIO()
+            src.save(b, "WEBP", quality=q)
+            lib = Image.open(io.BytesIO(b.getvalue())).convert("RGB")
+            pe, pl = psnr(im.convert("RGB"), src), psnr(lib, src)
+            check(pe >= pl - 3, "Easel's lossy WebP at %d: %.1f dB, libwebp's %.1f dB" % (q, pe, pl))
+
 # PSD layer styles: psd-tools reads the lfx2 block Easel wrote
 fxp = os.path.join(d, "fx.psd")
 try:

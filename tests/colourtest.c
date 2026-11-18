@@ -969,6 +969,52 @@ static void test_progressive(void)
     }
 }
 
+/* ------------------------------------------------------------------ lossy WebP */
+static double psnr(const u8 *a, const u8 *b, long n)
+{
+  long k;
+  double se = 0;
+  for (k = 0; k < n; k++) { int c; for (c = 0; c < 3; c++) { double d = (double)a[k * 4 + c] - b[k * 4 + c]; se += d * d; } }
+  se /= n * 3.0;
+  return se <= 0 ? 99 : 10 * log10(255.0 * 255.0 / se);
+}
+static void test_webp_lossy(void)
+{
+  static const int qs[3] = { 30, 75, 95 }, sz[3][2] = { { 61, 45 }, { 16, 16 }, { 3, 2 } };
+  int qi, si;
+  double last = 0;
+  for (si = 0; si < 3; si++)
+    for (qi = 0; qi < 3; qi++) {
+      Doc *d = ramp_doc(sz[si][0], sz[si][1], si == 0 && qi == 1);
+      Rgba im, back;
+      u8 *f;
+      size_t n;
+      char err[100], name[40];
+      i32 x, y;
+      im.w = sz[si][0]; im.h = sz[si][1]; im.px = d->lay[0]->px;
+      /* (a disc and some noise, so prediction and every token kind get used) */
+      for (y = 0; y < im.h; y++) for (x = 0; x < im.w; x++) {
+        u8 *p = im.px + ((long)y * im.w + x) * 4;
+        if ((x - 30) * (x - 30) + (y - 20) * (y - 20) < 150) { p[0] = 250; p[1] = 220; p[2] = 30; }
+        if (((x * 7 + y * 13) % 11) == 0) { int g = p[1] + ((x + y) & 1 ? 24 : -24); p[0] = p[1] = (u8)(g < 0 ? 0 : g > 255 ? 255 : g); }   /* (grey speckles: luma detail) */
+      }
+      f = webp_encode_lossy(&im, qs[qi], &n);
+      CHECK(f != NULL, "a lossy WebP written");
+      CHECK(f && codec_detect(f, n) == FMT_WEBP && codec_decode(f, n, &back, err, sizeof err) && back.w == im.w && back.h == im.h, "Easel reads it");
+      if (back.px) {
+        double ps = psnr(im.px, back.px, (long)im.w * im.h);
+        if (si == 0) { CHECK(ps > (qs[qi] < 50 ? 19 : qs[qi] < 90 ? 22 : 23), "its quality (4:2:0 limits it at the disc's edge, as libwebp's)"); CHECK(ps >= last - 0.01, "better at a higher quality"); last = ps; }
+        if (si == 0 && qi == 1) { int a0 = back.px[3], a1 = back.px[(10L * im.w + 10) * 4 + 3]; CHECK(a0 == 0 && a1 == 255, "alpha kept (ALPH)"); }
+        snprintf(name, sizeof name, "lossy_%d_%d.webp", si, qs[qi]); save(name, f, n);
+        snprintf(name, sizeof name, "lossy_%d_%d.rgba", si, qs[qi]); save(name, back.px, (size_t)back.w * back.h * 4);
+        if (si == 0) { snprintf(name, sizeof name, "lossy_src_%d.rgba", qs[qi]); save(name, im.px, (size_t)im.w * im.h * 4); }
+        rgba_free(&back);
+      }
+      free(f);
+      doc_free(d);
+    }
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -989,6 +1035,7 @@ int main(int argc, char **argv)
   test_anim78();
   test_psdfx();
   test_progressive();
+  test_webp_lossy();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

@@ -152,7 +152,7 @@ static struct NewMenu menus[] = {
   I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
   H("Export"), S("Export As...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
-  S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
+  S("WebP...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
   S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7),
   S("Cineon...", 0, ID_EXPXW0 + 8), S("Radiance HDR...", 0, ID_EXPXW0 + 9), SBAR,                 /* 1.2 */
   S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), S("Paths to SVG...", 0, ID_EXPSVG), SBAR,
@@ -1256,6 +1256,12 @@ static void export_x(int fmt)
   } else if (fmt == FMT_DDS) {
     if (!(r = ask("BC3 (DXT5)|BC1 (DXT1)|Uncompressed|Cancel", "%s", tr("How should the texture be stored? (Each comes with its mipmaps.)")))) return;
     export_sub = r == 1 ? DDS_BC3 : r == 2 ? DDS_BC1 : DDS_RGBA;
+  } else if (fmt == FMT_WEBP) {
+    /* 1.2: lossless, or lossy at a quality */
+    static LONG wq = 80;
+    if (!(r = ask("Lossless|Lossy|Cancel", "%s", tr("Save the WebP picture without loss, or lossy (much smaller)?")))) return;
+    if (r == 2) { if (!ask_number("WebP Quality", "Quality (1-100):", &wq, 1, 100)) return; export_sub = (int)wq; }
+    else export_sub = 0;
   } else if (fmt == FMT_DPX) {
     if (!(r = ask("8 Bits|10 Bits|12 Bits|16 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
     export_sub = r == 1 ? 0 : r == 2 ? 1 : r == 3 ? 12 : 16;      /* (1.2: 12 and 16 bits) */
