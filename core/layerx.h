@@ -99,6 +99,10 @@ int  doc_smart_rasterize(Doc *d, int i);      /* an ordinary pixel layer again (
 int  doc_smart_to_layers(Doc *d, int i);      /* Convert to Layers: the source as a pixel layer at its place, untransformed */
 int  layer_is_smart(const Layer *l);
 const char *layer_smart_path(const Layer *l); /* where its source is ("" none): Show in Drawer, Edit Contents */
+/* a new file name for a source in smart_drawer (0 if none could be found); and a layer's source moved
+   there (OpenRaster reading an embedded one) */
+int  smart_new_file(char *out, size_t cap);
+int  layerx_set_smart_path(Layer *l, const char *path);
 /* Open as Smart Object: a new document of the picture at file, its one layer a smart object */
 Doc *smart_open(const char *file, char *err, int errcap);
 

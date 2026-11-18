@@ -60,7 +60,7 @@ typedef struct {
   AdjParams adj; FillParams fillp;
   char *live;                         /* 0.9: a type or shape layer's settings (easel:text, easel:shape), malloc'd */
   LayerFx fx; int label;              /* 1.1: the layer style (easel:effects) and colour label (easel:label) */
-  char *xnums, *xvpath, *xspath; char xpat[64];   /* 1.2: layerx.h's settings (easel:layerx, -path, -smart, -pattern) */
+  char *xnums, *xvpath, *xspath; char xpat[64], xsdata[64];   /* 1.2: layerx.h's settings (easel:layerx, -path, -smart, -pattern) */
   int link, artboard; Box abox; long abg;          /* 1.2: easel:link, easel:artboard */
 } OraLayer;
 
@@ -167,6 +167,7 @@ static void common_attrs(Xml *x, OraLayer *l)
   if ((a = xml_attr(x, "layerx-path"))) l->xvpath = str_dup(a);
   if ((a = xml_attr(x, "layerx-smart"))) l->xspath = str_dup(a);
   if ((a = xml_attr(x, "layerx-pattern"))) copy_name(l->xpat, sizeof l->xpat, a);
+  if ((a = xml_attr(x, "layerx-smartdata"))) copy_name(l->xsdata, sizeof l->xsdata, a);
   if ((a = xml_attr(x, "link"))) l->link = atoi(a) & 0xFFFF;
   if ((a = xml_attr(x, "artboard")) && read_ints(a, v, 6) == 6) {
     l->artboard = v[0] == 2 ? 2 : 1; l->abox = box_make(v[1], v[2], v[3], v[4]); l->abg = v[5];
@@ -329,6 +330,15 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
         int hp = o->xpat[0] && read_picture(&z, o->xpat, &pim);
         layerx_from_text(l, o->xnums, o->xvpath, o->xspath, hp ? pim.px : NULL, hp ? pim.w : 0, hp ? pim.h : 0);
         if (hp) rgba_free(&pim);
+        if (o->xsdata[0]) {
+          /* an embedded smart object's source: out to a new file in the drawer */
+          int zi = zip_find(&z, o->xsdata);
+          size_t sl;
+          u8 *sd = zi >= 0 ? zip_read(&z, zi, &sl) : NULL;
+          char sp[256];
+          if (sd && smart_new_file(sp, sizeof sp) && file_write(sp, sd, sl)) layerx_set_smart_path(l, sp);
+          free(sd);
+        }
       }
       /* a layer whose picture is missing or damaged stays empty rather than losing the rest */
       if (l->px && read_picture(&z, o->src, &im)) {
@@ -483,6 +493,17 @@ static void put_common(Buf *xml, ZipWriter *zw, Doc *doc, int i, int *ok)
       buf_adds(xml, " easel:layerx=\""); xml_escape(xml, t.nums, strlen(t.nums)); buf_adds(xml, "\"");
       if (*t.vpath) { buf_adds(xml, " easel:layerx-path=\""); xml_escape(xml, t.vpath, strlen(t.vpath)); buf_adds(xml, "\""); }
       if (*t.spath) { buf_adds(xml, " easel:layerx-smart=\""); xml_escape(xml, t.spath, strlen(t.spath)); buf_adds(xml, "\""); }
+      if (layer_is_smart(l) && !layerx_get(l)->so_linked) {
+        /* an embedded smart object's source goes in the file (stored: it is a PNG already) */
+        size_t sl;
+        u8 *sd = file_read(t.spath, &sl);
+        if (sd) {
+          sprintf(name, "data/smart%d.png", i);
+          if (!zip_add_stored(zw, name, sd, sl)) *ok = 0;
+          buf_printf(xml, " easel:layerx-smartdata=\"%s\"", name);
+          free(sd);
+        }
+      }
       if (t.pat) {
         sprintf(name, "data/pattern%d.png", i);
         if (!store_png(zw, name, t.pat, NULL, t.pw, box_make(0, 0, t.pw, t.ph))) *ok = 0;

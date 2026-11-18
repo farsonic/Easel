@@ -196,12 +196,28 @@ static void test_smart(void)
   CHECK(doc_smart_update_all(d) == 1, "update linked");
   CHECK(doc_smart_embed(d, 2) && !layerx_get(d->lay[2])->so_linked, "embedded");
   {
+    /* an embedded source goes inside the OpenRaster file and comes out to a new file */
+    size_t n;
+    u8 *ora = ora_write(d, &n);
+    char err[80];
+    Doc *e = ora ? ora_read(ora, n, err, sizeof err) : NULL;
+    CHECK(e && layer_is_smart(e->lay[2]) && strcmp(layer_smart_path(e->lay[2]), layer_smart_path(d->lay[2])), "embedded source kept in OpenRaster");
+    if (e) { double m[6] = { 1, 0, 3, 0, 1, 0 }; CHECK(doc_smart_transform(e, 2, m), "and usable"); remove(layer_smart_path(e->lay[2])); doc_free(e); }
+    free(ora);
+  }
+  {
     Doc *o = smart_open(out, NULL, 0);
     CHECK(o && o->w == 20 && layer_is_smart(o->lay[0]), "open as smart object");
     if (o) { remove(layer_smart_path(o->lay[0])); doc_free(o); }
   }
   remove(layer_smart_path(d->lay[2]));
   remove(out);
+  {
+    /* (the sources left for undo) */
+    char p2[300];
+    int k;
+    for (k = 1; k < 40; k++) { snprintf(p2, sizeof p2, "%s/EaselSmart%04d.png", tmpdir, k); remove(p2); }
+  }
   doc_free(d);
 }
 

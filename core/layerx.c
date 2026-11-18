@@ -456,6 +456,14 @@ static void smart_name(char *out, size_t cap)
     fclose(f);
   }
 }
+int smart_new_file(char *out, size_t cap) { smart_name(out, cap); return out[0] != 0; }
+int layerx_set_smart_path(Layer *l, const char *path)
+{
+  LayerX *h = (LayerX *)l->x;
+  if (!layerx_get(l)) return 0;
+  strncpy(h->so_path, path, sizeof h->so_path - 1); h->so_path[sizeof h->so_path - 1] = 0;
+  return 1;
+}
 static int write_png(const char *path, const u8 *px, i32 w, i32 h)
 {
   Rgba im;
