@@ -9,6 +9,21 @@ CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c cor
 CORE="$CORE core/toolopts.c"     # 1.1: tool options
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
+  # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
+  # interface translated and every row used (langcheck lists what is missing), then tr() and the table
+  python3 tools/mklang.py --check
+  python3 tools/langcheck.py > $T/easel_langcheck.txt || { cat $T/easel_langcheck.txt; exit 1; }
+  tail -1 $T/easel_langcheck.txt
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/langtest.c -o $T/easel_langtest
+  $T/easel_langtest > $T/easel_langtest.txt || { cat $T/easel_langtest.txt; exit 1; }
+  tail -1 $T/easel_langtest.txt
+  # the translations still fit 640x480 (measured with QuillSans 11 when a Fonts drawer is found; EASEL_FONTS=<dir>)
+  python3 tools/langfit.py > $T/easel_langfit.txt || { cat $T/easel_langfit.txt; exit 1; }
+  tail -1 $T/easel_langfit.txt
+  # 1.1: the context menus' contents (amiga/ctxmenu.c is plain C)
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/ctxtest.c -o $T/easel_ctxtest
+  $T/easel_ctxtest > $T/easel_ctxtest.txt || { cat $T/easel_ctxtest.txt; exit 1; }
+  tail -1 $T/easel_ctxtest.txt
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }

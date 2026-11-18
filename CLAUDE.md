@@ -16,6 +16,7 @@ picking the work up. Read it first, then `README.md` (what Easel does, version b
 | `core/` | Portable C99: the document, layers and blending (`doc.c`, `layers.c`, `live.c`), painting, brushes and strokes, selections, transforms, adjustments and filters, type and paths, every codec (`png.c`, `jpegenc.c`, `gif.c`, `ilbm.c`, `tiff.c`, `psd.c`, `ora.c`, `webp.c`, `avif.c`, `rasters.c`...), the TrueType rasteriser. No AmigaOS calls: built and tested on Linux/macOS. |
 | `amiga/` | The MUI front end: `main.c`, `canvas.c` (the picture view), `panels.c`/`panels2.c`, `dialogs.c`, `jobs.c` (long jobs with progress and Abort), `keys.c`, `lang.c` (interface strings), `convert.c` (EaselConvert, the batch Shell command), `dtload.c` (datatypes as a last-resort reader). |
 | `av1/` | dav1d (BSD 2-clause) ported to vbcc, for AVIF: `build-av1.sh amiga` (vbcc objects) or `native` (a sanitizer library for the tests). Changes are described in `Licenses.txt`. |
+| `lang/` | `strings.txt`: every interface string with its German, French, Spanish and Italian rows (Photoshop's terms); `ignore.txt`: literals that are not words. `tools/mklang.py` makes `amiga/lang_table.h`, `tools/langcheck.py` and `tools/langfit.py` check it. |
 | `tests/` | Native tests (`*test.c`), Python cross-checks against Pillow and others (`check_*.py`), test data generators (`make_*.py`). |
 | `tools/` | `test.sh` (native tests, what CI runs), `package.sh` (builds the release `.lha`), `Install-Easel` (Installer script), `mkicons.py`, `vbcc-aos68k-fpu` (the vbcc config used for the 68040+FPU build). |
 | `docs/` | `photocraft-gap.md` (every PhotoCraft feature rated have/partial/missing), `gui-guide/` (how the four MUI programs Quill, Ledger, Easel and Folio are laid out, with screenshots). |
@@ -53,7 +54,13 @@ reference. RTG (15-32 bit) and AGA (dithered, 256 colours or fewer) screens both
   printing everything, rare `-O2` miscompiles - rewrite the loop). 68040 + FPU code.
 - The window fits 640x480; long jobs run through `amiga/jobs.c` with progress and Abort; memory is
   checked before big allocations and the user is told how much is needed.
-- Every interface string goes through `amiga/lang.c`/`lang_table.h` (English plus the translations).
+- Every interface string goes through `tr()` (`amiga/lang.c`) and has a row in `lang/strings.txt` with
+  its German, French, Spanish and Italian translations, in Photoshop's terms for each language. After
+  adding or changing strings: `python3 tools/langcheck.py --rows` prints the missing rows to paste and
+  translate, then `python3 tools/mklang.py` makes `amiga/lang_table.h`; `tools/test.sh` fails while a
+  string is untranslated or a row is unused, and `tools/langfit.py` checks the translations still fit
+  640x480. Menus, cycle gadgets (`tr_list`) and the options bar's fields are translated when shown, so
+  write their labels in English.
 - A new feature gets a native test, an update to its row in `docs/photocraft-gap.md`, and a README note.
 - Easel leaves out printing and ARexx on purpose.
 - Don't use `rm -rf` in scripts or by hand on shared machines; move things aside.
@@ -68,6 +75,12 @@ branches are merged into `main`. What is still missing is listed area by area in
 `docs/photocraft-gap.md`; its coverage summary (section 23) was counted before the 0.9/1.0 work and
 should be recounted. The README's "Not included" lists what may come next (clipboard export to other
 programs, animated brushes, guides dragged from the rulers).
+
+The interface is in English, German, French, Spanish and Italian (`lang/strings.txt`, Photoshop's terms
+in each language). The translations have been checked for fit with `tools/langfit.py`, not yet read on
+a real Amiga screen: a native speaker's look at each language, and a run in German at 640x480 on
+AmigaOS with MUI (dialogs and requesters use MUI's fonts there), are still to do. The right mouse
+button's menus (`amiga/ctxmenu.c`, `amiga/ctxmui.c`) also want checking on MUI 3.8 and on Zune.
 
 ## Issues
 

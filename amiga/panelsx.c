@@ -25,6 +25,7 @@
 #include "../core/fx.h"
 #include "../core/layerops.h"
 #include "../core/util.h"
+#include "ctxmui.h"
 
 #define ACTIONS_FILE "PROGDIR:Easel.actions"
 #define STYLES_FILE "PROGDIR:Easel.styles"
@@ -83,6 +84,7 @@ void mx_free(void)
   if (styles_read) file_save_text(STYLES_FILE, stylelib_save(&styles));
   stylelib_free(&styles);
   mx_context_free();
+  ctx_free();                                  /* (1.1's right-button menus, ctxmui.c) */
 }
 static void styles_ready(void)
 {

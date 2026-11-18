@@ -29,6 +29,8 @@
 #include "brushwin.h"
 #include "../core/guides.h"
 #include "theme.h"
+#include "screenpick.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "../core/retouch.h"
 #include "ids.h"
@@ -2162,7 +2164,15 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     if (labs(mx - d->zs_mx) > 3) d->zs_moved = 1;
     if (d->zs_moved) { ov_hide(d, obj); zoom_to(d, obj, d->zs_z * pow(2.0, (mx - d->zs_mx) / 100.0), d->zs_mx, d->zs_my); }
     break;
-  case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
+  case DR_PICK: {
+    int bg = (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER;
+    if (doc && x >= 0 && y >= 0 && x < doc->w && y < doc->h) pick(d, obj, x, y, bg);
+    else if (doc && tool == TL_EYEDROPPER) {
+      /* 1.1: dragged off the picture, the colour on the screen there (panels, other windows) */
+      LONG c = screen_pixel(_window(obj), mx, my);
+      if (c >= 0) { if (bg) doc->bg = (u32)c; else doc->fg = (u32)c; set(obj, MUIA_Canvas_Picked, TRUE); }
+    }
+    break; }
   case DR_STROKE:
     if (doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);   /* (1.1) */
     if (d->stroke) { stroke_to(d->stroke, x, y, &ch); d->sbox = box_union(d->sbox, ch); mask_painted(doc); update_box(d, obj, ch); }
@@ -2712,10 +2722,41 @@ static void mset(struct Data *d, Object *obj, struct opSet *m)
     }
   }
 }
+/* 1.1: the right mouse button over the picture (MUIM_ContextMenuBuild): the tool's menu
+   (ctxmenu.c). The layers with something under the pointer are found for the Move tool's list (and
+   Ctrl's, with any tool); with the Type tool a type layer there becomes the active one first */
+static Object *canvas_context(struct Data *d, Object *obj, LONG mx, LONG my)
+{
+  Doc *doc = cur_doc();
+  CtxState s;
+  int under[CTX_MAXUNDER], n = 0, i;
+  if (d->drag || type_editing) return NULL;
+  ctx_state(&s);
+  s.ctrl = (d->qual & IEQUALIFIER_CONTROL) != 0;
+  if (doc) {
+    double fx = to_ix(d, obj, mx), fy = to_iy(d, obj, my);
+    if (fx >= 0 && fy >= 0 && fx < doc->w && fy < doc->h) {
+      i32 x = (i32)fx, y = (i32)fy;
+      for (i = doc->nlay - 1; i >= 0 && n < CTX_MAXUNDER; i--)
+        if (doc->lay[i]->visible && layer_has(doc, doc->lay[i], x, y)) under[n++] = i;
+    }
+    if (s.tool == CK_TYPE && n && doc->lay[under[0]]->kind == LK_TEXT && under[0] != doc->active) {
+      doc->active = under[0]; changed(d, obj); tell_changed(d, obj); ctx_state(&s);
+    }
+  }
+  ctx_set_under(&s, under, n);
+  {
+    /* a tool without a menu of its own: the general one (menux.c, 1.2) */
+    Object *m = ctx_show(CTX_CANVAS, &s);
+    return m ? m : doc ? mx_context_menu() : NULL;
+  }
+}
 static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct Data *d;
   switch (msg->MethodID) {
+  case MUIM_ContextMenuBuild: return (ULONG)canvas_context(INST_DATA(cl, obj), obj, ((struct MUIP_ContextMenuBuild *)msg)->mx, ((struct MUIP_ContextMenuBuild *)msg)->my);
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);   /* (either menu's item: its command, as if from the menus) */
   case OM_NEW:
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     d = INST_DATA(cl, obj);
@@ -2726,9 +2767,11 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     d->ihn.ihn_Object = obj; d->ihn.ihn_Flags = MUIIHNF_TIMER; d->ihn.ihn_Method = MUIM_Canvas_Tick;
     d->ihn.ihn_stuff.ihn_timer.ihn_millis = 250;
     mset(d, obj, (struct opSet *)msg);
+    ctx_attach(obj, CTX_CANVAS);                 /* (1.1: the right button's menu) */
     return (ULONG)obj;
   case OM_DISPOSE:
     d = INST_DATA(cl, obj);
+    ctx_detach(obj, CTX_CANVAS);
     comp_free(d);
     if (d->rowbuf) FreeVec(d->rowbuf);
     if (d->view) FreeVec(d->view);
@@ -2831,13 +2874,6 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
       else MUI_Redraw(obj, MADF_DRAWOBJECT);
     }
     return 0;
-  case MUIM_ContextMenuChoice: {
-    /* 1.2: an item of the canvas's context menu (menux.c): its command, as if from the menus */
-    struct MUIP_ContextMenuChoice *m = (struct MUIP_ContextMenuChoice *)msg;
-    ULONG ud = 0;
-    if (m->item) get(m->item, MUIA_UserData, &ud);
-    if (ud) DoMethod(_app(obj), MUIM_Application_ReturnID, ud);
-    return 0; }
   case MUIM_Canvas_Update: {
     struct MUIP_Canvas_Update *m = (struct MUIP_Canvas_Update *)msg;
     update_box(INST_DATA(cl, obj), obj, box_make(m->x0, m->y0, m->x1, m->y1));

@@ -39,7 +39,7 @@ static Object *numfield(double v)
 }
 static Object *cycle(const char **labels, int active)
 {
-  return CycleObject, MUIA_Cycle_Entries, (ULONG)labels, MUIA_Cycle_Active, active, MUIA_CycleChain, 1, End;
+  return CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list((const char *const *)labels), MUIA_Cycle_Active, active, MUIA_CycleChain, 1, End;   /* (1.1: in the language chosen) */
 }
 static Object *check(int on)
 {

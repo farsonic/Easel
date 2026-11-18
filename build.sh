@@ -12,6 +12,8 @@ CORE="$CORE core/toolopts.c"     # 1.1: tool options
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
 if [ "$1" != "fast" ]; then
+  # 1.1: the interface languages (lang/strings.txt, amiga/lang_table.h, every string translated)
+  python3 tools/mklang.py --check && python3 tools/langcheck.py | tail -1
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c /tmp/easel_dav1d/libdav1d.a -o /tmp/easel_$1 -lm -lpthread; }

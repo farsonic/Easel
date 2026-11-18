@@ -165,7 +165,7 @@ static ULONG popdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
       LONG y = _mtop(obj) + 2 + i * rowh();
       if (i == p->hot) theme_fill(rp, _mleft(obj) + 1, y, _mright(obj) - 1, y + rowh() - 1, tpen(T_ACCENTDARK));
       if (i == p->cur) theme_fill(rp, _mleft(obj) + 4, y + rowh() / 2 - 2, _mleft(obj) + 7, y + rowh() / 2 + 1, tpen(T_TEXT));
-      theme_text(rp, theme_font(), _mleft(obj) + 12, y + 2, p->labels[i], tpen(i == p->hot ? T_WHITE : T_TEXT));
+      theme_text(rp, theme_font(), _mleft(obj) + 12, y + 2, tr(p->labels[i]), tpen(i == p->hot ? T_WHITE : T_TEXT));
     }
     return 0;
   }
@@ -210,7 +210,7 @@ void popup_list(Object *owner, LONG x, LONG y, LONG w, const char *const *labels
   set(popwin, MUIA_Window_Open, FALSE);
   p = INST_DATA(pcls->mcc_Class, poplist);
   p->owner = owner; p->attr = attr; p->labels = labels; p->n = n; p->cur = cur; p->hot = -1;
-  for (i = 0; i < n; i++) { LONG tw = theme_textlen(rp, theme_font(), labels[i]) + 24; if (tw > w) w = tw; }
+  for (i = 0; i < n; i++) { LONG tw = theme_textlen(rp, theme_font(), tr(labels[i])) + 24; if (tw > w) w = tw; }
   p->w = w;
   if (y + n * rowh() + 12 > scr->Height) y = scr->Height - n * rowh() - 12;
   if (y < 0) y = 0;

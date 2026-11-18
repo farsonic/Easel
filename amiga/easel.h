@@ -293,6 +293,7 @@ typedef struct {
   int undo_mb, undo_levels;           /* undo's memory and states */
   int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
   int skip_place_xf;                  /* 1.1: Place as Layer doesn't go on into Free Transform */
+  int language;                       /* 1.1: LANG_ (lang.h), or -1: the one Locale prefs prefer */
   /* 1.2: Transparency (core/viewx.h: the checkerboard's size 0-3 and CHK_ scheme, the custom colours);
      grid and guide line styles (LS_); Units & Rulers' screen resolution, column and gutter widths
      (pixels) and point size (0 PostScript, 72 a inch; 1 traditional, 72.27); the history log */

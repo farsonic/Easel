@@ -29,6 +29,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "theme.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "ids.h"
 #include "fxids.h"                    /* 1.1 */
@@ -333,8 +334,21 @@ static const char *menu_label(ULONG id)
 {
   int i;
   for (i = 0; menus[i].nm_Type != NM_END; i++)
-    if ((menus[i].nm_Type == NM_ITEM || menus[i].nm_Type == NM_SUB) && menus[i].nm_Label != NM_BARLABEL && (ULONG)menus[i].nm_UserData == id) return (const char *)menus[i].nm_Label;
+    if ((menus[i].nm_Type == NM_ITEM || menus[i].nm_Type == NM_SUB) && menus[i].nm_Label != NM_BARLABEL && (ULONG)menus[i].nm_UserData == id) return tr((const char *)menus[i].nm_Label);
   return NULL;
+}
+/* 1.1: the menus in the language chosen, for the menu strip: a copy of menus[] with each label put
+   through tr() (menus[] itself stays in English: Keyboard Shortcuts and Easel.keys name commands by it) */
+#define NMENUS ((int)(sizeof menus / sizeof menus[0]))
+static struct NewMenu menus_tr[NMENUS];
+static struct NewMenu *menus_translated(void)
+{
+  int i;
+  for (i = 0; i < NMENUS; i++) {
+    menus_tr[i] = menus[i];
+    if (menus[i].nm_Label && menus[i].nm_Label != NM_BARLABEL) menus_tr[i].nm_Label = (STRPTR)tr((const char *)menus[i].nm_Label);
+  }
+  return menus_tr;
 }
 DocView *cur_view(void) { return curdoc >= 0 && curdoc < ndocs ? &docs[curdoc] : NULL; }
 Doc *cur_doc(void) { DocView *v = cur_view(); return v ? v->doc : NULL; }
@@ -1964,6 +1978,13 @@ static void command(ULONG id)
 {
   Doc *d = cur_doc();
   Box ch;
+  if (id >= ID_CTX_LAYER0 && id < ID_CTX_LAST) {     /* 1.1: the right button's menus' own commands (ctxmui.c) */
+    int sw; ULONG then;
+    if (!ctx_command(id, &sw, &then)) return;
+    if (sw >= 0 && sw != curdoc) doc_switch(sw);
+    if (then) command(then);
+    return;
+  }
   if (mx_recording || prefs.history_log) mx_record(id, menu_label(id));   /* 1.2: into the action being recorded, and the history log */
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
@@ -2060,14 +2081,14 @@ static void command(ULONG id)
     }
     return; }
   case ID_ABOUT:
-    ask("OK", "%s", "\33cEasel 1.0\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
+    ask("OK", "%s", tr("\33cEasel 1.0\n\nA picture editor for the Amiga, laid out as PhotoCraft is.\n\n"
         "Live layers (groups, masks, adjustment and fill layers), palettes,\nindexed pictures and colour cycling, the Amiga's screen modes,\n"
         "brushes, gradients and patterns, selections and transforms,\neditable type, paths and shapes, retouching tools, adjustments and filters.\n"
         "Reads and writes PNG, JPEG, BMP, GIF, TIFF, Targa, Photoshop PSD,\nIFF ILBM and OpenRaster (.ora), and reads many more.\n\n"
         "Written in C for MUI; drawn with its own icons.\n\n"
         "AVIF decoding: dav1d, by VideoLAN and the dav1d authors.\n"
         "Picture readers and brush code ported from PhotoCraft,\nby the ArtCraft Team and the PhotoCraft contributors.\n"
-        "Fonts: Liberation, Carlito and Caladea.\nSee Licenses.txt for their licences.");
+        "Fonts: Liberation, Carlito and Caladea.\nSee Licenses.txt for their licences."));
     return;
   case ID_SCR_WINDOW: screen_switch(SM_WINDOW); save_prefs(); return;
   case ID_SCR_OWN: screen_switch(SM_SCREEN); save_prefs(); return;
@@ -2629,7 +2650,7 @@ static Object *flat(int horiz) { return NewObject(flatscroll_class()->mcc_Class,
 static Object *head(const char *const *labels) { return NewObject(head_class()->mcc_Class, NULL, MUIA_Head_Labels, (ULONG)labels, TAG_DONE); }
 static int win_make(void)
 {
-  Object *strip = MUI_MakeObject(MUIO_MenustripNM, (ULONG)menus, 0);
+  Object *strip = MUI_MakeObject(MUIO_MenustripNM, (ULONG)menus_translated(), 0);
   /* the whole screen below its title bar, as PhotoCraft fills its screen (0.8: or all of Easel's own
      screen, without borders, in Full Screen) */
   struct Screen *scr = LockPubScreen((STRPTR)(pub_screen[0] ? pub_screen : NULL));
@@ -2873,7 +2894,7 @@ int main(int argc, char **argv)
   if (prefs.screen_mode != SM_WINDOW && !arg_screen[0]) { if (own_open()) strcpy(pub_screen, OWN_NAME); else prefs.screen_mode = SM_WINDOW; }
   else if (arg_screen[0]) prefs.screen_mode = SM_WINDOW;
   LOG("Easel starting, cybergraphics %p", (void *)CyberGfxBase);
-  lang_set(LANG_EN);
+  lang_set(prefs.language >= 0 && prefs.language < UI_NLANG ? prefs.language : lang_system());   /* (1.1) */
   theme_set_dark(pref_dark);
   opts_defaults();
   splash_open(pub_screen, "Easel 1.0");

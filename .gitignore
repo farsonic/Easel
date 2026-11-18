@@ -6,3 +6,4 @@
 *.whl
 /EaselConvert
 amiga-mui-gui-guide.zip
+__pycache__/
