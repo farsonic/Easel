@@ -31,6 +31,8 @@
 #include "core/type.h"
 #include "core/fonts.h"
 #include "core/hyphen.h"
+#include "core/adjust.h"
+#include "core/adjust10.h"
 #include "core/gsub.h"
 #include "core/ttraster.h"
 
@@ -831,6 +833,59 @@ static void test_type(void)
   fonts_free(fs); free(fs);
 }
 
+/* ------------------------------------------------------------------ adjustments */
+static void test_replace_color(void)
+{
+  Doc *d = doc_new(30, 10, 0xFFFFFF, 0);
+  u8 *px = d->lay[0]->px;
+  u32 add[1] = { 0xFF8000 }, sub[1] = { 0xFF0400 };
+  i32 x, y;
+  /* red, orange and blue stripes */
+  for (y = 0; y < 10; y++)
+    for (x = 0; x < 30; x++) {
+      u8 *p = px + ((long)y * 30 + x) * 4;
+      if (x < 10) put(p, 255, 0, 0); else if (x < 20) put(p, 255, 128, 0); else put(p, 0, 0, 255);
+    }
+  CHECK(adj_replace_color(d, 0xFF0000, 40, 120, 0, 0), "replace red");
+  CHECK(px[1] > 100 && px[15 * 4] == 255 && px[15 * 4 + 1] == 128, "red turned, orange not");
+  doc_undo(d);
+  CHECK(adj_replace_color_ex(d, 0xFF0000, 40, 120, 0, 0, add, 1, NULL, 0), "add orange to the sample");
+  CHECK(px[1] > 100 && !(px[15 * 4] == 255 && px[15 * 4 + 1] == 128) && px[25 * 4 + 2] == 255 && px[25 * 4] == 0, "red and orange turned, blue not");
+  doc_undo(d);
+  CHECK(adj_replace_color_ex(d, 0xFF0000, 60, 120, 0, 0, NULL, 0, sub, 1), "subtract a red-orange");
+  CHECK(px[1] < 60, "red near the subtracted colour: barely changed");
+  doc_undo(d);
+  {
+    AdjParams p;
+    adj_defaults(AK_REPLACECOLOR, &p);
+    CHECK(replace_color_sample(&p, 0x00FF00, 0) && replace_color_sample(&p, 0x0000FF, 1) && p.npts == 2 && p.pts[3] == -1, "samples held");
+  }
+  doc_free(d);
+}
+static void test_acv(void)
+{
+  AdjParams p, q;
+  /* a Photoshop .acv as its documentation lays it out: version 4, two curves */
+  static const u8 acv[] = { 0, 4, 0, 2,
+    0, 3, 0, 0, 0, 0, 0, 160, 0, 128, 0, 255, 0, 255,      /* composite: (0,0) (128,160) (255,255) as output, input */
+    0, 2, 0, 20, 0, 0, 0, 235, 0, 255 };                   /* red: (0,20) (255,235) */
+  size_t n;
+  u8 *w, lut[768];
+  CHECK(curves_acv_read(acv, sizeof acv, &p), "an .acv read");
+  CHECK(p.kind == AK_CURVES && p.v[1] == 1 && p.v[2] == 3 && p.pts[2] == 128 && p.pts[3] == 160 && p.v[3] == 2 && p.pts[17] == 20, "its curves");
+  CHECK(p.v[4] == 2 && p.v[5] == 2, "green and blue straight");
+  adj10_curves_lut(&p, lut);
+  CHECK(lut[128 + 256] > 150 && lut[0] >= 20 && lut[128 + 512] > 150, "the composite lifts the middle, red the shadows");
+  CHECK((w = curves_acv_write(&p, &n)) != NULL, "written");
+  CHECK(w && curves_acv_read(w, n, &q) && !memcmp(q.v, p.v, 6 * sizeof(int)) && !memcmp(q.pts, p.pts, 64 * sizeof(int)), "read back the same");
+  free(w);
+  CHECK(!curves_acv_read(acv, 6, &q), "cut short: refused");
+  {
+    static const u8 bad[] = { 0, 4, 0, 1, 0, 2, 0, 0, 0, 200, 0, 255, 0, 100 };   /* (inputs falling) */
+    CHECK(!curves_acv_read(bad, sizeof bad, &q), "inputs out of order: refused");
+  }
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -849,6 +904,8 @@ int main(int argc, char **argv)
   test_subject();
   test_decontaminate();
   test_type();
+  test_replace_color();
+  test_acv();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

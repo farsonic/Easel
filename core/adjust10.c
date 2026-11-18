@@ -118,9 +118,17 @@ static double near_color(const u8 *p, const double *c, double fuzz)
 }
 static void fn_replace(u8 *p, const double *a)
 {
-  double w = near_color(p, a, a[3]);
+  double w = near_color(p, a, a[3]), wm = 0;
   u8 q[3];
-  int c;
+  int c, k, n = (int)a[7];
+  /* r3: Add to Sample and Subtract from Sample: the nearest added colour counts, and a nearby
+     subtracted one takes away from it */
+  for (k = 0; k < n && k < 10; k++) {
+    double v = near_color(p, a + 8 + 4 * k, a[3]);
+    if (a[8 + 4 * k + 3] > 0) { if (v > w) w = v; }
+    else if (v > wm) wm = v;
+  }
+  w *= 1 - wm;
   if (w <= 0 || (!a[4] && !a[5] && !a[6])) return;
   q[0] = p[0]; q[1] = p[1]; q[2] = p[2];
   hsl_shift(q, a[4], a[5], a[6]);
@@ -157,6 +165,12 @@ int adj10_pixfn(const AdjParams *p, Adj10Fn *fn, double *a, int *exact)
     a[0] = ((u32)p->v[0] >> 16) & 255; a[1] = ((u32)p->v[0] >> 8) & 255; a[2] = (u32)p->v[0] & 255;
     a[3] = p->v[1] < 0 ? 0 : p->v[1] > 200 ? 200 : p->v[1];
     a[4] = p->v[2]; a[5] = p->v[3]; a[6] = p->v[4];
+    /* r3: the sampled colours added and subtracted (pts: colour, +1 or -1 pairs) */
+    a[7] = p->npts < 0 ? 0 : p->npts > 10 ? 10 : p->npts;
+    for (i = 0; i < (int)a[7]; i++) {
+      u32 c = (u32)p->pts[2 * i];
+      a[8 + 4 * i] = (c >> 16) & 255; a[9 + 4 * i] = (c >> 8) & 255; a[10 + 4 * i] = c & 255; a[11 + 4 * i] = p->pts[2 * i + 1] >= 0 ? 1 : -1;
+    }
     *fn = fn_replace; *exact = 1;
     return 1;
   }
@@ -238,6 +252,82 @@ int adj_replace_color(Doc *d, u32 color, int fuzziness, int hue, int sat, int li
   p.kind = AK_REPLACECOLOR;
   p.v[0] = (int)(color & 0xFFFFFF); p.v[1] = fuzziness; p.v[2] = hue; p.v[3] = sat; p.v[4] = light;
   return adj_apply(d, &p, "Replace Color");
+}
+
+int adj_replace_color_ex(Doc *d, u32 color, int fuzziness, int hue, int sat, int light, const u32 *add, int nadd, const u32 *sub, int nsub)
+{
+  AdjParams p;
+  int k;
+  memset(&p, 0, sizeof p);
+  p.kind = AK_REPLACECOLOR;
+  p.v[0] = (int)(color & 0xFFFFFF); p.v[1] = fuzziness; p.v[2] = hue; p.v[3] = sat; p.v[4] = light;
+  for (k = 0; k < nadd && p.npts < 10; k++) { p.pts[2 * p.npts] = (int)(add[k] & 0xFFFFFF); p.pts[2 * p.npts + 1] = 1; p.npts++; }
+  for (k = 0; k < nsub && p.npts < 10; k++) { p.pts[2 * p.npts] = (int)(sub[k] & 0xFFFFFF); p.pts[2 * p.npts + 1] = -1; p.npts++; }
+  return adj_apply(d, &p, "Replace Color");
+}
+int replace_color_sample(AdjParams *p, u32 color, int subtract)
+{
+  if (p->kind != AK_REPLACECOLOR || p->npts < 0 || p->npts >= 10) return 0;
+  p->pts[2 * p->npts] = (int)(color & 0xFFFFFF); p->pts[2 * p->npts + 1] = subtract ? -1 : 1;
+  p->npts++;
+  return 1;
+}
+
+/* ------------------------------------------------------------------ r3: .acv files */
+int curves_acv_read(const u8 *data, size_t n, AdjParams *p)
+{
+  size_t o = 4;
+  int ver, count, c, k;
+  AdjParams q;
+  if (!data || n < 4) return 0;
+  ver = data[0] << 8 | data[1]; count = data[2] << 8 | data[3];
+  if ((ver != 1 && ver != 4) || count < 1 || count > 32) return 0;
+  memset(&q, 0, sizeof q);
+  q.kind = AK_CURVES; q.v[1] = 1; q.npts = 32;
+  for (c = 0; c < count; c++) {
+    int np, pts[2 * 32], m;
+    if (o + 2 > n) return 0;
+    np = data[o] << 8 | data[o + 1]; o += 2;
+    if (np < 2 || np > 32 || o + 4 * (size_t)np > n) return 0;
+    for (k = 0; k < np; k++) {
+      int out = data[o] << 8 | data[o + 1], in = data[o + 2] << 8 | data[o + 3];
+      o += 4;
+      if (out > 255 || in > 255) return 0;
+      pts[2 * k] = in; pts[2 * k + 1] = out;
+    }
+    for (k = 1; k < np; k++) if (pts[2 * k] <= pts[2 * k - 2]) return 0;      /* (inputs rise) */
+    if (c >= 4) continue;
+    m = np > CURVE10_MAX ? CURVE10_MAX : np;
+    for (k = 0; k < m; k++) {
+      int src = m == np ? k : (int)((long)k * (np - 1) / (m - 1));
+      q.pts[16 * c + 2 * k] = pts[2 * src]; q.pts[16 * c + 2 * k + 1] = pts[2 * src + 1];
+    }
+    q.v[2 + c] = m;
+  }
+  for (c = count; c < 4; c++) { q.v[2 + c] = 2; q.pts[16 * c] = 0; q.pts[16 * c + 1] = 0; q.pts[16 * c + 2] = 255; q.pts[16 * c + 3] = 255; }
+  *p = q;
+  return 1;
+}
+u8 *curves_acv_write(const AdjParams *pin, size_t *len)
+{
+  AdjParams p = *pin;
+  u8 *b, *o;
+  int c, k;
+  if (p.kind != AK_CURVES) return NULL;
+  if (p.v[1] != 1) curves10_convert(&p);
+  if (!(o = b = (u8 *)malloc(4 + 5 * (2 + 4 * CURVE10_MAX)))) return NULL;
+  *o++ = 0; *o++ = 4; *o++ = 0; *o++ = 5;
+  for (c = 0; c < 5; c++) {
+    int np = c < 4 ? p.v[2 + c] : 2;
+    if (np < 2 || np > CURVE10_MAX) np = 2;
+    *o++ = 0; *o++ = (u8)np;
+    for (k = 0; k < np; k++) {
+      int in = c < 4 && p.v[2 + c] >= 2 ? p.pts[16 * c + 2 * k] : k ? 255 : 0, out = c < 4 && p.v[2 + c] >= 2 ? p.pts[16 * c + 2 * k + 1] : k ? 255 : 0;
+      *o++ = 0; *o++ = (u8)(out < 0 ? 0 : out > 255 ? 255 : out); *o++ = 0; *o++ = (u8)(in < 0 ? 0 : in > 255 ? 255 : in);
+    }
+  }
+  *len = (size_t)(o - b);
+  return b;
 }
 
 /* ------------------------------------------------------------------ the frame for the rest */

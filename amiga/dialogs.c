@@ -616,11 +616,21 @@ static void presets_for(int kind)
   preset_labels[i + 1] = NULL;
   sd_cfg_cyc2 = preset_labels; sd_cfg_cyc2label = "Preset:"; sd_cfg_cyc2init = 0; sd_cfg_cyc2hook = adjpreset_pick;
 }
+static int is_acv(const char *path) { size_t n = strlen(path); return n > 4 && !Stricmp((STRPTR)path + n - 4, (STRPTR)".acv"); }
 static void adj_btn(int k)
 {
   Doc *d = cur_doc();
   int kind = adj_base.kind, picks = kind == AK_LEVELS || kind == AK_CURVES;
-  if (kind == AK_REPLACECOLOR) { if (d) adj_base.v[0] = (int)(d->fg & 0xFFFFFF); return; }
+  if (kind == AK_REPLACECOLOR) {
+    /* the foreground colour as the colour, added to the sample, taken from it; or the samples cleared (r3) */
+    if (!d) return;
+    if (k == 0) {
+      int how = sd_choice();                             /* (the list: set the colour, add to or subtract from the sample) */
+      if (how == 0) adj_base.v[0] = (int)(d->fg & 0xFFFFFF);
+      else if (!replace_color_sample(&adj_base, d->fg, how == 2)) ask("OK", "%s", tr("Replace Color holds ten sampled colours at most."));
+    } else adj_base.npts = 0;
+    return;
+  }
   if (kind == AK_BLACKWHITE && k == 2) {
     /* Auto (PhotoCraft #9301): the six weights that spread this layer's greys widest */
     int w6[6], i;
@@ -640,8 +650,15 @@ static void adj_btn(int k)
     if (kind == AK_LEVELS) adj_levels_pick(&adj_base, k, d->fg); else adj_curves_pick(&adj_base, k, d->fg);
   } else if (k == (picks ? 3 : 0)) {
     AdjParams p;
-    if (!ui_file_request(0, "Load Preset", preset_path, sizeof preset_path, "#?.preset")) return;
-    if (!adj_preset_load(preset_path, &p) || p.kind != kind) { ask("OK", "%s", tr("That file isn't a preset for this adjustment.")); return; }
+    if (!ui_file_request(0, "Load Preset", preset_path, sizeof preset_path, kind == AK_CURVES ? "#?.(preset|acv)" : "#?.preset")) return;
+    if (kind == AK_CURVES && is_acv(preset_path)) {
+      /* r3: Photoshop's Curves files */
+      size_t n;
+      u8 *data = file_read(preset_path, &n);
+      int ok = data && curves_acv_read(data, n, &p);
+      free(data);
+      if (!ok) { ask("OK", "%s", tr("That file isn't a preset for this adjustment.")); return; }
+    } else if (!adj_preset_load(preset_path, &p) || p.kind != kind) { ask("OK", "%s", tr("That file isn't a preset for this adjustment.")); return; }
     adj_base = p;
     if (kind == AK_CURVES) curves10_convert(&adj_base);
   } else if (k == (picks ? 4 : 1)) {
@@ -650,7 +667,13 @@ static void adj_btn(int k)
     else if ((l = CreateDir((STRPTR)"PROGDIR:Presets"))) UnLock(l);
     if (!ui_file_request(1, "Save Preset", preset_path, sizeof preset_path, "#?.preset")) return;
     if (!strchr(FilePart((STRPTR)preset_path), '.') && strlen(preset_path) + 8 < sizeof preset_path) strcat(preset_path, ".preset");
-    if (!adj_preset_save(&adj_base, preset_path)) ask("OK", "%s", tr("The preset couldn't be saved."));
+    if (kind == AK_CURVES && is_acv(preset_path)) {
+      /* r3: a name ending .acv saves Photoshop's Curves file */
+      size_t n;
+      u8 *data = curves_acv_write(&adj_base, &n);
+      if (!data || !file_write(preset_path, data, n)) ask("OK", "%s", tr("The preset couldn't be saved."));
+      free(data);
+    } else if (!adj_preset_save(&adj_base, preset_path)) ask("OK", "%s", tr("The preset couldn't be saved."));
     return;
   } else return;
   if (adj_reshow) adj_reshow();
@@ -658,7 +681,8 @@ static void adj_btn(int k)
 static const char *const pick_btns[] = { "Black Point", "Grey Point", "White Point", "Load...", "Save...", "Auto", NULL };
 static const char *const file_btns[] = { "Load...", "Save...", NULL };
 static const char *const bw_btns[] = { "Load...", "Save...", "Auto", NULL };
-static const char *const fg_btn[] = { "Use Foreground Color", NULL };
+static const char *const fg_btn[] = { "Use Foreground Color", "Clear Samples", NULL };
+static const char *const sample_ops[] = { "Replace the Colour", "Add to Sample", "Subtract from Sample", NULL };   /* (r3) */
 /* the adjustment a menu item stands for */
 static int adj_kind_of(ULONG id)
 {
@@ -774,8 +798,8 @@ void dlg_adjust(ULONG id)
     static const Param p[] = { { "Fuzziness:", 0, 200, 40 }, { "Hue:", -180, 180, 0 }, { "Saturation:", -100, 100, 0 }, { "Lightness:", -100, 100, 0 } };
     if (!adj_editing) adj_base.v[0] = (int)(d->fg & 0xFFFFFF);
     sd_cfg_btns = fg_btn; sd_cfg_btnhook = adj_btn;
-    slider_dialog("Replace Color", p, 4, NULL, NULL, NULL, 0, a_replace,
-                  TextObject, MUIA_Text_Contents, (ULONG)tr("The colour replaced is the foreground colour: pick it from the picture\nwith the Eyedropper, then press Use Foreground Color."), MUIA_Font, MUIV_Font_Tiny, End);
+    slider_dialog("Replace Color", p, 4, sample_ops, "Foreground Color:", NULL, 0, a_replace,
+                  TextObject, MUIA_Text_Contents, (ULONG)tr("The colour replaced is the foreground colour: pick it from the picture\nwith the Eyedropper, then press Use Foreground Color (to replace,\nadd to or subtract from the sample, as the list above says)."), MUIA_Font, MUIV_Font_Tiny, End);
     break; }
   case ID_ADJ_SHADOWHI: {
     static const Param p[] = { { "Shadows Amount (%):", 0, 100, 35 }, { "Shadows Tone (%):", 1, 100, 50 }, { "Shadows Radius (px):", 0, 500, 30 },

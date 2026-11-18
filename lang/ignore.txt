@@ -134,3 +134,4 @@ copper
 #?.(cube|3dl)
 CMYK/8
 Lab/8
+#?.(preset|acv)

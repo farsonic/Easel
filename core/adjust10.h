@@ -46,6 +46,11 @@ void curves10_convert(AdjParams *p);
 int adj_hue_saturation_ranges(Doc *d, const int *master4, const int *ranges30);
 int adj_black_white6(Doc *d, const int *weights6, int tint, int tint_hue, int tint_sat);
 int adj_replace_color(Doc *d, u32 color, int fuzziness, int hue, int sat, int light);
+/* r3: with Add to Sample and Subtract from Sample (PhotoCraft #10443): up to ten more colours in
+   all, kept in pts as (colour, +1 added or -1 subtracted) pairs, npts of them; a pixel near an added
+   colour is replaced, less so near a subtracted one */
+int adj_replace_color_ex(Doc *d, u32 color, int fuzziness, int hue, int sat, int light, const u32 *add, int nadd, const u32 *sub, int nsub);
+int replace_color_sample(AdjParams *p, u32 color, int subtract);   /* one more sample; 0 when ten are held */
 /* Shadows/Highlights: amounts 0-100 %, tonal widths 1-100 %, radii 0-2500 pixels; color correction
    -100..100 (how far the colours that change are made more or less saturated), midtone contrast
    -100..100. All amounts 0 and the rest 0 leave the picture as it is */
@@ -78,6 +83,12 @@ int  adj_preset_format(const AdjParams *p, char *out, int cap);     /* the lengt
 int  adj_preset_parse(const char *text, AdjParams *p);              /* 1 if it was a preset */
 int  adj_preset_save(const AdjParams *p, const char *path);         /* 0 on failure */
 int  adj_preset_load(const char *path, AdjParams *p);               /* 0 if unreadable or not one */
+/* r3: Photoshop's Curves files (.acv: big-endian version, curve count, then each curve's points as
+   output, input pairs; composite, red, green, blue, the rest ignored) read into a four-curve Curves
+   (more than CURVE10_MAX points: every so many kept, both ends with them), and written. Read: 0 if it
+   isn't one. Write: malloc'd, its length in *len, NULL if out of memory */
+int  curves_acv_read(const u8 *data, size_t n, AdjParams *p);
+u8  *curves_acv_write(const AdjParams *p, size_t *len);
 
 /* Photo Filter's named filters (Photoshop's twenty) */
 #define PHOTO_FILTERS 20
