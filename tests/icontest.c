@@ -350,7 +350,7 @@ static void batch(void)
   snprintf(in, sizeof in, "%s/batch_in.png", outdir);
   file_write(in, png, len);
   free(png);
-  ok("batch: format names", batch_format_named("jpg") == FMT_JPEG && batch_format_named("IFF") == FMT_ILBM && batch_format_named("tiff") == FMT_UNKNOWN);
+  ok("batch: format names", batch_format_named("jpg") == FMT_JPEG && batch_format_named("IFF") == FMT_ILBM && batch_format_named("tiff") == FMT_TIFF && batch_format_named("xyz") == FMT_UNKNOWN);
   ok("batch: format from a path", batch_format_of_path("Work:Pics/a.b/x.Gif") == FMT_GIF && batch_format_of_path("Work:Pics.d/x") == FMT_UNKNOWN);
   for (i = 0; i < 6; i++) {
     char t[100];

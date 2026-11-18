@@ -19,8 +19,9 @@ static size_t skip_blocks(const u8 *d, size_t n, size_t o)
 }
 
 /* decode LZW codes (variable width, least significant bit first, from mcs + 1 to 12 bits) from
-   s[0..n) into npx indexes. Returns how many pixels were written; damaged codes end it early */
-static long lzw(const u8 *s, size_t n, int mcs, u8 *out, long npx)
+   s[0..n) into npx indexes. Returns how many pixels were written; damaged codes end it early
+   (1.1: also used by frames.c for every frame) */
+long gif_lzw(const u8 *s, size_t n, int mcs, u8 *out, long npx)
 {
   u16 *prefix = (u16 *)malloc(sizeof(u16) * 4096);
   u8 *suffix = (u8 *)malloc(4096), *stack = (u8 *)malloc(4097);
@@ -109,7 +110,7 @@ int gif_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
     if (e + 1 + l > n) l = n - e - 1;
     memcpy(data + k, d + e + 1, l); k += l;
   }
-  if (lzw(data, k, mcs, idx, (long)iw * ih) < (long)iw * ih) { msg = "Truncated GIF file"; goto done; }
+  if (gif_lzw(data, k, mcs, idx, (long)iw * ih) < (long)iw * ih) { msg = "Truncated GIF file"; goto done; }
   if (!rgba_alloc(out, cw, ch)) { msg = "Out of memory"; goto done; }
   {
     /* interlaced rows come in four passes: every 8th from 0, every 8th from 4, every 4th from 2, every 2nd from 1 */

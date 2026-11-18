@@ -326,6 +326,38 @@ int main(int argc, char **argv)
     doc_free(doc);
   }
 
+  /* batch conversion (EaselConvert) to the new formats, each from the output name's extension */
+  {
+    char in[600], outp[600];
+    static const char *const exts[] = { ".webp", ".pbm", ".pgm", ".pam", ".qoi", ".ico", ".dds", ".dpx", ".fits", ".pdf", ".tif", ".tga", ".psd" };
+    BatchOpts o;
+    size_t n;
+    u8 *png = png_encode(&pic, 0, &n);
+    snprintf(in, sizeof in, "%s/batch_in.png", outdir);
+    if (png) { file_write(in, png, n); free(png); }
+    ok("batch names", batch_format_named("WEBP") == FMT_WEBP && batch_format_named("pdf") == FMT_PDF_OUT && batch_format_named("Targa") == FMT_TGA && batch_format_named("PPM") == FMT_PNM);
+    for (i = 0; i < (int)(sizeof exts / sizeof exts[0]); i++) {
+      char err[160] = "", nm[240];
+      u8 *f;
+      size_t fl = 0;
+      batch_opts_default(&o);
+      snprintf(outp, sizeof outp, "%s/batch_out%s", outdir, exts[i]);
+      snprintf(nm, sizeof nm, "batch to %s (%s)", exts[i], err);
+      ok(nm, batch_convert(in, outp, &o, err, sizeof err));
+      f = file_read(outp, &fl);
+      snprintf(nm, sizeof nm, "batch %s file kind", exts[i]);
+      ok(nm, f && fl > 8 && (i == 1 ? !memcmp(f, "P4", 2) : i == 2 ? !memcmp(f, "P5", 2) : i == 3 ? !memcmp(f, "P7", 2) : i == 9 ? !memcmp(f, "%PDF", 4) : 1));
+      if (f && i != 9) {
+        Rgba back;
+        snprintf(nm, sizeof nm, "batch %s reads back", exts[i]);
+        if (codec_decode(f, fl, &back, NULL, 0)) { ok(nm, back.w == (i == 5 ? 64 : pic.w)); rgba_free(&back); }
+        else ok(nm, 0);
+      }
+      free(f);
+    }
+    ok("batch ext", !strcmp(batch_ext(FMT_WEBP), ".webp") && !strcmp(batch_ext(FMT_TIFF), ".tif") && !strcmp(batch_ext(FMT_PDF_OUT), ".pdf"));
+  }
+
   /* a picture too big for the format */
   { Rgba big; big.w = 20000; big.h = 2; big.px = NULL; ok("webp refuses 20000 wide", !webp_encode_lossless(&big, &len)); }
 

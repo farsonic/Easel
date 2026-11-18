@@ -1,7 +1,8 @@
 /*
  * convert.c - EaselConvert, Easel's Shell command for converting pictures in batches: any picture
  * Easel reads (and, as a last resort, any the system's datatypes read) to PNG, JPEG, BMP, IFF ILBM
- * (24-bit or a number of colours), GIF or OpenRaster, resized if asked, with a Workbench icon if
+ * (24-bit or a number of colours), GIF, OpenRaster and (1.1) TIFF, Targa, PSD, WebP, PDF, Netpbm,
+ * QOI, ICO, DDS, DPX and FITS, resized if asked, with a Workbench icon if
  * asked. The work for each file is core/batch.c's; this is the Shell side: the arguments, the
  * wildcards (MatchFirst/MatchNext), the output names, and a big stack for the AVIF decoder.
  *
@@ -11,7 +12,8 @@
  * FROM   the pictures (wildcards allowed; .info files are skipped when matching a pattern)
  * TO     a drawer for the results, or (one picture in) the file to write; without it each
  *        result goes beside its picture with the new extension
- * FORMAT PNG (default), JPEG, BMP, ILBM, GIF or ORA; without it, from TO's extension
+ * FORMAT PNG (default), JPEG, BMP, ILBM, GIF, ORA, TIFF, TGA, PSD, WEBP (lossless), PDF, PBM, PGM,
+ *        PPM, PAM, QOI, ICO, DDS, DPX or FITS; without it, from TO's extension
  * WIDTH, HEIGHT  the new size (one alone keeps the proportions); SCALE  per cent instead
  * QUALITY  JPEG quality 1-100 (85); COLORS  ILBM and GIF colours 2-256 (ILBM default 24-bit);
  * DITHER  Floyd-Steinberg when reducing colours; ICON  write a .info beside each result;
@@ -32,6 +34,7 @@
 #include <proto/dos.h>
 #include "../core/batch.h"
 #include "../core/iconwrite.h"
+#include "../core/xwrite.h"
 #include "../core/adjust.h"
 #include "dtload.h"
 
@@ -119,11 +122,12 @@ int main(void)
   batch_opts_default(&o);
   o.dither = args[A_DITHER] != 0;
   if (args[A_FORMAT] && (o.format = batch_format_named((const char *)args[A_FORMAT])) == FMT_UNKNOWN) {
-    printf("EaselConvert: FORMAT is PNG, JPEG, BMP, ILBM, GIF or ORA\n");
+    printf("EaselConvert: FORMAT is PNG, JPEG, BMP, ILBM, GIF, ORA, TIFF, TGA, PSD, WEBP, PDF, PBM, PGM, PPM, PAM, QOI, ICO, DDS, DPX or FITS\n");
     goto done;
   }
+  if (args[A_FORMAT]) o.variant = xwrite_sub_of_ext((const char *)args[A_FORMAT]);   /* (1.1: PBM, PGM, PPM, PAM) */
   to = (const char *)args[A_TO];
-  if (!o.format && to && !is_dir(to)) o.format = batch_format_of_path(to);
+  if (!o.format && to && !is_dir(to)) { o.format = batch_format_of_path(to); if (strrchr(to, '.')) o.variant = xwrite_sub_of_ext(strrchr(to, '.')); }
   if (!o.format) o.format = FMT_PNG;
   if (args[A_WIDTH]) o.width = (i32)*(LONG *)args[A_WIDTH];
   if (args[A_HEIGHT]) o.height = (i32)*(LONG *)args[A_HEIGHT];

@@ -9,6 +9,7 @@
 #include "palette.h"
 #include "paint.h"
 #include "iconwrite.h"
+#include "xwrite.h"
 
 void batch_opts_default(BatchOpts *o)
 {
@@ -22,12 +23,14 @@ int batch_format_named(const char *s)
 {
   static const struct { const char *name; int fmt; } names[] = {
     { "PNG", FMT_PNG }, { "JPEG", FMT_JPEG }, { "JPG", FMT_JPEG }, { "BMP", FMT_BMP }, { "ILBM", FMT_ILBM },
-    { "IFF", FMT_ILBM }, { "LBM", FMT_ILBM }, { "GIF", FMT_GIF }, { "ORA", FMT_ORA } };
+    { "IFF", FMT_ILBM }, { "LBM", FMT_ILBM }, { "GIF", FMT_GIF }, { "ORA", FMT_ORA },
+    /* 1.1: every other format Easel writes (and xwrite.h's extensions) */
+    { "TARGA", FMT_TGA }, { "NETPBM", FMT_PNM }, { "ICON", FMT_ICO } };
   size_t i;
   if (!s) return FMT_UNKNOWN;
   if (*s == '.') s++;
   for (i = 0; i < sizeof names / sizeof names[0]; i++) if (str_ieq(s, names[i].name)) return names[i].fmt;
-  return FMT_UNKNOWN;
+  return xwrite_format_of_ext(s);
 }
 int batch_format_of_path(const char *path)
 {
@@ -43,7 +46,10 @@ const char *batch_ext(int fmt)
   case FMT_ILBM: return ".iff";
   case FMT_GIF: return ".gif";
   case FMT_ORA: return ".ora";
-  default: return ".png";
+  case FMT_TIFF: return ".tif";
+  case FMT_TGA: return ".tga";
+  case FMT_PSD: return ".psd";
+  default: return xwrite_handles(fmt) ? xwrite_ext(fmt) : ".png";
   }
 }
 
@@ -83,6 +89,12 @@ u8 *batch_encode(Doc *d, const BatchOpts *o, size_t *len, char *err, size_t errc
   *len = 0;
   switch (o->format) {
   case FMT_ORA: data = ora_write(d, len); break;
+  /* 1.1: TIFF (LZW), Targa (run-length), PSD with its layers, and xwrite.h's formats */
+  case FMT_TIFF: data = tiff_encode_doc(d, TIFFC_LZW, len); break;
+  case FMT_TGA: data = tga_write_doc(d, 1, len); break;
+  case FMT_PSD: data = psd_write_doc(d, len); break;
+  case FMT_WEBP: case FMT_PNM: case FMT_QOI: case FMT_ICO: case FMT_DDS: case FMT_DPX: case FMT_FITS: case FMT_PDF_OUT:
+    data = xwrite_doc(d, o->format, o->variant, 0, len); break;
   case FMT_GIF: data = gif_write_doc(d, o->colors >= 2 && o->colors <= 256 ? o->colors : 256, QM_WU, dither, 0, len); break;
   case FMT_PNG: if (d->mode != MODE_RGB) { data = doc_png_encode(d, d->dpi, len); break; } /* fall through */
   default:
@@ -148,7 +160,12 @@ int batch_convert(const char *in, const char *out, const BatchOpts *opts, char *
     d = o.fallback(in, err2, sizeof err2);           /* failing, the decoders' message is kept */
   }
   if (!d) { if (err && !err[0]) codec_err(err, errcap, "Not a picture Easel knows"); return 0; }
-  if (o.format == FMT_UNKNOWN) o.format = batch_format_of_path(out);
+  if (o.format == FMT_UNKNOWN) {
+    const char *e = strrchr(out, '.');
+    o.format = batch_format_of_path(out);
+    if (o.format == FMT_PNM && !o.variant && e) o.variant = xwrite_sub_of_ext(e);   /* (.pbm, .pgm, .ppm, .pam) */
+  }
+  if ((o.format == FMT_DDS || o.format == FMT_PNM) && o.variant < 0) o.variant = 0;
   if (o.format == FMT_UNKNOWN) o.format = FMT_PNG;
   if (!batch_resize(d, &o)) { doc_free(d); codec_err(err, errcap, "Not enough memory to resize the picture"); return 0; }
   if (!(enc = batch_encode(d, &o, &olen, err, errcap))) { doc_free(d); return 0; }
