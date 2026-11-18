@@ -25,6 +25,7 @@
 #include "lang.h"
 #include "ids.h"
 #include <devices/inputevent.h>
+#include "../core/toolopts.h"
 #include "../core/channels.h"
 #include "../core/util.h"
 #include "../core/paint.h"
@@ -253,7 +254,7 @@ static void info_draw(struct IData *d, Object *obj)
     DocView *v = cur_view();
     int i;
     for (i = 0; v && i < v->nsamp; i++) {
-      u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], 1, opt.sample) : 0xFFFFFFFFUL;
+      u32 c = v->samp_x[i] < doc->w && v->samp_y[i] < doc->h ? doc_pick_ex(doc, (i32)v->samp_x[i], (i32)v->samp_y[i], SAMPLE_ALL, pick_sizes[opt.sample % NPICK_SIZES]) : 0xFFFFFFFFUL;
       if (c == 0xFFFFFFFFUL) sprintf(buf, "#%d  %s", i + 1, tr("transparent"));
       else {
         draw_rgb_box(rp, _screen(obj), x + fh() * 2 + 4, y + 1, x + fh() * 3 + 2, y + fh() - 1, c);

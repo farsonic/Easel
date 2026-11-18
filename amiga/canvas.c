@@ -43,6 +43,7 @@
 #include "../core/pathops.h"
 #include "../core/shape.h"
 #include "../core/live.h"
+#include "../core/toolopts.h"
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -56,7 +57,8 @@ static Doc *ruler_doc;                   /* the picture the Ruler's line was dra
 
 enum { DR_NONE, DR_STROKE, DR_MARQUEE, DR_LASSO, DR_MOVE, DR_PAN, DR_LINE, DR_SHAPE, DR_CROP, DR_CROPMOVE, DR_PICK,
        DR_XFORM, DR_RULER, DR_SAMPLE,
-       DR_TYPEBOX, DR_TYPESEL, DR_PATH };              /* 0.9: a paragraph box dragged out, text selected, a path edited */
+       DR_TYPEBOX, DR_TYPESEL, DR_PATH,
+       DR_STRAIGHTEN, DR_ZOOMSCRUB };                   /* 1.1: the Crop tool's straightening line; scrubby zoom */              /* 0.9: a paragraph box dragged out, text selected, a path edited */
 /* 0.9: what a path tool's drag does */
 enum { PE_NONE, PE_HANDLES, PE_ANCHOR, PE_SELMOVE, PE_HANDLE, PE_SUBMOVE, PE_BOX };
 #define QSHIFT (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)
@@ -119,6 +121,10 @@ struct Data {
   int pen_on, pen_sub; Doc *pen_doc;
   int pe_what, pe_s, pe_k, pe_which, pe_alone, pe_moved; double pe_lx, pe_ly; Doc *pe_doc;
   int ov_type;                           /* the Type tool's caret and selection are in the overlay drawn */
+  /* 1.1: the crop overlay drawn; the Move tool's transform box drawn (and the layer it was worked
+     out for); scrubby zoom's start */
+  int ov_crop, ov_bounds; Box bbox; Doc *bb_doc; void *bb_undo; int bb_active, bb_nlay; u8 *bb_px; Box ov_bbox;
+  double zs_z; LONG zs_mx, zs_my; int zs_moved;
 };
 
 static struct MUI_CustomClass *ccls;
@@ -591,6 +597,29 @@ static void type_overlay(struct Data *d, Object *obj, struct RastPort *rp)
     if (a0 == a1) xline(rp, a0 + 1, b0, a1 + 1, b1);        /* (two pixels wide, to be seen) */
   }
 }
+/* 1.1: the Move tool's transform box: the active layer's content (xform_source_box), worked out
+   again only when the picture or the layer changes (a scan of the layer is slow on a 68040) */
+static int move_bounds(struct Data *d, Box *b)
+{
+  Doc *doc = cur_doc();
+  Layer *l;
+  if (!doc || doc->active < 0 || doc->active >= doc->nlay) return 0;
+  l = doc->lay[doc->active];
+  if (l->kind != LK_PIXEL || !l->px) return 0;
+  if (d->bb_doc != doc || d->bb_undo != (void *)doc->undo || d->bb_active != doc->active || d->bb_nlay != doc->nlay || d->bb_px != l->px) {
+    d->bbox = xform_source_box(doc, doc->active);
+    d->bb_doc = doc; d->bb_undo = (void *)doc->undo; d->bb_active = doc->active; d->bb_nlay = doc->nlay; d->bb_px = l->px;
+  }
+  *b = d->bbox;
+  return !box_empty(d->bbox);
+}
+/* its eight handles on the screen: the corners, then the sides' middles */
+static void bounds_handles(LONG x0, LONG y0, LONG x1, LONG y1, LONG *hx, LONG *hy)
+{
+  LONG mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  hx[0] = x0; hy[0] = y0; hx[1] = x1; hy[1] = y0; hx[2] = x1; hy[2] = y1; hx[3] = x0; hy[3] = y1;
+  hx[4] = mx; hy[4] = y0; hx[5] = x1; hy[5] = my; hx[6] = mx; hy[6] = y1; hx[7] = x0; hy[7] = my;
+}
 /* everything in the overlay drawn (or, drawn again, taken away) */
 static void ov_draw(struct Data *d, Object *obj)
 {
@@ -627,6 +656,9 @@ static void ov_draw(struct Data *d, Object *obj)
     break;
   case DR_TYPEBOX:
     xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    break;
+  case DR_STRAIGHTEN:
+    xline(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
     break;
   case DR_PATH:
     if (d->pe_what == PE_BOX) xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
@@ -676,6 +708,14 @@ static void ov_draw(struct Data *d, Object *obj)
       st = en;
     }
   }
+  if (d->ov_bounds) {
+    /* 1.1: the Move tool's Show Transform Controls: the layer's box and its handles */
+    LONG x0 = to_sx(d, obj, d->ov_bbox.x0), y0 = to_sy(d, obj, d->ov_bbox.y0), x1 = to_sx(d, obj, d->ov_bbox.x1) - 1, y1 = to_sy(d, obj, d->ov_bbox.y1) - 1, hx[8], hy[8];
+    int k;
+    xrect(rp, x0, y0, x1, y1);
+    bounds_handles(x0, y0, x1, y1, hx, hy);
+    for (k = 0; k < 8; k++) xrect(rp, hx[k] - 3, hy[k] - 3, hx[k] + 3, hy[k] + 3);
+  }
   if (d->ov_path) path_overlay(d, obj, rp);
   if (d->ov_type) type_overlay(d, obj, rp);
   for (i = 0; i < d->ov_nsamp; i++) {
@@ -698,10 +738,12 @@ static void ov_draw(struct Data *d, Object *obj)
   if (d->crop_on) {
     LONG x0 = to_sx(d, obj, d->c0x), y0 = to_sy(d, obj, d->c0y), x1 = to_sx(d, obj, d->c1x) - 1, y1 = to_sy(d, obj, d->c1y) - 1, k;
     xrect(rp, x0, y0, x1, y1);
-    /* the rule of thirds, and the handles at the corners and sides */
-    if (x1 - x0 > 30 && y1 - y0 > 30) {
+    /* the overlay (1.1: the one chosen; the rule of thirds at first), and the handles at the corners and sides */
+    if (x1 - x0 > 30 && y1 - y0 > 30 && d->ov_crop) {
+      double sg[4 * 64];
+      int ns = crop_overlay_lines(d->ov_crop, x0, y0, x1, y1, 32, sg, 64);
       SetDrPt(rp, 0xCCCC);
-      for (k = 1; k < 3; k++) { xline(rp, x0 + (x1 - x0) * k / 3, y0 + 1, x0 + (x1 - x0) * k / 3, y1 - 1); xline(rp, x0 + 1, y0 + (y1 - y0) * k / 3, x1 - 1, y0 + (y1 - y0) * k / 3); }
+      for (k = 0; k < ns; k++) xline(rp, (LONG)sg[k * 4], (LONG)sg[k * 4 + 1], (LONG)sg[k * 4 + 2], (LONG)sg[k * 4 + 3]);
       SetDrPt(rp, 0xFFFF);
     }
     for (k = 0; k < 8; k++) {
@@ -725,6 +767,8 @@ static void ov_show(struct Data *d, Object *obj)
   d->ov_prev = d->prev_on && (d->drag == DR_SHAPE || d->drag == DR_LINE);
   path_snapshot(d);
   d->ov_type = type_editing && ty.doc == cur_doc() && ty.tl;
+  d->ov_crop = opt.crop_overlay;
+  d->ov_bounds = tool == TL_MOVE && opt.move_bounds && !d->xf_on && d->drag != DR_MOVE && move_bounds(d, &d->ov_bbox);
   {
     DocView *v = cur_view();
     int i;
@@ -848,7 +892,7 @@ static void pick(struct Data *d, Object *obj, double x, double y, int bg)
   Doc *doc = cur_doc();
   u32 c;
   if (!doc || x < 0 || y < 0 || x >= doc->w || y >= doc->h) return;
-  c = doc_pick(doc, (i32)x, (i32)y, opt.all_layers, opt.sample);
+  c = doc_pick_ex(doc, (i32)x, (i32)y, sample_layers[opt.pick_from % 3], pick_sizes[opt.sample % NPICK_SIZES]);   /* (1.1) */
   if (c == 0xFFFFFFFFUL) return;
   if (bg) doc->bg = c; else doc->fg = c;
   set(obj, MUIA_Canvas_Picked, TRUE);
@@ -1822,16 +1866,38 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   switch (t) {
   case TL_HAND: d->drag = DR_PAN; d->pmx = mx; d->pmy = my; break;
   case TL_ZOOM:
-    ov_show(d, obj);
-    zoom_to(d, obj, zoom_step(d->z, alt ? -1 : 1), mx, my);
-    return;
+    /* 1.1: a click zooms in (out with Zoom Out chosen, or Alt); a drag left or right zooms smoothly */
+    d->drag = DR_ZOOMSCRUB; d->zs_z = d->z; d->zs_mx = mx; d->zs_my = my; d->zs_moved = 0;
+    break;
   case TL_EYEDROPPER: pick(d, obj, x, y, alt && tool == TL_EYEDROPPER); d->drag = DR_PICK; break;
   case TL_MOVE:
+    if (opt.move_bounds && !doc->sel) {
+      /* 1.1: a handle of the transform box held: Free Transform from there */
+      Box bb;
+      if (move_bounds(d, &bb)) {
+        LONG hx[8], hy[8];
+        int k;
+        bounds_handles(to_sx(d, obj, bb.x0), to_sy(d, obj, bb.y0), to_sx(d, obj, bb.x1) - 1, to_sy(d, obj, bb.y1) - 1, hx, hy);
+        for (k = 0; k < 8; k++) if (labs(mx - hx[k]) <= 5 && labs(my - hy[k]) <= 5) break;
+        if (k < 8) {
+          xf_start(d, obj, XM_FREE, 0);
+          if (d->xf_on) {
+            ov_hide(d, obj);
+            d->xf_handle = xf_hit(d, obj, mx, my); d->xf0 = d->xf; d->qual = qual;
+            d->drag = DR_XFORM;
+            ov_show(d, obj);
+          }
+          ov_show(d, obj);
+          return;
+        }
+      }
+    }
     if (opt.auto_select && x >= 0 && y >= 0 && x < doc->w && y < doc->h) {
-      /* the topmost visible layer with something at the pointer */
+      /* the topmost visible layer with something at the pointer (1.1: or the group it is in) */
       int i;
       for (i = doc->nlay - 1; i >= 0; i--)
         if (doc->lay[i]->visible && layer_has(doc, doc->lay[i], (i32)x, (i32)y)) break;
+      i = auto_select_target(doc, i, opt.move_group);
       if (i >= 0 && i != doc->active) { doc->active = i; changed(d, obj); tell_changed(d, obj); }
     }
     d->drag = DR_MOVE;
@@ -1956,6 +2022,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
     else { d->drag = DR_LASSO; d->npoly = 0; lasso_add(d, x, y); }
     break;
   case TL_CROP:
+    if (opt.crop_straighten) { d->drag = DR_STRAIGHTEN; break; }      /* 1.1: a line to straighten by */
     if (d->crop_on) {
       int h = crop_hit(d, obj, mx, my);
       if (dbl && h == 8) { ov_show(d, obj); crop_apply(d, obj, 1); return; }
@@ -1972,6 +2039,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
       if (t == TL_CLONE || t == TL_HEAL) {
         if (alt) { d->clone_x = x; d->clone_y = y; d->clone_set = 1; d->clone_aligned_set = 0; break; }
         if (!d->clone_set) { ask("OK", "%s", tr(t == TL_HEAL ? "Alt-click where the Healing Brush should take its texture from first." : "Alt-click where the Clone Stamp should copy from first.")); break; }
+        if (!opt.clone_aligned) d->clone_aligned_set = 0;          /* (1.1: not Aligned: each stroke starts from the source) */
         if (!d->clone_aligned_set) { d->clone_dx = (i32)floor(d->clone_x - x + 0.5); d->clone_dy = (i32)floor(d->clone_y - y + 0.5); d->clone_aligned_set = 1; }
         b.clone_dx = d->clone_dx; b.clone_dy = d->clone_dy;
       }
@@ -2028,6 +2096,12 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     v->sx -= mx - d->pmx; v->sy -= my - d->pmy;
     d->pmx = mx; d->pmy = my;
     draw_all(d, obj);
+    break;
+  case DR_STRAIGHTEN: ov_hide(d, obj); d->bx = x; d->by = y; ov_show(d, obj); break;
+  case DR_ZOOMSCRUB:
+    /* 1.1: scrubby zoom: right zooms in, left out, about where the drag began */
+    if (labs(mx - d->zs_mx) > 3) d->zs_moved = 1;
+    if (d->zs_moved) { ov_hide(d, obj); zoom_to(d, obj, d->zs_z * pow(2.0, (mx - d->zs_mx) / 100.0), d->zs_mx, d->zs_my); }
     break;
   case DR_PICK: pick(d, obj, x, y, (d->modifiers & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && tool == TL_EYEDROPPER); break;
   case DR_STROKE:
@@ -2149,6 +2223,23 @@ static void release(struct Data *d, Object *obj)
     tell_changed(d, obj);
     break;
   case DR_PICK: break;
+  case DR_ZOOMSCRUB:
+    if (!d->zs_moved) { int out = opt.zoom_out ^ ((d->modifiers & QALT) != 0); ov_hide(d, obj); zoom_to(d, obj, zoom_step(d->z, out ? -1 : 1), d->zs_mx, d->zs_my); }
+    break;
+  case DR_STRAIGHTEN:
+    /* 1.1: the Crop tool's Straighten: the picture turned so the line is level, and cropped */
+    d->drag = DR_STRAIGHTEN; ov_hide(d, obj); d->drag = DR_NONE;
+    if (fabs(d->bx - d->ax) + fabs(d->by - d->ay) >= 4 && image_straighten(doc, d->ax, d->ay, d->bx, d->by)) {
+      opt.crop_straighten = 0;
+      d->crop_on = 0; crop_pending = 0;
+      changed(d, obj);
+      d->edges_ok = 0;
+      draw_all(d, obj);
+      DoMethod(optbar, MUIM_Opts_Refresh);
+      tell_changed(d, obj);
+      return;
+    }
+    break;
   case DR_SAMPLE: set(obj, MUIA_Canvas_Pointer, TRUE); break;
   case DR_LASSO: d->drag = DR_LASSO; poly_finish(d, obj, 1); break;
   case DR_MARQUEE:

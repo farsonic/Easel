@@ -36,6 +36,7 @@
 #include "../core/codec.h"
 #include "../core/image.h"
 #include "../core/layers.h"
+#include "../core/toolopts.h"
 #include "../core/selmore.h"
 #include "../core/palette.h"
 #include "../core/amigamodes.h"
@@ -487,6 +488,12 @@ static void ami_free(void)
 }
 
 /* ------------------------------------------------------------------ tools */
+/* 1.1: the Blur, Sharpen and Smudge tools' Mode list (toolbox.c) as blend modes */
+static int retouch_blend(int k)
+{
+  static const int m[RETOUCH_MODES] = { BM_NORMAL, BM_DARKEN, BM_LIGHTEN, BM_HUE, BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
+  return k >= 0 && k < RETOUCH_MODES ? m[k] : BM_NORMAL;
+}
 Brush tool_brush(int t)
 {
   Brush b;
@@ -502,6 +509,15 @@ Brush tool_brush(int t)
   b.pattern = tool_pattern(); b.pattern_aligned = opt.pattern_aligned;
   if (t == TL_REPLACE || t == TL_BGERASE) { b.sampling = opt.sampling; b.limits = opt.limits; b.tolerance = opt.tolerance; b.replace_mode = opt.replace_mode; b.protect_fg = opt.protect_fg; }
   if (t == TL_HISTORY) { DocView *v = cur_view(); b.snapshot = v ? v->snap : NULL; }
+  /* 1.1: the options bar's tool options */
+  if (t == TL_DODGE || t == TL_BURN) { b.tone_range = TR_SHADOWS + (opt.range > 2 ? 1 : opt.range); b.protect_tones = opt.protect_tones; }
+  if (t == TL_SPONGE) { b.sponge_saturate = opt.sponge_mode == 1; b.vibrance = opt.vibrance; }
+  if (t == TL_CLONE || t == TL_HEAL) b.sample_all = sample_layers[opt.clone_sample % 3];
+  if (t == TL_HEAL) b.blend = BM_NORMAL;
+  if (t == TL_BLUR || t == TL_SHARPEN || t == TL_SMUDGE) b.blend = retouch_blend(opt.mode[t]);
+  if (t == TL_SHARPEN) b.protect_detail = opt.protect_detail;
+  if (t == TL_SMUDGE) b.finger_painting = opt.finger_paint;
+  if (t == TL_ERASER && opt.erase_history) { DocView *v = cur_view(); b.erase_history = 1; b.snapshot = v ? v->snap : NULL; }
   return b;
 }
 /* ------------------------------------------------------------------ 0.5: gradients and patterns */
@@ -543,7 +559,10 @@ static void opts_defaults(void)
   /* 0.9 */
   opt.text_aa = 2; opt.shape_fill = 1; opt.stroke_width = 3; opt.stroke_color = 0x000000;
   opt.poly_sides = 5; opt.poly_indent = 50; opt.round_radius = 10; opt.arrow_end = 1;
+  /* 1.1 */
+  opt.range = 1; opt.protect_tones = 1; opt.vibrance = 1; opt.clone_aligned = 1; opt.crop_overlay = CO_THIRDS;
 }
+const int sample_layers[3] = { SAMPLE_CURRENT, SAMPLE_BELOW, SAMPLE_ALL };
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
 static signed char key_tool[26];
 int tool_for_key(int c)
@@ -1796,6 +1815,7 @@ static void command(ULONG id)
   case ID_ZOOMIN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 1); refresh_panels(); return;
   case ID_ZOOMOUT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, -1); refresh_panels(); return;
   case ID_FIT: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 2); refresh_panels(); return;
+  case ID_FILLSCREEN: DoMethod(canvas, MUIM_Canvas_Zoom, 0, 3); refresh_panels(); return;   /* (1.1) */
   case ID_ACTUAL: DoMethod(canvas, MUIM_Canvas_Zoom, 1000, 0); refresh_panels(); return;
   case ID_ZOOM200: DoMethod(canvas, MUIM_Canvas_Zoom, 2000, 0); refresh_panels(); return;
   case ID_ZOOM50: DoMethod(canvas, MUIM_Canvas_Zoom, 500, 0); refresh_panels(); return;
