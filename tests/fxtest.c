@@ -11,6 +11,7 @@
 #include "core/layers.h"
 #include "core/fx.h"
 #include "core/codec.h"
+#include "core/layerops.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -335,6 +336,128 @@ static void test_kinds(void)
   doc_free(d);
 }
 
+/* 1.1: Paint.NET's blend modes, against their formulas (UserBlendOps), and by name */
+static void test_pdn_modes(void)
+{
+  static const int cb[] = { 0, 1, 64, 128, 200, 254, 255 }, cs[] = { 0, 1, 77, 128, 190, 254, 255 };
+  int i, j, m, bad = 0;
+  for (m = BM_REFLECT; m <= BM_PDNDODGE; m++)
+    for (i = 0; i < 7; i++)
+      for (j = 0; j < 7; j++) {
+        int b = cb[i], s = cs[j], want, v;
+        u8 dst[4], src[4];
+        switch (m) {
+        case BM_REFLECT: want = s == 255 ? 255 : b * b / (255 - s) > 255 ? 255 : b * b / (255 - s); break;
+        case BM_GLOW: want = b == 255 ? 255 : s * s / (255 - b) > 255 ? 255 : s * s / (255 - b); break;
+        case BM_NEGATION: want = 255 - abs(255 - b - s); break;
+        case BM_XOR: want = b ^ s; break;
+        case BM_PDNBURN: want = s == 0 ? 0 : 255 - (255 - b) * 255 / s < 0 ? 0 : 255 - (255 - b) * 255 / s; break;
+        default: want = s == 255 ? 255 : b * 255 / (255 - s) > 255 ? 255 : b * 255 / (255 - s); break;
+        }
+        dst[0] = dst[1] = dst[2] = (u8)b; dst[3] = 255;
+        src[0] = src[1] = src[2] = (u8)s; src[3] = 255;
+        blend_pixel(dst, src, 255, m);
+        v = dst[0];
+        if (v != want || dst[3] != 255) bad++;
+      }
+  CHECK(bad == 0, "Paint.NET modes follow their formulas");
+  CHECK(!strcmp(blend_names[BM_XOR], "Xor") && !strcmp(blend_names[BM_PDNDODGE], "Color Dodge (Paint.NET)"), "Paint.NET mode names");
+  CHECK(ora_op_mode(ora_op_name(BM_NEGATION)) == BM_NEGATION && ora_op_mode(ora_op_name(BM_PDNBURN)) == BM_PDNBURN, "OpenRaster names for them");
+  {
+    u8 d1[4] = { 100, 50, 25, 255 }, s1[4] = { 60, 200, 25, 128 };
+    blend_pixel(d1, s1, 255, BM_XOR);
+    CHECK(d1[0] == 100 + (((100 ^ 60) - 100) * 128 + 127) / 255 || abs(d1[0] - (100 + ((100 ^ 60) - 100) * 128 / 255)) <= 1, "Xor mixed by the source's alpha");
+  }
+}
+
+/* a document of n plain opaque layers, layer k grey 10 * (k + 1) */
+static Doc *grey_stack(int n)
+{
+  Doc *d = doc_new(8, 6, 0x0A0A0A, 0);
+  int k;
+  for (k = 1; k < n; k++) {
+    Layer *l = layer_new(d, "Grey");
+    long i;
+    for (i = 0; i < 8 * 6; i++) { l->px[i * 4] = l->px[i * 4 + 1] = l->px[i * 4 + 2] = (u8)(10 * (k + 1)); l->px[i * 4 + 3] = 255; }
+    snprintf(l->name, sizeof l->name, "Grey %d", k);
+    d->lay[d->nlay++] = l;
+  }
+  return d;
+}
+static void test_layerops(void)
+{
+  Doc *d = grey_stack(5);
+  char *css;
+  int i;
+  /* labels on the picked layers */
+  d->active = 2; d->lay[3]->picked = 1;
+  CHECK(doc_set_label(d, 4) == 2 && d->lay[2]->label == 4 && d->lay[3]->label == 4 && !d->lay[1]->label, "colour label on the picked layers");
+  doc_undo(d);
+  CHECK(!d->lay[2]->label, "undo label");
+  /* reverse: layers 1, 2, 3 picked */
+  d->lay[1]->picked = 1; d->active = 2;
+  CHECK(doc_reverse_layers(d) == 3, "reverse three");
+  CHECK(!strcmp(d->lay[1]->name, "Grey 3") && !strcmp(d->lay[3]->name, "Grey 1") && !strcmp(d->lay[2]->name, "Grey 2") && !strcmp(d->lay[4]->name, "Grey 4"), "reversed order");
+  doc_undo(d);
+  CHECK(!strcmp(d->lay[1]->name, "Grey 1"), "undo reverse");
+  for (i = 0; i < d->nlay; i++) d->lay[i]->picked = 0;
+  /* stack mode over every visible layer: 10, 20, 30, 40, 50 */
+  d->lay[0]->px[0] = 10;
+  {
+    static const struct { int m, v; } want[] = { { STK_MEAN, 30 }, { STK_MEDIAN, 30 }, { STK_MIN, 10 }, { STK_MAX, 50 }, { STK_RANGE, 40 },
+      { STK_SUM, 150 }, { STK_STDDEV, 14 }, { STK_VARIANCE, 1 }, { STK_ENTROPY, 255 }, { STK_SKEWNESS, 128 } };
+    int k, good = 1;
+    for (k = 0; k < (int)(sizeof want / sizeof want[0]); k++) {
+      int j = doc_stack_mode(d, want[k].m);
+      if (j < 0 || d->lay[j]->px[1] != want[k].v) { good = 0; printf("  stack %s: %d, not %d\n", stack_names[want[k].m], j < 0 ? -1 : d->lay[j]->px[1], want[k].v); }
+      if (j >= 0) { CHECK(strstr(d->lay[j]->name, stack_names[want[k].m]) != NULL, "stack layer named"); doc_undo(d); }
+    }
+    CHECK(good && d->nlay == 5, "stack modes");
+  }
+  /* only the picked ones, transparent pixels not counted */
+  d->lay[1]->picked = 1; d->lay[4]->picked = 1; d->active = 1;
+  d->lay[4]->px[3] = 0;
+  i = doc_stack_mode(d, STK_MEAN);
+  CHECK(i == 5 && d->lay[5]->px[5] == 35 && d->lay[5]->px[0] == 20, "stack mode of the picked layers, transparency skipped");
+  doc_undo(d);
+  /* delete hidden */
+  d->lay[2]->visible = 0; d->lay[4]->visible = 0;
+  CHECK(doc_delete_hidden(d) == 2 && d->nlay == 3 && !strcmp(d->lay[2]->name, "Grey 3"), "delete hidden layers");
+  doc_undo(d);
+  CHECK(d->nlay == 5, "undo delete hidden");
+  for (i = 0; i < d->nlay; i++) d->lay[i]->visible = 0;
+  CHECK(doc_delete_hidden(d) == 0 && d->nlay == 5, "all hidden: nothing deleted");
+  for (i = 0; i < d->nlay; i++) d->lay[i]->visible = 1;
+  /* a hidden group goes with its members */
+  d->active = 3;
+  {
+    int g = doc_new_group(d, "G");
+    d->lay[g]->visible = 0;
+    CHECK(g == 4 && d->lay[3]->depth == 0, "group made");
+    d->lay[3]->depth = 1;                   /* Grey 3 into it */
+    CHECK(doc_delete_hidden(d) == 2 && d->nlay == 4, "hidden group and its member deleted");
+    doc_undo(d);
+    doc_undo(d);
+  }
+  /* background from layer: Grey 2 made opaque at the bottom */
+  d->active = 2; d->lay[2]->px[3] = 0; d->bg = 0x112233;
+  CHECK(doc_background_from_layer(d) && !strcmp(d->lay[0]->name, "Background") && d->lay[0]->px[0] == 0x11 && d->lay[0]->px[3] == 255 && d->lay[0]->px[7] == 255, "background from layer");
+  CHECK(!strcmp(d->lay[1]->name, "Background") || !strcmp(d->lay[1]->name, "Grey 1"), "the rest moved up");
+  doc_undo(d);
+  /* Copy CSS */
+  d->lay[3]->opacity = 128; d->lay[3]->blend = BM_MULTIPLY;
+  {
+    LayerFx f = one(FX_DROPSHADOW);
+    f.e[FX_STROKE].on = 1;
+    d->lay[3]->fx = f;
+  }
+  css = layer_css(d, 3);
+  CHECK(css && strstr(css, ".grey-3 {") && strstr(css, "width: 8px;") && strstr(css, "opacity: 0.5;") && strstr(css, "mix-blend-mode: multiply;"), "CSS: box, opacity, mode");
+  CHECK(css && strstr(css, "box-shadow: 2.5px 4.33px 5px 0px rgba(0, 0, 0, 0.75)") && strstr(css, "outline: 3px solid #ff0000;"), "CSS: shadow and stroke");
+  free(css);
+  doc_free(d);
+}
+
 int main(void)
 {
   test_drop_shadow();
@@ -343,6 +466,8 @@ int main(void)
   test_glows_shadows_bevel();
   test_ops();
   test_kinds();
+  test_pdn_modes();
+  test_layerops();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

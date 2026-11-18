@@ -24,6 +24,8 @@ enum { BM_NORMAL, BM_MULTIPLY, BM_SCREEN, BM_OVERLAY, BM_DARKEN, BM_LIGHTEN, BM_
        /* 0.2.1: the rest of PhotoCraft's modes */
        BM_DISSOLVE, BM_LINEARBURN, BM_DARKERCOLOR, BM_LIGHTERCOLOR, BM_VIVIDLIGHT,
        BM_LINEARLIGHT, BM_PINLIGHT, BM_HARDMIX, BM_DIVIDE,
+       /* 1.1: Paint.NET's own modes */
+       BM_REFLECT, BM_GLOW, BM_NEGATION, BM_XOR, BM_PDNBURN, BM_PDNDODGE,
        BM_N,
        BM_PASS = 255 };                   /* a group's Pass Through (not a pixel blend) */
 extern const char *const blend_names[BM_N];

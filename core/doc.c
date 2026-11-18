@@ -21,7 +21,8 @@
 
 const char *const blend_names[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Linear Dodge (Add)",
   "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
-  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
+  "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)" };
 
 /* ------------------------------------------------------------------ boxes */
 Box box_make(i32 x0, i32 y0, i32 x1, i32 y1) { Box b; b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; return b; }
@@ -230,6 +231,13 @@ static int blend_ch2(int mode, int cb, int cs)
     if (cs == 0) return cb == 0 ? 0 : 255;
     v = (cb * 255 + cs / 2) / cs;
     return v > 255 ? 255 : v;
+  /* 1.1: Paint.NET's (UserBlendOps), cb the layer below, cs this one */
+  case BM_REFLECT: if (cs >= 255) return 255; v = cb * cb / (255 - cs); return v > 255 ? 255 : v;
+  case BM_GLOW: if (cb >= 255) return 255; v = cs * cs / (255 - cb); return v > 255 ? 255 : v;
+  case BM_NEGATION: v = 255 - cb - cs; return 255 - (v < 0 ? -v : v);
+  case BM_XOR: return cb ^ cs;
+  case BM_PDNBURN: if (cs == 0) return 0; v = 255 - (255 - cb) * 255 / cs; return v < 0 ? 0 : v;
+  case BM_PDNDODGE: if (cs >= 255) return 255; v = cb * 255 / (255 - cs); return v > 255 ? 255 : v;
   default: return cs;
   }
 }
