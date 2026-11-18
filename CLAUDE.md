@@ -75,7 +75,8 @@ released yet: 1.1 and 1.2 (tool options, layers, brushes, colour management, for
 (1.3: file formats, menus, tools and shortcuts, filters, selection, type and vectors; README "New in
 1.3"). All branches are merged into `main`. `docs/photocraft-gap.md` lists what is still missing area
 by area; its summary (section 23, counted with `python3 tools/gapcount.py docs/photocraft-gap.md`)
-stands at 661 Have, 78 Partial, 69 Missing, 34 Excluded of PhotoCraft `c337d6e` (about 87%). Round 3's
+stands at 674 Have, 76 Partial, 58 Missing, 34 Excluded of PhotoCraft `c337d6e` (about 88%, recounted
+after round 4). Round 3's
 interface was first run in an emulator in round 4 (below); a real Amiga check comes before 1.3 ships.
 
 Round 4 (branch `r4`): round 3 was run in FS-UAE (A4000/68040 without JIT, AROS ROM with Zune,

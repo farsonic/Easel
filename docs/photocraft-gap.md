@@ -1558,12 +1558,12 @@ and Lab, ICC, 16-bit, and the Hard content-aware and AI-substitute features.
 | Area | Have | Partial | Missing | Excluded | Rated rows | Coverage |
 |---|---|---|---|---|---|---|
 | 1. Tools | 54 | 18 | 2 | 0 | 74 | 85% |
-| 2. Menus (File, Edit, Image, Layer, View, Window) | 154 | 10 | 31 | 8 | 195 | 82% |
+| 2. Menus (File, Edit, Image, Layer, View, Window) | 156 | 10 | 29 | 8 | 195 | 83% |
 | 3. Layers | 69 | 10 | 5 | 1 | 84 | 88% |
 | 4. Blend modes | 35 | 0 | 1 | 0 | 36 | 97% |
-| 5. Adjustments | 21 | 2 | 2 | 0 | 25 | 88% |
+| 5. Adjustments | 23 | 2 | 0 | 0 | 25 | 96% |
 | 6. Filters | 78 | 1 | 5 | 1 | 84 | 93% |
-| 7. Selection | 22 | 4 | 2 | 0 | 28 | 86% |
+| 7. Selection | 26 | 2 | 0 | 0 | 28 | 96% |
 | 8. Painting and brushes | 32 | 0 | 0 | 0 | 32 | 100% |
 | 9. Type and text | 26 | 4 | 4 | 0 | 34 | 82% |
 | 10. Vector paths and shapes | 13 | 1 | 0 | 0 | 14 | 96% |
@@ -1571,19 +1571,19 @@ and Lab, ICC, 16-bit, and the Hard content-aware and AI-substitute features.
 | 12. History and undo | 11 | 2 | 0 | 0 | 13 | 92% |
 | 13. File formats (read, write, presets) | 52 | 3 | 4 | 6 | 59 | 91% |
 | 14. Import and export options | 19 | 1 | 0 | 0 | 20 | 98% |
-| 15. Panels | 20 | 10 | 6 | 0 | 36 | 69% |
-| 16. Shortcuts | 24 | 1 | 1 | 0 | 26 | 94% |
-| 17. Preferences | 7 | 6 | 3 | 4 | 16 | 62% |
+| 15. Panels | 23 | 10 | 3 | 0 | 36 | 78% |
+| 16. Shortcuts | 25 | 1 | 0 | 0 | 26 | 98% |
+| 17. Preferences | 8 | 6 | 2 | 4 | 16 | 69% |
 | 18. Automation and actions | 0 | 3 | 0 | 3 | 3 | 50% |
 | 19. Plug-ins | 1 | 0 | 0 | 4 | 1 | 100% |
 | 20. Anything else | 5 | 2 | 0 | 5 | 7 | 86% |
-| **All areas** | **661** | **78** | **69** | **34** | **808** | **86.6%** |
+| **All areas** | **674** | **76** | **58** | **34** | **808** | **88.1%** |
 
-**Overall** (recounted 2026-11-18 after round 3, Easel 1.3; when this summary was first counted, before 0.9, it was 26.9%):
+**Overall** (recounted 2026-11-18 after round 4, Easel 1.3; when this summary was first counted, before 0.9, it was 26.9%):
 
-- **Coverage:** about 87% (86.6%).
-- **Fully had:** 661 of 808 rated rows (81.8%).
-- **At least partly had:** 739 rows (91.5%).
+- **Coverage:** about 88% (88.1%).
+- **Fully had:** 674 of 808 rated rows (83.4%).
+- **At least partly had:** 750 rows (92.8%).
 
 **Legacy extras (section 21):** 45 Have, 7 Partial, 2 Missing, 2 Excluded. What is left there is
 listed in section 21.
