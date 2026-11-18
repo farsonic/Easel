@@ -2395,7 +2395,7 @@ Intent:	Priorität:	Mode de rendu :	Interpretación:	Intento:
 CMYK Color	CMYK-Farbe	Couleurs CMJN	Color CMYK	Colore CMYK
 Not enough memory to convert the picture.	Zu wenig Speicher, um das Bild umzuwandeln.	Mémoire insuffisante pour convertir l'image.	Memoria insuficiente para convertir la imagen.	Memoria insufficiente per convertire l'immagine.
 Progressive (shown coarse first while it loads)	Progressiv (erst grob, beim Laden feiner)	Progressif (grossier d'abord au chargement)	Progresivo (primero tosco al cargar)	Progressivo (prima grossolano, poi fine)
-Choose a 3D LUT (.cube or .3dl)	3D-LUT wählen (.cube oder .3dl)	Choisir une table 3D (.cube ou .3dl)	Elegir una tabla 3D (.cube o .3dl)	Scegli una LUT 3D (.cube o .3dl)
+Choose a 3D LUT (.cube, .3dl or .look)	3D-LUT wählen (.cube, .3dl oder .look)	Choisir une table 3D (.cube, .3dl ou .look)	Elegir una tabla 3D (.cube, .3dl o .look)	Scegli una LUT 3D (.cube, .3dl o .look)
 Export As...	Exportieren als...	Exporter sous...	Exportar como...	Esporta come...
 WebP...	WebP...	WebP...	WebP...	WebP...
 Cineon...	Cineon...	Cineon...	Cineon...	Cineon...
@@ -2886,3 +2886,93 @@ Taper (%):	Verjüngung (%):	Effilement (%) :	Afilar (%):	Rastremazione (%):
 Path Blur	Pfad-Weichzeichnung	Flou de tracé	Desenfoque de trazado	Sfocatura tracciato
 Centered Blur	Zentrierte Weichzeichnung	Flou centré	Desenfoque centrado	Sfocatura centrata
 The picture is smeared along the path chosen in the Paths panel,\nwhere the path passes nearest.	Das Bild wird entlang des im Pfade-Bedienfeld gewählten Pfades\nverwischt, wo der Pfad am nächsten verläuft.	L'image est étalée le long du tracé choisi dans le panneau Tracés,\nlà où le tracé passe le plus près.	La imagen se difumina a lo largo del trazado elegido en el panel\nTrazados, donde el trazado pasa más cerca.	L'immagine viene sfumata lungo il tracciato scelto nel pannello\nTracciati, dove il tracciato passa più vicino.
+## r3-files
+File size: about %ld bytes	Dateigröße: etwa %ld Byte	Taille du fichier : environ %ld octets	Tamaño de archivo: unos %ld bytes	Dimensione file: circa %ld byte
+File size: about %ld KB	Dateigröße: etwa %ld KB	Taille du fichier : environ %ld Ko	Tamaño de archivo: unos %ld KB	Dimensione file: circa %ld KB
+Quick Export as %s	Schnell-Export als %s	Exportation rapide au format %s	Exportación rápida como %s	Esportazione rapida in %s
+Quick Export	Schnell-Export	Exportation rapide	Exportación rápida	Esportazione rapida
+Beside the picture's file	Neben der Bilddatei	À côté du fichier de l'image	Junto al archivo de la imagen	Accanto al file dell'immagine
+In the last drawer exported to	Im zuletzt verwendeten Exportordner	Dans le dernier dossier d'exportation	En la última carpeta de exportación	Nell'ultima cartella di esportazione
+In this drawer:	In diesem Ordner:	Dans ce dossier :	En esta carpeta:	In questa cartella:
+Ask each time	Jedes Mal fragen	Toujours demander	Preguntar cada vez	Chiedi ogni volta
+Copyright only	Nur Copyright	Copyright uniquement	Solo copyright	Solo copyright
+Always create Smart Objects when placing:	Beim Platzieren immer Smartobjekte erstellen:	Toujours créer des objets dynamiques lors du placement :	Crear siempre objetos inteligentes al colocar:	Crea sempre oggetti avanzati quando inserisci:
+Beep when long jobs are done:	Signalton nach langen Vorgängen:	Bip à la fin des opérations longues :	Pitido al terminar tareas largas:	Segnale acustico al termine dei lavori lunghi:
+Quick Export format:	Schnell-Export-Format:	Format d'exportation rapide :	Formato de exportación rápida:	Formato esportazione rapida:
+Quick Export writes:	Schnell-Export speichert:	L'exportation rapide enregistre :	La exportación rápida guarda:	L'esportazione rapida salva:
+Drawer:	Ordner:	Dossier :	Carpeta:	Cartella:
+Metadata kept:	Beibehaltene Metadaten:	Métadonnées conservées :	Metadatos conservados:	Metadati conservati:
+Convert to sRGB:	In sRGB konvertieren:	Convertir en sRVB :	Convertir en sRGB:	Converti in sRGB:
+Lossy WebP quality:	Qualität für verlustbehaftetes WebP:	Qualité WebP avec perte :	Calidad de WebP con pérdida:	Qualità WebP con perdita:
+(Quick Export's choices; Export As asks its own.\nJPEG's quality is on File Handling.)	(Für den Schnell-Export; Exportieren als fragt selbst.\nDie JPEG-Qualität steht unter Dateihandhabung.)	(Pour l'exportation rapide ; Exporter sous demande les siens.\nLa qualité JPEG est dans Gestion des fichiers.)	(Para la exportación rápida; Exportar como pregunta los suyos.\nLa calidad JPEG está en Gestión de archivos.)	(Per l'esportazione rapida; Esporta come chiede i suoi.\nLa qualità JPEG è in Gestione file.)
+The monitor's profile: %s	Profil des Monitors: %s	Profil du moniteur : %s	Perfil del monitor: %s	Profilo del monitor: %s
+none (sRGB, or the display gamma)	keines (sRGB oder das Anzeige-Gamma)	aucun (sRVB, ou le gamma d'affichage)	ninguno (sRGB o la gamma de la pantalla)	nessuno (sRGB o la gamma dello schermo)
+Settings...|Load Monitor Profile...|No Monitor Profile|Cancel	Einstellungen...|Monitorprofil laden...|Kein Monitorprofil|Abbrechen	Paramètres...|Charger un profil...|Aucun profil|Annuler	Ajustes...|Cargar perfil de monitor...|Sin perfil de monitor|Cancelar	Impostazioni...|Carica profilo monitor...|Nessun profilo monitor|Annulla
+Load the monitor's profile	Profil des Monitors laden	Charger le profil du moniteur	Cargar el perfil del monitor	Carica il profilo del monitor
+That isn't an RGB profile Easel can use for the monitor.	Das ist kein RGB-Profil, das Easel für den Monitor verwenden kann.	Ce n'est pas un profil RVB qu'Easel peut utiliser pour le moniteur.	No es un perfil RGB que Easel pueda usar para el monitor.	Non è un profilo RGB che Easel possa usare per il monitor.
+Open %s as:	%s öffnen als:	Ouvrir %s sous :	Abrir %s como:	Apri %s come:
+Open As	Öffnen als	Ouvrir sous	Abrir como	Apri come
+Open As...	Öffnen als...	Ouvrir sous...	Abrir como...	Apri come...
+%s couldn't be opened as %s:\n%s	%s konnte nicht als %s geöffnet werden:\n%s	Impossible d'ouvrir %s sous %s :\n%s	No se pudo abrir %s como %s:\n%s	Impossibile aprire %s come %s:\n%s
+TIFF (with its layers or pages)	TIFF (mit Ebenen oder Seiten)	TIFF (avec ses calques ou pages)	TIFF (con sus capas o páginas)	TIFF (con livelli o pagine)
+TIFF (the first page, flat)	TIFF (erste Seite, reduziert)	TIFF (première page, aplatie)	TIFF (primera página, acoplada)	TIFF (prima pagina, unita)
+Photoshop (with its layers)	Photoshop (mit Ebenen)	Photoshop (avec ses calques)	Photoshop (con sus capas)	Photoshop (con i livelli)
+Photoshop (flattened)	Photoshop (reduziert)	Photoshop (aplati)	Photoshop (acoplado)	Photoshop (unito)
+Windows Icon	Windows-Symbol	Icône Windows	Icono de Windows	Icona di Windows
+Sun Raster	Sun-Raster	Sun Raster	Sun Raster	Sun Raster
+Atari Degas	Atari Degas	Atari Degas	Atari Degas	Atari Degas
+OpenEXR, Cineon or DICOM	OpenEXR, Cineon oder DICOM	OpenEXR, Cineon ou DICOM	OpenEXR, Cineon o DICOM	OpenEXR, Cineon o DICOM
+Camera Raw (its JPEG)	Camera Raw (sein JPEG)	Camera Raw (son JPEG)	Camera Raw (su JPEG)	Camera Raw (il suo JPEG)
+PNG	PNG	PNG	PNG	PNG
+JPEG	JPEG	JPEG	JPEG	JPEG
+BMP	BMP	BMP	BMP	BMP
+GIF	GIF	GIF	GIF	GIF
+Targa	Targa	Targa	Targa	Targa
+PCX	PCX	PCX	PCX	PCX
+XPM	XPM	XPM	XPM	XPM
+DDS	DDS	DDS	DDS	DDS
+QOI	QOI	QOI	QOI	QOI
+FITS	FITS	FITS	FITS	FITS
+DPX	DPX	DPX	DPX	DPX
+SGI	SGI	SGI	SGI	SGI
+NEOchrome	NEOchrome	NEOchrome	NEOchrome	NEOchrome
+Netpbm (PBM, PGM, PPM, PAM, PFM)	Netpbm (PBM, PGM, PPM, PAM, PFM)	Netpbm (PBM, PGM, PPM, PAM, PFM)	Netpbm (PBM, PGM, PPM, PAM, PFM)	Netpbm (PBM, PGM, PPM, PAM, PFM)
+GIMP (.xcf)	GIMP (.xcf)	GIMP (.xcf)	GIMP (.xcf)	GIMP (.xcf)
+Krita (.kra)	Krita (.kra)	Krita (.kra)	Krita (.kra)	Krita (.kra)
+Paint.NET (.pdn)	Paint.NET (.pdn)	Paint.NET (.pdn)	Paint.NET (.pdn)	Paint.NET (.pdn)
+Radiance HDR	Radiance HDR	Radiance HDR	Radiance HDR	Radiance HDR
+default time	Standardzeit	durée par défaut	tiempo predeterminado	durata predefinita
+%d frames, %s	%d Frames, %s	%d images, %s	%d fotogramas, %s	%d fotogrammi, %s
+%d notes	%d Anmerkungen	%d notes	%d notas	%d note
+Nothing is selected to measure.	Es ist nichts zum Messen ausgewählt.	Rien n'est sélectionné à mesurer.	No hay nada seleccionado para medir.	Non c'è niente di selezionato da misurare.
+The Measurement Log is full: delete some rows.	Das Messprotokoll ist voll: Löschen Sie einige Zeilen.	Le journal des mesures est plein : supprimez des lignes.	El registro de medidas está lleno: elimine algunas filas.	Il registro misure è pieno: elimina alcune righe.
+New Frame	Neuer Frame	Nouvelle image	Nuevo fotograma	Nuovo fotogramma
+Delete Frame	Frame löschen	Supprimer l'image	Eliminar fotograma	Elimina fotogramma
+Tween...	Dazwischen einfügen...	Trajectoire...	Interpolar...	Interpolazione...
+Reverse Frames	Frames umkehren	Inverser les images	Invertir fotogramas	Inverti fotogrammi
+Edit Note...	Anmerkung bearbeiten...	Modifier la note...	Editar nota...	Modifica nota...
+Delete Note	Anmerkung löschen	Supprimer la note	Eliminar nota	Elimina nota
+Delete All	Alle löschen	Tout supprimer	Eliminar todo	Elimina tutto
+Export Notes...	Anmerkungen exportieren...	Exporter les notes...	Exportar notas...	Esporta note...
+Export...	Exportieren...	Exporter...	Exportar...	Esporta...
+Timeline	Zeitleiste	Montage	Línea de tiempo	Timeline
+Measurement Log	Messprotokoll	Journal des mesures	Registro de medidas	Registro misure
+Export the notes	Anmerkungen exportieren	Exporter les notes	Exportar las notas	Esporta le note
+Export the measurements	Messungen exportieren	Exporter les mesures	Exportar las medidas	Esporta le misure
+A group frame can't be copied:\nchoose a frame that is one layer.	Ein Gruppen-Frame kann nicht kopiert werden:\nWählen Sie einen Frame aus einer Ebene.	Une image de groupe ne peut pas être copiée :\nchoisissez une image d'un seul calque.	Un fotograma de grupo no se puede copiar:\nelija un fotograma de una sola capa.	Un fotogramma di gruppo non si può copiare:\nscegli un fotogramma di un solo livello.
+The last frame can't be deleted.	Der letzte Frame kann nicht gelöscht werden.	La dernière image ne peut pas être supprimée.	El último fotograma no se puede eliminar.	L'ultimo fotogramma non si può eliminare.
+Tween	Dazwischen einfügen	Trajectoire	Interpolar	Interpolazione
+Frames to add after this one:	Hinzuzufügende Frames nach diesem:	Images à ajouter après celle-ci :	Fotogramas que añadir tras este:	Fotogrammi da aggiungere dopo questo:
+Tween needs this frame and the next to be pixel layers (and room for more layers).	Dazwischen einfügen braucht diesen und den nächsten Frame als Pixelebenen (und Platz für mehr Ebenen).	Trajectoire demande que cette image et la suivante soient des calques de pixels (et de la place pour d'autres calques).	Interpolar necesita que este fotograma y el siguiente sean capas de píxeles (y sitio para más capas).	L'interpolazione richiede che questo fotogramma e il successivo siano livelli di pixel (e spazio per altri livelli).
+This Frame...|All Frames...|Cancel	Dieser Frame...|Alle Frames...|Abbrechen	Cette image...|Toutes les images...|Annuler	Este fotograma...|Todos...|Cancelar	Questo fotogramma...|Tutti...|Annulla
+Set the time of this frame, or of every frame?	Die Zeit dieses Frames oder aller Frames festlegen?	Définir la durée de cette image, ou de toutes les images ?	¿Fijar el tiempo de este fotograma o de todos?	Impostare la durata di questo fotogramma o di tutti?
+Hundredths of a second (0: the default):	Hundertstelsekunden (0: Standard):	Centièmes de seconde (0 : par défaut) :	Centésimas de segundo (0: predeterminado):	Centesimi di secondo (0: predefinito):
+Reverse Frames needs every frame to be one layer.	Frames umkehren braucht Frames aus je einer Ebene.	Inverser les images demande que chaque image soit un seul calque.	Invertir fotogramas necesita que cada fotograma sea una sola capa.	Inverti fotogrammi richiede che ogni fotogramma sia un solo livello.
+Edit Note	Anmerkung bearbeiten	Modifier la note	Editar nota	Modifica nota
+Note:	Anmerkung:	Note :	Nota:	Nota:
+Delete All|Cancel	Alle löschen|Abbrechen	Tout supprimer|Annuler	Eliminar todo|Cancelar	Elimina tutto|Annulla
+Delete every note in the picture?	Alle Anmerkungen im Bild löschen?	Supprimer toutes les notes de l'image ?	¿Eliminar todas las notas de la imagen?	Eliminare tutte le note dell'immagine?
+Behind	Dahinter auftragen	Derrière	Detrás	Dietro
+Modifier Keys	Zusatztasten	Touches de modification	Teclas modificadoras	Tasti modificatori
+Held until pressed again.	Gehalten, bis sie erneut gedrückt werden.	Maintenues jusqu'au prochain appui.	Se mantienen hasta volver a pulsarlas.	Tenuti fino alla prossima pressione.
+Netscape Grey	Netscape-Grau	Gris Netscape	Gris Netscape	Grigio Netscape

@@ -14,6 +14,7 @@ CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Am
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
 CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"   # r3-image: vector, filter, selection and type extras
+CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c core/modex.c core/timeline.c core/measure.c core/grdw.c"   # round 3: file formats, import and export
   # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
   # interface translated and every row used (langcheck lists what is missing), then tr() and the table
   python3 tools/mklang.py --check
@@ -90,3 +91,8 @@ CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"  
   # r3-image: shape fills and combining, the new filters, Sky and Subject, type extras
   t r3imagetest;  $T/easel_r3imagetest $T | tail -1
   python3 tests/check_r3.py $T | tail -1
+  # round 3: other programs' layered files (GIMP, Krita, Paint.NET; written from their descriptions by
+  # make_foreign.py), .look LUTs, EXIF kept, PSB and layered TIFF, ...; ImageMagick, Pillow and psd-tools check
+  python3 tests/make_foreign.py $T/easel_foreign > /dev/null
+  t filestest;    $T/easel_filestest $T/easel_foreign | tail -1
+  python3 tests/check_files.py $T/easel_foreign | tail -1

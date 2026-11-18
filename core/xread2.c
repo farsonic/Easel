@@ -487,13 +487,137 @@ done:
   free(bitmap); free(lut); free(tmp);
   return ok;
 }
+/* ---- round 3: PXR24 and B44/B44A (after the OpenEXR file layout; Pxr24 and B44 compressors) ---- */
+/* PXR24: zlib of, line by line and channel by channel, byte planes of the differences (UINT 4 planes,
+   HALF 2, FLOAT 3: its top 24 bits) */
+static int pxr24_block(const u8 *in, size_t n, const ExrChan *ch, int nch, int w, int lines, u8 *out, size_t outlen)
+{
+  size_t raw = 0, at = 0, o = 0;
+  u8 *t;
+  int y, c, x;
+  long got;
+  for (c = 0; c < nch; c++) raw += (size_t)w * (ch[c].type == 0 ? 4 : ch[c].type == 1 ? 2 : 3);
+  raw *= (size_t)lines;
+  if (!(t = (u8 *)malloc(raw ? raw : 1))) return 0;
+  got = zlib_decompress(in, n, t, raw);
+  if (got < 0) { free(t); return 0; }
+  for (y = 0; y < lines; y++)
+    for (c = 0; c < nch; c++) {
+      u32 pix = 0;
+      const u8 *p0 = t + at, *p1 = p0 + w, *p2 = p1 + w, *p3 = p2 + w;
+      if (ch[c].type == 0) {
+        for (x = 0; x < w; x++) { pix += ((u32)p0[x] << 24) | ((u32)p1[x] << 16) | ((u32)p2[x] << 8) | p3[x]; if (o + 4 > outlen) goto bad; out[o++] = (u8)pix; out[o++] = (u8)(pix >> 8); out[o++] = (u8)(pix >> 16); out[o++] = (u8)(pix >> 24); }
+        at += (size_t)w * 4;
+      } else if (ch[c].type == 1) {
+        for (x = 0; x < w; x++) { pix = (pix + (((u32)p0[x] << 8) | p1[x])) & 0xFFFF; if (o + 2 > outlen) goto bad; out[o++] = (u8)pix; out[o++] = (u8)(pix >> 8); }
+        at += (size_t)w * 2;
+      } else {
+        for (x = 0; x < w; x++) { pix += ((u32)p0[x] << 24) | ((u32)p1[x] << 16) | ((u32)p2[x] << 8); if (o + 4 > outlen) goto bad; out[o++] = (u8)pix; out[o++] = (u8)(pix >> 8); out[o++] = (u8)(pix >> 16); out[o++] = (u8)(pix >> 24); }
+        at += (size_t)w * 3;
+      }
+    }
+  free(t);
+  return o == outlen;
+bad:
+  free(t);
+  return 0;
+}
+/* B44: each HALF channel in 4 x 4 blocks of 14 bytes (or 3 for a flat one in B44A); other channels raw */
+static void b44_unpack14(const u8 *b, u16 *s)
+{
+  u16 shift = (u16)(b[2] >> 2), bias = (u16)(0x20u << shift);
+  int i;
+  s[0] = (u16)((b[0] << 8) | b[1]);
+  s[4] = (u16)(s[0] + ((((b[2] << 4) | (b[3] >> 4)) & 0x3fu) << shift) - bias);
+  s[8] = (u16)(s[4] + ((((b[3] << 2) | (b[4] >> 6)) & 0x3fu) << shift) - bias);
+  s[12] = (u16)(s[8] + ((b[4] & 0x3fu) << shift) - bias);
+  s[1] = (u16)(s[0] + ((u32)(b[5] >> 2) << shift) - bias);
+  s[5] = (u16)(s[4] + ((((b[5] << 4) | (b[6] >> 4)) & 0x3fu) << shift) - bias);
+  s[9] = (u16)(s[8] + ((((b[6] << 2) | (b[7] >> 6)) & 0x3fu) << shift) - bias);
+  s[13] = (u16)(s[12] + ((b[7] & 0x3fu) << shift) - bias);
+  s[2] = (u16)(s[1] + ((u32)(b[8] >> 2) << shift) - bias);
+  s[6] = (u16)(s[5] + ((((b[8] << 4) | (b[9] >> 4)) & 0x3fu) << shift) - bias);
+  s[10] = (u16)(s[9] + ((((b[9] << 2) | (b[10] >> 6)) & 0x3fu) << shift) - bias);
+  s[14] = (u16)(s[13] + ((b[10] & 0x3fu) << shift) - bias);
+  s[3] = (u16)(s[2] + ((u32)(b[11] >> 2) << shift) - bias);
+  s[7] = (u16)(s[6] + ((((b[11] << 4) | (b[12] >> 4)) & 0x3fu) << shift) - bias);
+  s[11] = (u16)(s[10] + ((((b[12] << 2) | (b[13] >> 6)) & 0x3fu) << shift) - bias);
+  s[15] = (u16)(s[14] + ((b[13] & 0x3fu) << shift) - bias);
+  for (i = 0; i < 16; i++) s[i] = (u16)((s[i] & 0x8000) ? (s[i] & 0x7fff) : (u16)~s[i]);
+}
+static int b44_block(const u8 *in, size_t n, const ExrChan *ch, int nch, int w, int lines, u8 *out, size_t outlen)
+{
+  size_t p = 0, at[16], a = 0;
+  int c, x, y, i, j;
+  u8 *plane;
+  if (!(plane = (u8 *)malloc(outlen ? outlen : 1))) return 0;
+  /* each channel's block, whole, one after the other */
+  for (c = 0; c < nch; c++) {
+    size_t sz = (size_t)w * lines * (ch[c].type == 1 ? 2 : 4);
+    at[c] = a;
+    if (ch[c].type != 1) {
+      if (sz > n - p || a + sz > outlen) goto bad;
+      memcpy(plane + a, in + p, sz); p += sz;
+    } else {
+      for (y = 0; y < lines; y += 4)
+        for (x = 0; x < w; x += 4) {
+          u16 s[16];
+          if (n - p < 3) goto bad;
+          if (in[p + 2] >= (13 << 2)) { s[0] = (u16)((in[p] << 8) | in[p + 1]); s[0] = (u16)((s[0] & 0x8000) ? (s[0] & 0x7fff) : (u16)~s[0]); for (i = 1; i < 16; i++) s[i] = s[0]; p += 3; }
+          else { if (n - p < 14) goto bad; b44_unpack14(in + p, s); p += 14; }
+          for (i = 0; i < 4 && y + i < lines; i++)
+            for (j = 0; j < 4 && x + j < w; j++) {
+              size_t q = a + ((size_t)(y + i) * w + x + j) * 2;
+              plane[q] = (u8)s[i * 4 + j]; plane[q + 1] = (u8)(s[i * 4 + j] >> 8);
+            }
+        }
+    }
+    a += sz;
+  }
+  if (a != outlen) goto bad;
+  /* the planes as the lines and channels a block lays them out */
+  {
+    size_t o = 0;
+    for (y = 0; y < lines; y++)
+      for (c = 0; c < nch; c++) {
+        size_t l = (size_t)w * (ch[c].type == 1 ? 2 : 4);
+        memcpy(out + o, plane + at[c] + (size_t)y * l, l);
+        o += l;
+      }
+  }
+  free(plane);
+  return 1;
+bad:
+  free(plane);
+  return 0;
+}
+
+/* one chunk (scanline block or tile) of bw x lines pixels into buf, laid out line by line, channel by channel */
+static int exr_chunk(int comp, const u8 *data, u32 sz, const ExrChan *ch, int nch, int bw, int lines, u8 *buf, u8 *t, size_t want)
+{
+  if (sz == want) { memcpy(buf, data, want); return 1; }   /* (a chunk that didn't compress is stored) */
+  if (comp == 1) { long got = exr_rle(data, sz, t, want); if (got != (long)want) return 0; exr_unpredict(t, want, buf); return 1; }
+  if (comp == 2 || comp == 3) {
+    long got;
+    if (sz < 2) return 0;
+    got = zinflate(data + 2, sz - 2, t, want);
+    if (got != (long)want) return 0;
+    exr_unpredict(t, want, buf);
+    return 1;
+  }
+  if (comp == 4) { ExrChan cc[16]; memcpy(cc, ch, sizeof cc); return piz_block(data, sz, cc, nch, bw, lines, buf, want); }
+  if (comp == 5) return pxr24_block(data, sz, ch, nch, bw, lines, buf, want);
+  if (comp == 6 || comp == 7) return b44_block(data, sz, ch, nch, bw, lines, buf, want);
+  return 0;
+}
+
 float *exr_read_float(const u8 *d, size_t n, i32 *ow, i32 *oh, char *err, size_t errcap)
 {
   size_t p = 8;
   ExrChan ch[16];
-  int nch = -1, comp = -1, c, lpb, slot[16];
-  i32 x0 = 0, y0 = 0, x1 = -1, y1 = -1, w, h;
-  long nchunks, k;
+  int nch = -1, comp = -1, c, lpb, slot[16], tiled, tmode = -1;
+  i32 x0 = 0, y0 = 0, x1 = -1, y1 = -1, w, h, tw = 0, th = 0;
+  long nchunks, k, ntx = 1;
   float *f = NULL;
   u8 *buf = NULL, *t = NULL;
   size_t linebytes = 0;
@@ -501,8 +625,8 @@ float *exr_read_float(const u8 *d, size_t n, i32 *ow, i32 *oh, char *err, size_t
   if (n < 8) { err_set(err, errcap, "Not an OpenEXR file"); return NULL; }
   flags = le32(d + 4);
   if ((flags & 0xFF) != 2) { err_set(err, errcap, "Unsupported OpenEXR version"); return NULL; }
-  if (flags & 0x200) { err_set(err, errcap, "Tiled OpenEXR files aren't supported"); return NULL; }
   if (flags & 0x1800) { err_set(err, errcap, "Deep and multi-part OpenEXR files aren't supported"); return NULL; }
+  tiled = (flags & 0x200) != 0;                          /* round 3: single-part tiled files */
   /* the header's attributes */
   for (;;) {
     const u8 *name = d + p, *type;
@@ -535,6 +659,8 @@ float *exr_read_float(const u8 *d, size_t n, i32 *ow, i32 *oh, char *err, size_t
     } else if (nl == 11 && !memcmp(name, "compression", 11) && sz >= 1) comp = d[p];
     else if (nl == 10 && !memcmp(name, "dataWindow", 10) && sz >= 16) {
       x0 = (i32)le32(d + p); y0 = (i32)le32(d + p + 4); x1 = (i32)le32(d + p + 8); y1 = (i32)le32(d + p + 12);
+    } else if (nl == 5 && !memcmp(name, "tiles", 5) && sz >= 9) {
+      tw = (i32)le32(d + p); th = (i32)le32(d + p + 4); tmode = d[p + 8] & 15;
     }
     p += sz;
   }
@@ -544,17 +670,22 @@ float *exr_read_float(const u8 *d, size_t n, i32 *ow, i32 *oh, char *err, size_t
   if ((double)w * h > CODEC_MAXPIXELS) { err_set(err, errcap, "Bad OpenEXR picture size"); return NULL; }
   switch (comp) {
   case 0: case 1: case 2: lpb = 1; break;
-  case 3: lpb = 16; break;
-  case 4: lpb = 32; break;
-  default: err_set(err, errcap, "Unsupported OpenEXR compression (PXR24, B44 and DWA aren't read)"); return NULL;
+  case 3: case 5: lpb = 16; break;
+  case 4: case 6: case 7: lpb = 32; break;
+  default: err_set(err, errcap, "Unsupported OpenEXR compression (DWA isn't read)"); return NULL;
   }
-  for (c = 0; c < nch; c++) linebytes += (size_t)w * (ch[c].type == 1 ? 2 : 4);
+  if (tiled) {
+    if (tw < 1 || th < 1 || tw > 4096 || th > 4096 || tmode < 0 || tmode > 2) { err_set(err, errcap, "Damaged OpenEXR tile description"); return NULL; }
+    ntx = (w + tw - 1) / tw;
+    nchunks = ntx * ((h + th - 1) / th);                 /* level 0's tiles come first in every level mode */
+    lpb = th;
+  } else { tw = w; nchunks = (h + lpb - 1) / lpb; }
+  for (c = 0; c < nch; c++) linebytes += (size_t)tw * (ch[c].type == 1 ? 2 : 4);
   /* which channel goes where: R G B A, or Y (grey) */
   for (c = 0; c < nch; c++) {
     const char *nm = strrchr(ch[c].name, '.') ? strrchr(ch[c].name, '.') + 1 : ch[c].name;
     slot[c] = !strcmp(nm, "R") ? 0 : !strcmp(nm, "G") ? 1 : !strcmp(nm, "B") ? 2 : !strcmp(nm, "A") ? 3 : !strcmp(nm, "Y") ? 4 : -1;
   }
-  nchunks = (h + lpb - 1) / lpb;
   if ((double)nchunks * 8 > (double)(n - p)) goto trunc;
   if (!(f = (float *)malloc((size_t)w * h * 4 * sizeof(float))) || !(buf = (u8 *)malloc(linebytes * lpb)) || !(t = (u8 *)malloc(linebytes * lpb))) {
     free(f); free(buf); free(t); codec_oom = 1; err_set(err, errcap, "Not enough memory for the picture"); return NULL;
@@ -562,37 +693,42 @@ float *exr_read_float(const u8 *d, size_t n, i32 *ow, i32 *oh, char *err, size_t
   for (k = 0; k < (long)w * h; k++) { f[k * 4] = f[k * 4 + 1] = f[k * 4 + 2] = 0; f[k * 4 + 3] = 1; }
   for (k = 0; k < nchunks && !progress(k, nchunks); k++) {
     u32 off = le32(d + p + 8 * k), hi = le32(d + p + 8 * k + 4), sz;
-    i32 cy, lines, yy;
+    i32 cy, cx = 0, lines, yy, bw = w;
     const u8 *data;
-    size_t want;
+    size_t want, lb = linebytes;
     if (hi || off > n - 8) goto damaged;
-    cy = (i32)le32(d + off); sz = le32(d + off + 4);
-    if (sz > n - off - 8 || cy < y0 || cy > y1) goto damaged;
-    data = d + off + 8;
-    lines = y1 - cy + 1 < lpb ? y1 - cy + 1 : lpb;
-    want = linebytes * (size_t)lines;
-    if (sz == want) memcpy(buf, data, want);                /* (a chunk that didn't compress is stored) */
-    else if (comp == 1) { long got = exr_rle(data, sz, t, want); if (got != (long)want) goto damaged; exr_unpredict(t, want, buf); }
-    else if (comp == 2 || comp == 3) {
-      long got;
-      if (sz < 2) goto damaged;
-      got = zinflate(data + 2, sz - 2, t, want);
-      if (got != (long)want) goto damaged;
-      exr_unpredict(t, want, buf);
+    if (tiled) {
+      i32 tx, ty;
+      if (off > n - 20) goto damaged;
+      tx = (i32)le32(d + off); ty = (i32)le32(d + off + 4);
+      if (le32(d + off + 8) || le32(d + off + 12) || tx < 0 || ty < 0 || tx >= ntx || (long)ty * tw >= 0x7FFFFFFFL) goto damaged;
+      sz = le32(d + off + 16);
+      if (sz > n - off - 20) goto damaged;
+      data = d + off + 20;
+      cx = tx * tw; cy = y0 + ty * th;
+      if (cy > y1 || cx >= w) goto damaged;
+      bw = w - cx < tw ? w - cx : tw;
+      lines = y1 - cy + 1 < th ? y1 - cy + 1 : th;
+      for (lb = 0, c = 0; c < nch; c++) lb += (size_t)bw * (ch[c].type == 1 ? 2 : 4);
+    } else {
+      cy = (i32)le32(d + off); sz = le32(d + off + 4);
+      if (sz > n - off - 8 || cy < y0 || cy > y1) goto damaged;
+      data = d + off + 8;
+      lines = y1 - cy + 1 < lpb ? y1 - cy + 1 : lpb;
     }
-    else if (comp == 4) { ExrChan cc[16]; memcpy(cc, ch, sizeof ch); if (!piz_block(data, sz, cc, nch, w, lines, buf, want)) goto damaged; }
-    else goto damaged;
+    want = lb * (size_t)lines;
+    if (!exr_chunk(comp, data, sz, ch, nch, bw, lines, buf, t, want)) goto damaged;
     for (yy = 0; yy < lines; yy++) {
-      const u8 *q = buf + linebytes * yy;
-      float *o = f + ((size_t)(cy - y0 + yy) * w) * 4;
+      const u8 *q = buf + lb * yy;
+      float *o = f + ((size_t)(cy - y0 + yy) * w + cx) * 4;
       for (c = 0; c < nch; c++) {
         int s = slot[c], x;
-        for (x = 0; x < w; x++) {
+        for (x = 0; x < bw; x++) {
           float v = ch[c].type == 1 ? half_to_float(le16(q + 2 * x)) : ch[c].type == 2 ? u32_to_float(le32(q + 4 * x)) : (float)le32(q + 4 * x);
           if (s == 4) { o[x * 4] = o[x * 4 + 1] = o[x * 4 + 2] = v; }
           else if (s >= 0) o[x * 4 + s] = v;
         }
-        q += (size_t)w * (ch[c].type == 1 ? 2 : 4);
+        q += (size_t)bw * (ch[c].type == 1 ? 2 : 4);
       }
     }
   }

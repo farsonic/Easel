@@ -20,6 +20,7 @@
 #include "lang.h"
 #include "ids.h"
 #include "gradwin.h"
+#include "../core/brushx.h"                /* round 3: .grd written */
 #include "colorpick.h"
 #include "brushwin.h"
 
@@ -316,11 +317,17 @@ static void ged_button(struct GData *d, Object *obj, int row, int k)
     if (!gradlist_load(d->pl, path)) ask("OK", "%s", tr("No gradients could be read from that file."));
     break;
   case 3:
-    if (!ui_file_request(1, "Save Gradients", path, sizeof path, "#?.(gradients|ggr)")) return;
+    if (!ui_file_request(1, "Save Gradients", path, sizeof path, "#?.(gradients|ggr|grd)")) return;
     {
       size_t n = strlen(path);
       int ok;
-      if (n > 4 && str_ieq(path + n - 4, ".ggr")) {
+      if (n > 4 && str_ieq(path + n - 4, ".grd")) {
+        /* round 3: Photoshop's .grd, every preset */
+        size_t len;
+        u8 *f = d->pl && d->pl->n ? grd_write(d->pl->g, d->pl->n, &len) : NULL;
+        ok = f && file_write(path, f, len);
+        free(f);
+      } else if (n > 4 && str_ieq(path + n - 4, ".ggr")) {
         /* GIMP's files hold one gradient: the one being edited */
         GradientList one;
         gradlist_init(&one);

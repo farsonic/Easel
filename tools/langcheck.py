@@ -139,7 +139,8 @@ CORE_LISTS = [('core/adjust10.c', 'photo_filter_names', 'all'), ('core/adjust10.
              [('core/actions.c', 'histo_channel_names', 'all')] + \
              [('core/cms.c', 'cms_intent_names', 'all')] + \
              [('core/vecx.c', 'shape_lib', 'first')] + \
-             [('core/filtr3.c', n, 'all') for n in ('tree_names', 'frame_names', 'liquify_tool_names')]   # (r2-colour: the intents; r3-image: shapes, trees, frames, Liquify)
+             [('core/filtr3.c', n, 'all') for n in ('tree_names', 'frame_names', 'liquify_tool_names')] + \
+             [('core/modex.c', 'matte_names', 'all'), ('core/filesx.c', 'open_as_names', 'all'), ('core/measure.c', 'measure_sources', 'all')]   # (r2-colour: Color Settings' and Convert to Profile's intents; round 3: Indexed Color's Matte)
 def core_list_names():
     """the names in CORE_LISTS: (file, line, text)"""
     out = []

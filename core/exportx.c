@@ -25,7 +25,10 @@ Doc *exportx_prepare(Doc *d, const ExportOpts *o)
   t->fg = d->fg; t->bg = d->bg;
   if (d->icc && (t->icc = (u8 *)malloc(d->icclen)) != NULL) { memcpy(t->icc, d->icc, d->icclen); t->icclen = d->icclen; }
   /* the File Info kept, the copyright only, or none */
-  if (o->metadata == EXD_ALL) t->info = d->info;
+  if (o->metadata == EXD_ALL) {
+    t->info = d->info;
+    if (d->exif && (t->exif = (u8 *)malloc(d->exiflen)) != NULL) { memcpy(t->exif, d->exif, d->exiflen); t->exiflen = d->exiflen; }   /* (round 3) */
+  }
   else if (o->metadata == EXD_COPYRIGHT) { docinfo_clear(&t->info); memcpy(t->info.copyright, d->info.copyright, sizeof t->info.copyright); }
   else docinfo_clear(&t->info);
   /* scaled */
@@ -51,6 +54,7 @@ Doc *exportx_prepare(Doc *d, const ExportOpts *o)
       if (!t2) { free(n); doc_free(t); return NULL; }
       t2->dpi = t->dpi; t2->aspect_x = t->aspect_x; t2->aspect_y = t->aspect_y; t2->info = t->info; t2->fg = t->fg; t2->bg = t->bg;
       t2->icc = t->icc; t2->icclen = t->icclen; t->icc = NULL;
+      t2->exif = t->exif; t2->exiflen = t->exiflen; t->exif = NULL;
       doc_free(t);
       t = t2;
     }

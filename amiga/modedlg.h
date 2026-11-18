@@ -27,6 +27,7 @@ typedef struct {
   int dither;                         /* DI_ */
   int forced;                         /* IF_ */
   int keep_locked;                    /* locked entries keep their places */
+  int matte, transparency;            /* round 3: core/modex.h's MT_; see-through pixels kept see-through */
 } IndexedOpts;
 void modedlg_indexed_defaults(IndexedOpts *o);
 int  modedlg_indexed(Doc *d, IndexedOpts *o);
