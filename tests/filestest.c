@@ -21,6 +21,8 @@
 #include "core/legacy.h"
 #include "core/measure.h"
 #include "core/toolsx.h"
+#include "core/gradient.h"
+#include "core/brushx.h"
 #include "core/palette.h"
 #include <math.h>
 
@@ -764,6 +766,31 @@ static void test_measure(void)
   doc_free(d);
 }
 
+/* .grd written, and read back */
+static void test_grd(void)
+{
+  static Gradient g[3], back[4];
+  size_t len;
+  u8 *f;
+  char err[100];
+  int n, k;
+  gradient_init(&g[0], "Red to blue", 0xFF0000, 0x0000FF);
+  gradient_init(&g[1], "Grün", 0x00FF00, 0xFFFFFF);
+  g[1].color[1].kind = GS_FG; g[1].color[1].mid = 0.3;
+  g[1].opacity[1].opacity = 0.25;
+  gradient_init(&g[2], "Three", 0x102030, 0x405060);
+  g[2].color[2] = g[2].color[1]; g[2].color[1].pos = 0.4; g[2].color[1].rgb = 0x80FF00; g[2].ncolor = 3;
+  f = grd_write(g, 3, &len);
+  CHECK(f != NULL, ".grd written");
+  n = f ? grd_read(f, len, back, 4, err, sizeof err) : 0;
+  CHECK(n == 3, "three gradients read back");
+  CHECK(n == 3 && !strcmp(back[1].name, "Grün") && back[1].color[1].kind == GS_FG && fabs(back[1].color[1].mid - 0.3) < 0.01, "the name, a foreground stop, its midpoint");
+  CHECK(n == 3 && fabs(back[1].opacity[1].opacity - 0.25) < 0.001, "an opacity stop");
+  for (k = 0; n == 3 && k < 3; k++) CHECK(back[2].color[k].rgb == g[2].color[k].rgb && fabs(back[2].color[k].pos - g[2].color[k].pos) < 0.001, "the colours and places");
+  if (f) { save("written.grd", f, len); want("grd written.grd 3 Red to blue"); }
+  free(f);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -824,6 +851,7 @@ int main(int argc, char **argv)
   test_open_as();
   test_timeline();
   test_measure();
+  test_grd();
   test_exif();
   test_layered();
   test_exr2();

@@ -1056,7 +1056,7 @@ one (Pillow, and ImageMagick, poppler and psd-tools where installed: `E:tests/ch
 | Format | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Brushes .abr: read and write | **Have** (0.5): read (versions 1, 2 and 6-10); 1.2: written (version 2, `abr_write` in `E:core/brushx.c`). Easel's own brush presets and DPaint ILBM brushes load and save | Done | — |
-| Gradients .grd: read and write | **Partial** (1.2): read (version 5 descriptors and version 3, `grd_read` in `E:core/brushx.c`); not written (GIMP .ggr gradients load and save, 0.5) | Easy | P3 |
+| Gradients .grd: read and write | **Have**: read (1.2: version 5 descriptors and version 3, `grd_read` in `E:core/brushx.c`); round 3: written (version 5, every preset, from the Gradient Editor's Save with a .grd name; `E:core/grdw.c`; psd-tools' descriptor reader takes it); GIMP .ggr gradients load and save (0.5) | Done | — |
 | Patterns .pat: read and write | **Have** (1.2): read (8BPT version 1: grey, indexed and RGB, raw or PackBits) and written (RGB, raw: `pat_read`, `pat_write` in `E:core/brushx.c`); pattern sets also load and save as IFF (0.5) | Done | — |
 | Swatches .aco, .act, .ase: read and write | **Have** (0.5): .aco, .act, .ase, GIMP .gpl, JASC/RIFF .pal, IFF CMAP and Easel's own, both ways | Done | — |
 | LUTs .cube (read and write), .3dl and .look (read) | **Have**: .cube read and written by Color Lookup (1.1, `E:core/adjustx.c`), .3dl read (1.2, `E:core/lut3dl.c`); round 3: SpeedGrade .look read (XML in UTF-8 or UTF-16, hex floats; `E:core/lutlook.c`) | Done | — |

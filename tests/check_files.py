@@ -104,6 +104,23 @@ if os.path.exists(listing):
             if len(args) > 1:
                 ok("%s: picture %s is %s (ImageMagick: %s)" % (w[1], args[1], " ".join(args[2:]), res[int(args[1])] if len(res) > int(args[1]) else None),
                    len(res) > int(args[1]) and res[int(args[1])].replace("+", "").split() == args[2:])
+        elif kind == "grd":                  # psd-tools' descriptor reader takes a .grd: N gradients, the first's name
+            try:
+                from psd_tools.psd.descriptor import Descriptor
+            except ImportError:
+                skipped.append("psd-tools (%s)" % w[1]); continue
+            try:
+                data = open(f, "rb").read()
+                ok("%s: a Photoshop gradient file, version 5" % w[1], data[:4] == b"8BGR" and data[4:6] == b"\0\5")
+                import io
+                d = Descriptor.read(io.BytesIO(data[10:]))
+                grads = d[b"GrdL"]
+                nm = grads[0][b"Grad"][b"Nm  "]
+                name = str(getattr(nm, "value", nm)).strip("\0")
+                ok("%s: psd-tools finds %s gradients (%d), the first %s (%r)" % (w[1], args[0], len(grads), " ".join(args[1:]), name),
+                   len(grads) == int(args[0]) and name == " ".join(args[1:]))
+            except Exception as e:
+                ok("%s: psd-tools reads it (%s)" % (w[1], e), False)
         elif kind == "psdtools":             # psd-tools reads the file: N layers and the composite
             try:
                 from psd_tools import PSDImage

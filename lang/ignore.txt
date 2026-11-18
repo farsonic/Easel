@@ -145,3 +145,4 @@ webpq=
 placesmart=
 beepdone=
 Note %d (%ld, %ld) %s\n%s\n\n
+#?.(gradients|ggr|grd)
