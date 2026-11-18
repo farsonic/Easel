@@ -20,6 +20,7 @@
 #include "core/xread2.h"
 #include "core/type.h"
 #include "core/frames.h"
+#include "core/fx.h"
 #include "core/exportx.h"
 #include "core/paint.h"
 #include "core/resample.h"
@@ -885,6 +886,63 @@ static void test_anim78(void)
   buf_free(&b);
 }
 
+/* ------------------------------------------------------------------ PSD layer styles (lfx2) */
+static void test_psdfx(void)
+{
+  Doc *d = doc_new(64, 48, 0xFFFFFF, 0), *e;
+  Layer *l = layer_new(d, "Styled");
+  LayerFx fx;
+  u8 *f;
+  size_t n;
+  char err[100];
+  i32 x, y;
+  int k;
+  for (y = 10; y < 38; y++) for (x = 12; x < 52; x++) { u8 *p = l->px + ((long)y * 64 + x) * 4; p[0] = 200; p[1] = 40; p[2] = 40; p[3] = 255; }
+  d->lay[d->nlay++] = l; d->active = 1;
+  fx_defaults_all(&fx);
+  fx.e[FX_DROPSHADOW].on = 1; fx.e[FX_DROPSHADOW].color = 0x102030; fx.e[FX_DROPSHADOW].distance = 7; fx.e[FX_DROPSHADOW].size = 9;
+  fx.e[FX_DROPSHADOW].angle = 135; fx.e[FX_DROPSHADOW].opacity = 191; fx.e[FX_DROPSHADOW].blend = BM_MULTIPLY; fx.e[FX_DROPSHADOW].flags &= ~FXF_GLOBAL;
+  fx.e[FX_DROPSHADOW].spread = 20;
+  fx.e[FX_STROKE].on = 1; fx.e[FX_STROKE].size = 3; fx.e[FX_STROKE].color = 0x00FF00; fx.e[FX_STROKE].style = FXS_INSIDE;
+  fx.e[FX_GRADIENT].on = 1; fx.e[FX_GRADIENT].color = 0xFF0000; fx.e[FX_GRADIENT].color2 = 0x0000FF; fx.e[FX_GRADIENT].style = GR_RADIAL;
+  fx.e[FX_GRADIENT].angle = 45; fx.e[FX_GRADIENT].depth = 80; fx.e[FX_GRADIENT].dx = 10; fx.e[FX_GRADIENT].dy = -5;
+  fx.e[FX_BEVEL].on = 1; fx.e[FX_BEVEL].style = FXB_EMBOSS; fx.e[FX_BEVEL].size = 6; fx.e[FX_BEVEL].depth = 250; fx.e[FX_BEVEL].altitude = 40;
+  fx.e[FX_BEVEL].flags |= FXF_INVERT; fx.e[FX_BEVEL].color2 = 0x202020;
+  fx.e[FX_INNERGLOW].on = 1; fx.e[FX_INNERGLOW].style = FXG_CENTER; fx.e[FX_INNERGLOW].size = 12; fx.e[FX_INNERGLOW].spread = 50;
+  fx.e[FX_SATIN].on = 1; fx.e[FX_SATIN].flags |= FXF_INVERT; fx.e[FX_SATIN].distance = 4;
+  fx.e[FX_COLOR].on = 1; fx.e[FX_COLOR].color = 0x123456; fx.e[FX_COLOR].opacity = 128;
+  l->fx = fx;
+  f = psd_write_doc(d, &n);
+  CHECK(f != NULL, "a PSD with a layer style written");
+  e = f ? psd_read_doc(f, n, err, sizeof err) : NULL;
+  CHECK(e && e->nlay == 2, "and read back");
+  if (e && e->nlay == 2) {
+    const LayerFx *g = &e->lay[1]->fx;
+    for (k = 0; k < FX_N; k++) CHECK(g->e[k].on == fx.e[k].on, "each effect on or off as it was");
+    CHECK(g->e[FX_DROPSHADOW].color == 0x102030 && g->e[FX_DROPSHADOW].distance == 7 && g->e[FX_DROPSHADOW].size == 9 && g->e[FX_DROPSHADOW].angle == 135 &&
+          abs(g->e[FX_DROPSHADOW].opacity - 191) <= 1 && g->e[FX_DROPSHADOW].blend == BM_MULTIPLY && !(g->e[FX_DROPSHADOW].flags & FXF_GLOBAL) &&
+          abs(g->e[FX_DROPSHADOW].spread - 20) <= 6, "the drop shadow's settings");
+    CHECK(g->e[FX_STROKE].size == 3 && g->e[FX_STROKE].color == 0x00FF00 && g->e[FX_STROKE].style == FXS_INSIDE, "the stroke's");
+    CHECK(g->e[FX_GRADIENT].color == 0xFF0000 && g->e[FX_GRADIENT].color2 == 0x0000FF && g->e[FX_GRADIENT].style == GR_RADIAL && g->e[FX_GRADIENT].angle == 45 &&
+          g->e[FX_GRADIENT].depth == 80 && g->e[FX_GRADIENT].dx == 10 && g->e[FX_GRADIENT].dy == -5, "the gradient overlay's");
+    CHECK(g->e[FX_BEVEL].style == FXB_EMBOSS && g->e[FX_BEVEL].size == 6 && g->e[FX_BEVEL].depth == 250 && g->e[FX_BEVEL].altitude == 40 &&
+          (g->e[FX_BEVEL].flags & FXF_INVERT) && g->e[FX_BEVEL].color2 == 0x202020, "the bevel's");
+    CHECK(g->e[FX_INNERGLOW].style == FXG_CENTER && g->e[FX_INNERGLOW].size == 12 && abs(g->e[FX_INNERGLOW].spread - 50) <= 5, "the inner glow's");
+    CHECK((g->e[FX_SATIN].flags & FXF_INVERT) && g->e[FX_SATIN].distance == 4, "the satin's");
+    CHECK(g->e[FX_COLOR].color == 0x123456 && abs(g->e[FX_COLOR].opacity - 128) <= 1, "the colour overlay's");
+  }
+  save("fx.psd", f, n);
+  /* damaged blocks fail cleanly */
+  if (f) {
+    size_t i;
+    u8 *c = (u8 *)malloc(n);
+    for (i = 0; i < n; i += 7) { Doc *t; memcpy(c, f, n); c[i] ^= 0x41; t = psd_read_doc(c, n, err, sizeof err); doc_free(t); }
+    free(c);
+  }
+  doc_free(e); free(f);
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -903,6 +961,7 @@ int main(int argc, char **argv)
   test_type();
   test_export();
   test_anim78();
+  test_psdfx();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

@@ -23,6 +23,8 @@
 #include <string.h>
 #include "rasters.h"
 #include "cms.h"                       /* 1.2: cmyk_hook */
+#include "psdfx.h"
+#include "fx.h"
 
 static u32 be16(const u8 *p) { return ((u32)p[0] << 8) | p[1]; }
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
@@ -373,6 +375,7 @@ typedef struct {
   char name[64];
   int section; u8 skey[4]; int has_skey;
   int fill, protect;
+  LayerFx fx; int has_fx;             /* 1.2: the layer's style (lfx2) */
 } PsdRec;
 
 /* an IEEE double, big-endian, as a number (for the mask feather) */
@@ -500,6 +503,7 @@ static int psd_record(const u8 *d, size_t pos, size_t end, int psb, PsdRec *r, s
       if (len >= 12 && is_sig(d + e + 4)) { memcpy(r->skey, d + e + 8, 4); r->has_skey = 1; }
     } else if (!memcmp(key, "iOpa", 4) && len >= 1) r->fill = d[e] + 1;
     else if (!memcmp(key, "lspf", 4) && len >= 4) r->protect = (int)be32(d + e);
+    else if (!memcmp(key, "lfx2", 4)) r->has_fx = psdfx_read(d + e, len, &r->fx);   /* 1.2 */
     e += len;
   }
   return 1;
@@ -668,6 +672,7 @@ static Doc *psd_layers(const u8 *d, int psb, u32 w, u32 h, u32 depth, int gray, 
     l->collapsed = (u8)(r->section == 2);
     if (r->fill) l->fill_cut = (u8)(255 - (r->fill - 1));
     for (k = 0; k < 4; k++) l->blendif[k] = (u8)r->blendif[k];
+    if (r->has_fx && !group) l->fx = r->fx;               /* 1.2: the layer style */
     /* the pixels */
     for (c = 0; c < r->nch; c++) if (r->id[c] == -1) alpha = 1;
     if (!group) {
@@ -939,6 +944,7 @@ static void put_record(Buf *b, Doc *doc, const PsdOut *r, int id)
   if (r->what == PR_GROUP) { buf_add(&x, "8BIMlsct", 8); w32(&x, 12); w32(&x, l->collapsed ? 2 : 1); buf_add(&x, "8BIM", 4); buf_add(&x, psd_key(l->blend), 4); }
   if (r->what == PR_END) { buf_add(&x, "8BIMlsct", 8); w32(&x, 4); w32(&x, 3); }
   if (r->what != PR_END && l->fill_cut) { buf_add(&x, "8BIMiOpa", 8); w32(&x, 4); buf_addc(&x, 255 - l->fill_cut); buf_addc(&x, 0); buf_addc(&x, 0); buf_addc(&x, 0); }
+  if (r->what == PR_LAYER && fx_has(l)) psdfx_write(&x, &l->fx);   /* 1.2: the layer style (lfx2) */
   if (r->what != PR_END) {
     if (l->alpha_lock) prot |= 1;
     if (l->locked) prot |= 2;

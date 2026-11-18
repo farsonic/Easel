@@ -165,5 +165,29 @@ if os.path.exists(gpath):
             want = [-1 if dead else f.getGlyphID(n) for n, dead in seq]
             check(want == got, "%s %s %r: Easel %s, fontTools %s" % (os.path.basename(path), tag, text, got, want))
 
+# PSD layer styles: psd-tools reads the lfx2 block Easel wrote
+fxp = os.path.join(d, "fx.psd")
+try:
+    from psd_tools import PSDImage
+except ImportError:
+    PSDImage = None
+if PSDImage and os.path.exists(fxp):
+    psd = PSDImage.open(fxp)
+    layer = [l for l in psd if l.name == "Styled"]
+    check(len(layer) == 1 and layer[0].has_effects(), "psd-tools: the styled layer has effects")
+    if layer:
+        got = {type(e).__name__: e for e in layer[0].effects}
+        want = ("DropShadow", "InnerGlow", "BevelEmboss", "Satin", "ColorOverlay", "GradientOverlay", "Stroke")
+        check(all(k in got for k in want) and len(got) == len(want), "psd-tools: the seven effects (%s)" % sorted(got))
+        e = got.get("DropShadow")
+        check(e is not None and e.size == 9 and e.distance == 7 and e.angle == 135 and abs(e.opacity - 74.9) < 0.2
+              and e.color[b"Rd  "] == 16 and e.color[b"Bl  "] == 48 and str(e.blend_mode).endswith("MULTIPLY"), "psd-tools: the drop shadow")
+        e = got.get("Stroke")
+        check(e is not None and e.size == 3 and str(e.position).endswith("INSIDE") and e.color[b"Grn "] == 255, "psd-tools: the stroke")
+        e = got.get("GradientOverlay")
+        check(e is not None and e.angle == 45 and e.scale == 80 and e.offset[b"Hrzn"] == 10, "psd-tools: the gradient overlay")
+        e = got.get("BevelEmboss")
+        check(e is not None and e.size == 6 and e.depth == 250 and e.altitude == 40, "psd-tools: the bevel")
+
 print("%d checks, %d failed" % (checks, fails))
 sys.exit(1 if fails else 0)
