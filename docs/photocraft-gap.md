@@ -107,80 +107,87 @@ Rows that group several identical items say how many they cover.
 
 ## 1. Tools, with options per tool
 
-PhotoCraft has 68 tools (`Tool::ALL` in TOOL), and its options bar is OPT. Easel has 26 tools
-(`TL_` in `E:amiga/easel.h`), and its options bar is `E:amiga/toolbox.c` lines 311-342. Keys are
-PhotoCraft's (`Tool::key()`).
+PhotoCraft has 68 tools (`Tool::ALL` in TOOL), and its options bar is OPT. Easel 1.1 has 49 tools
+(`TL_` in `E:amiga/easel.h`), and its options bar is `fields_for` in `E:amiga/toolbox.c`. Keys are
+PhotoCraft's (`Tool::key()`). Rechecked 2026-11-18 against Easel 1.1 and PhotoCraft `c337d6e`
+(rows marked *upstream* are PhotoCraft changes since `eb6c1ab`, from its merged pull requests).
 
 | PhotoCraft tool and options (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Move (V): Auto-Select Layer/Group, transform controls, align bar (`tools/align_bar.rs`), ⌥-drag duplicates (`tools/move_mods.rs`), nudge; TOOL `Move` | **Partial**: Auto-Select Layer and nudge are there; Group mode, transform handles, align buttons and Alt-drag duplicate are missing | Easy | P1 |
-| Artboard (V); TOOL `Artboard` | **Missing** | Moderate: artboards are clipped top-level groups, so groups come first | P3 |
-| Rectangular Marquee (M): New/Add/Subtract/Intersect, Feather, Style Normal/Fixed Ratio/Fixed Size, W/H swap; OPT 246-315 | **Partial**: the four modes and Feather are there; the fixed-ratio and fixed-size styles are missing | Easy | P1 |
-| Elliptical Marquee (M): the same plus Anti-alias | **Partial**: the modes and Feather are there; the Style options and the Anti-alias toggle are missing | Easy | P1 |
-| Single Row Marquee: a 1-pixel row | **Missing** | Easy | P2 |
-| Single Column Marquee | **Missing** | Easy | P2 |
-| Lasso (L): modes, Feather, Anti-alias; OPT 315 | **Partial**: there's no Anti-alias toggle | Easy | P2 |
-| Polygonal Lasso (L): the same; Return or a double-click closes, Backspace removes a point | **Partial**: the closing works, but there's no Anti-alias toggle and no Backspace to remove the last point | Easy | P2 |
-| Magnetic Lasso (L): Width, Contrast, Frequency, pen pressure; `tools/magnetic_lasso_ui.rs`, `algo/src/magnetic.rs` | **Missing** | Moderate: a live-wire (Sobel cost plus Dijkstra in a moving window) is cheap enough | P2 |
-| Magic Wand (W): Tolerance, Anti-alias, Contiguous, Sample All Layers, Select Subject button; OPT 360 | **Partial**: Tolerance, Contiguous and All Layers are there; Anti-alias, the sample size and Select Subject are missing | Easy | P1 |
+| Move (V): Auto-Select Layer/Group, transform controls, align bar (`tools/align_bar.rs`), ⌥-drag duplicates (`tools/move_mods.rs`), nudge; TOOL `Move` | **Have**: Auto-Select with Layer or Group (`auto_select_target`, `E:core/toolopts.c`), Show Transform Controls (`move_bounds`, a handle starts Free Transform, `E:amiga/canvas.c`), the Align list (`F_MENU`, `alignids` in `E:amiga/toolbox.c`), Alt-drag copies (`move_selection_copy`), nudge | Done | — |
+| *upstream* Move: Distribute buttons, the gear menu (#11540); Auto-Select target dropdown Group, Layer (#12166) | **Have**: Distribute Horizontally/Vertically in the Align list; the Layer/Group choice | Done | — |
+| Artboard (V); TOOL `Artboard` | **Missing** | Moderate: artboards are clipped top-level groups (groups exist since 0.3) | P3 |
+| Rectangular Marquee (M): New/Add/Subtract/Intersect, Feather, Style Normal/Fixed Ratio/Fixed Size, W/H swap; OPT 246-315 | **Have** (0.7: `MQS_` styles, `marquee_box` in `E:core/selx.c`) | Done | — |
+| Elliptical Marquee (M): the same plus Anti-alias | **Have** (`sel_ellipse_ex` with Anti-alias) | Done | — |
+| Single Row Marquee: a 1-pixel row | **Have** (`MQS_ROW`, `sel_single_row`) | Done | — |
+| Single Column Marquee | **Have** (`MQS_COL`, `sel_single_col`) | Done | — |
+| Lasso (L): modes, Feather, Anti-alias; OPT 315 | **Have** (`sel_polygon_ex`) | Done | — |
+| Polygonal Lasso (L): the same; Return or a double-click closes, Backspace removes a point | **Have**: 1.1 adds Backspace (`keys`, `E:amiga/canvas.c`) | Done | — |
+| Magnetic Lasso (L): Width, Contrast, Frequency, pen pressure; `tools/magnetic_lasso_ui.rs`, `algo/src/magnetic.rs` | **Partial**: Width, Contrast, Frequency (`E:core/maglasso.c`); no pen pressure | Moderate (pressure, with tablet input) | P3 |
+| *upstream* Magnetic Lasso: Shift-[ and Shift-] jump to the width limits (#11701); Caps Lock shows the width circle (#12151) | **Missing** | Easy | P3 |
+| Magic Wand (W): Tolerance, Anti-alias, Contiguous, Sample All Layers, Select Subject button; OPT 360 | **Partial**: Tolerance, Anti-alias, Contiguous, All Layers (`sel_wand_ex`); no Sample Size. Select Subject: **Left out** (a trained segmentation model; no Amiga stand-in) | Easy (sample size) | P3 |
 | Quick Selection (W): a brush-driven graph cut; `algo/src/segment.rs` (`quick`) | **Missing** | Hard: a min-cut on a quarter-size proxy is about seconds per stroke | P3 |
-| Object Selection (W): GrabCut in a box, Object Finder; `tools/object_finder.rs` | **Missing** | Hard: GrabCut's iterations take tens of seconds on a 68040 | P3 |
-| Crop (C): ratio and size presets (`tools/crop_presets.rs`), Straighten (`crop_straighten.rs`), overlays (`crop_overlay.rs`), Delete Cropped Pixels, Content-Aware fill, rotating the box | **Partial**: there's a box with handles, and Return or Esc; presets, straightening, rotation, overlays and a non-destructive crop are missing | Easy (presets, overlay); Moderate (rotation) | P1 |
-| Perspective Crop (C); `tools/perspective_crop_ui.rs` | **Missing** | Moderate: a projective resample, like the arbitrary rotate | P3 |
+| Object Selection (W): GrabCut in a box, Object Finder; `tools/object_finder.rs`; *upstream* Hard Edge (#13039) | **Missing** (Object Finder is AI: **Left out**) | Hard: GrabCut's iterations take tens of seconds on a 68040 | P3 |
+| Crop (C): ratio and size presets (`tools/crop_presets.rs`), Straighten (`crop_straighten.rs`), overlays (`crop_overlay.rs`), Delete Cropped Pixels, Content-Aware fill, rotating the box | **Partial**: presets with W/H swap (`E:core/crop.c`), 1.1's overlays (Rule of Thirds, Grid, Diagonal, Triangle, Golden Ratio: `crop_overlay_lines`, `E:core/toolopts.c`) and Straighten (a drag, `image_straighten`); no turning the box on the canvas (the core has `image_crop_rotated`), no non-destructive crop, no Content-Aware fill | Moderate (rotating the box); Hard (non-destructive: layers are canvas-sized) | P2 |
+| *upstream* Crop: Straighten's label and spirit-level glyph (#11490), Reset button (#9730), Always Show Overlay (#11022), the Contextual Task Bar under the frame (#11669) | **Partial**: Straighten is labelled and Cancel resets; no task bar (it would cover the picture on a 640 × 480 screen) | Easy | P3 |
+| Perspective Crop (C); `tools/perspective_crop_ui.rs` and its upstream fixes (#12221-#12237, #12421) | **Missing** | Moderate: `image_remap` (`E:core/paint.h`) does the projective resample already | P3 |
 | Slice (C) | **Missing** | Easy, but of little use without web export | P3 |
 | Slice Select (C) | **Missing** | Easy | P3 |
-| Frame (K): a placeholder frame with a stroke; `tools/frame_tool.rs`, `Group::frame_stroke` | **Missing** | Moderate: needs groups and vector masks | P3 |
-| Eyedropper (I): sample point/3/5/11/31/51/101, Current/Current & Below/All Layers; `eyedropper_ui.rs` | **Partial**: point, 3 × 3 and 5 × 5 from the current or all layers; the larger averages and Current & Below are missing | Easy | P2 |
-| Color Sampler (I): up to 10 fixed readouts in Info | **Missing** | Easy, once an Info panel exists | P2 |
-| Ruler (I): measures angle and length; Straighten Layer | **Missing** | Easy | P2 |
+| Frame (K): a placeholder frame with a stroke; `tools/frame_tool.rs`, `Group::frame_stroke`; *upstream* reworked (#8920) | **Missing** | Moderate: needs vector masks | P3 |
+| Eyedropper (I): sample point/3/5/11/31/51/101, Current/Current & Below/All Layers; `eyedropper_ui.rs` | **Have** (1.1: `doc_pick_ex` and `pick_sizes`, `E:core/toolopts.c`; the square is composited once) | Done | — |
+| *upstream* Eyedropper: right-click menu with the sample sizes, Copy Color as HTML and its hex code (#12182) | **Missing** | Easy | P3 |
+| Color Sampler (I): up to 10 fixed readouts in Info | **Partial**: up to four (0.8, `DocView.samp_x`), shown in Info, with the Eyedropper's sample size (as *upstream* #12175) | Easy | P3 |
+| Ruler (I): measures angle and length; Straighten Layer | **Have** (0.7, `E:core/crop.h` `ruler_measure`, `layer_straighten`) | Done | — |
 | Note (I): annotations | **Missing** | Easy | P3 |
 | Count (I): numbered markers | **Missing** | Easy | P3 |
-| Brush (B): Size, Hardness, Mode, Opacity, Flow, airbrush build-up, Smoothing, pressure for size and opacity, preset picker (`tools/brush_picker.rs`), symmetry (`tools/symmetry_ui.rs`); OPT 134-220 | **Partial**: Size, Hardness, Mode, Opacity and Flow are there; Smoothing, build-up, presets, pressure and symmetry are missing | Easy (smoothing, build-up, symmetry); Moderate (pressure) | P1 |
-| Pencil (B): Size, Mode, Opacity, Smoothing, Auto Erase; OPT 173 | **Partial**: Smoothing and Auto Erase are missing | Easy | P2 |
+| Brush (B): Size, Hardness, Mode, Opacity, Flow, airbrush build-up, Smoothing, pressure for size and opacity, preset picker (`tools/brush_picker.rs`), symmetry (`tools/symmetry_ui.rs`); OPT 134-220 | **Partial**: all of it (0.5, Brush Settings and the Brushes panel; 1.1 puts Smoothing and Airbrush on the options bar) but pressure: the engine takes it (`stroke_begin_p`) and nothing reads a tablet | Moderate: `IESUBCLASS_NEWTABLET` input events | P2 |
+| *upstream* Brush: Alt+digit sets Smoothing (#12034), opacity minimum 1 % and "00" (#11823), Shift-drags constrained (#11926), the HUD's size/hardness drag (#12056), Reset Tool's defaults (#11856) | **Partial**: Alt+digit Smoothing and Shift+digit Flow (1.1, `keys`); no HUD drag, no Reset Tool | Easy | P3 |
+| Pencil (B): Size, Mode, Opacity, Smoothing, Auto Erase; OPT 173; *upstream* pressure toggles (#12477), Auto Erase only on the exact foreground (#12209) | **Have**: Smoothing and Auto Erase on the options bar (1.1), Auto Erase on the exact colour (`stroke_begin_target`); pressure as the Brush | Done | — |
 | Mixer Brush (B): Wet, Load, Mix, Flow, load and clean after each stroke, Sample All Layers; `paint/src/mixer.rs` | **Missing** | Moderate: a per-dab pickup buffer is fine at small sizes | P3 |
-| Color Replacement (B): Mode Hue/Saturation/Color/Luminosity, Sampling Continuous/Once/Background, Limits Contiguous/Discontiguous/Find Edges, Tolerance; `paint/src/replace.rs` | **Missing** | Easy | P2 |
-| Eraser (E): Mode Brush/Pencil/Block, Opacity, Flow, Erase to History; `tools/eraser_ui.rs` | **Partial**: Size, Hardness, Opacity and Flow are there; the Pencil and Block modes and Erase to History are missing | Easy | P2 |
-| Background Eraser (E): Sampling, Limits, Tolerance, Protect Foreground; `paint/src/bg_erase.rs` | **Missing** | Easy | P2 |
-| Magic Eraser (E): Tolerance, Anti-alias, Contiguous, All Layers, Opacity | **Missing** | Easy: Easel's wand plus clear | P2 |
-| Gradient (G): presets and the gradient editor (stops, midpoints, opacity stops), five styles, Mode, Opacity, Reverse, Dither, Classic/new; OPT 400, `tools/gradient_ui.rs` | **Partial**: five styles, Mode, Opacity, Reverse, and foreground to background or to transparent; the multi-stop editor, presets, the Dither toggle and an editable live gradient are missing | Easy | P1 |
-| Paint Bucket (G): Fill from Foreground or Pattern, Mode, Opacity, Tolerance, Anti-alias, Contiguous, All Layers; OPT 375 | **Partial**: Pattern and Mode are missing | Easy | P2 |
-| Horizontal Type (T): family, style, size, AA method, alignment, colour, warp, Character and Paragraph panels, commit and cancel; `tools/type_tool.rs` | **Partial**: point text rendered once into a pixel layer, with font, size, alignment and AA; it can't be edited afterwards, and there are no styles or panels (`E:core/text.h`) | Moderate | P1 |
-| Vertical Type (T) | **Missing** | Moderate | P3 |
-| Horizontal Type Mask (T): the glyphs as a selection | **Missing** | Easy: render to the selection mask instead of a layer | P2 |
-| Vertical Type Mask (T) | **Missing** | Moderate | P3 |
-| Hand (H): Fit Screen, Fill Screen, scroll all windows | **Have**: 100%, Fit, Zoom In/Out buttons and the Space bar (no Fill Screen) | Done | — |
+| Color Replacement (B): Mode Hue/Saturation/Color/Luminosity, Sampling Continuous/Once/Background, Limits Contiguous/Discontiguous/Find Edges, Tolerance; `paint/src/replace.rs` | **Have** (0.5, `PT_REPLACE`) | Done | — |
+| Eraser (E): Mode Brush/Pencil/Block, Opacity, Flow, Erase to History; `tools/eraser_ui.rs` | **Have**: the modes (0.5, `ER_`) and Erase to History (1.1, `Brush.erase_history` in `E:core/stroke.c`) on the options bar | Done | — |
+| Background Eraser (E): Sampling, Limits, Tolerance, Protect Foreground; `paint/src/bg_erase.rs`; *upstream* graded Find Edges, fading Protect Foreground, decontamination (#12152-#12154) | **Partial**: the options (0.5, `PT_BGERASE`); the upstream refinements are not ported | Easy | P3 |
+| Magic Eraser (E): Tolerance, Anti-alias, Contiguous, All Layers, Opacity | **Have** (0.5, `magic_erase`) | Done | — |
+| Gradient (G): presets and the gradient editor (stops, midpoints, opacity stops), five styles, Mode, Opacity, Reverse, Dither, Classic/new; OPT 400, `tools/gradient_ui.rs` | **Have** (0.5, `E:core/gradient.c`, `E:amiga/gradwin.c`); editable live gradients are gradient fill layers | Done | — |
+| Paint Bucket (G): Fill from Foreground or Pattern, Mode, Opacity, Tolerance, Anti-alias, Contiguous, All Layers; OPT 375 | **Partial**: Pattern (0.5) but no Mode | Easy | P3 |
+| Horizontal Type (T): family, style, size, AA method, alignment, colour, warp, Character and Paragraph panels, commit and cancel; `tools/type_tool.rs` | **Have**: editable type layers with all of these (0.9, `E:core/type.c`; section 9 for the details) | Done | — |
+| Vertical Type (T) | **Have** (0.9, `TL_VTEXT`) | Done | — |
+| Horizontal Type Mask (T): the glyphs as a selection | **Have** (0.9, `TL_TYPEMASK`) | Done | — |
+| Vertical Type Mask (T) | **Missing**: the Type Mask tool sets horizontal text only | Easy | P3 |
+| Hand (H): Fit Screen, Fill Screen, scroll all windows | **Have**: 100%, Fit Screen, Fill Screen (1.1), Zoom In/Out, the Space bar. Scroll All Windows (*upstream* #9144): **Left out**, Easel shows one picture at a time in tabs | Done | — |
 | Rotate View (R): view angle, reset | **Missing** | Hard: rotating the display on every redraw is slow; a 90° step would be Easy | P3 |
-| Zoom (Z): Resize Windows to Fit, scrubby zoom, Fit/Fill/100% | **Partial**: click and Alt-click, and the buttons; scrubby and marquee zoom are missing | Easy | P2 |
+| Zoom (Z): Resize Windows to Fit, scrubby zoom, Fit/Fill/100%; *upstream* Zoom In / Zoom Out mode (#13013), the bar's buttons (#12286) | **Have** (1.1: the mode, a drag zooms, Fill Screen; `DR_ZOOMSCRUB` in `E:amiga/canvas.c`); Resize Windows: **Left out** (tabs, one window) | Done | — |
 | Remove (J): non-local patch completion; `algo/src/remove.rs` | **Missing** | Hard: minutes for a small area | P3 |
-| Spot Healing Brush (J): Type Content-Aware/Create Texture/Proximity Match, Sample All Layers | **Missing** | Moderate (Proximity Match); Hard (Content-Aware) | P2 |
-| Healing Brush (J): Source Sampled/Pattern, Aligned, Sample current/below/all, Mode, Diffusion | **Missing** | Moderate: a Poisson blend over the dab bounds suits the FPU | P2 |
-| Patch (J): Source/Destination, Transparent, Diffusion, Content-Aware | **Missing** | Moderate | P3 |
+| Spot Healing Brush (J): Type Content-Aware/Create Texture/Proximity Match, Sample All Layers | **Partial**: Proximity Match (1.0, `E:core/retouch.c`) | Moderate (Create Texture); Hard (Content-Aware) | P3 |
+| Healing Brush (J): Source Sampled/Pattern, Aligned, Sample current/below/all, Mode, Diffusion | **Partial**: Sampled, Aligned and Sample (1.1); no Pattern source, Mode or Diffusion | Easy | P3 |
+| Patch (J): Source/Destination, Transparent, Diffusion, Content-Aware; *upstream* Shift constrains (#12274), Destination moves the selection (#12298) | **Partial**: Source only (1.0, `patch_heal`) | Easy (Destination); Hard (Content-Aware) | P3 |
 | Content-Aware Move (J): Move/Extend, Structure, Color, Transform On Drop | **Missing** | Hard | P3 |
-| Red Eye (J): Pupil Size, Darken Amount; `algo/src/redeye.rs` | **Missing** | Easy | P2 |
-| Clone Stamp (S): Size, Hardness, Mode, Opacity, Flow, Aligned, Sample current/below/all, Clone Source overlay with 5 sources | **Partial**: Size, Hardness, Opacity, Flow and Alt-click source are there; Mode, an Aligned toggle, layer sampling and the overlay are missing | Easy | P1 |
-| Pattern Stamp (S): pattern, Aligned, Impressionist | **Missing** | Easy, once patterns exist | P2 |
-| History Brush (Y): paints from a chosen history state | **Missing** | Moderate: needs a full-layer snapshot as the source (RAM) | P2 |
+| Red Eye (J): Pupil Size, Darken Amount; `algo/src/redeye.rs` | **Have** (1.0, `redeye_fix`) | Done | — |
+| Clone Stamp (S): Size, Hardness, Mode, Opacity, Flow, Aligned, Sample current/below/all, Clone Source overlay with 5 sources | **Partial**: everything but the Clone Source panel and its overlay (1.1: Mode, Aligned and Current & Below, `doc_composite_below`) | Easy | P3 |
+| Pattern Stamp (S): pattern, Aligned, Impressionist; *upstream* Behind in the Mode list (#13028) | **Partial**: pattern and Aligned (0.5); no Impressionist, no Mode | Easy | P3 |
+| History Brush (Y): paints from a chosen history state; *upstream* opacity/flow and source selection (#4446) | **Have**: the snapshot (0.5), Flow and a History panel snapshot as the source (1.1, `ID_HISTBRUSHSRC`) | Done | — |
 | Art History Brush (Y): 10 stroke styles, Area, Tolerance; `algo/src/art_history.rs` | **Missing** | Moderate | P3 |
-| Blur tool: Mode, Strength, Sample All Layers | **Partial**: Size, Hardness and Strength are there; Mode and Sample All are missing | Easy | P3 |
-| Sharpen tool: as Blur, plus Protect Detail | **Partial**: Mode, Sample All and Protect Detail are missing | Easy | P3 |
-| Smudge: Strength, Finger Painting, Sample All | **Partial**: Finger Painting and Sample All are missing | Easy | P3 |
-| Dodge (O): Range Shadows/Midtones/Highlights, Exposure, Protect Tones | **Partial**: Exposure only. `Opts.range` exists in `E:amiga/easel.h`, but the options bar (`E:amiga/toolbox.c:332`) doesn't show it and `Brush` in `E:core/paint.h` has no range | Easy | P1 |
-| Burn (O): the same | **Partial**: as Dodge | Easy | P1 |
-| Sponge (O): Mode Desaturate/Saturate, Flow, Vibrance | **Partial**: Flow only; the Mode isn't shown (as Dodge), and Vibrance is missing | Easy | P1 |
-| Pen (P): Shape/Path/Pixels, path operations, rubber band, auto add and delete | **Missing** | Moderate: Bézier paths with handles drawn in COMPLEMENT, like the crop box | P2 |
+| Blur tool: Mode, Strength, Sample All Layers | **Partial**: Mode (1.1, `mode_back` in `E:core/stroke.c`) and Strength; no Sample All Layers | Easy | P3 |
+| Sharpen tool: as Blur, plus Protect Detail; *upstream* gentle Protect Detail (#12999) | **Partial**: Mode and Protect Detail (1.1); no Sample All Layers | Easy | P3 |
+| Smudge: Strength, Finger Painting, Sample All; *upstream* Mode (#13031) | **Partial**: Mode, Strength, Finger Painting (1.1); no Sample All Layers | Easy | P3 |
+| Dodge (O): Range Shadows/Midtones/Highlights, Exposure, Protect Tones | **Have** (1.1: `tone_lut`, `tone_apply` in `E:core/toolopts.c`, ported from PhotoCraft's `algo/src/retouch.rs`) | Done | — |
+| Burn (O): the same | **Have** (as Dodge) | Done | — |
+| Sponge (O): Mode Desaturate/Saturate, Flow, Vibrance; *upstream* the Flow field (#13022) | **Have** (1.1: `tone_sponge`) | Done | — |
+| Pen (P): Shape/Path/Pixels, path operations, rubber band, auto add and delete; *upstream* Rubber Band in the gear (#13035), Alt-drag on a segment (#13037), Make: Selection/Mask/Shape (#12993) | **Partial**: the Pen and its anchor tools (0.9, `E:core/path.c`); no rubber band, Alt-drag on a segment or Make buttons | Easy | P3 |
 | Freeform Pen (P): curve fitting, magnetic option | **Missing** | Moderate | P3 |
 | Curvature Pen (P) | **Missing** | Moderate | P3 |
-| Add Anchor Point (P) | **Missing** | Easy, once paths exist | P2 |
-| Delete Anchor Point (P) | **Missing** | Easy | P2 |
-| Convert Point (P) | **Missing** | Easy | P2 |
-| Path Selection (A) | **Missing** | Easy | P2 |
-| Direct Selection (A) | **Missing** | Easy | P2 |
-| Rectangle (U): Shape/Path/Pixels, Fill, Stroke colour/width/dashes/align/caps, W/H, path operations, per-corner radii (`tools/corner_radius.rs`, VEC `LiveShape::Rect`) | **Partial**: filled pixels in the foreground colour with one radius and opacity; there's no stroke-only shape, no outline and no live shape layer | Easy (pixel stroke); Moderate (shape layers) | P1 |
-| Ellipse (U): the same | **Partial**: as Rectangle | Easy | P1 |
-| Triangle (U); VEC `LiveShape::Polygon` | **Missing** | Easy | P2 |
-| Polygon (U): sides, star ratio, smooth corners | **Missing** | Easy | P2 |
-| Line (U): weight, arrowheads, stroke | **Partial**: weight and opacity; arrowheads are missing | Easy | P2 |
-| Custom Shape (U): shape library, Shapes panel | **Missing** | Moderate: needs vector paths | P3 |
+| Add Anchor Point (P) | **Have** (0.9) | Done | — |
+| Delete Anchor Point (P) | **Have** (0.9) | Done | — |
+| Convert Point (P) | **Have** (0.9) | Done | — |
+| Path Selection (A) | **Have** (0.9) | Done | — |
+| Direct Selection (A) | **Have** (0.9) | Done | — |
+| Rectangle (U): Shape/Path/Pixels, Fill, Stroke colour/width/dashes/align/caps, W/H, path operations, per-corner radii (`tools/corner_radius.rs`, VEC `LiveShape::Rect`); *upstream* the gear's Square, Fixed Size, Proportional, From Center (#13894) | **Partial**: shape layers or pixels with fill and stroke (0.9, `E:core/shape.c`), Shift a square, Alt from the centre (1.1); no dashes, per-corner radii, Fixed Size or Proportional | Easy | P3 |
+| Ellipse (U): the same | **Partial**: as Rectangle | Easy | P3 |
+| Triangle (U); VEC `LiveShape::Polygon`; *upstream* Alt at the press picks the colour (#13910) | **Partial**: the Polygon tool with 3 sides (`SH_TRIANGLE` in `E:core/shape.h` has no tool of its own) | Easy | P3 |
+| Polygon (U): sides, star ratio, smooth corners; *upstream* a Star tool in the slot (#12142) | **Partial**: sides and star (0.9); no smooth corners | Easy | P3 |
+| Line (U): weight, arrowheads, stroke | **Have** (0.9) | Done | — |
+| Custom Shape (U): shape library, Shapes panel | **Partial**: the active path as a shape (0.9); no library or panel | Moderate | P3 |
+| Reset Tool / Reset All Tools (the options bar's tool icon menu; *upstream* defaults for many tools, #11856 #12243 #12253 #12383 #12691 #12862 #12989) | **Missing** | Easy | P3 |
 
 ## 2. Menus, item by item
 
@@ -749,39 +756,44 @@ anti-aliased edges already work. PhotoCraft's commands are in `engine/src/cmd/se
 
 PhotoCraft's engine is `crates/paint` (BRUSH; `dynamics.rs`, `render.rs`, `mixer.rs`,
 `symmetry.rs`, `tablet` crate). Easel's is `Brush` and `stroke_*` in `E:core/paint.h` and
-`E:core/paint.c`: round dabs with size, hardness, opacity, flow, spacing and blend mode.
+`E:core/stroke.c`, with the tips, DPaint brushes, dynamics, presets and snapshots of
+`E:core/brush.h` (0.5) and the Brush Settings window and Brushes panel of `E:amiga/brushwin.c`.
+Rechecked 2026-11-18 against Easel 1.1.
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Round tip: size and hardness | **Have** (1-2500 px) | Done | — |
-| Spacing (`spacing`, `spacing_enabled`) | **Partial**: fixed at 25% (`E:amiga/main.c:294`) and not shown | Easy | P1 |
-| Angle and roundness (elliptical tip) | **Missing** | Easy | P2 |
-| Flip X/Y of the tip | **Missing** | Easy | P3 |
-| Sampled (bitmap) tips, `TipShape::Sampled` | **Missing** | Easy: the same as a DPaint brush (section 21) | P1 |
-| Aliased or square tip (`aliased`, `square`) | **Partial**: the Pencil is hard-edged; there's no square tip | Easy | P2 |
-| Shape Dynamics: size, angle and roundness jitter; controls Fade/Pressure/Tilt/Direction (`ShapeDynamics`, `Control`) | **Missing** | Easy (jitter, fade, direction); Moderate (pressure, tilt) | P2 |
-| Scattering: both axes, count, count jitter | **Missing** | Easy | P2 |
+| Spacing (`spacing`, `spacing_enabled`) | **Have**: 1-1000 % in Brush Settings (`brushwin_apply`) | Done | — |
+| Angle and roundness (elliptical tip) | **Have** (0.5) | Done | — |
+| Flip X/Y of the tip | **Have** (0.5) | Done | — |
+| Sampled (bitmap) tips, `TipShape::Sampled` | **Have** (0.5: `Tip`, Edit > Define Brush Preset, `tip_from_doc`) | Done | — |
+| Aliased or square tip (`aliased`, `square`) | **Have** (the Pencil, and Square in Brush Settings) | Done | — |
+| Shape Dynamics: size, angle and roundness jitter; controls Fade/Pressure/Tilt/Direction (`ShapeDynamics`, `Control`) | **Partial**: jitters with Fade, Pressure, Direction and Initial Direction (`CTL_`); no Tilt (no tablet input) | Moderate (tilt) | P3 |
+| Scattering: both axes, count, count jitter | **Have** (0.5) | Done | — |
 | Texture: pattern, scale, mode, depth | **Missing** | Moderate | P3 |
 | Dual Brush | **Missing** | Moderate | P3 |
-| Color Dynamics: foreground/background jitter, hue, saturation, brightness, purity | **Missing** | Easy | P2 |
-| Transfer: opacity and flow jitter | **Missing** | Easy | P3 |
+| Color Dynamics: foreground/background jitter, hue, saturation, brightness, purity | **Have** (0.5, with Apply Per Stroke) | Done | — |
+| Transfer: opacity and flow jitter | **Have** (0.5) | Done | — |
 | Brush Pose: tilt, rotation and pressure overrides | **Missing** | Easy | P3 |
 | Noise | **Missing** | Easy | P3 |
 | Wet Edges | **Missing** | Easy | P3 |
-| Build-up (airbrush) and its rate | **Missing** | Easy: dabs on a timer while the button is held | P2 |
-| Smoothing, including Pulled String (`Smoothing`, `dynamics.rs` `Smoother`) | **Missing** | Easy | P2 |
-| Protect Texture | **Missing** | Easy | P3 |
-| Brush presets and the Brushes panel (`BrushPreset`, `presets.rs`) | **Missing** | Easy | P2 |
-| .abr brush import and export (`psd/src/abr.rs`) | **Missing** | Moderate | P3 |
-| Painting symmetry: Vertical, Horizontal, Dual, Diagonal, from a path (`SymmetryMode`) | **Missing** | Easy: DPaint users will expect it | P2 |
-| Pen pressure, tilt and rotation (`crates/tablet`, `input/stylus.rs`) and the pressure curve | **Missing** | Moderate: Intuition's `IESUBCLASS_NEWTABLET` and `TABLETA_Pressure` (V39 and later) carry pressure from tablet drivers | P2 |
-| Brush outline cursor (Cursors preferences) | **Have**: drawn in COMPLEMENT (`E:amiga/canvas.c`) | Done | — |
+| Build-up (airbrush) and its rate | **Have** (0.5, `stroke_tick`; 1.1 puts Airbrush on the options bar). *upstream* about ten dabs a second (#12169): Easel's rate is set in Brush Settings | Done | — |
+| Smoothing, including Pulled String (`Smoothing`, `dynamics.rs` `Smoother`) | **Have** (0.5; 1.1: on the options bar and Alt+digit) | Done | — |
+| Protect Texture | **Missing** | Easy, with Texture | P3 |
+| Brush presets and the Brushes panel (`BrushPreset`, `presets.rs`) | **Have** (0.5, `E:core/preset.c`) | Done | — |
+| .abr brush import and export (`psd/src/abr.rs`) | **Partial**: import (versions 1, 2 and 6-10, `presets_read_abr`); no export | Easy | P3 |
+| Painting symmetry: Vertical, Horizontal, Dual, Diagonal, from a path (`SymmetryMode`) | **Partial**: vertical, horizontal, both, radial and mandala (`SYM_`, `brush_symmetry`); no diagonal or path symmetry | Easy | P3 |
+| Pen pressure, tilt and rotation (`crates/tablet`, `input/stylus.rs`) and the pressure curve; *upstream* Pressure for Size starts off (#11847) | **Partial**: the engine takes pressure (`stroke_begin_p`, Pressure Controls Size/Opacity); the canvas reads no tablet, so pressure is always full | Moderate: Intuition's `IESUBCLASS_NEWTABLET` and `TABLETA_Pressure` (V39 and later) carry pressure from tablet drivers | P2 |
+| Brush outline cursor (Cursors preferences) | **Have**: drawn in COMPLEMENT (`E:amiga/canvas.c`), outline, crosshair or both (0.8 Preferences), Caps Lock for the crosshair | Done | — |
 | Alt for the eyedropper with painting tools | **Have** | Done | — |
 | Shift-click draws a straight line | **Have** | Done | — |
-| Gradient presets and the gradient editor: stops, midpoints, opacity stops, .grd (`gradient_fill_cmds.rs`, DOC `Fill::Gradient`) | **Missing** | Easy | P1 |
-| Pattern library: built-ins, Define Pattern, .pat (`pattern_cmds.rs`) | **Missing** | Easy | P2 |
-| Colour picker dialog: HSB/RGB/Lab/CMYK/hex, web colours only, sampling the screen (`docs/color-picker.md`) | **Partial**: `pick_color` gives RGB, HSV and hex | Easy | P2 |
-| Deterministic, replayable strokes (`BrushSettings::seed`) | **Missing** | Easy: needed for actions | P3 |
+| Gradient presets and the gradient editor: stops, midpoints, opacity stops, .grd (`gradient_fill_cmds.rs`, DOC `Fill::Gradient`) | **Partial**: all but .grd (0.5; GIMP .ggr and Easel's own files instead, `E:core/gradient.c`) | Easy (.grd reading) | P3 |
+| Pattern library: built-ins, Define Pattern, .pat (`pattern_cmds.rs`) | **Partial**: built-ins, Define Pattern, IFF pattern sets (0.5, `E:core/pattern.c`); no .pat | Easy | P3 |
+| Colour picker dialog: HSB/RGB/Lab/CMYK/hex, web colours only, sampling the screen (`docs/color-picker.md`) | **Partial**: HSB, RGB, Lab and hex (0.5, `E:amiga/colorpick.c`); no CMYK, web-colours-only or screen sampling | Easy | P3 |
+| Deterministic, replayable strokes (`BrushSettings::seed`) | **Have** (0.5: `BrushDynamics.seed`, counter-based `brush_hash`) | Done | — |
+| *upstream* Painting tools: Shift+Alt+click adds a colour sampler (#12245) | **Missing** | Easy | P3 |
+| *upstream* Brush: the reference's alerts when it can't paint (#12254) | **Have**: locked, hidden, no pixels, no snapshot or pattern (`press`, `E:amiga/canvas.c`) | Done | — |
+| DPaint stencil and grid snap for painting (Easel extra, section 21) | **Have** (1.1: `Brush.stencil`, `grid_snap_paint`) | Done | — |
 
 ## 9. Type and text
 
@@ -878,21 +890,26 @@ or dithered to a colour cube on AGA and ECS.
 ## 12. History and undo
 
 PhotoCraft keeps copy-on-write tiles and history commands (`engine/src/cmd/history_*`). Easel
-keeps undo steps that save only the changed regions (`doc_note_layer`), within 40 MB
-(`E:core/doc.h`), and has a History panel.
+keeps undo steps that save only the changed regions (`doc_note_layer`), within a memory budget and
+a number of steps set in Preferences (0.8: `undo_budget`, `undo_levels`, older steps spilled to a
+scratch drawer), and has a History panel (`history_class`, `E:amiga/panels.c`). Rechecked
+2026-11-18 against Easel 1.1.
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Multi-level undo and redo, named steps | **Have** | Done | — |
 | History panel: click a state to go back or forward | **Have** (`E:amiga/panels.c` `history_class`) | Done | — |
 | Step Backward / Step Forward | **Have** | Done | — |
-| Snapshots: new, rename, delete, select (`history.newSnapshot` and others) | **Missing** | Moderate: a full copy costs RAM, so offer to put snapshots in T: or a scratch drawer | P2 |
-| New Document from a state (`history.newDocument`) | **Missing** | Easy | P3 |
-| Delete a state (`history.deleteState`) | **Missing** | Easy | P3 |
-| History Options: non-linear history, automatic first snapshot (`PREFS` history options) | **Missing** | Moderate | P3 |
-| History states limit (`PREFS` `history_states`) and memory use | **Partial**: a fixed 40 MB budget, too much for a 16 MB machine and too little for 64 MB | Easy: a preference | P1 |
+| Snapshots: new, rename, delete, select (`history.newSnapshot` and others) | **Partial**: new, delete and go back to (0.8, up to eight whole copies, `DocView.hsnap`); no rename | Easy | P3 |
+| New Document from a state (`history.newDocument`) | **Have** (0.8, `ID_HISTNEWDOC`) | Done | — |
+| Delete a state (`history.deleteState`) | **Have** (1.1: the panel's bin with no snapshot picked, `doc_delete_state` in `E:core/toolopts.c`; linear history, so the steps after it go too) | Done | — |
+| History Options: non-linear history, automatic first snapshot (`PREFS` history options); *upstream* Automatically Create First Snapshot, New Snapshot When Saving, Show New Snapshot Dialog (#3634) | **Missing** | Moderate (non-linear); Easy (the snapshot options) | P3 |
+| History states limit (`PREFS` `history_states`) and memory use | **Have** (0.8: Preferences' undo memory and steps, `undo_budget`, `undo_levels`, and the scratch drawer) | Done | — |
 | History log: session, concise, detailed; to the metadata or a file (Preferences › History Log) | **Missing** | Easy | P3 |
-| Autosave and crash recovery (`PREFS` `autosave`, `autosave_minutes`, `recover_on_launch`; `.pcraft`) | **Missing** | Moderate: an ORA to T: or a chosen drawer every N minutes. Very valuable on the Amiga | P2 |
+| Autosave and crash recovery (`PREFS` `autosave`, `autosave_minutes`, `recover_on_launch`; `.pcraft`) | **Have** (0.6: Edit > Autosave to the Recovery drawer, offered back at the next start) | Done | — |
+| *upstream* History Brush: source selection (#4446) | **Have** (1.1: From History, a History panel snapshot as the source) | Done | — |
+| *upstream* one history step per action, kept across saves (persisted single-action grouping) | **Partial**: one step per action; the history is not kept in files | Moderate | P3 |
+| Edit > Fade and Toggle Last State | **Have** (0.6, `doc_fade`) | Done | — |
 
 ## 13. File formats
 
@@ -1052,33 +1069,37 @@ options bar, the document tabs and the status bar (`E:amiga/panels.c`, `E:amiga/
 
 PhotoCraft's single keys are `Tool::key()` in TOOL; its menu shortcuts are in CAT; the special keys
 are in `crates/ui-egui/src/input/` (`hold_keys.rs`, `spring_tools.rs`, `blend_keys.rs`,
-`page_keys.rs`, `layout_keys.rs`). Easel's are in the README tables and `E:amiga/canvas.c`.
+`page_keys.rs`, `layout_keys.rs`). Easel's are in the README tables, `keys` in `E:amiga/canvas.c`
+and Edit > Keyboard Shortcuts (0.8, `E:amiga/keys.c`). Rechecked 2026-11-18 against Easel 1.1.
 
 | PhotoCraft shortcut (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Tool letters V M L W C I B E G T H Z O S U (TOOL) | **Have**. Easel adds R for Blur/Sharpen/Smudge, which PhotoCraft gives to Rotate View | Done | — |
-| Tool letters K (Frame), J (healing), Y (History Brush), P (Pen), A (Path Selection), R (Rotate View) | **Missing**: the tools don't exist yet | Easy, with the tools | P2 |
+| Tool letters K (Frame), J (healing), Y (History Brush), P (Pen), A (Path Selection), R (Rotate View) | **Partial**: J, Y, P and A (0.5-1.0); K and R wait for their tools | Easy, with the tools | P3 |
 | ⇧+letter cycles a tool group | **Have** | Done | — |
-| Spring-loaded tool keys: hold a letter for a temporary tool (`spring_tools.rs`) | **Missing** | Easy | P3 |
+| Spring-loaded tool keys: hold a letter for a temporary tool (`spring_tools.rs`) | **Have** (0.8, `spring_code` in `E:amiga/canvas.c`) | Done | — |
 | Space for the Hand while held | **Have** | Done | — |
-| ⌘Space and ⌥Space to zoom while held (`hold_keys.rs`) | **Missing** | Easy (Ctrl-Space, Alt-Space) | P2 |
-| ⌘ for the Move tool while held | **Missing** | Easy | P3 |
+| ⌘Space and ⌥Space to zoom while held (`hold_keys.rs`) | **Have** (1.1: Ctrl-Space and Alt-Space, `press`) | Done | — |
+| ⌘ for the Move tool while held | **Have** (1.1: Ctrl with the painting, filling and sampling tools) | Done | — |
 | ⌥ for the eyedropper with painting tools | **Have** | Done | — |
-| `~` to erase with the Brush | **Missing** | Easy | P3 |
+| `~` to erase with the Brush | **Have** (1.1: hold the ` key, `Data.tilde`) | Done | — |
 | `[` `]` for size, ⇧`[` ⇧`]` for hardness, and keyboard-layout independence (`layout_keys.rs`) | **Have**: MUI keys follow the Amiga keymap | Done | — |
-| 1-0 for opacity (and quick two-digit typing) | **Have**: single digits | Done | — |
-| Blend mode keys: ⇧⌥ plus a letter, ⇧+ and ⇧- to step (`blend_keys.rs`) | **Missing** | Easy | P2 |
-| Page Up/Down, Home and End scroll the canvas (`page_keys.rs`) | **Missing** | Easy | P3 |
+| 1-0 for opacity (and quick two-digit typing) | **Partial**: single digits; 1.1 adds Shift+digit for Flow and Alt+digit for Smoothing (*upstream* #12034, #12371); no two-digit typing | Easy | P3 |
+| Blend mode keys: ⇧⌥ plus a letter, ⇧+ and ⇧- to step (`blend_keys.rs`) | **Partial**: Shift-Alt and a letter (0.6); no stepping with Shift + and - | Easy | P3 |
+| Page Up/Down, Home and End scroll the canvas (`page_keys.rs`) | **Have** (1.1: on keyboards that have them; Ctrl with Page Up/Down scrolls across) | Done | — |
 | D (default colours) and X (swap) | **Have** | Done | — |
-| Q (Quick Mask) | **Missing** | Easy, with Quick Mask | P1 |
-| F (screen modes) | **Missing** | Easy | P3 |
-| Tab hides the panels | **Missing** | Easy: valuable on small screens | P2 |
+| Q (Quick Mask) | **Have** (0.7) | Done | — |
+| F (screen modes) | **Have** (1.1: a window, Easel's own screen, full screen, as View > Screen Mode) | Done | — |
+| Tab hides the panels | **Have** (0.6; Shift-Tab the right-hand panels) | Done | — |
 | Menu shortcuts that Easel shares with CAT (⌘Z, ⇧⌘Z/⌘Y, X/C/V, ⇧⌘C, ⇧⌘V, A, D, ⇧⌘I, L, M, U, B, I, ⇧⌘U, ⇧⌘L, J, ⇧⌘J, E, ⇧⌘E, ⇧⌘N, T, ⌥⌘I, ⌥⌘C, ⌘[ ⌘], N, O, S, ⇧⌘S, W, 0, 1), with Ctrl in place of ⌘ | **Have** (README table) | Done | — |
-| Menu shortcuts Easel lacks: ⇧⌘D, ⌥⌘Z, ⇧⌘F, ⌥⌘G, ⇧⌘B (Auto Color), ⌥⇧⌘L, ⌥⇧⌘B, ⌘R, ⌘', ⌘;, ⇧⌘;, ⌥⌘;, ⌘H, ⌘Y, ⇧⌘Y, ⌘K, ⌥⌘F, ⇧F5, ⇧F6, F5-F8, ⌥⌘A, ⇧⌘T, ⌥⌘S, F12, ⌥⌘W, ⇧⌘[ ⇧⌘], ⌘= / ⌘- (Easel uses + and -) | **Partial**: about 30 are missing, mostly for missing features | Easy | P1 |
-| Amiga-key menu shortcuts (Right Amiga) | **Have** (Easel extra, in the NewMenu table) | Done | — |
+| Menu shortcuts Easel lacked: ⇧⌘D, ⌥⌘Z, ⇧⌘F, ⌥⌘G, ⇧⌘B, ⌥⇧⌘L, ⌥⇧⌘B, ⌘R, ⌘', ⌘;, ⇧⌘;, ⌘H, ⌥⌘F, ⇧F5, ⇧F6, ⌥⌘S, F12, ⌥⌘W, ⇧⌘T, ⇧⌘[ ⇧⌘], ⌘= / ⌘- | **Have** (1.1, the Ctrl block of `keys`; ⌘K is Preferences) | Done | — |
+| Menu shortcuts still missing: ⌘Y and ⇧⌘Y (proof colours and gamut warning, section 11), ⌥⌘; (Lock Guides), ⌥⌘A (Select All Layers), F5-F8 (the panels) | **Missing** | Easy, as their commands come | P3 |
+| Amiga-key menu shortcuts (Right Amiga) | **Have** (Easel extra, in the NewMenu table; changeable in Edit > Keyboard Shortcuts) | Done | — |
 | Arrow keys nudge by 1, ⇧ by 10 | **Have** | Done | — |
 | Return and Esc commit and cancel | **Have** | Done | — |
 | ⌥/⌘ Backspace fill with foreground or background, Del clears | **Have** | Done | — |
+| *upstream* Curves: Alt+2..6 pick the channel (#10475); Image Size: Alt+1..8 pick the resampling (#15054); Ctrl+. cancels typing (#12076) | **Missing** (the dialogs' and Type tool's own keys: sections 5, 2 and 9) | Easy | P3 |
+| *upstream* Keyboard Shortcuts records keys the menus use (#10451); tool keys keep their last tool across launches (#11322) | **Partial**: Edit > Keyboard Shortcuts (0.8) warns when an Amiga key is on two commands; the tool a letter chooses is not saved | Easy | P3 |
 
 ## 17. Preferences (Edit › Preferences, 18 items; PREFS)
 
@@ -1179,9 +1200,9 @@ figures in section 23. Easel's status was checked against its code:
 | Colour reduction choices: median cut (Have), Floyd-Steinberg (Have), Burkes/Stucki/Sierra/Jarvis, ordered Bayer 2/4/8, random, none | ADPro, ImageFX | **Partial**: median cut plus Floyd-Steinberg, at ILBM export only | Easy | P1 |
 | OCS/ECS 12-bit palettes (4 bits per gun, 4096 colours) and AGA 24-bit palettes when quantizing | all | **Missing** | Easy | P1 |
 | Halfbrite (EHB) editing: edit the 32 base colours and see their 32 half-bright twins | DPaint IV, PPaint | **Missing** (EHB is read only) | Easy | P2 |
-| Stencils: protect chosen colours, or an area, from painting | DPaint ("Stencil", "Fix Background"), PPaint | **Missing** | Easy: a frozen mask, like the selection | P2 |
-| Shade, Cycle, Tint and Blend draw modes over a palette range | DPaint | **Missing**. Partial equivalents: Smudge for Smear, Blur for Smooth | Easy, with indexed mode | P2 |
-| Range fills: a gradient through a palette range, with dither styles | DPaint | **Missing** (only RGB gradients) | Easy | P2 |
+| Stencils: protect chosen colours, or an area, from painting | DPaint ("Stencil", "Fix Background"), PPaint | **Have** (1.1): Brush Settings' Stencil keeps the background colour or the Color Table's locked colours from every painting tool, or (Stencil Inverted) paints only them (`Brush.stencil`, `stencil_colors` in `E:core/toolopts.c`); an area is protected with the selection or Quick Mask | Done | — |
+| Shade, Cycle, Tint and Blend draw modes over a palette range | DPaint | **Partial**: Smear, Shade, Blend and Cycle are custom-brush modes (0.5, `CB_` in `E:core/brush.h`); no Tint, and they work with a picked-up brush only | Easy | P3 |
+| Range fills: a gradient through a palette range, with dither styles | DPaint | **Have** (1.1): the Gradient tool's Palette Range on indexed pictures fills through the first cycling range (else the whole palette), dithered back to the palette (`gradient_from_palette`, `doc_fill_range`) | Done | — |
 
 ### 21.2 Colour cycling
 
@@ -1195,16 +1216,16 @@ figures in section 23. Easel's status was checked against its code:
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Pick up a custom brush: a rectangle, lasso or whole layer, with the background colour as transparent | DPaint, PPaint, Brilliance | **Missing** | Easy | P1 |
-| Paint with the custom brush in Matte, Color or Replace mode, and stamp it | DPaint | **Missing** | Easy | P1 |
-| Save and load brushes as ILBM, with the GRAB hotspot | DPaint | **Missing** | Easy | P1 |
-| Brush handle, and brush transforms: flip, rotate 90° or any angle, double or halve, stretch, shear, bend, outline | DPaint | **Missing** | Easy (flip, rotate, scale, outline); Moderate (bend) | P2 |
+| Pick up a custom brush: a rectangle, lasso or whole layer, with the background colour as transparent | DPaint, PPaint, Brilliance | **Have** (0.5: Edit > Pick Up Brush, `cbrush_pickup`) | Done | — |
+| Paint with the custom brush in Matte, Color or Replace mode, and stamp it | DPaint | **Have** (0.5: Window > DPaint Brush, `CB_MATTE`, `CB_COLOR`, `CB_REPLACE`) | Done | — |
+| Save and load brushes as ILBM, with the GRAB hotspot | DPaint | **Have** (0.5: `cbrush_write_ilbm`, `cbrush_read_ilbm`) | Done | — |
+| Brush handle, and brush transforms: flip, rotate 90° or any angle, double or halve, stretch, shear, bend, outline | DPaint | **Partial**: flip, turn, scale, halve, double and outline (0.5, `cbrush_*`); no shear or bend | Easy (shear); Moderate (bend) | P3 |
 | Anim brushes: a multi-frame brush that steps as it paints, saved as an ANIM | DPaint, Brilliance | **Missing** | Moderate | P3 |
 | Perspective: place a brush on a 3D plane | DPaint | **Missing** | Moderate | P3 |
-| Spare page (J) and copy to spare | DPaint | **Partial**: tabs and Next Document; no one-key swap and no copy to spare | Easy | P3 |
-| Magnify: a split view, zoomed beside 1:1 | DPaint, PPaint | **Missing** | Easy: two canvas objects, or a Navigator | P2 |
-| Grid snap for painting | DPaint | **Missing** (as View › Snap) | Easy | P1 |
-| Symmetry: N-fold point, mirror, tile | DPaint | **Missing** (as painting symmetry) | Easy | P2 |
+| Spare page (J) and copy to spare | DPaint | **Partial**: tabs and Next Document (Ctrl-Tab); no copy to spare | Easy | P3 |
+| Magnify: a split view, zoomed beside 1:1 | DPaint, PPaint | **Partial**: the Navigator panel (0.6) shows the whole picture beside the zoomed view; no zoomed split | Easy | P3 |
+| Grid snap for painting | DPaint | **Have** (1.1): with the grid shown and View > Snap on, the painting tools go from grid point to grid point (`grid_snap_paint`) | Done | — |
+| Symmetry: N-fold point, mirror, tile | DPaint | **Partial**: mirror and N-fold (radial and mandala, 0.5 `brush_symmetry`); no tile | Easy | P3 |
 
 ### 21.4 Writing Amiga picture modes
 
