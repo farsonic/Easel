@@ -1015,6 +1015,73 @@ static void test_webp_lossy(void)
     }
 }
 
+/* ------------------------------------------------------------------ fuzzing, with a work bound */
+static void test_fuzz(void)
+{
+  u32 len, l2;
+  u8 *lp = make_lut_profile(&len, 1), *c, *m;
+  u32 seed = 12345, it;
+  char err[80];
+  Doc *d = ramp_doc(24, 16, 1);
+  size_t n;
+  int k;
+  /* profiles: bytes changed at random, then parsed and used */
+  c = (u8 *)malloc(len);
+  for (it = 0; it < 400; it++) {
+    IccProfile *p;
+    memcpy(c, lp, len);
+    for (k = 0; k < 1 + (int)(it % 8); k++) { seed = seed * 1103515245u + 12345u; c[(seed >> 8) % len] ^= (u8)(seed >> 3); }
+    if ((p = icc_parse(c, (it & 1) ? len : (seed >> 4) % len, err, sizeof err)) != NULL) {
+      double in[3] = { 0.3, 0.6, 0.9 }, xyz[3], out[3];
+      CmsXform *x;
+      icc_to_xyz(p, CI_PERCEPTUAL, in, xyz);
+      icc_from_xyz(p, CI_RELATIVE, xyz, out);
+      if (it % 50 == 0 && (x = cms_xform_new(p, NULL, CI_RELATIVE, 1)) != NULL) { u8 px[8] = { 1, 2, 3, 4, 250, 128, 7, 255 }; cms_xform_apply(x, px, 2); cms_xform_free(x); }
+      icc_free(p);
+    }
+  }
+  free(c); free(lp);
+  /* files with profiles and in colour models: changed at random, then opened */
+  d->icc = icc_builtin_bytes(CMS_SRGB, &l2); d->icclen = l2;
+  for (k = 0; k < 6; k++) {
+    static const int fm[6] = { FMT_PNG, FMT_JPEG, FMT_TIFF, FMT_PSD, FMT_WEBP, FMT_TIFF };
+    if (k == 5) colorx_convert_model(d, CM_CMYK, NULL);
+    m = colorx_write_doc(d, fm[k], &n);
+    if (!m) continue;
+    c = (u8 *)malloc(n);
+    for (it = 0; it < 60; it++) {
+      Doc *e;
+      u8 *icc;
+      memcpy(c, m, n);
+      seed = seed * 1103515245u + 12345u; c[(seed >> 8) % n] ^= (u8)(1 + (seed >> 3) % 255);
+      seed = seed * 1103515245u + 12345u; c[(seed >> 8) % n] ^= (u8)(1 + (seed >> 3) % 255);
+      if ((icc = icc_from_file(c, n, &l2)) != NULL) free(icc);
+      cms_file_model(c, n);
+      e = codec_load_doc(c, n, err, sizeof err);
+      doc_free(e);
+    }
+    free(c); free(m);
+  }
+  /* Cineon and lossy WebP */
+  {
+    Rgba im, back;
+    im.w = 24; im.h = 16; im.px = d->lay[0]->px;
+    for (k = 0; k < 2; k++) {
+      m = k ? webp_encode_lossy(&im, 60, &n) : cineon_encode(&im, &n);
+      if (!m) continue;
+      c = (u8 *)malloc(n);
+      for (it = 0; it < 300; it++) {
+        memcpy(c, m, n);
+        seed = seed * 1103515245u + 12345u; c[(seed >> 8) % n] ^= (u8)(1 + (seed >> 3) % 255);
+        if (codec_decode(c, it % 3 ? n : (seed >> 5) % n, &back, err, sizeof err)) rgba_free(&back);
+      }
+      free(c); free(m);
+    }
+  }
+  doc_free(d);
+  CHECK(1, "fuzzed without a fault");
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -1036,6 +1103,7 @@ int main(int argc, char **argv)
   test_psdfx();
   test_progressive();
   test_webp_lossy();
+  test_fuzz();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }
