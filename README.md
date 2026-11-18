@@ -21,6 +21,20 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.1: five languages and the right mouse button
+
+- Easel speaks English, German, French, Spanish and Italian, in Photoshop's own words for each
+  (Ebene, Tonwertkorrektur, Zauberstab; calque, Niveaux, Baguette magique ...). It follows the first
+  of the preferred languages in Locale prefs, or the one chosen in Preferences › Interface ›
+  Language (from the next start). Menus, dialogs, panels, tools, help bubbles and messages are all
+  translated, and each language still fits a 640 × 480 screen.
+- Right-click menus, as PhotoCraft has them: on the picture, one for the tool in use (the selection
+  tools' Deselect, Select Inverse, Feather, Layer via Copy, Free Transform ...; the layers under the
+  pointer with the Move tool or Ctrl; the zooms with Hand and Zoom; sample sizes with the
+  Eyedropper; Apply and Cancel while transforming or cropping; the type, path and shape commands);
+  on a Layers panel row, its thumbnail or its mask; on Channels and Paths rows; on document tabs.
+- The Eyedropper dragged off the picture picks up any colour on the screen.
+
 ## New in 1.1: tool options
 
 - Dodge and Burn have a Range (Shadows, Midtones, Highlights) and Protect Tones; the Sponge
@@ -491,7 +505,7 @@ it. File > Export always writes a flat copy and leaves the picture's own file al
 ## Settings
 
 Easel keeps a few settings in `PROGDIR:Easel.prefs`: the dark interface, the public screen and
-the last drawer used. Start it with `PUBSCREEN=name` (or a PUBSCREEN tool type) to open on
+the last drawer used, and the interface language (`language=de`, or `auto` for Locale prefs' choice). Start it with `PUBSCREEN=name` (or a PUBSCREEN tool type) to open on
 another screen. `DEBUG=file` writes a log.
 
 ## Not included

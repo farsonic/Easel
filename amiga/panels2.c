@@ -22,6 +22,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "theme.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "ids.h"
 #include <devices/inputevent.h>
@@ -400,7 +401,18 @@ static ULONG chandispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     memset(INST_DATA(cl, obj), 0, sizeof(struct ChData));
     ((struct ChData *)INST_DATA(cl, obj))->lastrow = -1;
+    ctx_attach(obj, CTX_CHANNELROW);             /* (1.1: the right button's menu) */
     return (ULONG)obj;
+  case OM_DISPOSE: ctx_detach(obj, CTX_CHANNELROW); break;
+  case MUIM_ContextMenuBuild: {
+    /* a channel's row: its commands, about that channel (chan_pick); elsewhere Save Selection */
+    CtxState s;
+    int k = ch_row_at(obj, cur_doc(), ((struct MUIP_ContextMenuBuild *)msg)->my);
+    ctx_state(&s);
+    if (k >= 0) { chan_pick = k; chan_op = SEL_REPLACE; s.chan = k; }
+    return (ULONG)ctx_show(CTX_CHANNELROW, &s);
+  }
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);
   case MUIM_AskMinMax: {
     struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
     DoSuperMethodA(cl, obj, msg);

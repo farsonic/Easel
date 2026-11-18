@@ -94,6 +94,7 @@ ICON = re.compile(r'^(?:[A-Za-z]{1,2}|-?\d+(?:\.\d+)?)(?: (?:[A-Za-z]{1,2}|-?\d+
 def not_words(t):
     """true for text that isn't words for people to read"""
     s = FMT.sub(' ', t)
+    if re.match(r'\t[a-z]+\t', t): return True                              # vbcc inline assembler ("\tjsr\t-108(a6)")
     if not re.search(r'[A-Za-z\300-\377]{2}', s): return True             # numbers, signs, conversions
     if re.fullmatch(r'(\$VER: )?Easel [0-9.]+( \(.*)?', t): return True                # the version
     if ICON.match(t) and re.search(r'\d', t): return True                  # an icon's drawing (theme.c)

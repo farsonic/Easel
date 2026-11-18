@@ -19,6 +19,9 @@ CORE="$CORE core/toolopts.c"     # 1.1: tool options
   python3 tools/langfit.py > $T/easel_langfit.txt || { cat $T/easel_langfit.txt; exit 1; }
   tail -1 $T/easel_langfit.txt
   # 1.1: the context menus' contents (amiga/ctxmenu.c is plain C)
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/ctxtest.c -o $T/easel_ctxtest
+  $T/easel_ctxtest > $T/easel_ctxtest.txt || { cat $T/easel_ctxtest.txt; exit 1; }
+  tail -1 $T/easel_ctxtest.txt
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }

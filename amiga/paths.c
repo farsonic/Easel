@@ -20,6 +20,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "theme.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "ids.h"
 #include "../core/path.h"
@@ -149,7 +150,23 @@ static ULONG padispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, 
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     memset(INST_DATA(cl, obj), 0, sizeof(struct PaData));
     ((struct PaData *)INST_DATA(cl, obj))->lastrow = -1;
+    ctx_attach(obj, CTX_PATHROW);                /* (1.1: the right button's menu) */
     return (ULONG)obj;
+  case OM_DISPOSE: ctx_detach(obj, CTX_PATHROW); break;
+  case MUIM_ContextMenuBuild: {
+    /* a path's row becomes the active path first, as a click would */
+    CtxState s;
+    Doc *doc = cur_doc();
+    int row = pa_row_at(obj, doc, ((struct MUIP_ContextMenuBuild *)msg)->my);
+    if (doc && row >= 0) {
+      int k = pa_row_path(doc, row);
+      path_pick = k;
+      if (doc->path_active != pa_active_of(k)) { doc->path_active = pa_active_of(k); MUI_Redraw(obj, MADF_DRAWOBJECT); }
+    }
+    ctx_state(&s);
+    return (ULONG)ctx_show(CTX_PATHROW, &s);
+  }
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);
   case MUIM_AskMinMax: {
     struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
     DoSuperMethodA(cl, obj, msg);

@@ -29,6 +29,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "theme.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "ids.h"
 #include "fxids.h"                    /* 1.1 */
@@ -1906,6 +1907,13 @@ static void command(ULONG id)
 {
   Doc *d = cur_doc();
   Box ch;
+  if (id >= ID_CTX_LAYER0 && id < ID_CTX_LAST) {     /* 1.1: the right button's menus' own commands (ctxmui.c) */
+    int sw; ULONG then;
+    if (!ctx_command(id, &sw, &then)) return;
+    if (sw >= 0 && sw != curdoc) doc_switch(sw);
+    if (then) command(then);
+    return;
+  }
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }

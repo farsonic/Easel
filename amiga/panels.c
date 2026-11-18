@@ -26,6 +26,7 @@
 #include "../core/fx.h"                 /* 1.1 */
 #include "../core/layerops.h"
 #include "theme.h"
+#include "ctxmui.h"
 #include "lang.h"
 #include "ids.h"
 
@@ -556,6 +557,22 @@ static int lay_row_at(Object *obj, struct LData *d, LONG my)
   return d->list[d->first + (int)k];
 }
 static void lay_changed(Object *obj) { SetAttrs(obj, MUIA_Layers_Changed, TRUE, TAG_DONE); }
+/* 1.1: the right button on a layer's row, its thumbnail or its mask's thumbnail: that layer's menu
+   (ctxmenu.c). A layer outside the picked ones becomes the active one first, as a click would */
+static Object *lay_context(Object *obj, struct LData *d, LONG mx, LONG my)
+{
+  Doc *doc = cur_doc();
+  CtxState s;
+  int li = lay_row_at(obj, d, my), target = CTX_LAYERROW;
+  Layer *ly;
+  if (!doc || li < 0 || li >= doc->nlay || d->drag || d->scrub >= 0) return NULL;
+  ly = doc->lay[li];
+  if (li != doc->active && !ly->picked) { doc_pick_layer(doc, li, 0); MUI_Redraw(obj, MADF_DRAWOBJECT); lay_changed(obj); }
+  if (ly->mask && mx >= mask_x(obj, ly) && mx < mask_x(obj, ly) + THUMB) target = CTX_MASKTHUMB;
+  else if (mx >= thumb_x(obj, ly) && mx < thumb_x(obj, ly) + THUMB) target = CTX_LAYERTHUMB;
+  ctx_state(&s);
+  return ctx_show(target, &s);
+}
 static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct LData *d;
@@ -566,11 +583,16 @@ static ULONG laydispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     memset(d, 0, sizeof *d);
     d->lastrow = -1; d->scrub = -1;
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_RAWKEY;
+    ctx_attach(obj, CTX_LAYERROW);               /* (1.1: the right button's menus: row, thumbnail, mask) */
+    ctx_attach(obj, CTX_LAYERTHUMB); ctx_attach(obj, CTX_MASKTHUMB);
     return (ULONG)obj;
   case OM_DISPOSE:
     d = INST_DATA(cl, obj);
+    ctx_detach(obj, CTX_LAYERROW); ctx_detach(obj, CTX_LAYERTHUMB); ctx_detach(obj, CTX_MASKTHUMB);
     if (d->buf) FreeVec(d->buf);
     break;
+  case MUIM_ContextMenuBuild: return (ULONG)lay_context(obj, INST_DATA(cl, obj), ((struct MUIP_ContextMenuBuild *)msg)->mx, ((struct MUIP_ContextMenuBuild *)msg)->my);
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);
   case OM_SET: {
     struct TagItem *t = FindTagItem(MUIA_Popup_Chosen, ((struct opSet *)msg)->ops_AttrList);
     struct TagItem *ta = FindTagItem(MUIA_Layers_AdjPick, ((struct opSet *)msg)->ops_AttrList);
@@ -1109,7 +1131,24 @@ static ULONG tabdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj,
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = IDCMP_MOUSEBUTTONS;
+    ctx_attach(obj, CTX_DOCTAB);                 /* (1.1: Close, Close Others, Close All ...) */
     return (ULONG)obj;
+  case OM_DISPOSE: ctx_detach(obj, CTX_DOCTAB); break;
+  case MUIM_ContextMenuBuild: {
+    /* the tab right-clicked: its menu's commands work on that picture (ctx_command switches to it) */
+    struct MUIP_ContextMenuBuild *m = (struct MUIP_ContextMenuBuild *)msg;
+    CtxState s;
+    int i;
+    d = INST_DATA(cl, obj);
+    for (i = 0; i < ndocs; i++)
+      if (d->x0[i] >= 0 && m->mx >= d->x0[i] && m->mx <= d->x1[i]) {
+        ctx_state(&s);
+        ctx_tab = i;
+        return (ULONG)ctx_show(CTX_DOCTAB, &s);
+      }
+    return 0;
+  }
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);
   case OM_GET: {
     struct opGet *g = (struct opGet *)msg;
     if (g->opg_AttrID == MUIA_DocTabs_Pick || g->opg_AttrID == MUIA_DocTabs_Close) { *g->opg_Storage = (ULONG)((struct DTData *)INST_DATA(cl, obj))->pick; return TRUE; }

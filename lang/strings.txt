@@ -2185,3 +2185,18 @@ Enlarged	Vergrößert	Agrandi	Ampliado	Ingrandito
 Stippled	Getupft	Pointillé	Punteado	Puntinato
 Speckle	Gesprenkelt	Moucheté	Moteado	Maculato
 Neon Blue	Neonblau	Bleu néon	Azul neón	Blu neon
+## ctxmenu.c (the right mouse button's menus)
+Ruler	Lineal	Règle	Regla	Righello
+Disable Layer Mask	Ebenenmaske deaktivieren	Désactiver le masque de fusion	Desactivar máscara de capa	Disattiva maschera di livello
+Enable Layer Mask	Ebenenmaske aktivieren	Activer le masque de fusion	Activar máscara de capa	Attiva maschera di livello
+Delete Layer Mask	Ebenenmaske löschen	Supprimer le masque de fusion	Eliminar máscara de capa	Elimina maschera di livello
+Apply Layer Mask	Ebenenmaske anwenden	Appliquer le masque de fusion	Aplicar máscara de capa	Applica maschera di livello
+Channels	Kanäle	Couches	Canales	Canali
+Rename Channel...	Kanal umbenennen...	Renommer la couche...	Cambiar nombre del canal...	Rinomina canale...
+Duplicate Path	Pfad duplizieren	Dupliquer le tracé	Duplicar trazado	Duplica tracciato
+Document	Dokument	Document	Documento	Documento
+Select All	Alles auswählen	Tout sélectionner	Seleccionar todo	Seleziona tutto
+Select Inverse	Auswahl umkehren	Intervertir la sélection	Invertir selección	Selezione inversa
+Make Work Path...	Arbeitspfad erstellen...	Créer un tracé de travail...	Hacer trazado de trabajo...	Crea tracciato di lavoro...
+Eyedropper	Pipette	Pipette	Cuentagotas	Contagocce
+Color Sampler	Farbaufnahme	Échantillonnage de couleur	Muestra de color	Campionatore colore
