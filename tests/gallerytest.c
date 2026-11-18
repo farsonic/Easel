@@ -1,5 +1,8 @@
 /*
- * gallerytest.c - native tests of the Filter Gallery effects and stacks (core/gallery.c).
+ * gallerytest.c - native tests of the Filter Gallery effects and stacks (core/gallery.c), Color
+ * Lookup, Equalize's areas and Black & White Auto (core/adjustx.c), Focus Area and Select and Mask
+ * (core/selmask.c). It also writes a LUT, a picture and Easel's lookups of it for
+ * tests/check_fx.py to check with numpy.
  *
  * Every effect changes a textured picture, gives the same pixels twice, and gives (to within
  * rounding) the same pixels worked out in 128-pixel tiles as worked out over the whole picture at
@@ -15,6 +18,9 @@
 #include "../core/paint.h"
 #include "../core/util.h"
 #include "../core/gallery.h"
+#include "../core/adjust10.h"
+#include "../core/adjustx.h"
+#include "../core/selmask.h"
 
 static int tests, failed;
 static void ok(const char *name, int cond) { tests++; if (!cond) { failed++; printf("FAIL %s\n", name); } }
@@ -182,12 +188,171 @@ static void known_answers(void)
   doc_free(d);
 }
 
-int main(void)
+/* ------------------------------------------------------------------ Color Lookup */
+static void lookup(const char *outdir)
 {
+  static const char inv[] = "TITLE \"invert\"\n# a comment\nLUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+  static const char inv1[] = "LUT_1D_SIZE 3\n1 1 1\n0.5 0.5 0.5\n0 0 0\n";
+  char err[120], path[300];
+  Lut3D *l = lut_parse_cube(inv, (long)strlen(inv), err, sizeof err), *id = lut_identity(17), *rt, *one, *rnd;
+  Doc *d = textured(120, 90);
+  u8 *orig = copy_px(d);
+  long n = (long)d->w * d->h * 4, k, len;
+  int md, tet, okinv = 1;
+  char *txt;
+  ok("cube parsed", l && l->n == 2 && !strcmp(l->title, "invert"));
+  for (tet = 0; tet < 2; tet++) {
+    adj_color_lookup(d, id, tet, 0, 100);
+    ok("identity LUT leaves the picture", ndiff(d->lay[0]->px, orig, n, 1, &md) == 0);
+    doc_undo(d);
+    adj_color_lookup(d, l, tet, 0, 100);
+    for (k = 0; k < (long)d->w * d->h * 4; k++) if (k % 4 != 3 && abs(d->lay[0]->px[k] - (255 - orig[k])) > 1) okinv = 0;
+    ok("invert LUT inverts", okinv);
+    doc_undo(d);
+  }
+  adj_color_lookup(d, l, 1, 0, 50);
+  ok("opacity 50 is half way", abs(d->lay[0]->px[0] - (orig[0] + (255 - orig[0])) / 2) <= 1 + abs(255 - 2 * orig[0]) / 255);
+  doc_undo(d);
+  adj_color_lookup(d, id, 0, 1, 100);
+  ok("dither moves by at most one", ndiff(d->lay[0]->px, orig, n, 1, &md) == 0 && md <= 1);
+  doc_undo(d);
+  txt = lut_format_cube(l, &len);
+  rt = txt ? lut_parse_cube(txt, len, err, sizeof err) : NULL;
+  ok("cube written and read back", rt && rt->n == 2 && fabs(rt->t[0] - 1) < 1e-5 && fabs(rt->t[21] - 0) < 1e-5);
+  one = lut_parse_cube(inv1, (long)strlen(inv1), err, sizeof err);
+  if (one) { adj_color_lookup(d, one, 0, 0, 100); ok("1D LUT inverts", abs(d->lay[0]->px[4] - (255 - orig[4])) <= 1); doc_undo(d); }
+  else ok("1D LUT parsed", 0);
+  ok("not a LUT refused", !lut_parse_cube("hello\n1 2 3\n", 12, err, sizeof err) && err[0]);
+  ok("short LUT refused", !lut_parse_cube("LUT_3D_SIZE 3\n0 0 0\n", 21, err, sizeof err));
+  ok("huge LUT refused", !lut_parse_cube("LUT_3D_SIZE 900\n0 0 0\n", 23, err, sizeof err));
+  /* a bent LUT for numpy to check: a 9-point table with a twist and a curve */
+  rnd = lut_identity(9);
+  if (rnd) {
+    FILE *f;
+    for (k = 0; k < 9L * 9 * 9; k++) {
+      float *e = rnd->t + k * 3, r0 = e[0], g0 = e[1], b0 = e[2];
+      e[0] = (float)pow(r0, 1.7) * 0.8f + b0 * 0.2f; e[1] = (float)(0.5 + 0.5 * sin(g0 * 3.0 + r0)); e[2] = (float)(b0 * b0 * 0.6 + g0 * 0.3);
+    }
+    free(txt);
+    txt = lut_format_cube(rnd, &len);
+    snprintf(path, sizeof path, "%s/bent.cube", outdir); file_write(path, txt, (size_t)len);
+    snprintf(path, sizeof path, "%s/in.rgba", outdir); file_write(path, orig, (size_t)n);
+    for (tet = 0; tet < 2; tet++) {
+      Lut3D *back = lut_load_cube((snprintf(path, sizeof path, "%s/bent.cube", outdir), path), err, sizeof err);
+      if (back) adj_color_lookup(d, back, tet, 0, 100);
+      snprintf(path, sizeof path, "%s/out_%s.rgba", outdir, tet ? "tetra" : "tri"); file_write(path, d->lay[0]->px, (size_t)n);
+      if (back) doc_undo(d);
+      lut_free(back);
+    }
+    f = fopen((snprintf(path, sizeof path, "%s/size.txt", outdir), path), "w");
+    if (f) { fprintf(f, "%d %d\n", (int)d->w, (int)d->h); fclose(f); }
+  }
+  free(txt);
+  lut_free(l); lut_free(id); lut_free(rt); lut_free(one); lut_free(rnd);
+  free(orig);
+  doc_free(d);
+}
+
+static void equalize_bw(void)
+{
+  Doc *d = textured(120, 90), *e;
+  u8 *orig = copy_px(d);
+  long n = (long)d->w * d->h * 4;
+  int w6[6] = { 40, 60, 40, 60, 20, 80 }, w0[6] = { 40, 60, 40, 60, 20, 80 }, k, inrange = 1;
+  sel_rect(d, 10, 10, 50, 40, SEL_REPLACE, 0);
+  adj_equalize_ex(d, EQ_SELECTED);
+  ok("Equalize selected: outside kept", !memcmp(px(d, 100, 80), orig + ((long)80 * d->w + 100) * 4, 4));
+  doc_undo(d);
+  adj_equalize_ex(d, EQ_ENTIRE);
+  ok("Equalize entire: outside changed too", ndiff(px(d, 0, 60), orig + (long)60 * d->w * 4, (long)d->w * 4 * 30, 0, NULL) > 0);
+  doc_undo(d);
+  sel_none(d);
+  ok("Equalize undone", !memcmp(d->lay[0]->px, orig, (size_t)n));
+  /* Black & White Auto: a red and a blue of the same brightness become different greys */
+  e = doc_new(64, 32, 0, 0);
+  {
+    i32 x, y;
+    for (y = 0; y < 32; y++) for (x = 0; x < 64; x++) { u8 *p = e->lay[0]->px + ((long)y * 64 + x) * 4; p[3] = 255; if (x < 32) { p[0] = 200; p[1] = 40; p[2] = 40; } else { p[0] = 60; p[1] = 60; p[2] = 230; } }
+  }
+  ok("Auto finds weights", bw_auto_weights(e, w6));
+  for (k = 0; k < 6; k++) if (w6[k] < -200 || w6[k] > 300) inrange = 0;
+  ok("Auto weights in range", inrange);
+  {
+    int g1, g2, h1, h2;
+    adj_black_white6(e, w0, 0, 0, 0); h1 = e->lay[0]->px[0]; h2 = e->lay[0]->px[40 * 4]; doc_undo(e);
+    adj_black_white6(e, w6, 0, 0, 0); g1 = e->lay[0]->px[0]; g2 = e->lay[0]->px[40 * 4]; doc_undo(e);
+    ok("Auto spreads the greys at least as far", abs(g1 - g2) >= abs(h1 - h2) && abs(g1 - g2) > 40);
+  }
+  doc_free(e);
+  free(orig);
+  doc_free(d);
+}
+
+static void focus_refine(void)
+{
+  Doc *d = doc_new(160, 100, 0, 0);
+  i32 x, y;
+  u8 *m;
+  RefineParams r;
+  long left = 0, right = 0;
+  /* left: sharp fine texture; right: the same, smooth */
+  for (y = 0; y < 100; y++)
+    for (x = 0; x < 160; x++) {
+      u8 *p = px(d, x, y);
+      int v = x < 80 ? (((x * 7 + y * 13) % 5) * 40 + 40) : (int)(120 + 20 * sin(x * 0.05) * cos(y * 0.07));
+      p[0] = p[1] = p[2] = (u8)v; p[3] = 255;
+    }
+  m = focus_area_mask(d, 50, 0, 0, 0);
+  ok("Focus Area mask made", m != NULL);
+  if (m) {
+    for (y = 20; y < 80; y++) for (x = 0; x < 160; x++) { if (x < 60) left += m[(long)y * 160 + x]; else if (x > 100) right += m[(long)y * 160 + x]; }
+    ok("Focus Area: sharp side selected", left > 60L * 60 * 200);
+    ok("Focus Area: smooth side not", right < 60L * 59 * 40);
+    free(m);
+  }
+  ok("Focus Area as a selection", sel_focus_area(d, 50, 0, 1, 0, SEL_REPLACE) && d->sel && doc_can_undo(d));
+  doc_free(d);
+  /* Select and Mask: a red square on blue, a selection a little off it, pulled onto the edge */
+  d = doc_new(120, 120, 0, 0);
+  for (y = 0; y < 120; y++) for (x = 0; x < 120; x++) { u8 *p = px(d, x, y); int in = x >= 40 && x < 80 && y >= 40 && y < 80; p[0] = in ? 220 : 20; p[1] = 30; p[2] = in ? 30 : 200; p[3] = 255; }
+  memset(&r, 0, sizeof r);
+  ok("Select and Mask needs a selection", !refine_mask(d, &r));
+  sel_rect(d, 44, 36, 84, 76, SEL_REPLACE, 0);
+  r.radius = 8;
+  ok("refined", sel_refine(d, &r));
+  ok("refine: off the square dropped", d->sel && d->sel[(long)60 * 120 + 82] < 30);
+  ok("refine: in the square taken", d->sel && d->sel[(long)78 * 120 + 42] > 225 && d->sel[(long)38 * 120 + 60] < 30);
+  ok("refine: middle kept", d->sel && d->sel[(long)60 * 120 + 60] == 255);
+  doc_undo(d);
+  memset(&r, 0, sizeof r);
+  r.shift = 50;
+  sel_refine(d, &r);
+  ok("shift edge grows", d->sel && d->sel[(long)56 * 120 + 87] == 255 && d->sel[(long)56 * 120 + 92] == 0);
+  doc_undo(d);
+  memset(&r, 0, sizeof r);
+  r.feather10 = 40;
+  sel_refine(d, &r);
+  ok("feather softens", d->sel && d->sel[(long)56 * 120 + 84] > 40 && d->sel[(long)56 * 120 + 84] < 215);
+  doc_undo(d);
+  memset(&r, 0, sizeof r);
+  r.feather10 = 40; r.contrast = 100;
+  sel_refine(d, &r);
+  ok("contrast hardens", d->sel && (d->sel[(long)56 * 120 + 83] == 255 || d->sel[(long)56 * 120 + 83] == 0));
+  doc_free(d);
+}
+
+int main(int argc, char **argv)
+{
+  char outdir[260];
+  const char *tmp = getenv("TMP");
+  snprintf(outdir, sizeof outdir, "%s", argc > 1 ? argv[1] : tmp && tmp[0] ? tmp : "/tmp");
   every_effect();
   selection_and_abort();
   stacks();
   known_answers();
+  lookup(outdir);
+  equalize_bw();
+  focus_refine();
   printf("%d tests, %d failed\n", tests, failed);
   return failed != 0;
 }
