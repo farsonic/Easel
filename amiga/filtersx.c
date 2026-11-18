@@ -304,5 +304,7 @@ void dlgx_command(ULONG id)
   case ID_FX_LOOKUP: color_lookup(); break;
   case ID_FX_FOCUS: focus_area(); break;
   case ID_FX_REFINE: select_and_mask(); break;
+  case ID_FX_ALLLAYERS: if (cur_doc()) doc_pick_all_layers(cur_doc()); break;
+  case ID_FX_NOLAYERS: if (cur_doc()) doc_pick_no_layers(cur_doc()); break;
   }
 }

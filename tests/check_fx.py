@@ -102,5 +102,19 @@ for tetra, name in ((0, "tri"), (1, "tetra")):
     ok("Color Lookup (%s) within 1 of numpy (max %d)" % (name, diff.max()), diff.max() <= 1)
     ok("Color Lookup (%s) keeps the alpha" % name, (got[..., 3] == src[..., 3]).all())
     ok("Color Lookup (%s) changed the picture" % name, np.abs(got[..., :3] - src[..., :3]).max() > 20)
+# Image Size's Preserve Details (Lanczos-3) against Pillow's LANCZOS enlargement, away from the edges
+# (Pillow drops taps past the edge where Easel repeats the edge pixel)
+rsz = os.path.join(out, "rs_size.txt")
+if os.path.exists(rsz):
+    from PIL import Image
+    sw, sh, dw, dh = [int(v) for v in open(rsz).read().split()]
+    im = Image.frombytes("RGBA", (sw, sh), open(os.path.join(out, "rs_in.rgba"), "rb").read()).convert("RGB")
+    want = np.asarray(im.resize((dw, dh), Image.LANCZOS)).astype(int)
+    got = np.frombuffer(open(os.path.join(out, "rs_lanczos.rgba"), "rb").read(), np.uint8).reshape(dh, dw, 4)[..., :3].astype(int)
+    m = 9
+    diff = np.abs(got[m:-m, m:-m] - want[m:-m, m:-m])
+    ok("Preserve Details within 2 of Pillow's Lanczos (max %d)" % diff.max(), diff.max() <= 2)
+else:
+    ok("resampling files written", False)
 print("check_fx: %d tests, %d failed" % (tests, fails))
 sys.exit(1 if fails else 0)

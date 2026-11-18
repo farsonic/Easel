@@ -21,6 +21,8 @@
 #include "../core/adjust10.h"
 #include "../core/adjustx.h"
 #include "../core/selmask.h"
+#include "../core/layers.h"
+#include "../core/resample.h"
 
 static int tests, failed;
 static void ok(const char *name, int cond) { tests++; if (!cond) { failed++; printf("FAIL %s\n", name); } }
@@ -339,6 +341,47 @@ static void focus_refine(void)
   sel_refine(d, &r);
   ok("contrast hardens", d->sel && (d->sel[(long)56 * 120 + 83] == 255 || d->sel[(long)56 * 120 + 83] == 0));
   doc_free(d);
+  /* All Layers and Deselect Layers */
+  d = doc_new(20, 20, 0, 0);
+  doc_add_layer(d, layer_new(d, "a"), 1); doc_add_layer(d, layer_new(d, "b"), 2);
+  ok("All Layers picks every layer", doc_pick_all_layers(d) == 3 && doc_npicked(d) == 3);
+  doc_pick_no_layers(d);
+  ok("Deselect Layers leaves the active one", doc_npicked(d) == 1 && d->lay[d->active]->picked);
+  doc_free(d);
+}
+
+/* ------------------------------------------------------------------ Image Size's methods */
+static double roughness(Doc *d)
+{
+  double t = 0;
+  i32 x, y;
+  for (y = 0; y < d->h; y++) for (x = 1; x < d->w; x++) t += abs(px(d, x, y)[0] - px(d, x - 1, y)[0]);
+  return t / ((double)d->h * (d->w - 1));
+}
+static void resampling(const char *outdir)
+{
+  Doc *a = textured(40, 30), *b = textured(40, 30), *c;
+  char path[300];
+  FILE *f;
+  double rs, rb;
+  snprintf(path, sizeof path, "%s/rs_in.rgba", outdir); file_write(path, a->lay[0]->px, 40 * 30 * 4);
+  ok("Preserve Details enlarges", image_resize(a, 120, 90, RS_DETAILS) && a->w == 120 && a->h == 90);
+  snprintf(path, sizeof path, "%s/rs_lanczos.rgba", outdir); file_write(path, a->lay[0]->px, 120 * 90 * 4);
+  f = fopen((snprintf(path, sizeof path, "%s/rs_size.txt", outdir), path), "w");
+  if (f) { fprintf(f, "40 30 120 90\n"); fclose(f); }
+  doc_undo(a);
+  ok("undone back to 40 x 30", a->w == 40 && a->h == 30);
+  image_resize(a, 120, 90, RS_SMOOTHER); rs = roughness(a);
+  image_resize(b, 120, 90, RS_BICUBIC); rb = roughness(b);
+  ok("Bicubic Smoother is smoother than Bicubic", rs < rb && rs > rb * 0.6);
+  doc_free(a); doc_free(b);
+  a = textured(200, 150); b = textured(200, 150);
+  image_resize(a, 60, 45, RS_SHARPER); image_resize(b, 60, 45, RS_BICUBIC);
+  ok("Bicubic Sharper is crisper than Bicubic when reducing", roughness(a) > roughness(b) * 1.05);
+  c = doc_new(16, 16, 0x808080, 0);
+  image_resize(c, 48, 48, RS_DETAILS);
+  ok("a flat colour stays flat", px(c, 20, 20)[0] == 0x80 && px(c, 0, 47)[1] == 0x80);
+  doc_free(a); doc_free(b); doc_free(c);
 }
 
 int main(int argc, char **argv)
@@ -353,6 +396,7 @@ int main(int argc, char **argv)
   lookup(outdir);
   equalize_bw();
   focus_refine();
+  resampling(outdir);
   printf("%d tests, %d failed\n", tests, failed);
   return failed != 0;
 }

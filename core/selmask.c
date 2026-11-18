@@ -234,3 +234,18 @@ int sel_refine(Doc *d, const RefineParams *r)
   sel_apply_mask(d, m, SEL_REPLACE, "Select and Mask");
   return 1;
 }
+
+/* ------------------------------------------------------------------ All Layers, Deselect Layers */
+int doc_pick_all_layers(Doc *d)
+{
+  int k;
+  for (k = 0; k < d->nlay; k++) d->lay[k]->picked = 1;
+  return d->nlay;
+}
+int doc_pick_no_layers(Doc *d)
+{
+  int k;
+  for (k = 0; k < d->nlay; k++) d->lay[k]->picked = 0;
+  if (d->active >= 0 && d->active < d->nlay) d->lay[d->active]->picked = 1;
+  return d->nlay > 0;
+}

@@ -198,6 +198,7 @@ static struct NewMenu menus[] = {
   I("Merge Down", "E", ID_MERGEDOWN), I("Merge Group", 0, ID_MERGEGROUP), I("Merge Layers", 0, ID_MERGELAYERS), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
   M("Select"),
   I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
+  I("All Layers", 0, ID_FX_ALLLAYERS), I("Deselect Layers", 0, ID_FX_NOLAYERS), BAR,
   I("Color Range...", 0, ID_COLORRANGE), I("Focus Area...", 0, ID_FX_FOCUS), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
   I("Select and Mask...", 0, ID_FX_REFINE),
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
@@ -612,7 +613,7 @@ static void update_menus(void)
     ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
     ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
     ID_F_FILMGRAIN, ID_F_CUTOUT, ID_F_POSTEREDGES, ID_F_DIFFUSEGLOW, ID_F_STAINEDGLASS, ID_F_HALFTONEPAT, ID_F_PHOTOCOPY, ID_F_TEXTURIZER,
-    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, ID_FX_GALLERY, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE, 0 };
+    ID_F_MOSAICTILES, ID_F_PATCHWORK, ID_F_SPATTER, ID_FX_GALLERY, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE, ID_FX_ALLLAYERS, ID_FX_NOLAYERS, 0 };
   /* 0.7: what works on the selection, greyed out while it is being edited as a Quick Mask */
   static const ULONG needsel[] = { ID_SELALL, ID_DESELECT, ID_RESELECT, ID_INVERSE, ID_COLORRANGE, ID_SELALPHA, ID_FEATHER, ID_EXPAND,
     ID_CONTRACT, ID_BORDER, ID_SMOOTH, ID_GROWSIM, ID_SIMILAR, ID_SAVESEL, ID_LOADSEL, ID_XFSEL, 0 };
@@ -1702,7 +1703,7 @@ static void command(ULONG id)
   if ((id >= ID_ADJ_BC && id <= ID_ADJ_EQUALIZE) || (id >= ID_ADJ_REPLACE && id <= ID_ADJ_MATCH)) { if (d) dlg_adjust(id); refresh_all(); return; }
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
-  if ((id >= ID_FX_GALLERY && id <= ID_FX_REFINE) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
+  if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);

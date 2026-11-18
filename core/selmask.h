@@ -23,4 +23,9 @@ typedef struct { int radius, smooth, feather10, contrast, shift; } RefineParams;
 u8  *refine_mask(Doc *d, const RefineParams *r);
 /* and made the selection (one undo step); 0 if nothing was selected or out of memory */
 int  sel_refine(Doc *d, const RefineParams *r);
+
+/* Select > All Layers and Deselect Layers: every layer picked in the Layers panel (as for Merge
+   Layers, Group, Align), or only the active one. The number picked */
+int  doc_pick_all_layers(Doc *d);
+int  doc_pick_no_layers(Doc *d);
 #endif

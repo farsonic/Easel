@@ -31,6 +31,7 @@
 #include "brushwin.h"
 #include "../core/adjustx.h"
 #include "dlgx.h"
+#include "../core/resample.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -1134,18 +1135,23 @@ int dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg)
 void dlg_image_size(void)
 {
   Doc *d = cur_doc();
-  static const char *const methods[] = { "Bicubic (smooth)", "Bilinear", "Nearest Neighbour (hard edges)", NULL };
+  static const char *const methods[] = { "Bicubic (smooth)", "Bicubic Smoother (enlargement)", "Bicubic Sharper (reduction)", "Preserve Details (enlargement)",
+                                         "Bilinear", "Nearest Neighbour (hard edges)", NULL };
+  static const int rs[] = { RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS, RS_BILINEAR, RS_NEAREST };
+  static int last_method;
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *ws, *hs, *ps, *ck, *mc;
-  LONG nw, nh;
-  int ok, method;
+  Object *w, *ws, *hs, *ps, *ck, *mc, *ds, *rc;
+  LONG nw, nh, dpi;
+  int ok, method, resample;
   if (!d) return;
   w = dialog_window("Image Size", ColGroup(2),
         Child, QLabel(tr("Width (px):"), MUIO_Label_SingleFrame), Child, ws = string_num(d->w),
         Child, QLabel(tr("Height (px):"), MUIO_Label_SingleFrame), Child, hs = string_num(d->h),
         Child, QLabel(tr("or Percent:"), MUIO_Label_SingleFrame), Child, ps = string_num(100),
         Child, ck = check(1), Child, QLabel(tr("Constrain proportions (height follows width)"), 0),
-        Child, QLabel(tr("Resample:"), MUIO_Label_Centered), Child, mc = cycle(methods, 0),
+        Child, QLabel(tr("Resolution (dpi):"), MUIO_Label_SingleFrame), Child, ds = string_num(d->dpi ? d->dpi : 72),
+        Child, rc = check(1), Child, QLabel(tr("Resample (else only the resolution changes)"), 0),
+        Child, QLabel(tr("Resample:"), MUIO_Label_Centered), Child, mc = cycle(methods, last_method),
       End, NULL);
   if (!w) return;
   set(w, MUIA_Window_ActiveObject, (ULONG)ws);
@@ -1155,11 +1161,15 @@ void dlg_image_size(void)
   else if (xget(ck, MUIA_Selected) && nw != d->w && nh == d->h) nh = (LONG)((double)d->h * nw / d->w + 0.5);
   else if (xget(ck, MUIA_Selected) && nh != d->h && nw == d->w) nw = (LONG)((double)d->w * nh / d->h + 0.5);
   method = (int)xget(mc, MUIA_Cycle_Active);
+  dpi = str_val(ds); resample = (int)xget(rc, MUIA_Selected);
   MUI_DisposeObject(w);
-  if (!ok || (nw == d->w && nh == d->h)) return;
+  if (!ok) return;
+  last_method = method;
+  if (dpi >= 1 && dpi <= 9999) d->dpi = (u16)dpi;
+  if (!resample || (nw == d->w && nh == d->h)) return;
   if (nw < 1 || nh < 1 || nw > MAXDIM || nh > MAXDIM) { ask("OK", "%s", tr("The width and height must be between 1 and 16384 pixels.")); return; }
   set(app, MUIA_Application_Sleep, TRUE);
-  if (!image_resize(d, (i32)nw, (i32)nh, method == 0 ? RS_BICUBIC : method == 1 ? RS_BILINEAR : RS_NEAREST)) out_of_memory();
+  if (!image_resize(d, (i32)nw, (i32)nh, rs[method >= 0 && method < 6 ? method : 0])) out_of_memory();
   set(app, MUIA_Application_Sleep, FALSE);
 }
 void dlg_canvas_size(void)

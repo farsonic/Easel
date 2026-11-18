@@ -77,7 +77,7 @@ enum {
   ID_F_LAST,
   ID_F_AGAIN = 695,
   /* the Filter Gallery and its effects, Color Lookup, Focus Area, Select and Mask (filtersx.c) */
-  ID_FX_GALLERY = 4600, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE,
+  ID_FX_GALLERY = 4600, ID_FX_LOOKUP, ID_FX_FOCUS, ID_FX_REFINE, ID_FX_ALLLAYERS, ID_FX_NOLAYERS, ID_FX_LAST,
   ID_GX0 = 4650,                      /* .. ID_GX0 + GX_N - 1 (core/gallery.h): the gallery effects */
   ID_GX_LAST = 4699,
   /* View */
