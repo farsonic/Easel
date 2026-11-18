@@ -225,7 +225,7 @@ static void color_lookup(void)
   char err[120];
   Lut3D *l;
   if (!d || !mem_ok(area_bytes(d))) return;
-  if (!ui_file_request(0, "Choose a 3D LUT (.cube)", lut_path, sizeof lut_path, "#?.cube")) return;
+  if (!ui_file_request(0, "Choose a 3D LUT (.cube or .3dl)", lut_path, sizeof lut_path, "#?.(cube|3dl)")) return;
   if (!(l = lut_load_cube(lut_path, err, sizeof err))) { ask("OK", "%s", tr(err)); return; }
   lut_free(lut_cur); lut_cur = l;
   snprintf(info, sizeof info, "%s (%d x %d x %d)", l->title[0] ? l->title : (const char *)FilePart((STRPTR)lut_path), l->n, l->n, l->n);
@@ -280,7 +280,7 @@ static void select_and_mask(void)
   if (!d) return;
   if (!d->sel) { ask("OK", "%s", tr("Select something first: Select and Mask refines the selection.")); return; }
   if (!mem_ok((long)d->w * d->h * 9)) return;
-  outc = CycleObject, MUIA_Cycle_Entries, (ULONG)outs, MUIA_Cycle_Active, last_out, MUIA_CycleChain, 1, End;
+  outc = CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list(outs), MUIA_Cycle_Active, last_out, MUIA_CycleChain, 1, End;
   if (!dlg_sliders("Select and Mask", p, 5, NULL, NULL, 0, NULL, NULL, 0, NULL, 0, have ? last : NULL, f_refine,
                    VGroup, Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Edge Radius: pixels this near the edge are decided again by their colour.\nThe preview shows the selection's edge."), MUIA_Font, MUIV_Font_Tiny, End,
                      Child, HGroup, Child, QLabel(tr("Output To:"), MUIO_Label_Centered), Child, outc, End, End, 0)) return;

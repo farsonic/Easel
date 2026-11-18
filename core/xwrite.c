@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "xwrite.h"
+#include "xread2.h"
 #include "palette.h"
 
 static void le16(Buf *b, u32 v) { buf_addc(b, (int)(v & 255)); buf_addc(b, (int)((v >> 8) & 255)); }
@@ -769,7 +770,9 @@ u8 *dpx_encode(const Rgba *im, int bits10, size_t *len)
 {
   u8 *h;
   int nc = any_alpha(im) ? 4 : 3;
-  u32 per = (u32)im->w * nc, line = bits10 ? (per + 2) / 3 * 4 : (per + 3) / 4 * 4;
+  /* bits10: 0 for 8 bits, 1 for 10 (packed as Method A); 1.2: 12 (Method A, one a 16-bit word) or 16 */
+  int bits = bits10 == 12 ? 12 : bits10 == 16 ? 16 : bits10 ? 10 : 8;
+  u32 per = (u32)im->w * nc, line = bits == 10 ? (per + 2) / 3 * 4 : bits == 8 ? (per + 3) / 4 * 4 : (per + 1) / 2 * 4;
   size_t total = 2048 + (size_t)line * im->h;
   i32 x, y;
   Buf b;
@@ -783,9 +786,9 @@ u8 *dpx_encode(const Rgba *im, int bits10, size_t *len)
   put_be32(h + 20, 1); put_be32(h + 24, 1664); put_be32(h + 28, 384); put_be32(h + 32, 0);
   memcpy(h + 160, "Easel", 5);
   put_be16(h + 768, 0); put_be16(h + 770, 1); put_be32(h + 772, (u32)im->w); put_be32(h + 776, (u32)im->h);
-  put_be32(h + 780, 0); put_be32(h + 784, 0); put_be32(h + 792, bits10 ? 1023 : 255);
-  h[800] = (u8)(nc == 4 ? 51 : 50); h[801] = 2; h[802] = 2; h[803] = (u8)(bits10 ? 10 : 8);
-  put_be16(h + 804, bits10 ? 1 : 0); put_be16(h + 806, 0); put_be32(h + 808, 2048);
+  put_be32(h + 780, 0); put_be32(h + 784, 0); put_be32(h + 792, (1u << bits) - 1);
+  h[800] = (u8)(nc == 4 ? 51 : 50); h[801] = 2; h[802] = 2; h[803] = (u8)bits;
+  put_be16(h + 804, bits == 10 || bits == 12 ? 1 : 0); put_be16(h + 806, 0); put_be32(h + 808, 2048);
   put_be32(h + 812, 0); put_be32(h + 816, 0);
   for (y = 0; y < im->h; y++) {
     u8 *o = h + 2048 + (size_t)y * line;
@@ -794,7 +797,9 @@ u8 *dpx_encode(const Rgba *im, int bits10, size_t *len)
     for (x = 0; x < im->w; x++)
       for (k = 0; k < (u32)nc; k++) {
         u32 i = (u32)x * nc + k, v = s[x * 4 + k];
-        if (!bits10) o[i] = (u8)v;
+        if (bits == 8) o[i] = (u8)v;
+        else if (bits == 12) put_be16(o + 2 * i, ((v << 4) | (v >> 4)) << 4);
+        else if (bits == 16) put_be16(o + 2 * i, v * 257);
         else {
           u8 *wd = o + i / 3 * 4;
           u32 cur = ((u32)wd[0] << 24) | ((u32)wd[1] << 16) | ((u32)wd[2] << 8) | wd[3];
@@ -889,12 +894,13 @@ static const struct { const char *ext; int fmt; int sub; } exts[] = {
   { "tiff", FMT_TIFF, 0 }, { "tga", FMT_TGA, 0 }, { "psd", FMT_PSD, 0 }, { "webp", FMT_WEBP, 0 }, { "pdf", FMT_PDF_OUT, 0 },
   { "pnm", FMT_PNM, PNM_AUTO }, { "pbm", FMT_PNM, PNM_PBM }, { "pgm", FMT_PNM, PNM_PGM }, { "ppm", FMT_PNM, PNM_PPM },
   { "pam", FMT_PNM, PNM_PAM }, { "qoi", FMT_QOI, 0 }, { "ico", FMT_ICO, 0 }, { "dds", FMT_DDS, DDS_BC3 }, { "dpx", FMT_DPX, 0 },
-  { "fits", FMT_FITS, 0 }, { "fit", FMT_FITS, 0 }, { "fts", FMT_FITS, 0 } };
+  { "fits", FMT_FITS, 0 }, { "fit", FMT_FITS, 0 }, { "fts", FMT_FITS, 0 },
+  { "cin", FMT_CINEON_OUT, 0 }, { "hdr", FMT_HDR_OUT, 0 } };              /* 1.2 (xread2.h) */
 #define NEXTS ((int)(sizeof exts / sizeof exts[0]))
 int xwrite_handles(int fmt)
 {
   return fmt == FMT_WEBP || fmt == FMT_PNM || fmt == FMT_QOI || fmt == FMT_ICO || fmt == FMT_DDS || fmt == FMT_DPX ||
-         fmt == FMT_FITS || fmt == FMT_PDF_OUT;
+         fmt == FMT_FITS || fmt == FMT_PDF_OUT || fmt == FMT_CINEON_OUT || fmt == FMT_HDR_OUT;
 }
 static int ext_index(const char *ext)
 {
@@ -918,6 +924,8 @@ const char *xwrite_name(int fmt)
   switch (fmt) {
   case FMT_PDF_OUT: return "PDF";
   case FMT_PNM: return "Netpbm";
+  case FMT_CINEON_OUT: return "Cineon";
+  case FMT_HDR_OUT: return "Radiance HDR";
   default: return codec_name(fmt);
   }
 }
@@ -928,7 +936,7 @@ u8 *xwrite_doc(Doc *d, int fmt, int sub, int quality, size_t *len)
   im.w = d->w; im.h = d->h;
   if (!(im.px = doc_flat_rgba(d))) return NULL;
   switch (fmt) {
-  case FMT_WEBP: data = webp_encode_lossless(&im, len); break;
+  case FMT_WEBP: data = sub > 0 && sub <= 100 ? webp_encode_lossy(&im, sub, len) : webp_encode_lossless(&im, len); break;   /* (1.2: lossy) */
   case FMT_PDF_OUT: data = pdf_encode(&im, d->dpi, d->mode == MODE_GRAY || d->mode == MODE_BITMAP, quality, &d->info, len); break;
   case FMT_PNM: data = pnm_encode(&im, sub == PNM_AUTO && d->mode == MODE_BITMAP ? PNM_PBM : sub, len); break;
   case FMT_QOI: data = qoi_encode(&im, len); break;
@@ -936,6 +944,8 @@ u8 *xwrite_doc(Doc *d, int fmt, int sub, int quality, size_t *len)
   case FMT_DDS: data = dds_encode(&im, sub, 1, len); break;
   case FMT_DPX: data = dpx_encode(&im, sub, len); break;
   case FMT_FITS: data = fits_encode(&im, len); break;
+  case FMT_CINEON_OUT: data = cineon_encode(&im, len); break;          /* 1.2 */
+  case FMT_HDR_OUT: data = hdr_encode(&im, len); break;
   }
   rgba_free(&im);
   return data;

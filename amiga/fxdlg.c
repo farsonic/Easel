@@ -232,7 +232,7 @@ static void dlg_layer_style(Doc *d, int page)
       } else {
         DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(c->label), MUIO_Label_Centered));
         if (f == F_BLEND || f == F_BLEND2 || f == F_STYLE) {
-          o = CycleObject, MUIA_Cycle_Entries, (ULONG)(f == F_STYLE ? (const char *const *)c->choices : blendlist), MUIA_Cycle_Active, v, MUIA_CycleChain, 1, End;
+          o = CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list(f == F_STYLE ? (const char *const *)c->choices : blendlist), MUIA_Cycle_Active, v, MUIA_CycleChain, 1, End;
           DoMethod(o, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
         } else {
           o = SliderObject, MUIA_Numeric_Min, c->min, MUIA_Numeric_Max, c->max, MUIA_Numeric_Value, v < c->min ? c->min : v > c->max ? c->max : v,

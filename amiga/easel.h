@@ -191,7 +191,8 @@ enum { XM_FREE, XM_SCALE, XM_ROTATE, XM_SKEW, XM_DISTORT, XM_PERSPECTIVE };
 /* 0.9: the Type tool's work, from the options bar, menus and panels: struct MUIP_Canvas_TypeCmd */
 #define MUIM_Canvas_TypeCmd (QTAG + 0x10A)
 struct MUIP_Canvas_TypeCmd { ULONG MethodID; LONG code; LONG arg; };
-enum { TC_OPTS, TC_CHARACTER, TC_PARAGRAPH, TC_WARP, TC_EDIT, TC_COMMIT, TC_ORIENT, TC_COLOR };
+enum { TC_OPTS, TC_CHARACTER, TC_PARAGRAPH, TC_WARP, TC_EDIT, TC_COMMIT, TC_ORIENT, TC_COLOR,
+       TC_OT };                       /* 1.2: an OpenType feature (arg its TO_ bit) turned on or off */
 extern int type_editing;               /* text is being typed on the canvas */
 /* 0.9: the paths changed from outside the canvas (the Paths panel): drawn again */
 #define MUIM_Canvas_Paths   (QTAG + 0x10B)
@@ -211,6 +212,7 @@ void canvas_class_free(void);
 /* the pointer's place in the image and the colour there, for the status bar ("" when outside) */
 extern char canvas_info[96];
 extern int crop_pending;               /* a crop box is up (Return applies it) */
+extern int pcrop_pending;              /* 1.2: Perspective Crop's corners are out */
 /* 0.7: Free Transform's handles are up (the options bar shows its numbers and Commit/Cancel) */
 extern int xform_pending;
 extern char xform_info[80];            /* W%, H% and the angle, for the options bar */
@@ -307,6 +309,13 @@ typedef struct {
   int undo_mb, undo_levels;           /* undo's memory and states */
   int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
   int skip_place_xf;                  /* 1.1: Place as Layer doesn't go on into Free Transform */
+  int language;                       /* 1.1: LANG_ (lang.h), or -1: the one Locale prefs prefer */
+  /* 1.2: Transparency (core/viewx.h: the checkerboard's size 0-3 and CHK_ scheme, the custom colours);
+     grid and guide line styles (LS_); Units & Rulers' screen resolution, column and gutter widths
+     (pixels) and point size (0 PostScript, 72 a inch; 1 traditional, 72.27) */
+  int checker_size, checker_scheme; ULONG checker_c1, checker_c2;
+  int grid_style, guide_style;
+  int screen_dpi, column_w, gutter_w, point_kind;
 } Prefs;
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;

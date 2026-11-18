@@ -75,6 +75,13 @@ int   jpeg_read_scaled(const u8 *d, size_t n, i32 w, i32 h, Rgba *out, char *err
 /* baseline JPEG, YCbCr 4:2:0 (4:4:4 at quality 90 and above), the Annex K tables scaled for quality
    1-100 as IJG does, JFIF density from dpi (0: aspect only). Transparency is laid over white. */
 u8   *jpeg_encode(const Rgba *im, int quality, int dpi, size_t *len);
+/* 1.2: CMYK (w * h * 4 bytes of ink, 0 none) as Photoshop writes it: Adobe APP14, no transform,
+   inverted samples, full resolution */
+u8   *jpeg_encode_cmyk(const u8 *cmyk, i32 w, i32 h, int quality, int dpi, size_t *len);
+/* 1.2: progressive (SOF2, spectral selection: DC, then Y 1-5, Cr, Cb, Y 6-63), the baseline's tables
+   and quality scaling; NULL if out of memory (it holds the whole picture's coefficients) */
+u8   *jpeg_encode_progressive(const Rgba *im, int quality, int dpi, size_t *len);
+extern int jpeg_write_progressive;                  /* 1.2: jpeg_write_doc writes progressive JPEGs (Export's choice) */
 
 /* ------------------------------------------------------------------ bmp.c */
 /* 1/4/8-bit palette (uncompressed, RLE4, RLE8), 16/24/32-bit (BI_RGB or bitfields), either row order */

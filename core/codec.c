@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "codec.h"
+#include "loadx.h"
+#include "xread2.h"
 #include "avif.h"
 #include "rasters.h"
 #include "amigafmt.h"
@@ -161,6 +163,7 @@ int codec_decode(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
     int f = codec_detect(d, n);
     if (f > FMT_DPX) return amigafmt_decode(d, n, out, err, errcap);
     if (f > FMT_AVIF) return rasters_read(d, n, out, err, errcap);
+    if (xread2_detect(d, n)) return xread2_decode(d, n, out, err, errcap);   /* 1.2: Cineon, DICOM, OpenEXR */
     break; }
   }
   codec_err(err, errcap, "Unknown file format");
@@ -233,12 +236,14 @@ Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
   Rgba im;
   Doc *doc;
   int fmt = codec_detect(d, n);
+  int cmyk = codec_cmyk_begin(d, n);                     /* 1.2: CMYK through the press or the file's profile */
   if (fmt == FMT_ORA) doc = ora_read(d, n, err, errcap);
   else if (fmt == FMT_PSD) { codec_oom = 0; doc = psd_read_doc(d, n, err, errcap); }   /* 0.6: with its layers */
   else {
     if (!codec_decode(d, n, &im, err, errcap)) doc = NULL;
     else doc = doc_of(&im, d, n, err, errcap);
   }
+  if (cmyk) codec_cmyk_end();
   if (progress_aborted) {
     /* 0.8: Abort pressed while it was read: whatever was made dropped */
     if (doc) doc_free(doc);
@@ -247,6 +252,7 @@ Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
     return NULL;
   }
   if (doc) codec_read_info(d, n, &doc->info);           /* 0.6: File Info */
+  if (doc) codec_load_extras(doc, d, n);                /* 1.2: profile, colour model, palette and 1-bit files */
   return doc;
 }
 /* a decoded picture made the one layer of a new document (its pixels taken over, not copied) */
@@ -269,8 +275,12 @@ Doc *codec_load_doc_scaled(const u8 *d, size_t n, i32 w, i32 h, char *err, size_
   Doc *doc;
   codec_oom = 0;
   if (codec_detect(d, n) != FMT_JPEG) { codec_err(err, errcap, "Only JPEG pictures can be opened smaller"); return NULL; }
-  if (!jpeg_read_scaled(d, n, w, h, &im, err, errcap)) return NULL;
+  {
+    int cmyk = codec_cmyk_begin(d, n), ok = jpeg_read_scaled(d, n, w, h, &im, err, errcap);    /* (1.2) */
+    if (cmyk) codec_cmyk_end();
+    if (!ok) return NULL;
+  }
   if (progress_aborted) { rgba_free(&im); codec_err(err, errcap, "Opening the picture was stopped"); return NULL; }   /* (0.8) */
-  if ((doc = doc_of(&im, d, n, err, errcap)) != NULL) codec_read_info(d, n, &doc->info);
+  if ((doc = doc_of(&im, d, n, err, errcap)) != NULL) { codec_read_info(d, n, &doc->info); codec_load_extras(doc, d, n); }
   return doc;
 }

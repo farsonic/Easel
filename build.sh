@@ -10,7 +10,11 @@ cd "$(dirname "$0")"
 CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/channels.c core/xform.c core/selx.c core/maglasso.c core/crop.c core/matte.c core/path.c core/pathops.c core/shape.c core/type.c core/live.c core/amifont.c core/adjust10.c core/filters10.c core/retouch.c core/xwrite.c core/frames.c core/scripts.c core/svg.c core/gallery.c core/adjustx.c core/selmask.c core/resample.c core/fx.c core/layerops.c"
 CORE="$CORE core/toolopts.c"     # 1.1: tool options
 CORE="$CORE core/layerx.c core/brushx.c core/cafill.c core/selsmart.c core/toolsx.c core/legacy.c"   # 1.2: the tools, brushes and layers extras
+CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
+CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
 if [ "$1" != "fast" ]; then
+  # 1.1: the interface languages (lang/strings.txt, amiga/lang_table.h, every string translated)
+  python3 tools/mklang.py --check && python3 tools/langcheck.py | tail -1
   av1/build-av1.sh native /tmp/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c /tmp/easel_dav1d/libdav1d.a -o /tmp/easel_$1 -lm -lpthread; }
@@ -56,6 +60,13 @@ if [ "$1" != "fast" ]; then
   t brushxtest;   /tmp/easel_brushxtest | tail -1
   t smarttest;    /tmp/easel_smarttest | tail -1
   t toolsxtest;   /tmp/easel_toolsxtest /tmp | tail -1
+  # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
+  t menutest;     /tmp/easel_menutest | tail -1
+  # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
+  # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
+  # LittleCMS and ImageMagick check the files and colours
+  t colourtest;   /tmp/easel_colourtest /tmp/easel_colour_out | tail -1
+  python3 tests/check_colour.py /tmp/easel_colour_out | tail -1
 fi
 av1/build-av1.sh amiga
 # Easel itself: every amiga/*.c but convert.c, which is EaselConvert's main
@@ -65,6 +76,6 @@ ls -l Easel
 # 0.6: EaselConvert, the Shell command for batch conversion (the core's codecs, datatypes as a last resort)
 # (the core files it needs: the codecs, the document, resizing and its dependencies; if a link
 # fails for an undefined symbol, add the core file that defines it here)
-CONVERT_CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/brush.c core/gradient.c core/adjust.c core/adjust10.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/path.c core/live.c core/type.c core/shape.c core/fonts.c core/ttraster.c core/amifont.c core/text.c core/xwrite.c core/resample.c core/fx.c core/layers.c core/layerx.c core/toolsx.c"   # (1.2: OpenRaster keeps layerx.h's settings and the notes)
+CONVERT_CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/brush.c core/gradient.c core/adjust.c core/adjust10.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/path.c core/live.c core/type.c core/shape.c core/fonts.c core/ttraster.c core/amifont.c core/text.c core/xwrite.c core/resample.c core/fx.c core/picinfo.c core/amigamodes.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/psdfx.c core/layers.c core/layerx.c core/toolsx.c"   # (r2-tools: OpenRaster keeps layerx.h's settings and the notes)
 vc +tools/vbcc-aos68k-fpu -c99 -O2 -cpu=68040 -fpu=68040 -I. -Iav1/include -I"$NDK" amiga/convert.c amiga/dtload.c amiga/bigstack.s $CONVERT_CORE av1/obj/*.o -o EaselConvert -lamiga -lm040
 ls -l EaselConvert

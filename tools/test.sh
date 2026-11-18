@@ -11,6 +11,23 @@ CORE="$CORE core/layerx.c"       # 1.2: vector masks, links, patterns, smart obj
 CORE="$CORE core/brushx.c"       # 1.2: brush extras, Mixer and Art History brushes, tablets, .abr/.grd/.pat
 CORE="$CORE core/cafill.c core/selsmart.c"   # 1.2: content-aware fill, Quick and Object Selection
 CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Amiga-era extras
+CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
+CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
+  # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
+  # interface translated and every row used (langcheck lists what is missing), then tr() and the table
+  python3 tools/mklang.py --check
+  python3 tools/langcheck.py > $T/easel_langcheck.txt || { cat $T/easel_langcheck.txt; exit 1; }
+  tail -1 $T/easel_langcheck.txt
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/langtest.c -o $T/easel_langtest
+  $T/easel_langtest > $T/easel_langtest.txt || { cat $T/easel_langtest.txt; exit 1; }
+  tail -1 $T/easel_langtest.txt
+  # the translations still fit 640x480 (measured with QuillSans 11 when a Fonts drawer is found; EASEL_FONTS=<dir>)
+  python3 tools/langfit.py > $T/easel_langfit.txt || { cat $T/easel_langfit.txt; exit 1; }
+  tail -1 $T/easel_langfit.txt
+  # 1.1: the context menus' contents (amiga/ctxmenu.c is plain C)
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/ctxtest.c -o $T/easel_ctxtest
+  $T/easel_ctxtest > $T/easel_ctxtest.txt || { cat $T/easel_ctxtest.txt; exit 1; }
+  tail -1 $T/easel_ctxtest.txt
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }
@@ -62,3 +79,10 @@ CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Am
   t smarttest;    $T/easel_smarttest | tail -1
   # 1.2: Perspective Crop, notes, counts, slices, Rotate View, history log; Amiga-era extras
   t toolsxtest;   $T/easel_toolsxtest $T | tail -1
+  # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
+  t menutest;     $T/easel_menutest | tail -1
+  # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
+  # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
+  # LittleCMS and ImageMagick check the files and colours
+  t colourtest;   $T/easel_colourtest $T/easel_colour_out | tail -1
+  python3 tests/check_colour.py $T/easel_colour_out | tail -1

@@ -188,6 +188,11 @@ typedef struct {
   i16 light_angle; u8 light_alt, light_set;
   /* 1.2: notes, counts and slices (toolsx.h; one flat malloc'd block, NULL for none; not part of undo) */
   struct Annots *annot;
+  /* ---- 1.2: colour management (cms.h): the document's ICC profile (NULL: untagged, taken as sRGB;
+     malloc'd, kept by undo with the palette) and, in MODE_RGB, its colour model (cms.h's CM_: a CMYK or
+     Lab document is edited as RGB and saved in its model) ---- */
+  u8 *icc; u32 icclen;
+  u8 cmode;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */

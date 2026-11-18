@@ -78,6 +78,8 @@ static void save_text(Buf *b, const TextParams *tp)
   if (tp->indent) kv_num(b, "indent", tp->indent);
   if (tp->space_before) kv_num(b, "sb", tp->space_before);
   if (tp->space_after) kv_num(b, "sa", tp->space_after);
+  if (tp->indent_left) kv_num(b, "il", tp->indent_left);      /* 1.2 */
+  if (tp->indent_right) kv_num(b, "ir", tp->indent_right);
   if (tp->warp) {
     kv_num(b, "warp", tp->warp); kv_num(b, "bend", tp->warp_bend); kv_num(b, "wh", tp->warp_h); kv_num(b, "wv", tp->warp_v);
     if (tp->warp_vertical) kv_num(b, "warpv", 1);
@@ -86,7 +88,7 @@ static void save_text(Buf *b, const TextParams *tp)
   kv_str(b, "text", tp->text);
   for (i = 0; i < tp->nruns; i++) {
     const TextRun *r = &tp->run[i];
-    int fl = r->bold | r->italic << 1 | r->faux_bold << 2 | r->faux_italic << 3 | r->underline << 4 | r->strike << 5;
+    int fl = r->bold | r->italic << 1 | r->faux_bold << 2 | r->faux_italic << 3 | r->underline << 4 | r->strike << 5 | (int)r->ot << 6;   /* (1.2: ot) */
     buf_printf(b, "&r=%ld,%.10g,%ld,%.10g,%.10g,%d,", (long)r->start, r->size, (long)(r->color & 0xFFFFFF), r->tracking, r->baseline, fl);
     enc(b, r->family);
   }
@@ -152,7 +154,7 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "box")) tp->box = x != 0;
     else if (!strcmp(k, "bw")) tp->bw = x;
     else if (!strcmp(k, "bh")) tp->bh = x;
-    else if (!strcmp(k, "align")) tp->align = (u8)(x >= 0 && x <= 4 ? x : 0);
+    else if (!strcmp(k, "align")) tp->align = (u8)(x >= 0 && x <= 6 ? x : 0);   /* (1.2: up to Justify Last Right) */
     else if (!strcmp(k, "aa")) tp->aa = (u8)(x >= 0 && x <= 2 ? x : 2);
     else if (!strcmp(k, "kern")) tp->kern = x != 0;
     else if (!strcmp(k, "vert")) tp->vertical = x != 0;
@@ -160,6 +162,8 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "indent")) tp->indent = x;
     else if (!strcmp(k, "sb")) tp->space_before = x;
     else if (!strcmp(k, "sa")) tp->space_after = x;
+    else if (!strcmp(k, "il")) tp->indent_left = x;             /* 1.2 */
+    else if (!strcmp(k, "ir")) tp->indent_right = x;
     else if (!strcmp(k, "warp")) tp->warp = (u8)(x >= 0 && x < TW_N ? x : 0);
     else if (!strcmp(k, "bend")) tp->warp_bend = x;
     else if (!strcmp(k, "wh")) tp->warp_h = x;
@@ -179,6 +183,7 @@ static int load_text(Layer *l, char *s)
       fl = (int)a[5];
       r->bold = fl & 1; r->italic = (fl >> 1) & 1; r->faux_bold = (fl >> 2) & 1; r->faux_italic = (fl >> 3) & 1;
       r->underline = (fl >> 4) & 1; r->strike = (fl >> 5) & 1;
+      r->ot = (u16)((fl >> 6) & 0x3FFF);                  /* 1.2 */
       if (c) { dec(c); strncpy(r->family, c, sizeof r->family - 1); }
       nr++;
     }

@@ -39,7 +39,7 @@ static Object *numfield(double v)
 }
 static Object *cycle(const char **labels, int active)
 {
-  return CycleObject, MUIA_Cycle_Entries, (ULONG)labels, MUIA_Cycle_Active, active, MUIA_CycleChain, 1, End;
+  return CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list((const char *const *)labels), MUIA_Cycle_Active, active, MUIA_CycleChain, 1, End;   /* (1.1: in the language chosen) */
 }
 static Object *check(int on)
 {
@@ -103,10 +103,11 @@ int dlg_character(struct TextParams *tp, int from, int to)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
   static const char *const styles[] = { "Regular", "Bold", "Italic", "Bold Italic" };
-  static const char *fonts[100], *stl[5];
+  static const char *fonts[100], *stl[5], *csl[4], *psl[4];
+  static const char *const cases[] = { "Normal", "All Caps", "Small Caps" }, *const positions[] = { "Normal", "Superscript", "Subscript" };   /* 1.2 */
   const TextRun *r0 = &tp->run[text_run_at(tp, from < to ? from + 1 : from)];
   TextRun r;
-  Object *w, *fc, *sc, *sz, *ld, *tk, *bs, *col, *ul, *st, *fb, *fi;
+  Object *w, *fc, *sc, *sz, *ld, *tk, *bs, *col, *ul, *st, *fb, *fi, *cc, *pc;
   int nf = font_count(), i, f0 = font_find(r0->family), s0, ok;
   u32 m = 0;
   if (nf > 99) nf = 99;
@@ -122,6 +123,8 @@ int dlg_character(struct TextParams *tp, int from, int to)
         Child, QLabel(tr("Leading (px, 0 auto):"), MUIO_Label_SingleFrame), Child, HGroup, Child, ld = numfield(tp->leading), Child, HSpace(0), End,
         Child, QLabel(tr("Tracking (1/1000 em):"), MUIO_Label_SingleFrame), Child, HGroup, Child, tk = numfield(r0->tracking), Child, HSpace(0), End,
         Child, QLabel(tr("Baseline Shift (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, bs = numfield(r0->baseline), Child, HSpace(0), End,
+        Child, QLabel(tr("Case:"), MUIO_Label_Centered), Child, cc = cycle(labels_of(cases, 3, csl), r0->ot & TO_CASE),
+        Child, QLabel(tr("Position:"), MUIO_Label_Centered), Child, pc = cycle(labels_of(positions, 3, psl), (r0->ot & TO_POS) >> 2),
         Child, QLabel(tr("Color (hex #):"), MUIO_Label_SingleFrame), Child, HGroup, Child, col = hexfield(r0->color), Child, pick_button(ID_DLGRESET), Child, HSpace(0), End,
         Child, ul = check(r0->underline), Child, QLabel(tr("Underline"), 0),
         Child, st = check(r0->strike), Child, QLabel(tr("Strikethrough"), 0),
@@ -148,6 +151,13 @@ int dlg_character(struct TextParams *tp, int from, int to)
     if (sel_of(ul) != r0->underline) { r.underline = (u8)sel_of(ul); m |= TS_UNDERLINE; }
     if (sel_of(st) != r0->strike) { r.strike = (u8)sel_of(st); m |= TS_STRIKE; }
     if ((v = num_of(ld)) >= 0 && v < 5000) tp->leading = v;
+    /* 1.2: the case and position, only where they were changed (the runs keep their own features) */
+    if (cyc_of(cc) != (int)(r0->ot & TO_CASE) || (cyc_of(pc) << 2) != (int)(r0->ot & TO_POS)) {
+      u16 bits = 0, val = (u16)(cyc_of(cc) | cyc_of(pc) << 2);
+      if (cyc_of(cc) != (int)(r0->ot & TO_CASE)) bits |= TO_CASE;
+      if ((cyc_of(pc) << 2) != (int)(r0->ot & TO_POS)) bits |= TO_POS;
+      text_ot_set(tp, from, to, bits, val);
+    }
     if (m) {
       if (from >= to) { from = 0; to = (int)strlen(tp->text); }
       if (to > from) text_style(tp, from, to, &r, m);
@@ -176,13 +186,16 @@ int dlg_character(struct TextParams *tp, int from, int to)
 int dlg_paragraph(struct TextParams *tp)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  static const char *const aligns[] = { "Left", "Centre", "Right", "Justify (last line left)", "Justify All" };
-  static const char *al[6];
-  Object *w, *ac, *ind, *sb, *sa, *kc, *bw = NULL, *bh = NULL, *grp;
+  static const char *const aligns[] = { "Left", "Centre", "Right", "Justify (last line left)", "Justify All",
+                                        "Justify (last line centred)", "Justify (last line right)" };   /* (1.2: the last two) */
+  static const char *al[8];
+  Object *w, *ac, *ind, *sb, *sa, *kc, *bw = NULL, *bh = NULL, *grp, *il, *ir;
   int ok;
   grp = ColGroup(2),
-        Child, QLabel(tr("Align:"), MUIO_Label_Centered), Child, ac = cycle(labels_of(aligns, 5, al), tp->align < 5 ? tp->align : 0),
+        Child, QLabel(tr("Align:"), MUIO_Label_Centered), Child, ac = cycle(labels_of(aligns, 7, al), tp->align < 7 ? tp->align : 0),
         Child, QLabel(tr("First Line Indent (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, ind = numfield(tp->indent), Child, HSpace(0), End,
+        Child, QLabel(tr("Left Indent (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, il = numfield(tp->indent_left), Child, HSpace(0), End,
+        Child, QLabel(tr("Right Indent (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, ir = numfield(tp->indent_right), Child, HSpace(0), End,
         Child, QLabel(tr("Space Before (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, sb = numfield(tp->space_before), Child, HSpace(0), End,
         Child, QLabel(tr("Space After (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, sa = numfield(tp->space_after), Child, HSpace(0), End,
         Child, kc = check(tp->kern), Child, QLabel(tr("Kerning from the font (Metrics)"), 0),
@@ -200,6 +213,7 @@ int dlg_paragraph(struct TextParams *tp)
   if (ok) {
     tp->align = (u8)cyc_of(ac);
     tp->indent = num_of(ind); tp->space_before = num_of(sb); tp->space_after = num_of(sa);
+    { double v = num_of(il); tp->indent_left = v >= 0 ? v : 0; v = num_of(ir); tp->indent_right = v >= 0 ? v : 0; }   /* 1.2 */
     tp->kern = (u8)sel_of(kc);
     if (bw && num_of(bw) >= 1) tp->bw = num_of(bw);
     if (bh && num_of(bh) >= 1) tp->bh = num_of(bh);

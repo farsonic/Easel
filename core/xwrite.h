@@ -18,6 +18,9 @@
 /* WebP lossless (VP8L): the subtract-green and predictor transforms, LZ77 with a hash chain,
    length-limited Huffman codes. Alpha is kept (and flagged) when anything isn't opaque */
 u8 *webp_encode_lossless(const Rgba *im, size_t *len);
+/* 1.2: WebP lossy (VP8 key frame: 16x16 and chroma intra prediction, default probabilities, no loop
+   filter) at quality 1-100, alpha (when anything isn't opaque) in an uncompressed ALPH chunk */
+u8 *webp_encode_lossy(const Rgba *im, int quality, size_t *len);
 
 /* PDF 1.4, one page the picture's size at dpi (0: 72), the picture as one image: Flate-compressed
    RGB (grey when gray is set) with a soft mask for transparency, or (jpeg_quality 1-100) a JPEG
@@ -42,8 +45,8 @@ u8 *ico_encode(const Rgba *im, int maxsize, size_t *len);
 enum { DDS_RGBA, DDS_BC1, DDS_BC3 };
 u8 *dds_encode(const Rgba *im, int kind, int mipmaps, size_t *len);
 
-/* DPX (SMPTE 268M): RGB, or RGBA when anything isn't opaque, at 8 bits or (bits10) 10 bits packed
-   as Method A; big-endian */
+/* DPX (SMPTE 268M): RGB, or RGBA when anything isn't opaque, at 8 bits or (bits10 1) 10 bits packed
+   as Method A; 1.2: bits10 12 for 12 bits (Method A, one to a 16-bit word) or 16 for 16 bits; big-endian */
 u8 *dpx_encode(const Rgba *im, int bits10, size_t *len);
 
 /* FITS: 8-bit (BITPIX 8), one plane when every pixel is grey, else three (NAXIS3 = 3); the bottom
@@ -69,7 +72,7 @@ int  xwrite_sub_of_ext(const char *ext);
 /* a document written as one of xwrite's formats, from its composite: PNM and PDF follow its mode
    (Bitmap as PBM, Grayscale as a grey PDF); its dpi and File Info where the format keeps them.
    sub: PNM's PNM_ kind, DDS's DDS_ kind (with mipmaps), DPX 1 for 10 bits, ICO the largest size
-   (0: 256). quality: JPEG inside the PDF (0: Flate) */
+   (0: 256); 1.2: WebP 1-100 for lossy at that quality (0 lossless). quality: JPEG inside the PDF (0: Flate) */
 u8  *xwrite_doc(Doc *d, int fmt, int sub, int quality, size_t *len);
 
 #endif

@@ -25,6 +25,7 @@
 #include <string.h>
 #include <math.h>
 #include "rasters.h"
+#include "cms.h"                       /* 1.2: cmyk_hook */
 
 /* ------------------------------------------------------------------ the file */
 typedef struct { const u8 *d; size_t n; int le, big; } Tf;
@@ -551,6 +552,7 @@ static void finish(const Lay *L, Rgba *out, int jpeg)
     case 3: { const u8 *c = L->pal[p[0]]; p[0] = c[0]; p[1] = c[1]; p[2] = c[2]; break; }
     case 5: {
       int k = 255 - p[3];
+      if (cmyk_hook) { u8 ink[4]; memcpy(ink, p, 4); cmyk_hook(ink, p); break; }   /* (1.2) */
       p[0] = (u8)(((255 - p[0]) * k + 127) / 255); p[1] = (u8)(((255 - p[1]) * k + 127) / 255); p[2] = (u8)(((255 - p[2]) * k + 127) / 255);
       break;
     }

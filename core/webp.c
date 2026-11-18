@@ -30,6 +30,7 @@
 #include <string.h>
 #include "codec.h"
 #include "amigafmt.h"
+#include "xwrite.h"                     /* (1.2: webp_encode_lossy) */
 
 static u32 le16(const u8 *p) { return p[0] | ((u32)p[1] << 8); }
 static u32 le24(const u8 *p) { return p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16); }
@@ -1425,4 +1426,331 @@ int webp_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
   } else msg = frame_decode(d + 12, end - 12, 1, out);
   if (msg) { rgba_free(out); codec_err(err, errcap, msg); return 0; }
   return 1;
+}
+
+/* ================================================================== 1.2: VP8 (lossy) written */
+/* A small key-frame encoder: each macroblock predicted whole (16x16 DC, V, H or TM for luma, the
+   same four 8x8 for chroma, the one with the least error chosen), its residual through the forward
+   DCT and Walsh-Hadamard transforms, quantized for the quality asked, and coded with VP8's default
+   token probabilities (no updates, no segments, no loop filter). The reconstruction the encoder
+   predicts from is made with the decoder's own routines above, so the two never drift. Alpha goes
+   in an uncompressed ALPH chunk */
+typedef struct { Buf o; u32 range, bottom; int count; } BoolEnc;
+static void be_init(BoolEnc *e) { buf_init(&e->o); e->range = 255; e->bottom = 0; e->count = 24; }
+static void be_carry(BoolEnc *e)
+{
+  size_t i = e->o.len;
+  while (i > 0 && (u8)e->o.data[i - 1] == 255) { e->o.data[i - 1] = 0; i--; }
+  if (i > 0) e->o.data[i - 1] = (char)((u8)e->o.data[i - 1] + 1);
+}
+static void be_put(BoolEnc *e, int prob, int bit)
+{
+  u32 split = 1 + (((e->range - 1) * (u32)prob) >> 8);
+  if (bit) { e->bottom += split; e->range -= split; } else e->range = split;
+  while (e->range < 128) {
+    e->range <<= 1;
+    if (e->bottom & 0x80000000UL) be_carry(e);
+    e->bottom <<= 1;
+    if (!--e->count) { buf_addc(&e->o, (int)(e->bottom >> 24 & 255)); e->bottom &= 0xFFFFFF; e->count = 8; }
+  }
+}
+static void be_value(BoolEnc *e, u32 v, int n) { while (n-- > 0) be_put(e, 128, (int)(v >> n & 1)); }
+static void be_flush(BoolEnc *e)
+{
+  int c = e->count, k;
+  u32 v = e->bottom;
+  if (v & (1UL << (32 - c))) be_carry(e);
+  v <<= c & 7;
+  c >>= 3;
+  while (--c >= 0) v <<= 8;
+  for (k = 0; k < 4; k++) { buf_addc(&e->o, (int)(v >> 24 & 255)); v <<= 8; }
+}
+/* the forward transforms (libvpx's) */
+static void fdct4(const int *in, int *out)
+{
+  int tmp[16], i;
+  for (i = 0; i < 4; i++) {
+    const int *ip = in + 4 * i;
+    int a1 = (ip[0] + ip[3]) * 8, b1 = (ip[1] + ip[2]) * 8, c1 = (ip[1] - ip[2]) * 8, d1 = (ip[0] - ip[3]) * 8;
+    tmp[4 * i] = a1 + b1; tmp[4 * i + 2] = a1 - b1;
+    tmp[4 * i + 1] = (c1 * 2217 + d1 * 5352 + 14500) >> 12;
+    tmp[4 * i + 3] = (d1 * 2217 - c1 * 5352 + 7500) >> 12;
+  }
+  for (i = 0; i < 4; i++) {
+    int a1 = tmp[i] + tmp[12 + i], b1 = tmp[4 + i] + tmp[8 + i], c1 = tmp[4 + i] - tmp[8 + i], d1 = tmp[i] - tmp[12 + i];
+    out[i] = (a1 + b1 + 7) >> 4; out[8 + i] = (a1 - b1 + 7) >> 4;
+    out[4 + i] = ((c1 * 2217 + d1 * 5352 + 12000) >> 16) + (d1 != 0);
+    out[12 + i] = (d1 * 2217 - c1 * 5352 + 51000) >> 16;
+  }
+}
+static void fwht4(const int *in, int *out)
+{
+  int tmp[16], i;
+  for (i = 0; i < 4; i++) {
+    const int *ip = in + 4 * i;
+    int a1 = (ip[0] + ip[2]) * 4, d1 = (ip[1] + ip[3]) * 4, c1 = (ip[1] - ip[3]) * 4, b1 = (ip[0] - ip[2]) * 4;
+    tmp[4 * i] = a1 + d1 + (a1 != 0); tmp[4 * i + 1] = b1 + c1; tmp[4 * i + 2] = b1 - c1; tmp[4 * i + 3] = a1 - d1;
+  }
+  for (i = 0; i < 4; i++) {
+    int a1 = tmp[i] + tmp[8 + i], d1 = tmp[4 + i] + tmp[12 + i], c1 = tmp[4 + i] - tmp[12 + i], b1 = tmp[i] - tmp[8 + i];
+    int a2 = a1 + d1, b2 = b1 + c1, c2 = b1 - c1, d2 = a1 - d1;
+    a2 += a2 < 0; b2 += b2 < 0; c2 += c2 < 0; d2 += d2 < 0;
+    out[i] = (a2 + 3) >> 3; out[4 + i] = (b2 + 3) >> 3; out[8 + i] = (c2 + 3) >> 3; out[12 + i] = (d2 + 3) >> 3;
+  }
+}
+/* coefficients (raster order) quantized into zigzag order q; the dequantized ones into dq (raster);
+   the position after the last non-zero one from first (0 if none) */
+static int quant_block(const int *c, int first, int qdc, int qac, int *q, i16 *dq)
+{
+  int n, last = 0;
+  for (n = 0; n < 16; n++) {
+    int r = zigzag[n], d = n ? qac : qdc, v = c[r], a = v < 0 ? -v : v, k;
+    if (n < first) { q[n] = 0; continue; }
+    k = (a + (n ? d * 3 / 8 : d / 2)) / d;            /* (a little dead zone for AC) */
+    if (k > 2048) k = 2048;
+    q[n] = v < 0 ? -k : k;
+    dq[r] = wrap16(q[n] * d);
+    if (k) last = n + 1;
+  }
+  return last;
+}
+static void put_coeffs(BoolEnc *e, const u8 *prob, int ctx, int first, const int *q, int last)
+{
+  const u8 *p = prob + (coeff_bands[first] * 3 + ctx) * 11;
+  int n = first;
+  while (n < 16) {
+    int v, a;
+    if (n >= last) { be_put(e, p[0], 0); return; }
+    be_put(e, p[0], 1);
+    while (!q[n]) { be_put(e, p[1], 0); n++; p = prob + coeff_bands[n] * 33; }
+    be_put(e, p[1], 1);
+    v = q[n]; a = v < 0 ? -v : v;
+    if (a == 1) be_put(e, p[2], 0);
+    else {
+      be_put(e, p[2], 1);
+      if (a <= 4) {
+        be_put(e, p[3], 0);
+        if (a == 2) be_put(e, p[4], 0); else { be_put(e, p[4], 1); be_put(e, p[5], a == 4); }
+      } else {
+        be_put(e, p[3], 1);
+        if (a <= 10) {
+          be_put(e, p[6], 0);
+          if (a <= 6) { be_put(e, p[7], 0); be_put(e, 159, a == 6); }
+          else { be_put(e, p[7], 1); be_put(e, 165, (a - 7) >> 1); be_put(e, 145, (a - 7) & 1); }
+        } else {
+          int cat = a < 19 ? 0 : a < 35 ? 1 : a < 67 ? 2 : 3, nb, k;
+          const u8 *tab = cat3456[cat];
+          u32 extra = (u32)(a - (3 + (8 << cat)));
+          be_put(e, p[6], 1);
+          be_put(e, p[8], cat >> 1); be_put(e, p[9 + (cat >> 1)], cat & 1);
+          for (nb = 0; tab[nb]; nb++) ;
+          for (k = 0; k < nb; k++) be_put(e, tab[k], (int)(extra >> (nb - 1 - k) & 1));
+        }
+      }
+    }
+    be_put(e, 128, v < 0);
+    p = prob + (coeff_bands[n + 1] * 3 + (a == 1 ? 1 : 2)) * 11;
+    n++;
+  }
+}
+static const u8 *proba_default(int type) { return default_coeff_probs + type * 264; }
+/* the sum of squared differences between source and a block predicted in place */
+static long block_sse(const u8 *src, long ss, const u8 *rec, long rs, int n)
+{
+  long s = 0;
+  int x, y;
+  for (y = 0; y < n; y++) for (x = 0; x < n; x++) { int d = src[y * ss + x] - rec[y * rs + x]; s += d * d; }
+  return s;
+}
+u8 *webp_encode_lossy(const Rgba *im, int quality, size_t *len)
+{
+  static const int modes[4] = { B_DC, B_VE, B_HE, B_TM };
+  int w = im->w, h = im->h, mbw, mbh, mbx, mby, qi, q[6], alpha = 0, k;
+  long ys, uvs, np = (long)w * h, i;
+  u8 *sy = NULL, *su = NULL, *sv = NULL, *ry = NULL, *ru = NULL, *rv = NULL, *res = NULL;
+  u8 *tnz = NULL, *tdc = NULL;
+  u8 lnz = 0, ldc = 0;
+  BoolEnc p0, tk;
+  Buf f;
+  if (!im->px || w < 1 || h < 1 || w > 16383 || h > 16383) return NULL;
+  for (i = 0; i < np; i++) if (im->px[i * 4 + 3] != 255) { alpha = 1; break; }
+  mbw = (w + 15) / 16; mbh = (h + 15) / 16;
+  ys = (long)mbw * 16; uvs = (long)mbw * 8;
+  sy = (u8 *)malloc((size_t)ys * mbh * 16); su = (u8 *)malloc((size_t)uvs * mbh * 8); sv = (u8 *)malloc((size_t)uvs * mbh * 8);
+  ry = (u8 *)malloc((size_t)ys * mbh * 16); ru = (u8 *)malloc((size_t)uvs * mbh * 8); rv = (u8 *)malloc((size_t)uvs * mbh * 8);
+  tnz = (u8 *)calloc((size_t)mbw, 1); tdc = (u8 *)calloc((size_t)mbw, 1);
+  if (!sy || !su || !sv || !ry || !ru || !rv || !tnz || !tdc) goto done;
+  /* the picture as YUV 4:2:0 (BT.601 studio range, libwebp's sums), over white where transparent
+     only in colour (the alpha goes in ALPH), edges repeated to whole macroblocks */
+  {
+    long x, y;
+    for (y = 0; y < mbh * 16; y++)
+      for (x = 0; x < ys; x++) {
+        const u8 *p = im->px + ((long)(y < h ? y : h - 1) * w + (x < w ? x : w - 1)) * 4;
+        sy[y * ys + x] = (u8)((16839 * p[0] + 33059 * p[1] + 6420 * p[2] + 32768 + (16 << 16)) >> 16);
+      }
+    for (y = 0; y < mbh * 8; y++)
+      for (x = 0; x < uvs; x++) {
+        int r = 0, g = 0, b = 0, dy, dx;
+        for (dy = 0; dy < 2; dy++) for (dx = 0; dx < 2; dx++) {
+          long yy = 2 * y + dy, xx = 2 * x + dx;
+          const u8 *p = im->px + ((yy < h ? yy : h - 1) * w + (xx < w ? xx : w - 1)) * 4;
+          r += p[0]; g += p[1]; b += p[2];
+        }
+        su[y * uvs + x] = (u8)((-9719 * r - 19081 * g + 28800 * b + (128 << 18) + (1 << 17)) >> 18);
+        sv[y * uvs + x] = (u8)((28800 * r - 24116 * g - 4684 * b + (128 << 18) + (1 << 17)) >> 18);
+      }
+  }
+  /* the quantizers, as vp8_headers works them out */
+  if (quality < 1) quality = 1;
+  if (quality > 100) quality = 100;
+  qi = (100 - quality) * 127 / 100;
+  q[0] = dc_qlookup[qi]; q[1] = ac_qlookup[qi]; q[2] = dc_qlookup[qi] * 2;
+  q[3] = (int)(((long)ac_qlookup[qi] * 101581L) >> 16); if (q[3] < 8) q[3] = 8;
+  q[4] = dc_qlookup[qi > 117 ? 117 : qi]; q[5] = ac_qlookup[qi];
+  be_init(&p0); be_init(&tk);
+  be_put(&p0, 128, 0); be_put(&p0, 128, 0);              /* colour space, clamping */
+  be_put(&p0, 128, 0);                                   /* no segments */
+  be_put(&p0, 128, 0); be_value(&p0, 0, 6); be_value(&p0, 0, 3); be_put(&p0, 128, 0);   /* no loop filter */
+  be_value(&p0, 0, 2);                                   /* one token partition */
+  be_value(&p0, (u32)qi, 7);
+  for (k = 0; k < 5; k++) be_put(&p0, 128, 0);
+  be_put(&p0, 128, 0);                                   /* refresh_entropy_probs */
+  for (k = 0; k < 4 * 8 * 3 * 11; k++) be_put(&p0, coeff_update_probs[k], 0);
+  be_put(&p0, 128, 0);                                   /* no skipping */
+  for (mby = 0; mby < mbh && !progress(mby, mbh); mby++) {
+    lnz = 0; ldc = 0;
+    for (mbx = 0; mbx < mbw; mbx++) {
+      int best = 0, bu = 0, m, bx, by, c[16], qz[16], nzdc, ch;
+      long bestsse = -1;
+      i16 coef[384], y2[16];
+      int dcs[16];
+      u8 *yrec = ry + (long)mby * 16 * ys + mbx * 16;
+      const u8 *ysrc = sy + (long)mby * 16 * ys + mbx * 16;
+      u32 t = tnz[mbx] & 0x0F, l = lnz & 0x0F, outt = 0, outl = 0;
+      /* the luma mode with the least error */
+      for (m = 0; m < 4; m++) {
+        long e;
+        pred_block(ry, ys, mbx * 16, mby * 16, 16, modes[m]);
+        e = block_sse(ysrc, ys, yrec, ys, 16);
+        if (bestsse < 0 || e < bestsse) { bestsse = e; best = m; }
+      }
+      pred_block(ry, ys, mbx * 16, mby * 16, 16, modes[best]);
+      bestsse = -1;
+      for (m = 0; m < 4; m++) {
+        long e;
+        pred_block(ru, uvs, mbx * 8, mby * 8, 8, modes[m]);
+        pred_block(rv, uvs, mbx * 8, mby * 8, 8, modes[m]);
+        e = block_sse(su + (long)mby * 8 * uvs + mbx * 8, uvs, ru + (long)mby * 8 * uvs + mbx * 8, uvs, 8) +
+            block_sse(sv + (long)mby * 8 * uvs + mbx * 8, uvs, rv + (long)mby * 8 * uvs + mbx * 8, uvs, 8);
+        if (bestsse < 0 || e < bestsse) { bestsse = e; bu = m; }
+      }
+      pred_block(ru, uvs, mbx * 8, mby * 8, 8, modes[bu]);
+      pred_block(rv, uvs, mbx * 8, mby * 8, 8, modes[bu]);
+      /* its modes in partition 0 */
+      be_put(&p0, 145, 1);
+      if (modes[best] == B_DC) { be_put(&p0, 156, 0); be_put(&p0, 163, 0); }
+      else if (modes[best] == B_VE) { be_put(&p0, 156, 0); be_put(&p0, 163, 1); }
+      else if (modes[best] == B_HE) { be_put(&p0, 156, 1); be_put(&p0, 128, 0); }
+      else { be_put(&p0, 156, 1); be_put(&p0, 128, 1); }
+      if (modes[bu] == B_DC) be_put(&p0, 142, 0);
+      else if (modes[bu] == B_VE) { be_put(&p0, 142, 1); be_put(&p0, 114, 0); }
+      else if (modes[bu] == B_TM) { be_put(&p0, 142, 1); be_put(&p0, 114, 1); be_put(&p0, 183, 1); }
+      else { be_put(&p0, 142, 1); be_put(&p0, 114, 1); be_put(&p0, 183, 0); }
+      /* luma: each block's transform, the DCs through Y2 */
+      memset(coef, 0, sizeof coef);
+      {
+        int ac[16][16];
+        for (by = 0; by < 4; by++) for (bx = 0; bx < 4; bx++) {
+          int px[16], x, y;
+          for (y = 0; y < 4; y++) for (x = 0; x < 4; x++) px[y * 4 + x] = ysrc[(by * 4 + y) * ys + bx * 4 + x] - yrec[(by * 4 + y) * ys + bx * 4 + x];
+          fdct4(px, ac[by * 4 + bx]);
+          dcs[by * 4 + bx] = ac[by * 4 + bx][0];
+        }
+        fwht4(dcs, c);
+        memset(y2, 0, sizeof y2);
+        nzdc = quant_block(c, 0, q[2], q[3], qz, y2);
+        put_coeffs(&tk, proba_default(1), tdc[mbx] + ldc, 0, qz, nzdc);
+        tdc[mbx] = ldc = (u8)(nzdc > 0);
+        if (nzdc > 1) iwht(y2, coef);
+        else { i16 dc0 = wrap16((y2[0] + 3) >> 3); for (k = 0; k < 256; k += 16) coef[k] = dc0; }
+        for (by = 0; by < 4; by++) {
+          u32 lb = l & 1;
+          for (bx = 0; bx < 4; bx++) {
+            int n = by * 4 + bx, last;
+            i16 *dq = coef + n * 16;
+            last = quant_block(ac[n], 1, q[0], q[1], qz, dq);
+            put_coeffs(&tk, proba_default(0), (int)(lb + (t & 1)), 1, qz, last);
+            lb = last > 1;
+            t = (t >> 1) | (lb << 7);
+          }
+          t >>= 4;
+          l = (l >> 1) | (lb << 7);
+        }
+        outt = t; outl = l >> 4;
+      }
+      /* chroma */
+      for (ch = 0; ch < 2; ch++) {
+        u8 *src = (ch ? sv : su) + (long)mby * 8 * uvs + mbx * 8, *rec = (ch ? rv : ru) + (long)mby * 8 * uvs + mbx * 8;
+        u32 tc = (u32)tnz[mbx] >> (4 + 2 * ch), lc = (u32)lnz >> (4 + 2 * ch);
+        for (by = 0; by < 2; by++) {
+          u32 lb = lc & 1;
+          for (bx = 0; bx < 2; bx++) {
+            int px[16], x, y, last;
+            i16 *dq = coef + 256 + ch * 64 + (by * 2 + bx) * 16;
+            for (y = 0; y < 4; y++) for (x = 0; x < 4; x++) px[y * 4 + x] = src[(by * 4 + y) * uvs + bx * 4 + x] - rec[(by * 4 + y) * uvs + bx * 4 + x];
+            fdct4(px, c);
+            last = quant_block(c, 0, q[4], q[5], qz, dq);
+            put_coeffs(&tk, proba_default(2), (int)(lb + (tc & 1)), 0, qz, last);
+            lb = last > 0;
+            tc = (tc >> 1) | (lb << 3);
+          }
+          tc >>= 2;
+          lc = (lc >> 1) | (lb << 5);
+        }
+        outt |= (tc << 4) << (2 * ch);
+        outl |= (lc & 0xF0) << (2 * ch);
+      }
+      tnz[mbx] = (u8)outt; lnz = (u8)outl;
+      /* the reconstruction, as the decoder makes it */
+      for (by = 0; by < 4; by++) for (bx = 0; bx < 4; bx++) idct_add(coef + (by * 4 + bx) * 16, yrec + (long)by * 4 * ys + bx * 4, ys);
+      for (ch = 0; ch < 2; ch++) for (by = 0; by < 2; by++) for (bx = 0; bx < 2; bx++)
+        idct_add(coef + 256 + ch * 64 + (by * 2 + bx) * 16, (ch ? rv : ru) + ((long)mby * 8 + by * 4) * uvs + mbx * 8 + bx * 4, uvs);
+    }
+  }
+  be_flush(&p0); be_flush(&tk);
+  if (p0.o.oom || tk.o.oom) { buf_free(&p0.o); buf_free(&tk.o); goto done; }
+  /* the container */
+  {
+    size_t vlen = 10 + p0.o.len + tk.o.len, alen = alpha ? 1 + (size_t)np : 0;
+    u32 tag = (u32)(0 | (0 << 1) | (1 << 4) | ((u32)p0.o.len << 5));
+    buf_init(&f);
+    buf_add(&f, "RIFF\0\0\0\0WEBP", 12);
+    if (alpha) {
+      u8 x[18];
+      memcpy(x, "VP8X", 4); x[4] = 10; x[5] = x[6] = x[7] = 0;
+      x[8] = 0x10; x[9] = x[10] = x[11] = 0;
+      x[12] = (u8)(w - 1); x[13] = (u8)((w - 1) >> 8); x[14] = (u8)((w - 1) >> 16);
+      x[15] = (u8)(h - 1); x[16] = (u8)((h - 1) >> 8); x[17] = (u8)((h - 1) >> 16);
+      buf_add(&f, x, 18);
+      buf_add(&f, "ALPH", 4); buf_addc(&f, (int)(alen & 255)); buf_addc(&f, (int)(alen >> 8 & 255)); buf_addc(&f, (int)(alen >> 16 & 255)); buf_addc(&f, (int)(alen >> 24 & 255));
+      buf_addc(&f, 0);                                   /* raw, no filter, no preprocessing */
+      for (i = 0; i < np; i++) buf_addc(&f, im->px[i * 4 + 3]);
+      if (alen & 1) buf_addc(&f, 0);
+    }
+    buf_add(&f, "VP8 ", 4); buf_addc(&f, (int)(vlen & 255)); buf_addc(&f, (int)(vlen >> 8 & 255)); buf_addc(&f, (int)(vlen >> 16 & 255)); buf_addc(&f, (int)(vlen >> 24 & 255));
+    buf_addc(&f, (int)(tag & 255)); buf_addc(&f, (int)(tag >> 8 & 255)); buf_addc(&f, (int)(tag >> 16 & 255));
+    buf_addc(&f, 0x9D); buf_addc(&f, 0x01); buf_addc(&f, 0x2A);
+    buf_addc(&f, w & 255); buf_addc(&f, (w >> 8) & 0x3F); buf_addc(&f, h & 255); buf_addc(&f, (h >> 8) & 0x3F);
+    buf_add(&f, p0.o.data, p0.o.len); buf_add(&f, tk.o.data, tk.o.len);
+    if (vlen & 1) buf_addc(&f, 0);
+    buf_free(&p0.o); buf_free(&tk.o);
+    if (f.oom) { buf_free(&f); goto done; }
+    { u32 rs = (u32)(f.len - 8); f.data[4] = (char)(rs & 255); f.data[5] = (char)(rs >> 8 & 255); f.data[6] = (char)(rs >> 16 & 255); f.data[7] = (char)(rs >> 24 & 255); }
+    *len = f.len;
+    res = (u8 *)buf_take(&f);
+  }
+done:
+  free(sy); free(su); free(sv); free(ry); free(ru); free(rv); free(tnz); free(tdc);
+  return res;
 }

@@ -1,0 +1,136 @@
+# lang/ignore.txt - string literals in amiga/ that are not the interface's words, so tools/langcheck.py
+# doesn't ask for their translations. One per line, exactly as the C source has it (UTF-8, C escapes).
+# Lines starting "# " are notes. Here: language names (each in its own words), codes, preference keys,
+# file patterns, key names typed in Keyboard Shortcuts (parsed in English), font file names, icon
+# drawings, unit suffixes, the program's name.
+#
+px
+#?.(brushes|abr)
+xb0
+0123456789abcdefABCDEF#
+#?.(gradients|ggr)
+esc
+Ctrl 
+Alt 
+Shift 
+Help
+Amiga 
+English
+Deutsch
+Français
+Español
+Italiano
+en
+de
+fr
+es
+it
+english
+deutsch
+français
+español
+italiano
+Easel
+Liberation Sans
+Easel - %s%s
+#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)
+#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)
+#?.(gif|anim|anm|iff)
+ModeID
+, EHB
+, HAM6
+, HAM8
+fx
+RGB/8
+tips=
+large=
+cursor=
+capsprecise=
+xformnums=
+savefmt=
+jpegq=
+askflatten=
+nrecent=
+units=
+dpi=
+gridsp=
+gridsub=
+scratchon=
+scratchmb=
+undomb=
+undolevels=
+screenmode=
+skipplacexf=
+ px
+ in
+ cm
+ mm
+#?.(swatches|gpl|aco|act|ase|iff|ilbm)
+#?.(swatches|gpl|aco|act|ase|iff)
+FONTS:
+can't open
+can't read
+not a font file:
+QuillSerif
+QuillSerifB
+QuillSerifI
+QuillSerifBI
+QuillSans
+QuillSansB
+QuillSansI
+QuillSansBI
+QuillMono
+QuillMonoB
+QuillMonoI
+QuillMonoBI
+QuillSansC
+QuillSansCB
+QuillSansCI
+QuillSansCBI
+QuillSerifC
+QuillSerifCB
+QuillSerifCI
+QuillSerifCBI
+aatext
+no sizes in
+not a font:
+nnnnnnnnnn
+ci B abc cg L 5 12 8 15 L 8 15 14 8
+ci R 2 1 13 15 cr F 1 7 14 12 cw B PDF
+ca I fx
+2500px
+\tjsr\t-126(a6)
+Easel - %s%s%s
+PROGDIR:
+RAM:
+PROGDIR:Easel History.txt
+OpenRaster
+checker=
+checkerscheme=
+gridstyle=
+guidestyle=
+screendpi=
+columnw=
+gutterw=
+pointkind=
+historylog=
+# r2-tools: preference keys, the tablet input handler's name, default file names of the programmer's exports
+tabletcurve=
+tabletfloor=
+dither=
+parcorrect=
+Easel tablet
+picture
+%s_sprite
+sprite.s
+sprite.c
+picture.s
+picture.c
+copper.s
+copper.c
+copper
+# r2-colour: file patterns and colour mode codes
+#?.(icc|icm)
+#?.(cube|3dl)
+CMYK/8
+Lab/8

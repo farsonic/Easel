@@ -21,6 +21,70 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.2: colour management, more formats and type
+
+- Colour management: ICC profiles (v2 and v4; matrix, grey and LUT profiles) are kept when a picture
+  is opened and saved as PNG, JPEG, TIFF, PSD or WebP. Edit > Color Settings (proofing intent, black
+  point compensation, the display's gamma), Assign Profile and Convert to Profile (sRGB and Adobe
+  RGB built in, or any .icc file). Pictures with a profile are shown converted for the screen.
+- View > Proof Colors and Proof Setup: working CMYK (Easel's own press or a CMYK profile you load)
+  and its plates, legacy Macintosh, Internet and monitor RGB, and two kinds of colour blindness.
+  View > Gamut Warning paints what can't be printed grey.
+- Image > Mode > CMYK Color and Lab Color: the picture is still edited in RGB (a native CMYK mode
+  would need five bytes a pixel and a second set of every tool), with its colours brought into the
+  printable range, and is saved as a CMYK TIFF or JPEG or a CIELab TIFF. CMYK files open through
+  their own profile.
+- Opening: palette PNG and BMP files open Indexed, 1-bit TIFF and PBM in Bitmap mode; Cineon,
+  DICOM and OpenEXR (uncompressed, RLE, ZIP and PIZ) are read; IFF ANIM ops 7 and 8; PSD layer
+  styles; Color Lookup reads .3dl LUTs.
+- Saving: lossy WebP, progressive JPEG, palette BMP, Cineon, Radiance HDR, 12- and 16-bit DPX, PSD
+  layer styles; File > Export > TIFF asks its compression. Export As has a resampling method, a
+  canvas size, a matte, a choice of metadata and Convert to sRGB.
+- Type: All Caps, Small Caps, superscript and subscript (Layer > Type > Character), OpenType
+  ligatures, swashes, oldstyle figures, alternates, ordinals and fractions (Layer > Type), justified
+  paragraphs with the last line centred or right, and left and right indents.
+## New in 1.2: menus, actions and panels
+
+- View > Pixel Aspect Ratio: Square, the video presets (D1/DV, HDV, DVCPRO, anamorphic), the Amiga's
+  PAL and NTSC low and high resolution pixels, From Amiga Screen Mode and Custom; with Pixel Aspect
+  Ratio Correction on (it is at first) a lores or interlaced picture is drawn with pixels as tall as
+  the screen would show them. The aspect is kept in IFF ILBM files.
+- View > Extras, Show > Selection Edges, Layer Edges, Target Path, Pixel Grid (from 800%), All and
+  None; Pattern Preview (the picture tiled round itself, for Workbench backdrops); Fit Layer(s) on
+  Screen; Print Size; New Guide Layout (columns, rows, gutters and margins) and New Guides From Shape.
+- Window > Actions: record menu commands as an action and play it back, with sets, stops, steps
+  turned off, Play from Step, and files of actions to load and save. File > Automate > Batch runs an
+  action on every picture in a drawer; Conditional Mode Change changes the mode only when it is one of
+  those ticked. Actions are plain lists of commands: there is no scripting language.
+- Window > Styles (saved layer styles, applied with a click), Window > Layer Comps (the layers'
+  visibility and appearance kept by name, applied, cycled and exported to files), the Info panel's
+  histogram by channel with its mean, standard deviation and median, Window > Arrange > Match Zoom
+  and Location.
+- Edit > Search finds any menu command as you type; Edit > Paste Outside; Image > Trim with its
+  options; Layer > New > Layer... (name, mode, opacity, clipping, colour); Align > Distribute by
+  edges and spacing; Rasterize > All Layers; Layer > Quick Export as PNG; File > Scripts > Flatten
+  All Layer Effects. A copyrighted picture shows © in the title.
+- The canvas's context menu (right mouse button) with the usual commands.
+- Preferences: a Transparency page (checkerboard size and colours), grid and guide line styles,
+  screen resolution, column and gutter widths and point size, and the History Log (the same
+  setting as Edit > History Options, below).
+- EaselConvert INFO describes pictures (format, size, layers, mode, resolution, aspect, screen
+  mode, File Info) without converting them.
+
+## New in 1.2: five languages and the right mouse button
+
+- Easel speaks English, German, French, Spanish and Italian, in Photoshop's own words for each
+  (Ebene, Tonwertkorrektur, Zauberstab; calque, Niveaux, Baguette magique ...). It follows the first
+  of the preferred languages in Locale prefs, or the one chosen in Preferences › Interface ›
+  Language (from the next start). Menus, dialogs, panels, tools, help bubbles and messages are all
+  translated, and each language still fits a 640 × 480 screen.
+- Right-click menus, as PhotoCraft has them: on the picture, one for the tool in use (the selection
+  tools' Deselect, Select Inverse, Feather, Layer via Copy, Free Transform ...; the layers under the
+  pointer with the Move tool or Ctrl; the zooms with Hand and Zoom; sample sizes with the
+  Eyedropper; Apply and Cancel while transforming or cropping; the type, path and shape commands);
+  on a Layers panel row, its thumbnail or its mask; on Channels and Paths rows; on document tabs.
+- The Eyedropper dragged off the picture picks up any colour on the screen.
+
 ## New in 1.2: tools, layers and brushes
 
 - New tools: Quick Selection (paint over what you want; it grows to the edges) and Object Selection
@@ -47,12 +111,11 @@ interface and icons. None of the icons are copied from any other program.
   memory than a pixel layer, and transforms are worked out from the source without loss.
 - History: Edit > History Options (the first snapshot made on opening, a snapshot on saving, the
   New Snapshot dialog, and a History Log to a file or the picture's File Info), Rename Snapshot.
-- Amiga: View > Pixel Aspect Ratio Correction shows lores and hires pixels as the screen would;
-  overscan sizes and View > Show > Guides from TV Safe Areas; File > Export More writes raw
-  bitplanes (interleaved or not, with LoadRGB4 or LoadRGB32 palettes), the same as C or assembler
-  source, hardware sprites and copper-list gradients; Window > Spare Page and Copy to Spare;
-  Window > Animation steps through and plays the frames (layers) with onion skins; brushes shear
-  and bend; icons get tool types.
+- Amiga: overscan sizes (with their pixel aspects, see View > Pixel Aspect Ratio above) and View >
+  Show > Guides from TV Safe Areas; File > Export More writes raw bitplanes (interleaved or not,
+  with LoadRGB4 or LoadRGB32 palettes), the same as C or assembler source, hardware sprites and
+  copper-list gradients; Window > Spare Page and Copy to Spare; Window > Animation steps through and
+  plays the frames (layers) with onion skins; brushes shear and bend; icons get tool types.
 
 ## New in 1.1: tool options
 
@@ -525,7 +588,7 @@ it. File > Export always writes a flat copy and leaves the picture's own file al
 ## Settings
 
 Easel keeps a few settings in `PROGDIR:Easel.prefs`: the dark interface, the public screen and
-the last drawer used. Start it with `PUBSCREEN=name` (or a PUBSCREEN tool type) to open on
+the last drawer used, and the interface language (`language=de`, or `auto` for Locale prefs' choice). Start it with `PUBSCREEN=name` (or a PUBSCREEN tool type) to open on
 another screen. `DEBUG=file` writes a log.
 
 ## Not included

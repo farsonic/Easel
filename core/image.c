@@ -3,6 +3,7 @@
 #include <string.h>
 #include "image.h"
 #include "zip.h"
+#include "cms.h"                       /* 1.2: cmyk_hook */
 
 /* both formats store numbers big-endian */
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
@@ -497,7 +498,12 @@ static void jpeg_rgb(const Jpeg *j, u32 y, u8 *rgb)
     if (j->nc == 4) {
       /* Adobe's (the usual) CMYK is stored inverted */
       if (!j->adobe) for (k = 0; k < 4; k++) v[k] = 255 - v[k];
-      for (k = 0; k < 3; k++) v[k] = (v[k] * v[3] + 127) / 255;
+      if (cmyk_hook) {                                   /* 1.2: through the press or the file's profile */
+        u8 ink[4], o3[3];
+        for (k = 0; k < 4; k++) ink[k] = (u8)(255 - v[k]);
+        cmyk_hook(ink, o3);
+        for (k = 0; k < 3; k++) v[k] = o3[k];
+      } else for (k = 0; k < 3; k++) v[k] = (v[k] * v[3] + 127) / 255;
     }
     o[0] = (u8)v[0]; o[1] = (u8)v[1]; o[2] = (u8)v[2];
   }

@@ -551,7 +551,6 @@ int tools2_command(ULONG id)
     dlg_sliders("Pattern Overlay", ps, 2, modes, "Mode:", 0, NULL, NULL, 0, NULL, 0, NULL, po_apply, NULL, 0);
     return 1; }
   /* ---- View */
-  case ID_PIXASPECT: view_aspect = menu_ticked(ID_PIXASPECT); return 1;
   case ID_DITHER0: case ID_DITHER1: case ID_DITHER2: display_dither = (int)(id - ID_DITHER0); redraw_window(); return 1;
   case ID_ROT_CW: case ID_ROT_CCW: case ID_ROT_180: case ID_ROT_RESET: case ID_ROTRESET:
     if (!v) return 0;
@@ -649,7 +648,6 @@ void tools2_menus(void)
 {
   Doc *d = cur_doc();
   Annots *a = d ? d->annot : NULL;
-  menu_tick(ID_PIXASPECT, view_aspect);
   menu_tick(ID_DITHER0, display_dither == 0); menu_tick(ID_DITHER1, display_dither == 1); menu_tick(ID_DITHER2, display_dither == 2);
   menu_tick(ID_ONION, onion_on);
   menu_tick(ID_SHOWNOTES, !a || a->show_notes);

@@ -507,7 +507,8 @@ u8 *jpeg_write_doc(Doc *d, int quality, size_t *len)
   im.w = d->w; im.h = d->h;
   if (!(im.px = doc_flat_rgba(d))) return NULL;
   rgba_flatten_white(&im);
-  p = jpeg_encode(&im, quality, d->dpi, len);
+  p = jpeg_write_progressive ? jpeg_encode_progressive(&im, quality, d->dpi, len) : NULL;   /* (1.2) */
+  if (!p) p = jpeg_encode(&im, quality, d->dpi, len);
   free(im.px);
   return jpeg_add_info(p, len, &d->info);
 }

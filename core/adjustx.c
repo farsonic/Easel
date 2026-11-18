@@ -155,6 +155,7 @@ Lut3D *lut_load_cube(const char *path, char *err, int errcap)
   Lut3D *l;
   if (!data) { seterr(err, errcap, "The LUT file couldn't be read."); return NULL; }
   l = lut_parse_cube((const char *)data, (long)len, err, errcap);
+  if (!l) l = lut_parse_3dl((const char *)data, (long)len, err, errcap);    /* 1.2: or an Autodesk .3dl */
   free(data);
   return l;
 }

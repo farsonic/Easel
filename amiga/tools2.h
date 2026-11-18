@@ -9,7 +9,6 @@
 #include "../core/toolsx.h"
 
 extern MixerState tool_mixer;         /* the Mixer Brush's reservoir and pickup */
-extern int view_aspect;               /* (canvas.c) the canvas shows the pixels' aspect */
 extern int slice_pick;                /* (canvas.c) the slice the Slice Select tool picked, -1 none */
 /* animation frames' onion skins (Window > Animation): on, frames before and after, opacity, the frame
    shown; the canvas composites through view_composite */

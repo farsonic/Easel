@@ -1,7 +1,8 @@
 /*
  * frames.c - animations (Easel 1.1), see frames.h: every frame of an animated GIF (GIF89a's
  * Graphic Control Extension: delay, transparency and disposal) and of an IFF ANIM (ANHD and DLTA
- * as "ANIM - IFF CEL Animations" and the op 5 byte vertical delta of Jim Kent's ANIM5 describe),
+ * as "ANIM - IFF CEL Animations" and the op 5 byte vertical delta of Jim Kent's ANIM5 describe;
+ * 1.2: ops 7 and 8, the short and long vertical deltas),
  * and both written from a document's layers. Portable C99.
  */
 #include <stdlib.h>
@@ -206,6 +207,56 @@ static void apply_op5(AnimState *a, const u8 *c, size_t len, u8 *planes)
     }
   }
 }
+/* 1.2: ops 7 and 8 (the "short/long vertical delta" of the ANIM7/ANIM8 players): the column is a
+   word (bits & 1: a long) wide. Op 7: eight pointers to opcode lists and eight to data lists; per
+   column a count of ops from the opcodes, each 0 (a count, then one data word repeated), 0x80 | n
+   (skip n rows) or n (n data words copied down). Op 8: eight pointers, opcodes, counts and data all
+   words (or longs) in one list, the skip bit the word's top bit */
+static u32 rdw(const u8 *p, int ws) { return ws == 4 ? rd32(p) : rd16(p); }
+static void put_word(u8 *dst, u32 v, int ws, int bytes)
+{
+  int k;
+  for (k = 0; k < bytes; k++) dst[k] = (u8)(v >> (8 * (ws - 1 - k)));
+}
+static void apply_op78(AnimState *a, const u8 *c, size_t len, u8 *planes, int op8, int longw)
+{
+  int p, ws = longw ? 4 : 2;
+  i32 ncol = (a->rb + ws - 1) / ws;
+  if (len < (op8 ? 32u : 64u)) return;
+  for (p = 0; p < a->np && p < 8; p++) {
+    u32 oo = rd32(c + p * 4), od = op8 ? 0 : rd32(c + 32 + p * 4);
+    size_t i = oo, di = od;
+    i32 col;
+    if (!oo || oo >= len || (!op8 && (!od || od >= len))) continue;
+    for (col = 0; col < ncol; col++) {
+      u8 *base = planes + (size_t)p * a->h * a->rb + (size_t)col * ws;
+      int bytes = (col + 1) * ws <= a->rb ? ws : a->rb - col * ws;   /* (a last column narrower than a long) */
+      u32 nops, k;
+      i32 y = 0;
+      if (op8) { if (i + (size_t)ws > len) return; nops = rdw(c + i, ws); i += (size_t)ws; }
+      else { if (i >= len) return; nops = c[i++]; }
+      if (nops > (u32)a->h * 2 + 2) return;
+      for (k = 0; k < nops; k++) {
+        u32 o, top = op8 ? (ws == 4 ? 0x80000000UL : 0x8000UL) : 0x80;
+        if (op8) { if (i + (size_t)ws > len) return; o = rdw(c + i, ws); i += (size_t)ws; }
+        else { if (i >= len) return; o = c[i++]; }
+        if (o == 0) {
+          u32 cnt, v, m;
+          if (op8) { if (i + 2 * (size_t)ws > len) return; cnt = rdw(c + i, ws); v = rdw(c + i + ws, ws); i += 2 * (size_t)ws; }
+          else { if (i >= len || di + (size_t)ws > len) return; cnt = c[i++]; v = rdw(c + di, ws); di += (size_t)ws; }
+          for (m = 0; m < cnt && y < a->h; m++, y++) put_word(base + (size_t)y * a->rb, v, ws, bytes);
+        } else if (o & top) y += (i32)(o & (top - 1));
+        else {
+          u32 m;
+          size_t *src = op8 ? &i : &di;
+          if (o > (u32)a->h || *src + (size_t)o * ws > len) return;
+          for (m = 0; m < o; m++, y++) if (y >= 0 && y < a->h) put_word(base + (size_t)y * a->rb, rdw(c + *src + m * ws, ws), ws, bytes);
+          *src += (size_t)o * ws;
+        }
+      }
+    }
+  }
+}
 /* the planes as an uncompressed ILBM in memory, read by ilbm_read (so EHB and HAM come out right) */
 static int planes_to_rgba(AnimState *a, const u8 *planes, Rgba *out)
 {
@@ -247,7 +298,7 @@ int anim_read_frames(const u8 *d, size_t n, Frames *f, int max, long limit, char
     int op = 0, have_body = 0;
     const u8 *dlta = NULL, *body = NULL;
     size_t dlen = 0, blen = 0;
-    u32 reltime = 0;
+    u32 reltime = 0, anhd_bits = 0;
     if (fe > end || flen < 4) break;
     if (memcmp(d + o, "FORM", 4) || memcmp(d + o + 8, "ILBM", 4)) { o = fe + (fe & 1); continue; }
     for (c = o + 12; c + 8 <= fe; ) {
@@ -266,6 +317,7 @@ int anim_read_frames(const u8 *d, size_t n, Frames *f, int max, long limit, char
         if (frame) op = p[0];
         reltime = rd32(p + 14);
         interleave = p[18] ? p[18] : 2;
+        anhd_bits = rd32(p + 20);                         /* (1.2: ops 7 and 8: bit 0 long data) */
       } else if (!memcmp(id, "DLTA", 4)) { dlta = p; dlen = len; }
       else if (!memcmp(id, "BODY", 4)) { body = p; blen = len; have_body = 1; }
       c += 8 + len + (len & 1);
@@ -285,7 +337,8 @@ int anim_read_frames(const u8 *d, size_t n, Frames *f, int max, long limit, char
       u8 *t = interleave == 1 ? a.buf[0] : a.buf[frame & 1];   /* (interleave 1: each delta on the frame before) */
       if (op == 0 && have_body) { if (!body_to_planes(&a, body, blen, 1, t)) body_to_planes(&a, body, blen, 0, t); }
       else if (op == 5 && dlta) apply_op5(&a, dlta, dlen, t);
-      else if (op != 5 && op != 0) { f->truncated = 1; break; }   /* (ops 1-4, 6-8 and J aren't read) */
+      else if ((op == 7 || op == 8) && dlta) apply_op78(&a, dlta, dlen, t, op == 8, (int)(anhd_bits & 1));   /* 1.2 */
+      else if (op != 5 && op != 0 && op != 7 && op != 8) { f->truncated = 1; break; }   /* (ops 1-4, 6 and J aren't read) */
     }
     if (!frame_room(f, max, limit)) break;
     if (!planes_to_rgba(&a, interleave == 1 ? a.buf[0] : a.buf[frame & 1], &f->fr[f->n])) { if (frame) { f->truncated = 1; break; } free(a.buf[0]); free(a.buf[1]); codec_err(err, errcap, "Damaged ANIM file"); return 0; }
