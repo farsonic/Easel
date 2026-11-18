@@ -63,6 +63,7 @@ int pcrop_pending;                       /* 1.2: Perspective Crop's corners are 
 int xform_pending;
 char xform_info[80];
 int ruler_on;
+extern UWORD modkeys_qual;              /* round 3: Shift, Alt and Ctrl held on screen (filesui.c) */
 double ruler_xy[4];
 char ruler_info[96];
 int extras_hidden;                       /* (1.1, easel.h) */
@@ -3138,7 +3139,7 @@ static ULONG handle(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *m)
     ov_hide(d, obj);
     d->cur_x = mx; d->cur_y = my; d->cur_in = in;
     ov_show(d, obj);
-    d->qual = im->Qualifier;
+    d->qual = im->Qualifier | modkeys_qual;              /* (round 3: and the Modifier Keys window's) */
     if (d->drag) motion(d, obj, mx, my);
     else if (d->ml && in) {
       /* 0.7: the Magnetic Lasso's live path follows the pointer */
@@ -3166,7 +3167,7 @@ static ULONG handle(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *m)
   }
   if (im->Class == IDCMP_MOUSEBUTTONS) {
     if (im->Code == SELECTDOWN && in) {
-      press(d, obj, mx, my, im->Qualifier, im->Seconds, im->Micros);
+      press(d, obj, mx, my, im->Qualifier | modkeys_qual, im->Seconds, im->Micros);
       return MUI_EventHandlerRC_Eat;
     }
     if (im->Code == SELECTUP && d->drag) { release(d, obj); return MUI_EventHandlerRC_Eat; }

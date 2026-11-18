@@ -9,6 +9,7 @@
 #include <proto/muimaster.h>
 #include <libraries/mui.h>
 #include <clib/alib_protos.h>
+#include <devices/inputevent.h>
 #include "easel.h"
 #include "lang.h"
 #include "ids.h"
@@ -150,6 +151,33 @@ static void ml_fill(void)
   for (k = 0; k < mlog.n; k++) { mlog_line(&mlog.r[k], k, tr(measure_sources[mlog.r[k].source]), line, sizeof line); lwin_add(&mlw, line); }
   lwin_fill_end(&mlw, mlog.n ? mlog.n - 1 : -1);
 }
+/* the Modifier Keys window: Shift, Alt and Ctrl held down on screen, for a pen or a one-handed mouse;
+   the canvas takes them with the keyboard's own */
+UWORD modkeys_qual;
+static Object *mkwin, *mkb[3];
+static const UWORD mk_quals[3] = { IEQUALIFIER_LSHIFT, IEQUALIFIER_LALT, IEQUALIFIER_CONTROL };
+static void modkeys_window(void)
+{
+  static const char *const names[3] = { "Shift", "Alt", "Ctrl" };
+  int i;
+  if (!mkwin) {
+    Object *row = HGroup, End;
+    mkwin = QWindowObject, MUIA_Window_Title, (ULONG)tr("Modifier Keys"), MUIA_Window_ID, FU_ID('E', 'M', 'K', 'Y'),
+      WindowContents, VGroup, Child, row, Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Held until pressed again."), MUIA_Font, MUIV_Font_Tiny, End, End,
+    End;
+    if (!mkwin) return;
+    for (i = 0; i < 3; i++) {
+      mkb[i] = TextObject, ButtonFrame, MUIA_Background, MUII_ButtonBack, MUIA_InputMode, MUIV_InputMode_Toggle,
+        MUIA_Text_Contents, (ULONG)names[i], MUIA_Text_PreParse, (ULONG)"\33c", MUIA_CycleChain, 1, End;
+      DoMethod(row, OM_ADDMEMBER, (ULONG)mkb[i]);
+      DoMethod(mkb[i], MUIM_Notify, MUIA_Selected, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_MK_BTN0 + i);
+    }
+    DoMethod(app, OM_ADDMEMBER, (ULONG)mkwin);
+    DoMethod(mkwin, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (ULONG)mkwin, 3, MUIM_Set, MUIA_Window_Open, FALSE);
+  }
+  set(mkwin, MUIA_Window_Open, TRUE);
+}
+
 /* (see filesui.h) */
 void filesui_refresh(void)
 {
@@ -186,6 +214,11 @@ int filesui_command(ULONG id)
   case ID_WIN_TIMELINE: if (lwin_make(&tlw, "Timeline", FU_ID('E', 'T', 'L', 'N'), tlb, 10, 5, ID_TL_BTN0, ID_TL_SEL)) show(&tlw); return 0;
   case ID_WIN_NOTES: if (lwin_make(&ntw, "Notes", FU_ID('E', 'N', 'T', 'S'), ntb, 4, 4, ID_NT_BTN0, ID_NT_SEL)) show(&ntw); return 0;
   case ID_WIN_MLOG: if (lwin_make(&mlw, "Measurement Log", FU_ID('E', 'M', 'L', 'G'), mlb, 4, 4, ID_ML_BTN0, ID_ML_SEL)) show(&mlw); return 0;
+  case ID_WIN_MODKEYS: modkeys_window(); return 0;
+  case ID_MK_BTN0: case ID_MK_BTN0 + 1: case ID_MK_BTN0 + 2:
+    k = (int)(id - ID_MK_BTN0);
+    if (xget(mkb[k], MUIA_Selected)) modkeys_qual |= mk_quals[k]; else modkeys_qual &= (UWORD)~mk_quals[k];
+    return 0;
   case ID_RECORDMEAS: case ID_ML_BTN0: if (d) record(d, v ? v->name : ""); return 0;
   case ID_ML_BTN0 + 1: mlog_delete(&mlog, lwin_sel(&mlw)); ml_fill(); return 0;
   case ID_ML_BTN0 + 2: mlog.n = 0; ml_fill(); return 0;

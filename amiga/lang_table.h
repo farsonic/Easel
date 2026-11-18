@@ -2806,4 +2806,6 @@
   { { "Delete All|Cancel", "Alle l\366schen|Abbrechen", "Tout supprimer|Annuler", "Eliminar todo|Cancelar", "Elimina tutto|Annulla" } },
   { { "Delete every note in the picture?", "Alle Anmerkungen im Bild l\366schen?", "Supprimer toutes les notes de l'image ?", "\277Eliminar todas las notas de la imagen?", "Eliminare tutte le note dell'immagine?" } },
   { { "Behind", "Dahinter auftragen", "Derri\350re", "Detr\341s", "Dietro" } },
+  { { "Modifier Keys", "Zusatztasten", "Touches de modification", "Teclas modificadoras", "Tasti modificatori" } },
+  { { "Held until pressed again.", "Gehalten, bis sie erneut gedr\374ckt werden.", "Maintenues jusqu'au prochain appui.", "Se mantienen hasta volver a pulsarlas.", "Tenuti fino alla prossima pressione." } },
   { { "Netscape Grey", "Netscape-Grau", "Gris Netscape", "Gris Netscape", "Grigio Netscape" } },

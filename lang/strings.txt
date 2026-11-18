@@ -2821,4 +2821,6 @@ Note:	Anmerkung:	Note :	Nota:	Nota:
 Delete All|Cancel	Alle löschen|Abbrechen	Tout supprimer|Annuler	Eliminar todo|Cancelar	Elimina tutto|Annulla
 Delete every note in the picture?	Alle Anmerkungen im Bild löschen?	Supprimer toutes les notes de l'image ?	¿Eliminar todas las notas de la imagen?	Eliminare tutte le note dell'immagine?
 Behind	Dahinter auftragen	Derrière	Detrás	Dietro
+Modifier Keys	Zusatztasten	Touches de modification	Teclas modificadoras	Tasti modificatori
+Held until pressed again.	Gehalten, bis sie erneut gedrückt werden.	Maintenues jusqu'au prochain appui.	Se mantienen hasta volver a pulsarlas.	Tenuti fino alla prossima pressione.
 Netscape Grey	Netscape-Grau	Gris Netscape	Gris Netscape	Grigio Netscape

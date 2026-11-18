@@ -359,7 +359,7 @@ static struct NewMenu menus[] = {
   /* 1.2 */
   I("Actions...", 0, ID_WIN_ACTIONS), I("Stop Recording", 0, ID_ACTSTOP), I("Play Action Again", 0, ID_ACTPLAY), I("Styles...", 0, ID_WIN_STYLES), I("Layer Comps...", 0, ID_WIN_COMPS),
   H("Histogram"), ST("Luminosity", ID_HISTCH0), ST("Red", ID_HISTCH0 + 1), ST("Green", ID_HISTCH0 + 2), ST("Blue", ID_HISTCH0 + 3), BAR,
-  I("Timeline", 0, ID_WIN_TIMELINE), I("Notes", 0, ID_WIN_NOTES), I("Measurement Log", 0, ID_WIN_MLOG),   /* round 3 */
+  I("Timeline", 0, ID_WIN_TIMELINE), I("Notes", 0, ID_WIN_NOTES), I("Measurement Log", 0, ID_WIN_MLOG), I("Modifier Keys", 0, ID_WIN_MODKEYS),   /* round 3 */
   H("Animation"), S("Previous Frame", 0, ID_FRAMEPREV), S("Next Frame", 0, ID_FRAMENEXT), S("Play Frames", 0, ID_FRAMEPLAY), SBAR,
   ST("Onion Skin", ID_ONION), S("Onion Skin Settings...", 0, ID_ONIONSET), S("Frame Time...", 0, ID_FRAMETIME),
   I("Spare Page", 0, ID_SPARE), I("Copy to Spare", 0, ID_COPYSPARE),

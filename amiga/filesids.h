@@ -15,6 +15,8 @@
 #define ID_WIN_MLOG     7740           /* Window > Measurement Log; 7741-7744 its buttons */
 #define ID_ML_BTN0      7741
 #define ID_ML_SEL       7745
-#define ID_RECORDMEAS   7746           /* Image > Analysis > Record Measurements (the log's first button too) */
+#define ID_RECORDMEAS   7746
+#define ID_WIN_MODKEYS  7750           /* Window > Modifier Keys; 7751-7753 its Shift, Alt and Ctrl */
+#define ID_MK_BTN0      7751           /* Image > Analysis > Record Measurements (the log's first button too) */
 #define ID_FU_LAST      7799
 #endif
