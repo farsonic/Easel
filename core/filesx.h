@@ -19,6 +19,18 @@ int  exif_get(const u8 *e, u32 len, int tag, long *val);
 /* the document's EXIF (with its size) added to an encoded JPEG or PNG (other formats unchanged):
    takes the file and returns it grown (or as it was); NULL if out of memory */
 u8  *exif_embed(const Doc *d, int fmt, u8 *file, size_t *len);
+/* Layered TIFF, as Photoshop writes it: the layers (as PSD keeps them) in tag 37724
+   (ImageSourceData) beside the flat picture other programs show. Written with the document's mode
+   and compression (tiff_encode_doc) when it has more than one layer; read with them (8 and 16 bits),
+   else a TIFF of several pages opens with each page as a layer (the first page's size) */
+u8  *tiff_encode_layered(Doc *d, int compression, size_t *len);
+Doc *tiff_read_layers(const u8 *d, size_t n, char *err, size_t errcap);
+/* a TIFF's pages (IFDs), at most max, their offsets in ifd; how many */
+int  tiff_pages(const u8 *d, size_t n, u32 *ifd, int max);
+/* a new first IFD for a TIFF with a tag added (type, count, data stored at the end): takes the file and
+   returns it grown (or unchanged when it can't); NULL if out of memory */
+u8  *tiff_add_tag(u8 *t, size_t *len, int tag, int type, const u8 *data, u32 count);
+
 /* what codec_load_doc adds from a file: its EXIF */
 void filesx_load_extras(Doc *doc, const u8 *d, size_t n);
 

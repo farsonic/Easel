@@ -1138,7 +1138,7 @@ static int write_doc(Doc *d, const char *path, int fmt)
   /* 0.4: GIF; an indexed (or grey) picture's own palette kept in PNG and ILBM */
   else if (fmt == FMT_GIF) data = gif_write_doc(d, 256, QM_WU, DI_FS, 0, &len);
   /* 0.6: TIFF (LZW), Targa (run-length), Photoshop with its layers; PNG and JPEG with File Info */
-  else if (fmt == FMT_TIFF) data = tiff_encode_doc(d, export_tiff_comp, &len);
+  else if (fmt == FMT_TIFF) data = tiff_encode_layered(d, export_tiff_comp, &len);   /* (round 3: with its layers) */
   else if (fmt == FMT_TGA) data = tga_write_doc(d, 1, &len);
   else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
   else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
@@ -1267,7 +1267,7 @@ static int save(void)
   DocView *v = cur_view();
   if (!v) return 0;
   if (!v->path[0] || !(codec_writable_06(v->fmt) || xwrite_handles(v->fmt))) return save_as();
-  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 && prefs.ask_flatten &&
+  if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->fmt != FMT_TIFF && v->doc->nlay > 1 && prefs.ask_flatten &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
   }

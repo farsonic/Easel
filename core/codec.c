@@ -242,6 +242,7 @@ Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
   if (fmt != FMT_ORA && foreign_detect(d, n)) doc = foreign_load_doc(d, n, err, errcap);   /* round 3: GIMP, Krita, Paint.NET */
   else if (fmt == FMT_ORA) doc = ora_read(d, n, err, errcap);
   else if (fmt == FMT_PSD) { codec_oom = 0; doc = psd_read_doc(d, n, err, errcap); }   /* 0.6: with its layers */
+  else if (fmt == FMT_TIFF && (doc = tiff_read_layers(d, n, err, errcap)) != NULL) { int dpi = codec_dpi(d, n); if (dpi > 0 && dpi < 65536) doc->dpi = (u16)dpi; }   /* round 3: layered TIFF, pages */
   else {
     if (!codec_decode(d, n, &im, err, errcap)) doc = NULL;
     else doc = doc_of(&im, d, n, err, errcap);

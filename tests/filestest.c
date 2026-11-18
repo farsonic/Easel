@@ -323,6 +323,163 @@ static void test_pdn(void)
   fuzz("layers.pdn", 400);
 }
 
+/* a document of three layers (one with a mask, one in a group) for the layered writers */
+static Doc *layered_doc(void)
+{
+  Doc *d = doc_new(48, 40, 0xFFFFFF, 0);
+  Layer *a = layer_new(d, "Red box"), *b = layer_new(d, "Blue"), *g;
+  i32 x, y;
+  for (y = 5; y < 25; y++) for (x = 4; x < 30; x++) { u8 *p = a->px + (y * 48 + x) * 4; p[0] = 220; p[1] = 30; p[2] = 40; p[3] = 255; }
+  for (y = 15; y < 38; y++) for (x = 20; x < 46; x++) { u8 *p = b->px + (y * 48 + x) * 4; p[0] = 20; p[1] = 60; p[2] = 230; p[3] = 160; }
+  b->mask = (u8 *)malloc(48 * 40);
+  for (y = 0; y < 40; y++) for (x = 0; x < 48; x++) b->mask[y * 48 + x] = (u8)(x < 33 ? 255 : 0);
+  b->mask_on = 1; b->mask_linked = 1;
+  b->blend = BM_MULTIPLY; b->opacity = 200;
+  doc_add_layer(d, a, 1);
+  doc_add_layer(d, b, 2);
+  g = (Layer *)calloc(1, sizeof *g);
+  strcpy(g->name, "Group"); g->kind = LK_GROUP; g->opacity = 255; g->visible = 1; g->blend = BM_PASS;
+  doc_add_layer(d, g, 3);
+  d->lay[2]->depth = 1;
+  doc_forget_undo(d);
+  return d;
+}
+static int same_layers(Doc *a, Doc *b, const char *what)
+{
+  int i, ok = a && b && a->nlay == b->nlay && a->w == b->w && a->h == b->h;
+  char msg[200];
+  for (i = 0; ok && i < a->nlay; i++) {
+    Layer *p = a->lay[i], *q = b->lay[i];
+    ok = !strcmp(p->name, q->name) && p->kind == q->kind && p->depth == q->depth && p->blend == q->blend && p->opacity == q->opacity && (!p->mask) == (!q->mask);
+    if (ok && p->px) {
+      long k, bad = 0;
+      for (k = 0; k < (long)a->w * a->h; k++) if (p->px[k * 4 + 3] != q->px[k * 4 + 3] || (p->px[k * 4 + 3] && memcmp(p->px + k * 4, q->px + k * 4, 3))) bad++;
+      ok = !bad;
+    }
+    if (ok && p->mask) ok = !memcmp(p->mask, q->mask, (size_t)a->w * a->h);
+  }
+  snprintf(msg, sizeof msg, "%s: the layers come back", what);
+  CHECK(ok, msg);
+  return ok;
+}
+static void test_layered(void)
+{
+  Doc *d = layered_doc(), *r;
+  u8 *f;
+  size_t fl;
+  char err[200];
+  Rgba im;
+  /* PSB */
+  f = psb_write_doc(d, &fl);
+  CHECK(f && f[5] == 2, "PSB written as version 2");
+  r = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  same_layers(d, r, "PSB");
+  if (r) doc_free(r);
+  if (f) { save("layers.psb", f, fl); free(f); }
+  /* the composite, for psd-tools */
+  if (rgba_alloc(&im, d->w, d->h)) {
+    u8 *png;
+    doc_composite(d, doc_box(d), im.px, (long)d->w * 4);
+    rgba_flatten_white(&im);
+    if ((png = png_encode(&im, 0, &fl)) != NULL) { save("layers.ref.png", png, fl); free(png); }
+    rgba_free(&im);
+  }
+  want("psdtools layers.psb 4 2 layers.ref.png 2");
+  /* layered TIFF: with each compression */
+  {
+    int c;
+    for (c = 0; c < TIFFC_N; c++) {
+      char nm[64], line[200];
+      f = tiff_encode_layered(d, c, &fl);
+      r = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+      snprintf(nm, sizeof nm, "layered TIFF (%s)", tiff_comp_names[c]);
+      same_layers(d, r, nm);
+      if (r) doc_free(r);
+      snprintf(nm, sizeof nm, "layers_%d.tif", c);
+      if (f) { save(nm, f, fl); free(f); }
+      snprintf(line, sizeof line, "same %s layers.flat.png 0", nm);
+      want(line);
+      snprintf(line, sizeof line, "frames %s 4 3 26 23 26 23 20 15", nm);   /* (the masked layer: its pixels' box) */
+      want(line);
+    }
+  }
+  /* what other programs show: the flat picture */
+  if (rgba_alloc(&im, d->w, d->h)) {
+    u8 *png;
+    doc_composite(d, doc_box(d), im.px, (long)d->w * 4);
+    if ((png = png_encode(&im, 0, &fl)) != NULL) { save("layers.flat.png", png, fl); free(png); }
+    rgba_free(&im);
+  }
+  /* one layer: a plain TIFF, no tag */
+  {
+    Doc *one = doc_new(10, 10, 0x808080, 0);
+    u32 ifd[4];
+    f = tiff_encode_layered(one, TIFFC_LZW, &fl);
+    r = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+    CHECK(r && r->nlay == 1, "a flat TIFF opens as one layer");
+    CHECK(f && tiff_pages(f, fl, ifd, 4) == 1, "one page");
+    if (r) doc_free(r);
+    free(f);
+    doc_free(one);
+  }
+  /* several pages: a layer each (the pages made by hand: two TIFFs joined) */
+  {
+    Doc *p1 = doc_new(12, 8, 0xFF0000, 0), *p2 = doc_new(12, 8, 0x00FF00, 0);
+    size_t l1, l2;
+    u8 *t1 = tiff_encode_doc(p1, TIFFC_NONE, &l1), *t2 = tiff_encode_doc(p2, TIFFC_NONE, &l2), *m;
+    if (t1 && t2 && (m = (u8 *)malloc(l1 + l2)) != NULL) {
+      u32 ifd[4];
+      int le = t1[0] == 'I', np;
+      /* t2's offsets moved by l1; its IFD chained after t1's */
+      memcpy(m, t1, l1); memcpy(m + l1, t2, l2);
+      np = tiff_pages(t2, l2, ifd, 4);
+      if (np == 1) {
+        u32 off = ifd[0], ne, k, last;
+        u8 *e = m + l1 + off;
+        ne = le ? (u32)(e[0] | e[1] << 8) : (u32)(e[0] << 8 | e[1]);
+        for (k = 0; k < ne; k++) {
+          u8 *t = e + 2 + k * 12;
+          u32 type = le ? (u32)(t[2] | t[3] << 8) : (u32)(t[2] << 8 | t[3]);
+          u32 cnt = le ? (u32)(t[4] | t[5] << 8 | t[6] << 16 | (u32)t[7] << 24) : ((u32)t[4] << 24 | t[5] << 16 | t[6] << 8 | t[7]);
+          u32 sz = (type == 3 ? 2 : type == 4 ? 4 : type == 5 ? 8 : 1) * cnt;
+          int ptr = sz > 4;
+          u32 tag = le ? (u32)(t[0] | t[1] << 8) : (u32)(t[0] << 8 | t[1]);
+          if (tag == 273 && !ptr) ptr = 1, sz = 0;     /* the strip offsets themselves move */
+          if (ptr) {
+            u32 v = le ? (u32)(t[8] | t[9] << 8 | t[10] << 16 | (u32)t[11] << 24) : ((u32)t[8] << 24 | t[9] << 16 | t[10] << 8 | t[11]);
+            if (tag == 273 && cnt == 1) v += (u32)l1;
+            else {
+              v += (u32)l1;
+              if (tag == 273) { u32 j; for (j = 0; j < cnt; j++) { u8 *q = m + v + j * (type == 3 ? 2 : 4); if (type == 4) { u32 o = le ? (u32)(q[0] | q[1] << 8 | q[2] << 16 | (u32)q[3] << 24) : ((u32)q[0] << 24 | q[1] << 16 | q[2] << 8 | q[3]); o += (u32)l1; if (le) { q[0] = (u8)o; q[1] = (u8)(o >> 8); q[2] = (u8)(o >> 16); q[3] = (u8)(o >> 24); } else { q[0] = (u8)(o >> 24); q[1] = (u8)(o >> 16); q[2] = (u8)(o >> 8); q[3] = (u8)o; } } } }
+            }
+            if (le) { t[8] = (u8)v; t[9] = (u8)(v >> 8); t[10] = (u8)(v >> 16); t[11] = (u8)(v >> 24); } else { t[8] = (u8)(v >> 24); t[9] = (u8)(v >> 16); t[10] = (u8)(v >> 8); t[11] = (u8)v; }
+          }
+        }
+        /* chain: t1's IFD's next pointer to t2's IFD */
+        {
+          u32 f1[4];
+          tiff_pages(t1, l1, f1, 4);
+          {
+            u8 *e1 = m + f1[0];
+            u32 n1 = le ? (u32)(e1[0] | e1[1] << 8) : (u32)(e1[0] << 8 | e1[1]);
+            u8 *nx = e1 + 2 + n1 * 12;
+            last = off + (u32)l1;
+            if (le) { nx[0] = (u8)last; nx[1] = (u8)(last >> 8); nx[2] = (u8)(last >> 16); nx[3] = (u8)(last >> 24); } else { nx[0] = (u8)(last >> 24); nx[1] = (u8)(last >> 16); nx[2] = (u8)(last >> 8); nx[3] = (u8)last; }
+          }
+        }
+        CHECK(tiff_pages(m, l1 + l2, ifd, 4) == 2, "two pages found");
+        r = codec_load_doc(m, l1 + l2, err, sizeof err);
+        CHECK(r && r->nlay == 2 && !strcmp(r->lay[1]->name, "Page 1") && r->lay[1]->px[0] == 255 && r->lay[0]->px[1] == 255, "each page a layer, the first on top");
+        if (r) doc_free(r);
+      }
+      free(m);
+    }
+    free(t1); free(t2);
+    doc_free(p1); doc_free(p2);
+  }
+  doc_free(d);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -378,6 +535,7 @@ int main(int argc, char **argv)
   }
   test_look();
   test_exif();
+  test_layered();
   test_xcf();
   test_kra();
   test_pdn();

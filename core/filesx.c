@@ -3,6 +3,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "filesx.h"
 #include "zip.h"
 
@@ -183,4 +184,199 @@ void filesx_load_extras(Doc *doc, const u8 *d, size_t n)
   if ((e = exif_from_file(d, n, &el)) != NULL) {
     if (exif_normalize(e, el)) { doc->exif = e; doc->exiflen = el; } else free(e);
   }
+}
+
+/* ------------------------------------------------------------------ layered TIFF */
+#define ISD_SIG "Adobe Photoshop Document Data Block"
+static u32 rb32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
+
+u8 *tiff_add_tag(u8 *t, size_t *len, int tag, int type, const u8 *data, u32 count)
+{
+  int le;
+  u32 ifd, ne, i, k, nnext, ins = 0;
+  size_t n = *len, dat, ifdat, total;
+  u8 *o;
+  if (!t || n < 8) return t;
+  if (t[0] == 'I' && t[1] == 'I') le = 1; else if (t[0] == 'M' && t[1] == 'M') le = 0; else return t;
+  ifd = g32(t + 4, le);
+  if (ifd < 8 || ifd > n - 2) return t;
+  ne = g16(t + ifd, le);
+  if (ne > (n - ifd - 6) / 12) return t;
+  nnext = g32(t + ifd + 2 + 12 * ne, le);
+  dat = (n + 1) & ~(size_t)1;
+  ifdat = (dat + count + 1) & ~(size_t)1;
+  total = ifdat + 2 + 12 * (ne + 1) + 4;
+  if (!(o = (u8 *)calloc(1, total))) { free(t); return NULL; }
+  memcpy(o, t, n);
+  memcpy(o + dat, data, count);
+  p32(o + 4, le, (u32)ifdat);
+  p16(o + ifdat, le, ne + 1);
+  for (i = 0, k = 0; i <= ne; i++) {
+    const u8 *e = t + ifd + 2 + 12 * k;
+    u8 *dd = o + ifdat + 2 + 12 * i;
+    u32 tg = k < ne ? g16(e, le) : 0x10000UL;
+    if (tg == (u32)tag) { free(o); return t; }           /* (one there already) */
+    if (!ins && tg > (u32)tag) {
+      p16(dd, le, (u32)tag); p16(dd + 2, le, (u32)type); p32(dd + 4, le, count);
+      if (count <= 4) { memset(dd + 8, 0, 4); memcpy(dd + 8, data, count); } else p32(dd + 8, le, (u32)dat);
+      ins = 1;
+      continue;
+    }
+    memcpy(dd, e, 12);
+    k++;
+  }
+  p32(o + ifdat + 2 + 12 * (ne + 1), le, nnext);
+  free(t);
+  *len = total;
+  return o;
+}
+
+/* the layer information a PSD of the document holds (its layer info section's contents); malloc'd */
+static u8 *psd_layer_info_of(Doc *d, u32 *len)
+{
+  size_t pl, pos = 26;
+  u8 *p = psd_write_doc(d, &pl), *r = NULL;
+  u32 l;
+  if (!p) return NULL;
+  if (pl - pos < 4) goto out;
+  pos += 4 + rb32(p + pos);                              /* colour mode data */
+  if (pos > pl - 4) goto out;
+  pos += 4 + rb32(p + pos);                              /* image resources */
+  if (pos > pl - 8) goto out;
+  pos += 4;                                              /* the layer and mask section's length */
+  l = rb32(p + pos); pos += 4;                           /* the layer info's */
+  if (l > pl - pos || !(r = (u8 *)malloc(l ? l : 1))) goto out;
+  memcpy(r, p + pos, l);
+  *len = l;
+out:
+  free(p);
+  return r;
+}
+u8 *tiff_encode_layered(Doc *d, int compression, size_t *len)
+{
+  u8 *t = tiff_encode_doc(d, compression, len), *li, *blk;
+  u32 ll, bl;
+  if (!t || d->nlay < 2) return t;
+  if (!(li = psd_layer_info_of(d, &ll))) { free(t); return NULL; }
+  bl = (u32)sizeof ISD_SIG + 12 + ((ll + 3) & ~3u);
+  if (!(blk = (u8 *)calloc(1, bl))) { free(li); free(t); return NULL; }
+  memcpy(blk, ISD_SIG, sizeof ISD_SIG);                  /* (with its NUL) */
+  memcpy(blk + sizeof ISD_SIG, "8BIMLayr", 8);
+  p32(blk + sizeof ISD_SIG + 8, 0, (ll + 3) & ~3u);
+  memcpy(blk + sizeof ISD_SIG + 12, li, ll);
+  free(li);
+  t = tiff_add_tag(t, len, 37724, 7, blk, bl);
+  free(blk);
+  return t;
+}
+
+int tiff_pages(const u8 *d, size_t n, u32 *ifd, int max)
+{
+  int le, k = 0;
+  u32 off;
+  if (n < 8) return 0;
+  if (d[0] == 'I' && d[1] == 'I') le = 1; else if (d[0] == 'M' && d[1] == 'M') le = 0; else return 0;
+  if (g16(d + 2, le) != 42) return 0;
+  off = g32(d + 4, le);
+  while (off >= 8 && off <= n - 2 && k < max) {
+    u32 ne = g16(d + off, le);
+    int j;
+    for (j = 0; j < k; j++) if (ifd[j] == off) return k;          /* (a loop) */
+    if (ne > (n - off - 6) / 12) break;
+    ifd[k++] = off;
+    off = g32(d + off + 2 + 12 * ne, le);
+  }
+  return k;
+}
+
+/* tag 37724's bytes in the first IFD; NULL if none */
+static const u8 *isd_of(const u8 *d, size_t n, u32 *len)
+{
+  int le = d[0] == 'I';
+  u32 ifd = g32(d + 4, le), ne, k;
+  if (ifd < 8 || ifd > n - 2) return NULL;
+  ne = g16(d + ifd, le);
+  if (ne > (n - ifd - 6) / 12) return NULL;
+  for (k = 0; k < ne; k++) {
+    const u8 *e = d + ifd + 2 + 12 * k;
+    if (g16(e, le) == 37724) {
+      u32 cnt = g32(e + 4, le), off = g32(e + 8, le);
+      if (cnt <= 4 || off > n || cnt > n - off) return NULL;
+      *len = cnt;
+      return d + off;
+    }
+  }
+  return NULL;
+}
+
+Doc *tiff_read_layers(const u8 *d, size_t n, char *err, size_t errcap)
+{
+  u32 il, pos, ifd[MAXLAYERS];
+  const u8 *isd;
+  Doc *doc = NULL;
+  int np, k;
+  if (n < 8 || codec_detect(d, n) != FMT_TIFF) return NULL;
+  if ((isd = isd_of(d, n, &il)) != NULL && il > sizeof ISD_SIG + 12 && !memcmp(isd, ISD_SIG, sizeof ISD_SIG)) {
+    /* the tagged blocks after the signature: Layr (8 bits) or Lr16 inside a PSD made around it */
+    pos = (u32)sizeof ISD_SIG;
+    while (il - pos >= 12) {
+      u32 bl = rb32(isd + pos + 8);
+      int is16 = !memcmp(isd + pos + 4, "Lr16", 4);
+      if (memcmp(isd + pos, "8BIM", 4) && memcmp(isd + pos, "8B64", 4)) break;
+      if (bl > il - pos - 12) break;
+      if (!memcmp(isd + pos + 4, "Layr", 4) || is16) {
+        Rgba im;
+        u8 *p;
+        size_t plen = 26 + 12 + 4 + bl + 4;
+        if (!codec_decode(d, n, &im, err, errcap)) return NULL;      /* (the flat picture: its size) */
+        if (!(p = (u8 *)calloc(1, plen))) { rgba_free(&im); codec_oom = 1; return NULL; }
+        memcpy(p, "8BPS\0\1", 6);
+        p[12] = 0; p[13] = 4;
+        p32(p + 14, 0, (u32)im.h); p32(p + 18, 0, (u32)im.w);
+        p[22] = 0; p[23] = (u8)(is16 ? 16 : 8); p[24] = 0; p[25] = 3;
+        p32(p + 34, 0, bl + 8);                          /* (cmode and resources empty: 26..33) */
+        p32(p + 38, 0, bl);
+        memcpy(p + 42, isd + pos + 12, bl);
+        rgba_free(&im);
+        doc = psd_read_doc(p, plen, err, errcap);
+        free(p);
+        if (doc && doc->nlay >= 1) return doc;
+        if (doc) doc_free(doc);
+        return NULL;
+      }
+      pos += 12 + bl;
+    }
+  }
+  /* several pages: a layer each */
+  np = tiff_pages(d, n, ifd, MAXLAYERS);
+  if (np < 2) return NULL;
+  {
+    u8 *c = (u8 *)malloc(n);
+    if (!c) { codec_oom = 1; return NULL; }
+    memcpy(c, d, n);
+    for (k = 0; k < np; k++) {
+      Rgba im;
+      Layer *l;
+      i32 y, cw;
+      p32(c + 4, d[0] == 'I', ifd[k]);
+      if (!codec_decode(c, n, &im, err, errcap)) { if (!k) break; continue; }
+      if (!k) {
+        if (!(doc = doc_new(im.w, im.h, 0, 1))) { rgba_free(&im); codec_oom = 1; break; }
+        layer_free(doc->lay[0]); doc->nlay = 0;
+      }
+      if (doc->nlay >= MAXLAYERS || !(l = layer_new(doc, "Page"))) { rgba_free(&im); break; }
+      snprintf(l->name, sizeof l->name, "Page %d", k + 1);
+      cw = im.w < doc->w ? im.w : doc->w;
+      for (y = 0; y < im.h && y < doc->h; y++) memcpy(l->px + (size_t)y * doc->w * 4, im.px + (size_t)y * im.w * 4, (size_t)cw * 4);
+      /* the first page on top, as a stack of pages reads */
+      memmove(doc->lay + 1, doc->lay, sizeof doc->lay[0] * (size_t)doc->nlay);
+      doc->lay[0] = l; doc->nlay++;
+      rgba_free(&im);
+      if (progress_aborted) break;
+    }
+    free(c);
+  }
+  if (doc && !doc->nlay) { doc_free(doc); doc = NULL; }
+  if (doc) { doc->active = doc->nlay - 1; doc_forget_undo(doc); doc->dirty = 0; }
+  return doc;
 }

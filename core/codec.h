@@ -187,6 +187,8 @@ Doc  *psd_read_doc(const u8 *d, size_t n, char *err, size_t errcap);
 /* the document as an 8-bit RGB PSD with its layers (fill layers as their pixels, adjustment layers
    as empty pixel layers), groups, masks, resolution, File Info (XMP) and the merged composite */
 u8   *psd_write_doc(Doc *d, size_t *len);
+/* round 3: the same as a PSB (version 2, Photoshop's large document format; psd_read_doc reads it) */
+u8   *psb_write_doc(Doc *d, size_t *len);
 
 /* jpegenc.c and docinfo.c: the EXIF orientation (1-8; 1 if none), which jpeg_read applies, and the
    transformation that makes a picture with orientation o upright (5-8 swap w and h) */

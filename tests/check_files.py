@@ -93,6 +93,17 @@ if os.path.exists(listing):
                 ok("%s: ImageMagick flattens it as %s (off by %d)" % (w[1], args[0], d), d <= int(args[1]))
             else:
                 ok("%s: ImageMagick reads it" % w[1], False)
+        elif kind == "frames":               # ImageMagick finds N pictures (a layered TIFF's flat one and its layers) and the geometry
+            exe = shutil.which("magick") or shutil.which("identify")
+            if not exe:
+                skipped.append("ImageMagick (%s)" % w[1]); continue
+            cmd = [exe] + (["identify"] if exe.endswith("magick") else []) + ["-format", "%W %H %w %h %X %Y\n", f]
+            res = subprocess.run(cmd, capture_output=True, text=True).stdout.split("\n")
+            res = [r for r in res if r.strip()]
+            ok("%s: ImageMagick finds %s pictures (found %d)" % (w[1], args[0], len(res)), len(res) == int(args[0]))
+            if len(args) > 1:
+                ok("%s: picture %s is %s (ImageMagick: %s)" % (w[1], args[1], " ".join(args[2:]), res[int(args[1])] if len(res) > int(args[1]) else None),
+                   len(res) > int(args[1]) and res[int(args[1])].replace("+", "").split() == args[2:])
         elif kind == "psdtools":             # psd-tools reads the file: N layers and the composite
             try:
                 from psd_tools import PSDImage

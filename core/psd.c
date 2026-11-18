@@ -767,6 +767,10 @@ Doc *psd_read_doc(const u8 *d, size_t n, char *err, size_t errcap)
 /* ------------------------------------------------------------------ writing */
 static void w16(Buf *b, u32 v) { buf_addc(b, (int)((v >> 8) & 255)); buf_addc(b, (int)(v & 255)); }
 static void w32(Buf *b, u32 v) { w16(b, v >> 16); w16(b, v & 0xFFFF); }
+/* round 3: writing a PSB (version 2: section and channel lengths in 8 bytes, row counts in 4) */
+static int psd_big;
+static void wlen(Buf *b, u32 v) { if (psd_big) w32(b, 0); w32(b, v); }
+static void wcount(Buf *b, u32 v) { if (psd_big) w32(b, v); else w16(b, v); }
 
 /* PackBits for one row into b (or just counted when b is NULL); its length */
 static size_t pack_row(Buf *b, const u8 *s, size_t n)
@@ -836,8 +840,8 @@ static u32 out_channel(Buf *b, const Doc *doc, const PsdOut *r, int c, u8 *row)
     size_t l;
     out_row(doc, r, c, y, row);
     l = pack_row(NULL, row, (size_t)(bx.x1 - bx.x0));
-    if (b) w16(b, (u32)l);
-    total += 2 + (u32)l;
+    if (b) wcount(b, (u32)l);
+    total += (psd_big ? 4 : 2) + (u32)l;
   }
   if (b) for (y = bx.y0; y < bx.y1; y++) { out_row(doc, r, c, y, row); pack_row(b, row, (size_t)(bx.x1 - bx.x0)); }
   return total;
@@ -873,7 +877,7 @@ static void put_record(Buf *b, Doc *doc, const PsdOut *r, int id)
   int c, flags = 8, prot = 0, mode = l->blend;
   w32(b, (u32)r->b.y0); w32(b, (u32)r->b.x0); w32(b, (u32)r->b.y1); w32(b, (u32)r->b.x1);
   w16(b, (u32)r->nch);
-  for (c = 0; c < r->nch; c++) { w16(b, (u32)ids[c] & 0xFFFF); w32(b, r->len[c]); }
+  for (c = 0; c < r->nch; c++) { w16(b, (u32)ids[c] & 0xFFFF); wlen(b, r->len[c]); }
   buf_add(b, "8BIM", 4);
   if (r->what == PR_END) mode = BM_NORMAL;
   else if (r->what == PR_LAYER && mode == BM_PASS) mode = BM_NORMAL;
@@ -1008,7 +1012,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
   for (i = 0; i < (size_t)w * h; i++) if (comp[i * 4 + 3] != 255) { alpha = 1; break; }
   nch = alpha ? 4 : 3;
   /* the header: version 1, nch channels, 8 bits, RGB */
-  buf_add(&b, "8BPS\0\1\0\0\0\0\0\0", 12);
+  buf_add(&b, psd_big ? "8BPS\0\2\0\0\0\0\0\0" : "8BPS\0\1\0\0\0\0\0\0", 12);
   w16(&b, (u32)nch); w32(&b, (u32)h); w32(&b, (u32)w); w16(&b, 8); w16(&b, 3);
   w32(&b, 0);                                            /* no colour mode data */
   /* image resources: 1005 resolution, 1060 XMP */
@@ -1031,8 +1035,8 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
   if (x.oom) b.oom = 1;
   buf_free(&x);
   /* the layer and mask information */
-  lmstart = b.len; w32(&b, 0);
-  listart = b.len; w32(&b, 0);
+  lmstart = b.len; wlen(&b, 0);
+  listart = b.len; wlen(&b, 0);
   w16(&b, (u32)(alpha ? -nrec : nrec) & 0xFFFF);
   for (k = 0; k < nrec; k++) put_record(&b, doc, &o[k], k + 1);
   for (k = 0; k < nrec && !progress(k, nrec); k++)
@@ -1040,10 +1044,13 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
       if (o[k].px || c == 4) out_channel(&b, doc, &o[k], c == 0 ? 3 : c == 4 ? 4 : c - 1, row);
       else w16(&b, 0);
     }
-  while ((b.len - listart - 4) & 3) buf_addc(&b, 0);
-  if (!b.oom) { u8 *p = (u8 *)b.data + listart; u32 v = (u32)(b.len - listart - 4); p[0] = (u8)(v >> 24); p[1] = (u8)(v >> 16); p[2] = (u8)(v >> 8); p[3] = (u8)v; }
-  w32(&b, 0);                                            /* no global layer mask */
-  if (!b.oom) { u8 *p = (u8 *)b.data + lmstart; u32 v = (u32)(b.len - lmstart - 4); p[0] = (u8)(v >> 24); p[1] = (u8)(v >> 16); p[2] = (u8)(v >> 8); p[3] = (u8)v; }
+  {
+    size_t ll = psd_big ? 8 : 4;
+    while ((b.len - listart - ll) & 3) buf_addc(&b, 0);
+    if (!b.oom) { u8 *p = (u8 *)b.data + listart + ll - 4; u32 v = (u32)(b.len - listart - ll); p[0] = (u8)(v >> 24); p[1] = (u8)(v >> 16); p[2] = (u8)(v >> 8); p[3] = (u8)v; }
+    w32(&b, 0);                                          /* no global layer mask */
+    if (!b.oom) { u8 *p = (u8 *)b.data + lmstart + ll - 4; u32 v = (u32)(b.len - lmstart - ll); p[0] = (u8)(v >> 24); p[1] = (u8)(v >> 16); p[2] = (u8)(v >> 8); p[3] = (u8)v; }
+  }
   /* the merged image, RLE: the row counts of every channel, then the rows; matted on white */
   if (alpha)
     for (i = 0; i < (size_t)w * h; i++) {
@@ -1059,7 +1066,7 @@ u8 *psd_write_doc(Doc *doc, size_t *len)
         i32 xx;
         const u8 *p = comp + (size_t)y * w * 4 + c;
         for (xx = 0; xx < w; xx++) row[xx] = p[xx * 4];
-        if (k == 0) { counts[c * h + y] = (u16)pack_row(NULL, row, (size_t)w); w16(&b, counts[c * h + y]); }
+        if (k == 0) { counts[c * h + y] = (u16)pack_row(NULL, row, (size_t)w); wcount(&b, counts[c * h + y]); }
         else pack_row(&b, row, (size_t)w);
       }
   if (b.oom) goto done;
@@ -1070,4 +1077,14 @@ done:
   free(o); free(row); free(comp); free(counts);
   buf_free(&b);
   return res;
+}
+
+/* round 3: the same as a PSB (Photoshop's large document format) */
+u8 *psb_write_doc(Doc *d, size_t *len)
+{
+  u8 *r;
+  psd_big = 1;
+  r = psd_write_doc(d, len);
+  psd_big = 0;
+  return r;
 }
