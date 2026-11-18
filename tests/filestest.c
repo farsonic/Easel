@@ -311,6 +311,18 @@ static void test_exif(void)
   }
 }
 
+static void test_pdn(void)
+{
+  size_t len;
+  u8 *d;
+  check_expect("layers.pdn", 0);
+  if ((d = slurp("layers.pdn", &len)) != NULL) {
+    CHECK(foreign_detect(d, len) == FF_PDN, "a Paint.NET file is detected");
+    free(d);
+  }
+  fuzz("layers.pdn", 400);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -368,6 +380,7 @@ int main(int argc, char **argv)
   test_exif();
   test_xcf();
   test_kra();
+  test_pdn();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

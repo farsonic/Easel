@@ -308,4 +308,117 @@ make_kra("rgba8.kra")
 make_kra("rgba16.kra", depth16=True)
 make_kra("graya8.kra", grey=True)
 
+# ---------------------------------------------------------------- Paint.NET PDN
+class Nrbf:
+    """MS-NRBF records, as .NET's BinaryFormatter writes them"""
+    def __init__(s): s.b = bytearray(); s.seen = {}
+    def i32(s, v): s.b += struct.pack("<i", v)
+    def u8(s, v): s.b.append(v)
+    def string(s, t):
+        e = t.encode(); n = len(e)
+        while True:
+            c = n & 127; n >>= 7
+            s.b.append(c | (128 if n else 0))
+            if not n: break
+        s.b += e
+    def header(s, root): s.u8(0); s.i32(root); s.i32(-1); s.i32(1); s.i32(0)
+    def library(s, lid, name): s.u8(12); s.i32(lid); s.string(name)
+    def cls(s, oid, name, members, lib=2, system=False):
+        """members: (name, kind, extra) with kind prim/str/obj/sys/class/objarray; values are written after"""
+        if name in s.seen:
+            s.u8(1); s.i32(oid); s.i32(s.seen[name]); return
+        s.seen[name] = oid
+        s.u8(4 if system else 5); s.i32(oid); s.string(name); s.i32(len(members))
+        for m in members: s.string(m[0])
+        bt = {"prim": 0, "str": 1, "obj": 2, "sys": 3, "class": 4, "objarray": 5}
+        for m in members: s.u8(bt[m[1]])
+        for m in members:
+            if m[1] == "prim": s.u8(m[2])
+            elif m[1] == "sys": s.string(m[2])
+            elif m[1] == "class": s.string(m[2]); s.i32(2)
+        if not system: s.i32(lib)
+    def ref(s, oid): s.u8(9); s.i32(oid)
+    def null(s): s.u8(10)
+    def objstr(s, oid, t): s.u8(6); s.i32(oid); s.string(t)
+
+INT32, BOOL, DOUBLE, INT64 = 8, 1, 6, 9
+
+def make_pdn(name):
+    W, H = 37, 29
+    layers = [  # name, mode: ("op", class) or ("enum", n), opacity, visible, k, stride pad, gzip
+        ("Background", ("op", "PaintDotNet.UserBlendOps+NormalBlendOp"), 1.0, True, 3, 0, True),
+        ("Multiply", ("op", "PaintDotNet.UserBlendOps+MultiplyBlendOp"), 0.5, True, 1, 0, False),
+        ("Reflect", ("enum", 5), 1.0, False, 2, 8, True),
+        ("Xor", ("op", "PaintDotNet.UserBlendOps+XorBlendOp"), 0.25, True, 4, 0, True)]
+    N = Nrbf()
+    N.header(1)
+    N.library(2, "PaintDotNet.Data, Version=3.36.0.0, Culture=neutral, PublicKeyToken=null")
+    N.cls(1, "PaintDotNet.Document", [("layers", "class", "PaintDotNet.LayerList"), ("width", "prim", INT32), ("height", "prim", INT32),
+                                      ("savedWith", "sys", "System.Version"), ("userMetaData", "sys", "System.Collections.Specialized.NameValueCollection")])
+    N.ref(3); N.i32(W); N.i32(H); N.ref(4); N.null()
+    N.cls(3, "PaintDotNet.LayerList", [("parent", "class", "PaintDotNet.Document"), ("ArrayList+_items", "objarray", None),
+                                       ("ArrayList+_size", "prim", INT32), ("ArrayList+_version", "prim", INT32)])
+    N.ref(1); N.ref(5); N.i32(len(layers)); N.i32(7)
+    N.cls(4, "System.Version", [("_Major", "prim", INT32), ("_Minor", "prim", INT32), ("_Build", "prim", INT32), ("_Revision", "prim", INT32)], system=True)
+    N.i32(3); N.i32(36); N.i32(0); N.i32(0)
+    N.u8(16); N.i32(5); N.i32(len(layers) + 2)
+    for i in range(len(layers)): N.ref(10 + i * 10)
+    N.u8(13); N.u8(2)                       # two nulls (the list's spare capacity)
+    blocks = []
+    for i, (lname, mode, op, vis, k, pad, gz) in enumerate(layers):
+        oid = 10 + i * 10
+        stride = W * 4 + pad
+        N.cls(oid, "PaintDotNet.BitmapLayer", [("properties", "class", "PaintDotNet.BitmapLayer+BitmapLayerProperties"), ("surface", "class", "PaintDotNet.Surface"),
+                                               ("Layer+isDisposed", "prim", BOOL), ("Layer+width", "prim", INT32), ("Layer+height", "prim", INT32),
+                                               ("Layer+properties", "class", "PaintDotNet.LayerProperties")])
+        inline = i % 2 == 0
+        # BitmapLayerProperties, inline for even layers, by reference for odd ones
+        def blp():
+            if mode[0] == "op":
+                N.cls(oid + 1, "PaintDotNet.BitmapLayer+BitmapLayerProperties", [("blendOp", "class", "PaintDotNet.UserBlendOp")])
+                N.cls(oid + 2, mode[1], [])
+            else:
+                N.cls(oid + 1, "PaintDotNet.BitmapLayer+BitmapLayerProperties4", [("blendMode", "class", "PaintDotNet.LayerBlendMode")])
+                N.cls(oid + 2, "PaintDotNet.LayerBlendMode", [("value__", "prim", INT32)]); N.i32(mode[1])
+        def surf():
+            N.cls(oid + 3, "PaintDotNet.Surface", [("width", "prim", INT32), ("height", "prim", INT32), ("stride", "prim", INT32), ("scan0", "class", "PaintDotNet.MemoryBlock")])
+            N.i32(W); N.i32(H); N.i32(stride)
+            N.cls(oid + 4, "PaintDotNet.MemoryBlock", [("length64", "prim", INT64), ("hasParent", "prim", BOOL), ("deferred", "prim", BOOL)])
+            N.b += struct.pack("<q", stride * H); N.u8(0); N.u8(1)
+        def lp():
+            N.cls(oid + 5, "PaintDotNet.LayerProperties", [("name", "str", None), ("userMetaData", "sys", "System.Collections.Specialized.NameValueCollection"),
+                                                           ("visible", "prim", BOOL), ("isBackground", "prim", BOOL), ("opacity", "prim", DOUBLE)])
+            N.objstr(oid + 6, lname); N.null(); N.u8(1 if vis else 0); N.u8(1 if i == 0 else 0); N.b += struct.pack("<d", op)
+        if inline:
+            blp(); surf(); N.u8(0); N.i32(W); N.i32(H); lp()
+        else:
+            N.ref(oid + 1); N.ref(oid + 3); N.u8(0); N.i32(W); N.i32(H); N.ref(oid + 5)
+            blp(); surf(); lp()
+        px = bytearray(stride * H)
+        for y in range(H):
+            for x in range(W):
+                r, g, b, a = pat(x, y, k)
+                px[y * stride + x * 4: y * stride + x * 4 + 4] = bytes([b, g, r, a])
+        blocks.append((bytes(px), gz))
+    N.u8(11)
+    xml = '<pdnImage width="%d" height="%d" layerCount="%d" savedWithVersion="3.36"><custom><thumb png="" /></custom></pdnImage>' % (W, H, len(layers))
+    out = bytearray(b"PDN3") + struct.pack("<I", len(xml))[:3] + xml.encode() + b"\x00\x01" + N.b
+    for px, gz in blocks:
+        cs = 1000
+        out.append(0 if gz else 1); out += struct.pack(">I", cs)
+        chunks = [(i, px[i * cs:(i + 1) * cs]) for i in range((len(px) + cs - 1) // cs)]
+        if gz: chunks.reverse()             # (Paint.NET writes them in any order)
+        for num, c in chunks:
+            data = gzip.compress(c) if gz else c
+            out += struct.pack(">II", num, len(data)) + data
+    meta = dict(w=W, h=H, layers=[dict(name=l[0], kind="pixel", depth=0, opacity=round(l[2] * 255), visible=int(l[3]),
+                                       mode={"PaintDotNet.UserBlendOps+NormalBlendOp": "normal", "PaintDotNet.UserBlendOps+MultiplyBlendOp": "multiply",
+                                             "PaintDotNet.UserBlendOps+XorBlendOp": "xor"}.get(l[1][1], "reflect")) for l in layers], probes=[])
+    for l in layers:
+        for (x, y) in [(0, 0), (5, 9), (W - 1, H - 1), (20, 3)]:
+            meta["probes"].append(dict(layer=l[0], x=x, y=y, rgba=list(pat(x, y, l[4]))))
+    save(name, bytes(out), meta)
+
+make_pdn("layers.pdn")
+
 print("made", len([f for f in os.listdir(OUT) if not f.endswith((".json", ".txt", ".png"))]), "files in", OUT)
