@@ -220,7 +220,7 @@ Re-checked 2026-11-18 (Easel 1.1) against `menus[]` in `E:amiga/main.c`.
 | Export › Artboards to Files… | **Missing** | Easy, once artboards exist | P3 |
 | Export › Artboards to PDF… | **Missing**: Easel writes a one-page PDF (1.1) but has no artboards | Easy, once artboards exist | P3 |
 | Export › Layers to Files… | **Have** (0.6) | Done | — |
-| Export › Layer Comps to Files… | **Missing** | Easy, once layer comps exist | P3 |
+| Export › Layer Comps to Files… | **Have** (1.2): File › Export › Layer Comps to Files (and the Layer Comps window's Export to Files): each comp applied (one Apply Layer Comp step each, the picture ending on the last, as upstream #14003) and written as `<picture>-<comp>.png` | Done | — |
 | Export › Color Lookup Tables… (.cube) | **Missing** | Easy: the adjustment layers exist | P3 |
 | Export › Data Sets as Files… | **Missing** | Moderate | P3 |
 | Export › Paths to Illustrator… | **Have** (1.1) as SVG: Export › Paths to SVG, with the shape layers and the document's bounds | Done | — |
@@ -229,18 +229,18 @@ Re-checked 2026-11-18 (Easel 1.1) against `menus[]` in `E:amiga/main.c`.
 | Place Embedded… `file.placeEmbedded` | **Partial** (0.6): Place as Layer goes on into Free Transform; there's no smart object | Moderate (smart objects) | P3 |
 | Place Linked… | **Missing** | Moderate | P3 |
 | Package… | **Missing** | Easy | P3 |
-| Automate › Batch… | **Partial**: EaselConvert (Shell) converts, resizes and reduces colours in batches; there are no actions to run | Moderate: needs actions | P2 |
+| Automate › Batch… | **Have** (1.2): File › Automate › Batch runs a recorded action (Window › Actions) on every picture in a drawer and saves each to another drawer as PNG, JPEG, ILBM, ORA, TIFF, PSD, BMP or GIF (`dlg_batch` in `E:amiga/panelsx.c`); EaselConvert still converts from the Shell | Done | — |
 | Automate › Create Droplet… | **Missing** | Easy. Amiga stand-in: a Workbench tool icon that runs an action on the files dropped on it | P3 |
 | Automate › Crop and Straighten Photos | **Missing** | Moderate (`algo/src/scancrop.rs`) | P3 |
 | Automate › Contact Sheet II… | **Missing** | Easy | P3 |
-| Automate › Conditional Mode Change… | **Missing** | Easy | P3 |
+| Automate › Conditional Mode Change… | **Have** (1.2): source modes ticked, a target mode; recordable in an action | Done | — |
 | Automate › Fit Image… | **Have** (1.1): File › Scripts › Fit Image (`doc_fit_image`) | Done | — |
 | Automate › Lens Correction… | **Missing** (Filter › Lens Correction exists, 1.0) | Easy, once batches run filters | P3 |
 | Automate › Merge to HDR Pro… | **Missing** | Hard: float stacks of several exposures overflow 16-64 MB | P3 |
 | Automate › Photomerge… | **Missing** | Hard: feature matching and warping take too much CPU and RAM (`algo/src/panorama.rs`) | P3 |
 | Scripts › Image Processor… (batch convert and resize; the open documents as a source, #12858) | **Partial**: EaselConvert does it from the Shell; there's no window for it | Easy | P2 |
 | Scripts › Delete All Empty Layers | **Have** (1.1): one undo step (`doc_delete_empty_layers` in `E:core/scripts.c`) | Done | — |
-| Scripts › Flatten All Layer Effects | **Missing** | Easy, once effects exist | P3 |
+| Scripts › Flatten All Layer Effects | **Have** (1.2): every layer's style drawn into its pixels (type and shape layers rasterized first), one undo step | Done | — |
 | Scripts › Flatten All Masks | **Have** (1.1): one undo step (`doc_flatten_all_masks`) | Done | — |
 | Scripts › Script Events Manager… | **Missing** | Easy if it only runs actions on events (open, save) | P3 |
 | Scripts › Load Files into Stack… | **Have** (0.6) | Done | — |
@@ -251,7 +251,7 @@ Re-checked 2026-11-18 (Easel 1.1) against `menus[]` in `E:amiga/main.c`.
 | Import › Notes… | **Missing** | Easy | P3 |
 | Import › WIA Support… | **Left out**: WIA is the Windows scanner API (datatypes and a scanner program's files stand in) | Not sensible | — |
 | File Info… (XMP/IPTC/EXIF metadata) | **Have** (0.6): six fields, kept in PNG, JPEG, TIFF, PSD, ORA and (1.1) PDF | Done | — |
-| File Info: a copyrighted picture shows © before its name in the tab and title (#13985) | **Missing** | Easy | P3 |
+| File Info: a copyrighted picture shows © before its name in the tab and title (#13985) | **Partial** (1.2): the window's title shows © before the name when File Info has a copyright; the document tab doesn't yet | Easy | P3 |
 | Print… | **Excluded** by request | — | — |
 | Print One Copy | **Excluded** by request | — | — |
 | Exit `file.exit` | **Have**: Quit | Done | — |
@@ -272,9 +272,9 @@ Re-checked 2026-11-18 (Easel 1.1).
 | Paste `edit.paste` | **Have** (0.6): from Easel's clipboard, else the Amiga's (iffparse); Paste from Amiga Clipboard too | Done | — |
 | Paste Special › Paste in Place | **Have** | Done | — |
 | Paste Special › Paste Into (with a mask) | **Have** (0.3) | Done | — |
-| Paste Special › Paste Outside | **Missing** | Easy | P3 |
+| Paste Special › Paste Outside | **Have** (1.2): Edit › Paste Outside: a new layer masked to everything but the selection | Done | — |
 | Clear `edit.clear` | **Have** | Done | — |
-| Search… (command palette, ⌘F) | **Missing** | Easy: a MUI list of the menu commands, filtered as you type | P3 |
+| Search… (command palette, ⌘F) | **Have** (1.2): Edit › Search lists every menu command as Menu › Item › Subitem and narrows the list as you type (each word anywhere in the name); Return or a double-click runs it (`dlg_search` in `E:amiga/panelsx.c`) | Done | — |
 | Check Spelling… | **Missing** | Moderate: needs dictionaries (Quill's could be shared) | P3 |
 | Find and Replace Text… | **Missing** | Easy: type layers exist (0.9) | P3 |
 | Fill… `edit.fill`: Foreground/Background/Color/Pattern/History/Black/50% Gray/White/Content-Aware, Mode, Opacity, Preserve Transparency | **Partial**: foreground, background, black, 50% grey, white or a colour, with mode and opacity; the pattern through Edit › Fill with Pattern (0.5). History, Content-Aware and Preserve Transparency are missing | Easy | P3 |
@@ -337,7 +337,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Image Rotation › Flip Canvas Horizontal | **Have** | Done | — |
 | Image Rotation › Flip Canvas Vertical | **Have** | Done | — |
 | Crop `image.crop` | **Have** | Done | — |
-| Trim… (transparent, top-left or bottom-right colour; which sides) | **Partial**: transparent edges only, from all sides | Easy | P3 |
+| Trim… (transparent, top-left or bottom-right colour; which sides) | **Have** (1.2): Image › Trim…: based on transparent pixels or the top-left or bottom-right colour, any of the four sides (`image_trim_ex` in `E:core/viewx.c`) | Done | — |
 | Reveal All | **Missing**: Easel's layers are exactly canvas-sized, so there are no off-canvas pixels | Moderate: needs layer offsets or tiles (section 19) | P3 |
 | Duplicate… | **Have** | Done | — |
 | Apply Image… | **Missing** | Easy | P3 |
@@ -354,7 +354,7 @@ Rechecked 2026-11-18 against Easel 1.0 plus the 1.1 layer work (`E:amiga/main.c`
 
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| New › Layer… `layer.new.layer` (name, mode, opacity, clip, colour) | **Partial**: New › Layer makes "Layer N" at once (`layer_new_named` in `E:amiga/main.c`); the name, mode, opacity, clipping and colour label are set afterwards (Layer Properties, Layer Color) | Easy | P3 |
+| New › Layer… `layer.new.layer` (name, mode, opacity, clip, colour) | **Have** (1.2): New › Layer… asks the name, clipping, colour label, mode and opacity first; New › Layer still makes "Layer N" at once | Done | — |
 | New › Layer from Background… | **Partial**: Easel has no locked Background, so every layer is already a normal layer | Easy | P3 |
 | New › Background from Layer | **Have** (1.1): `doc_background_from_layer` in `E:core/layerops.c`: the active pixel layer laid over the background colour, moved to the bottom, named Background, position locked | Done | — |
 | New › Group… | **Have**: `doc_new_group` (`E:core/layers.c`); groups nest, collapse and pass through (0.3) | Done | — |
@@ -366,7 +366,7 @@ Rechecked 2026-11-18 against Easel 1.0 plus the 1.1 layer work (`E:amiga/main.c`
 | Duplicate Layer… | **Have** | Done | — |
 | Delete › Layer | **Have** | Done | — |
 | Delete › Hidden Layers | **Have** (1.1): Delete Hidden Layers (`doc_delete_hidden`): hidden layers, and hidden groups with their members; at least one layer is kept | Done | — |
-| Quick Export as PNG (layer) | **Missing** (File › Export › Layers to Files writes every layer) | Easy | P3 |
+| Quick Export as PNG (layer) | **Have** (1.2): Layer › Quick Export as PNG writes the active layer alone (with its mask and style) beside the picture as `<layer name>.png` | Done | — |
 | Export As… (layer); upstream #15039 puts several layers into a folder as `<layer name>.<ext>` | **Partial**: File › Export › Layers to Files (`layers_to_files` in `E:amiga/main.c`) writes each layer to a drawer; exporting just the picked layers is missing | Easy | P3 |
 | Rename Layer | **Have**: through Layer Properties | Done | — |
 | Layer Content Options… | **Have**: `ID_FILLSETTINGS` edits a fill or adjustment layer's settings | Done | — |
@@ -380,7 +380,7 @@ Rechecked 2026-11-18 against Easel 1.0 plus the 1.1 layer work (`E:amiga/main.c`
 | Arrange › Send to Back | **Have** | Done | — |
 | Arrange › Reverse | **Have** (1.1): `doc_reverse_layers`, the picked layers at the active one's level | Done | — |
 | Align › Top/Vertical Centers/Bottom/Left/Horizontal Centers/Right (6 items) | **Have**: `doc_align` (0.3), to the selection or the canvas | Done | — |
-| Distribute › 8 items | **Partial**: Distribute Horizontally and Vertically (centres, `AL_DIST_H`, `AL_DIST_V`); by edges and the spacing kinds are missing | Easy | P3 |
+| Distribute › 8 items | **Have** (1.2): Align › Distribute Left, Right, Top and Bottom Edges, Horizontally and Vertically (centres), Horizontal and Vertical Spacing (equal gaps), `AL_DIST_LEFT`..`AL_SPACE_V` in `E:core/layers.h` | Done | — |
 | Lock Layers… (transparency, pixels, position, artboard, all; DOC `Locks`) | **Have**: Layer › Lock: Pixels, Transparency, Position, All (artboards don't exist) | Done | — |
 | Link Layers | **Missing** | Easy | P3 |
 | Select Linked Layers | **Missing** | Easy | P3 |
@@ -391,7 +391,7 @@ Rechecked 2026-11-18 against Easel 1.0 plus the 1.1 layer work (`E:amiga/main.c`
 | Matting › Defringe… | **Have**: `E:core/matte.c` (0.7) | Done | — |
 | Matting › Remove Black Matte | **Have** (0.7) | Done | — |
 | Matting › Remove White Matte | **Have** (0.7) | Done | — |
-| Rasterize › Type, Shape, Fill Content, Vector Mask, Smart Object, Video, Layer Style, Layer, All Layers (9 items) | **Partial**: Type, Shape, Layer (fill and live layers, `doc_rasterize`) and, in 1.1, Layer Style (`doc_rasterize_fx`: the effects, mask and fill opacity drawn into the layer's pixels); Vector Mask, Smart Object and Video have nothing to rasterize in Easel; All Layers is missing | Easy | P3 |
+| Rasterize › Type, Shape, Fill Content, Vector Mask, Smart Object, Video, Layer Style, Layer, All Layers (9 items) | **Have**: Type, Shape, Layer, Layer Style (1.1) and All Layers (1.2: every type, shape and fill layer, one step); Vector Mask, Smart Object and Video have nothing to rasterize in Easel | Done | — |
 | Video Layers › 12 items (new blank or from file, insert, duplicate or delete frame, replace or interpret footage, restore, reload, rasterize) | **Missing** | Not sensible for real video. Stand-in: IFF ANIM frames as a frame stack (section 21) | P3 |
 | Layer › Copy CSS (upstream #10569) | **Have** (1.1): `layer_css` (`E:core/layerops.c`): the layer's box, opacity, mode, solid or gradient fill, drop, inner and glow shadows and stroke as one CSS rule, put on the Amiga clipboard as text (FTXT) | Done | — |
 
@@ -401,31 +401,31 @@ Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Partial**: a picture's pixel aspect is kept and set from its Amiga screen mode (Image › Amiga Screen Mode, ILBM's BMHD), but the canvas always draws square pixels and there are no video presets | Easy: a vertical zoom of its own in `E:amiga/canvas.c` (to_iy/to_sy and the rows drawn). Very relevant on the Amiga, where PAL/NTSC lores and hires-interlace pixels aren't square | P1 |
-| Pixel Aspect Ratio Correction (toggle) | **Missing** | Easy, with the above | P1 |
+| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Have** (1.2): View › Pixel Aspect Ratio: Square, the seven video presets, five Amiga ones (PAL and NTSC low and high res, PAL laced), From Amiga Screen Mode and Custom… (a ratio or width:height); kept as the picture's BMHD aspect, one undo step (`par_set` in `E:core/viewx.c`). The canvas draws pixels that tall (`zy` in `E:amiga/canvas.c`: the view, rulers, grid, guides, brush outline, Navigator) | Done | — |
+| Pixel Aspect Ratio Correction (toggle) | **Have** (1.2): View › Pixel Aspect Ratio Correction, on at first | Done | — |
 | Zoom In | **Have** | Done | — |
 | Zoom Out | **Have** | Done | — |
 | Fit on Screen | **Have** | Done | — |
-| Fit Layer(s) on Screen | **Missing** | Easy | P3 |
+| Fit Layer(s) on Screen | **Have** (1.2): the picked layers' content (or the active one's) fitted and centred | Done | — |
 | Fit Artboard on Screen | **Missing** | Easy, once artboards exist | P3 |
 | 100% | **Have** | Done | — |
 | 200% | **Have** (Easel adds 50%) | Done | — |
-| Print Size | **Missing** | Easy (zoom to the dpi) | P3 |
+| Print Size | **Have** (1.2): the zoom for the picture's dpi on a screen of the Units & Rulers page's screen resolution (72 at first) | Done | — |
 | Flip Horizontal (the view only) | **Missing** | Moderate: mirror the rows as they're drawn | P3 |
 | Screen Mode › Standard, Full Screen With Menu Bar, Full Screen (3 items) | **Have** (0.8): View › Screen Mode: in a window, on Easel's own screen, or full screen in any mode | Done | — |
-| Extras (toggle all overlays) | **Missing** (Tab hides the panels, which is something else) | Easy | P2 |
-| Show › Layer Edges | **Missing**: `ID_SHOWEDGES` is defined in `E:amiga/ids.h` but never used | Easy | P3 |
-| Show › Selection Edges | **Missing**: the marching ants can't be hidden | Easy | P3 |
+| Extras (toggle all overlays) | **Have** (1.1, menu item 1.2): View › Extras (Amiga-H; Ctrl-H on the canvas) hides the selection outline, guides, grid, pixel grid, layer edges and target path | Done | — |
+| Show › Layer Edges | **Have** (1.2): the active pixel layer's box, dotted, in the overlay | Done | — |
+| Show › Selection Edges | **Have** (1.2): the marching ants can be hidden while the selection stays | Done | — |
 | Show › Grid | **Have** (0.4) | Done | — |
 | Show › Guides / Canvas Guides (2 items) | **Have** (0.4) | Done | — |
-| Show › Pixel Grid | **Missing** | Easy: the pixel-art grid at high zoom | P2 |
-| Show › Target Path, Artboard Guides, Count, Smart Guides, Slices, Notes, Brush Preview, Mesh, Edit Pins, All, Show Extras Options (11 items) | **Missing** (the active path always shows) | Easy to Moderate, each with its feature | P3 |
+| Show › Pixel Grid | **Have** (1.2): a thin line between image pixels from 800% up (`pixgrid_line`) | Done | — |
+| Show › Target Path, Artboard Guides, Count, Smart Guides, Slices, Notes, Brush Preview, Mesh, Edit Pins, All, Show Extras Options (11 items) | **Partial** (1.2): Show › Target Path (the active path hidden but for the path tools), All and None; artboard guides, count, smart guides, slices, notes, brush preview, mesh and pins have no feature behind them yet | Easy to Moderate, each with its feature | P3 |
 | Rulers | **Have** (0.4) | Done | — |
 | Snap | **Have** (0.4) | Done | — |
 | Snap To › Guides, Grid, Layers, Slices, Document Bounds, All (6 items) | **Partial** (1.1): View › Snap To › Guides, Grid, Document Bounds, Centre Lines and Pixels; Layers and Slices are missing | Easy (layers) | P3 |
-| Lock Guides, Clear Guides, Clear Selected Artboard Guides, Clear Canvas Guides, New Guide…, New Guide Layout…, New Guides From Shape (7 items) | **Partial**: New Guide and Clear Guides (0.4), Lock Guides (1.1); New Guide Layout and New Guides From Shape are missing (no artboards) | Easy | P2 |
+| Lock Guides, Clear Guides, Clear Selected Artboard Guides, Clear Canvas Guides, New Guide…, New Guide Layout…, New Guides From Shape (7 items) | **Have**: New Guide and Clear Guides (0.4), Lock Guides (1.1), New Guide Layout… (1.2: columns and rows with widths and gutters, margins, centred, clearing the old, `guide_layout`) and New Guides From Shape (1.2: the active layer's or the selection's edges and centre lines); the artboard items have no artboards to act on | Done | — |
 | Lock Slices / Clear Slices (2 items) | **Missing** | Easy | P3 |
-| Pattern Preview (tiles the document) | **Missing** | Easy: handy for Workbench backdrop patterns | P2 |
+| Pattern Preview (tiles the document) | **Partial** (1.2): View › Pattern Preview draws the picture tiled round itself, and edits show in every tile; painting doesn't wrap across the edges yet (upstream #9348) | Easy | P3 |
 | Pixel Art Preview | **Missing** | Easy | P2 |
 
 ### 2.6 Window › Arrange and Workspace (the panels are in section 15)
@@ -437,7 +437,7 @@ Re-checked 2026-11-18 (Easel 1.1): unchanged since 0.2 apart from the rows' note
 | Arrange › Tile All Vertically/Horizontally, 2-up, 3-up, 4-up, 6-up, Cascade, Tile (11 items; borders between them dragged, #10695) | **Missing**: one canvas, with tabs | Moderate: several canvas objects or windows | P3 |
 | Arrange › Consolidate All to Tabs | **Have**: Easel only has tabs | Done | — |
 | Arrange › Float in Window / Float All in Windows / New Window for Document (3 items) | **Missing** | Moderate | P3 |
-| Arrange › Match Zoom / Location / Rotation / All (4 items) | **Missing** | Easy | P3 |
+| Arrange › Match Zoom / Location / Rotation / All (4 items) | **Have** (1.2): Window › Arrange › Match Zoom, Match Location (the same part of each picture) and Match All; Easel has no view rotation to match | Done | — |
 | Workspace › Essentials, Photography, Painting, Pixel Art, Graphic and Web, Motion (6 items) | **Missing** (Tab and Shift-Tab hide the panels) | Moderate: needs dockable panels | P3 |
 | Workspace › Reset, New, Delete, Lock Workspace (4 items; Keyboard Shortcuts… repeats Edit's) | **Missing** | Moderate | P3 |
 
@@ -1115,7 +1115,7 @@ the status bar and the Palette, Brush Settings and DPaint Brush windows.
 | History | **Have** (with snapshots, 0.8) | Done | — |
 | Channels: composite and colour channels, alpha and spot channels | **Partial**: the Channels tab lists the alpha channels (saved selections) and the Quick Mask (0.7); the composite and red, green and blue channels and spot channels are missing | Easy | P3 |
 | Paths | **Have**: the Paths tab (0.9) | Done | — |
-| Actions (⌥F9) | **Missing** (section 18) | Moderate | P2 |
+| Actions (⌥F9) | **Have** (1.2) as a window: Window › Actions lists the actions by set with their steps; New, Duplicate, Rename, Set, Delete; Record (each menu command chosen becomes a step), Stop Recording, Play, Play from Step, Play Action Again; steps turned on and off, moved, deleted, Insert Stop with a message; Load and Save `.actions` files, kept in `PROGDIR:Easel.actions` (`E:core/actions.c`, `E:amiga/panelsx.c`). A plain step recorder, no scripting language | Done | — |
 | Adjustments: one-click adjustment layers and presets | **Missing** as a panel; Layer › New Adjustment Layer makes them | Easy | P3 |
 | Properties: adjustment settings, mask density and feather, live shape, type | **Partial**: as dialogs (double-click an adjustment, fill or shape layer; Layer Properties for mask density and feather); no panel | Easy to Moderate | P3 |
 | Brush Settings (F5): the dynamics sections | **Have**: Window › Brush Settings (0.5) | Done | — |
@@ -1128,15 +1128,15 @@ the status bar and the Palette, Brush Settings and DPaint Brush windows.
 | Clone Source: five sources, offset, scale, rotation, overlay | **Missing** | Easy | P3 |
 | Gradients | **Partial**: the Gradient tool's preset list and the Gradient Editor (0.5), not a panel | Easy | P3 |
 | Patterns | **Partial**: Edit › Define Pattern and the pattern chosen in the options bar; no panel | Easy | P3 |
-| Histogram: live, with mean, standard deviation and median | **Partial**: the Info tab draws a live brightness histogram (`info_hist` in `E:amiga/panels2.c`); channels and the statistics are missing | Easy | P3 |
+| Histogram: live, with mean, standard deviation and median | **Have** (1.2) in the Info tab: the histogram of the channel chosen in Window › Histogram (Luminosity, Red, Green, Blue), within the selection, with mean, standard deviation, median and pixel count (marked * when sampled from up to 96 rows; `histo_stats` in `E:core/actions.c`) | Done | — |
 | Info (F8): readouts, colour samplers, selection size, document info | **Have**: the Info tab (0.6): position, colour in RGB, HSB and hex, picture size and mode, selection size, the Color Sampler marks (0.8) | Done | — |
 | Navigator: a thumbnail with the view box | **Have**: the Navigator tab (0.6) | Done | — |
-| Layer Comps | **Missing** | Easy | P3 |
+| Layer Comps | **Have** (1.2) as a window: Window › Layer Comps: New (visibility, appearance or both), Apply, Update, Delete, Previous, Next, Export to Files; each Apply an undo step (`comp_capture`, `comp_apply`). Position isn't kept: Easel's layers are canvas-sized, so a layer's position is its pixels; comps aren't saved with the picture | Done | — |
 | Measurement Log | **Missing** | Easy | P3 |
 | Modifier Keys (on-screen Shift, Alt and Ctrl for pens) | **Missing** | Easy | P3 |
 | Notes | **Missing** | Easy | P3 |
 | Shapes | **Partial**: the Custom Shape tool's list (0.9), not a panel | Easy | P3 |
-| Styles | **Missing**: layer styles exist (1.1) but there is no panel of saved styles; Copy and Paste Layer Style move one between layers | Easy | P2 |
+| Styles | **Have** (1.2) as a window: Window › Styles: six built-in styles and saved ones (New Style from the active layer), Apply (or double-click) to the picked layers, Rename, Delete, Load, Save, Reset; kept in `PROGDIR:Easel.styles` (`stylelib_` in `E:core/actions.c`) | Done | — |
 | Timeline (video and frame animation) | **Missing** | Moderate. Amiga stand-in: an IFF ANIM frame strip (section 21) | P2 |
 | Tool Presets | **Missing** | Easy | P3 |
 | Docking, floating, collapsing to icons, tabbed groups (`panel_docking.rs`) | **Partial**: a fixed right-hand column of two tabbed groups; Tab and Shift-Tab hide them | Moderate: MUI can't dock windows, but panels can be shown, hidden and grouped | P3 |
@@ -1194,16 +1194,16 @@ with the dark interface, the public screen, the screen mode and the last drawer.
 | Interface: theme dark or light (and Pro, Studio, Classic), canvas colour, UI scale, language, font size, tooltips, animations (upstream #9480 removed the animations setting) | **Partial**: Dark interface, Large interface text and help bubbles; the language (1.1): Locale prefs' choice or one of English, Deutsch, Français, Español, Italiano (Preferences › Interface, kept as `language=` in Easel.prefs; see Localization below); canvas colour and scale are missing | Easy | P3 |
 | Workspace: auto-collapse panels, open as tabs, narrow options bar | **Missing** | Easy | P3 |
 | Tools: Shift for tool switching, zoom to the clicked point, flick panning, snap to the pixel grid, show transform values, overscroll, right-click with painting tools, tablet pressure and curve, nudge bundling | **Partial**: painting cursor, Caps Lock precise cross, show transform values | Easy | P3 |
-| History Log | **Missing** | Easy | P3 |
+| History Log | **Have** (1.2): General page: each command chosen written to a text file (time, picture, command; `PROGDIR:Easel History.txt` at first) | Done | — |
 | File Handling: previews, lowercase extensions, autosave interval, recovery, ignore the EXIF profile, layered TIFF and PSD compatibility prompts, number of recent files, LUT folder | **Partial**: default save format, JPEG quality, ask before flattening, recent files listed, recovery drawer (autosave on General) | Easy | P3 |
 | Export: Quick Export format and location, JPEG and WebP defaults, metadata, convert to sRGB | **Partial**: the JPEG quality on File Handling only | Easy | P3 |
 | Performance: memory use, history states, cache levels and tile size, GPU options | **Have**: history states and undo memory (General); cache levels, tiles and GPU options don't apply to Easel | Done | — |
 | Effect Cache (upstream #10921) | **Left out**: Easel always keeps each styled layer's drawn effects (core/fx.c); there is nothing to set | Not needed | — |
 | Scratch Disks | **Have**: the Scratch Drawer page (0.8): old undo steps go to a drawer, up to a size | Done | — |
 | Cursors: painting cursor standard/precise/tip/full size, crosshair, other cursors | **Partial**: brush outline, crosshair or both, Caps Lock precise | Easy | P3 |
-| Transparency & Gamut: checker size and colours, gamut warning colour | **Partial**: a fixed checkerboard | Easy | P3 |
-| Units & Rulers: units, column size, new-document resolution, point size | **Partial**: units (pixels, inches, cm, mm, per cent) and new picture resolution; column and point size are missing | Easy | P3 |
-| Guides, Grid & Slices: colours and styles, gridline every N, subdivisions | **Partial**: guide and grid colours, gridline every, subdivisions; line styles and slices are missing | Easy | P3 |
+| Transparency & Gamut: checker size and colours, gamut warning colour | **Partial** (1.2): the Transparency page: checkerboard size (none, small, medium, large) and colours (light, medium, dark, five tints or two custom colours, `checker_at` in `E:core/viewx.c`); the gamut warning colour is missing (there is no gamut warning) | Easy | P3 |
+| Units & Rulers: units, column size, new-document resolution, point size | **Have** (1.2): units, new picture resolution, and now screen resolution (for Print Size), column and gutter widths (New Guide Layout starts with the gutter) and point size (PostScript or traditional) | Done | — |
+| Guides, Grid & Slices: colours and styles, gridline every N, subdivisions | **Have** (1.2): guide and grid colours, gridline every, subdivisions, and grid and guide styles (lines, dashed lines, dots); slices don't exist in Easel | Done | — |
 | Plug-ins: additional plug-ins folder | **Missing** | Easy, once plug-ins exist | P3 |
 | Type: smart quotes, font preview, missing-glyph protection | **Missing** | Easy | P3 |
 | Enhanced Controls | **Missing** | Easy | P3 |
@@ -1218,9 +1218,9 @@ batch conversion (0.6, `E:amiga/convert.c` with `E:core/batch.c`), and no action
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Actions: record, play, stop, insert, conditional steps, dialog toggles, sets, colours (`actions.*`) | **Missing** | Moderate: record each `ID_` command with its dialog values (needs a command and parameter layer, below) | P2 |
-| One registry of 500+ commands with JSON parameters, used by the UI, CLI and agents | **Missing**: menu IDs go straight to code (`E:amiga/ids.h`) | Moderate: a table of commands with parameter blocks; actions and batch depend on it | P2 |
-| Command-line front end: `photocraft-cli convert/info/run/batch/droplet/commands` | **Partial**: EaselConvert converts and resizes any picture Easel reads (datatypes as a last resort) to every format Easel writes (1.1: also TIFF, Targa, PSD, WebP, PDF, Netpbm, QOI, ICO, DDS, DPX and FITS), reduces colours and writes icons, in the ADPro tradition; `info`, `run` and actions are missing | Easy (info) | P3 |
+| Actions: record, play, stop, insert, conditional steps, dialog toggles, sets, colours (`actions.*`) | **Partial** (1.2): Window › Actions records menu commands as steps and plays them back, with sets, Insert Stop, steps turned off, Play from Step, Load and Save, and File › Automate › Batch (section 15). Dialog toggles (a dialog's settings recorded and replayed without it), conditional steps and colours shown in the list are missing: every dialog shows as its step plays | Moderate: dialogs need their settings as parameters | P2 |
+| One registry of 500+ commands with JSON parameters, used by the UI, CLI and agents | **Partial** (1.2): the menu table is the registry Edit › Search, Keyboard Shortcuts and the action recorder all use (each command by its ID and name); there are no parameter blocks, so commands with dialogs can't be run without them | Moderate | P2 |
+| Command-line front end: `photocraft-cli convert/info/run/batch/droplet/commands` | **Partial**: EaselConvert converts and resizes any picture Easel reads (datatypes as a last resort) to every format Easel writes, reduces colours and writes icons, in the ADPro tradition, and (1.2) INFO describes each picture (format, size, layers, mode, resolution, aspect, screen mode, File Info; `picture_info` in `E:core/picinfo.c`); `run` and actions from the Shell are missing | Easy | P3 |
 | JSON-lines control channel (`photocraft --control`, `control-protocol.md`) | **Excluded** by request: external control is ARexx's role | — | — |
 | MCP server for AI agents (`photocraft-cli mcp`) | **Excluded** by request (external control); also Not sensible (AI service) | — | — |
 | Running scripts (Scripts › Browse) | **Excluded** by request (ARexx) | — | — |
@@ -1250,7 +1250,7 @@ Rechecked 2026-11-18.
 | Multithreaded filters | **Left out**: one CPU. The stand-in is there: long jobs show progress and can be aborted (`E:amiga/jobs.c`) | Not sensible | — |
 | Background jobs with progress and cancel (`ui-egui/src/jobs_ui.rs`) | **Have**: `E:amiga/jobs.c` (0.8): a Working window after half a second, with progress and Abort; an aborted job leaves the picture as it was | Done | — |
 | Recent files and the Home screen (`PREFS` `recent_files`, `show_home_recent_files`) | **Partial**: File › Open Recent (ten, 0.6); there's no Home screen | Easy | P3 |
-| Context menus (`docs/context-menu-inventory.md`; upstream adds many, e.g. #12450, #13278) | **Have** (1.1): MUI context menus (`MUIA_ContextMenu`, `MUIM_ContextMenuBuild`, `E:amiga/ctxmui.c`) built from a plain-C model (`E:amiga/ctxmenu.c`, tested in `E:tests/ctxtest.c`) in PhotoCraft's `context-menu-parity.md` order. On the canvas, per tool: the selection tools' Photoshop 2026 list with a selection (Deselect, Select Inverse, Feather, Select and Mask, Save Selection, Make Work Path, Layer via Copy/Cut, New Layer, Free Transform, Transform Selection, Distort, Perspective, Fill, Stroke, Last Filter, Fade) and Select All / Reselect / Color Range / Load Selection without; Move (and Ctrl with any tool): the visible layers under the pointer; a pending Free Transform: its modes, turns, flips, Apply, Cancel; a pending crop: Crop, Cancel; painting tools: Brush Settings, DPaint Brush, Define Brush Preset, Pick Up Brush (History Brush: Take Snapshot); Gradient and Paint Bucket: the fills; Eyedropper and Color Sampler: sample size (and source); Type over a type layer (made active first): Edit Type, Character, Paragraph, Rasterize, Create Work Path, Horizontal/Vertical, Convert to Paragraph/Point Text, Warp Text; Pen and path tools: the path's commands; shape tools: Shape Properties, Free Transform, Rasterize; Hand and Zoom: Fit on Screen, Fill Screen, 100%, 200%, Zoom In, Zoom Out; Ruler: Straighten Layer, Clear. Layers panel rows (the layer clicked made active unless it is among the picked ones): Blending Options, Layer Properties, Duplicate/Delete, Group/Ungroup, Quick Export, Export As, Rasterize, the mask, Create/Release Clipping Mask, Copy/Paste/Clear Layer Style, Layer Color (submenu), Merge Down/Layers/Group, Merge Visible, Flatten; a layer thumbnail and a mask thumbnail have their own menus; Channels and Paths rows; document tabs (Close, Close Others, Close All, Duplicate, File Info). Every item sends the menu bar's own command. Left out: Photoshop's Generative Fill and Content-Aware rows (no such commands), the pasteboard colour menu, and the options bar's Reset Tool | Done | — |
+| Context menus (`docs/context-menu-inventory.md`; upstream adds many, e.g. #12450, #13278) | **Have** (1.1): MUI context menus (`MUIA_ContextMenu`, `MUIM_ContextMenuBuild`, `E:amiga/ctxmui.c`) built from a plain-C model (`E:amiga/ctxmenu.c`, tested in `E:tests/ctxtest.c`) in PhotoCraft's `context-menu-parity.md` order. On the canvas, per tool: the selection tools' Photoshop 2026 list with a selection (Deselect, Select Inverse, Feather, Select and Mask, Save Selection, Make Work Path, Layer via Copy/Cut, New Layer, Free Transform, Transform Selection, Distort, Perspective, Fill, Stroke, Last Filter, Fade) and Select All / Reselect / Color Range / Load Selection without; Move (and Ctrl with any tool): the visible layers under the pointer; a pending Free Transform: its modes, turns, flips, Apply, Cancel; a pending crop: Crop, Cancel; painting tools: Brush Settings, DPaint Brush, Define Brush Preset, Pick Up Brush (History Brush: Take Snapshot); Gradient and Paint Bucket: the fills; Eyedropper and Color Sampler: sample size (and source); Type over a type layer (made active first): Edit Type, Character, Paragraph, Rasterize, Create Work Path, Horizontal/Vertical, Convert to Paragraph/Point Text, Warp Text; Pen and path tools: the path's commands; shape tools: Shape Properties, Free Transform, Rasterize; Hand and Zoom: Fit on Screen, Fill Screen, 100%, 200%, Zoom In, Zoom Out; Ruler: Straighten Layer, Clear. Layers panel rows (the layer clicked made active unless it is among the picked ones): Blending Options, Layer Properties, Duplicate/Delete, Group/Ungroup, Quick Export, Export As, Rasterize, the mask, Create/Release Clipping Mask, Copy/Paste/Clear Layer Style, Layer Color (submenu), Merge Down/Layers/Group, Merge Visible, Flatten; a layer thumbnail and a mask thumbnail have their own menus; Channels and Paths rows; document tabs (Close, Close Others, Close All, Duplicate, File Info). Where the tool has no menu of its own the canvas shows the general one 1.2 added (`E:amiga/menux.c`: Undo, Redo, the clipboard, selection, layer and view commands). Every item sends the menu bar's own command. Left out: Photoshop's Generative Fill and Content-Aware rows (no such commands), the pasteboard colour menu, and the options bar's Reset Tool | Done | — |
 | Localization: en, zh-Hans, es, it, ko, ru… (`docs/localization*.md`) | **Have** (1.1) for English, German, French, Spanish and Italian, in Photoshop's own terms for each (Ebene, calque, capa, livello; Tonwertkorrektur, Niveaux, Niveles, Livelli …): `E:lang/strings.txt` (about 2,170 rows: every menu, dialog, panel, tool, help bubble and message, the core's undo step names, filter, preset and layer effect names), made into `E:amiga/lang_table.h` by `E:tools/mklang.py`; `E:tools/langcheck.py` (in `E:tools/test.sh`) fails on any string without its four translations or any row no longer used; `E:tools/langfit.py` measures every translation with Easel's screen font and topaz 8 so the options bar, menus and requesters still fit 640×480; `E:tests/langtest.c`. The language follows Locale prefs' preferred languages (`lang_system`) or Preferences › Interface › Language; menus, cycle gadgets (`tr_list`), the options bar and pop-ups are translated. Chinese, Korean and Russian are left out: the Amiga's screen fonts are Latin-1 | Done for Latin-1 languages; Hard for CJK and Cyrillic | — |
 | Help bubbles on every control | **Have** | Done | — |
 | AI and generative features: Generative Fill and Expand, Neural Filters, Sky Replacement, Super Zoom (PhotoCraft lacks them too, `docs/gaps.md` G15) | **Left out**: they need an ML runtime or an online service. Stand-ins: the classical methods (Easel 1.0's healing tools) | Not sensible | — |

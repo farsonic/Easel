@@ -100,3 +100,17 @@ ci R 2 1 13 15 cr F 1 7 14 12 cw B PDF
 ca I fx
 2500px
 \tjsr\t-126(a6)
+Easel - %s%s%s
+PROGDIR:
+RAM:
+PROGDIR:Easel History.txt
+OpenRaster
+checker=
+checkerscheme=
+gridstyle=
+guidestyle=
+screendpi=
+columnw=
+gutterw=
+pointkind=
+historylog=

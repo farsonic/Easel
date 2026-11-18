@@ -1315,8 +1315,8 @@ Grid Settings...	Rastereinstellungen...	Paramètres de la grille...	Ajustes de c
 New Guide...	Neue Hilfslinie...	Nouveau repère...	Nueva guía...	Nuova guida...
 Lock Guides	Hilfslinien fixieren	Verrouiller les repères	Bloquear guías	Blocca guide
 Clear Guides	Hilfslinien löschen	Effacer les repères	Borrar guías	Cancella guide
-Hide/Show Panels (Tab)	Bedienfelder aus-/einblenden (Tab)	Masquer/Afficher panneaux (Tab)	Ocultar/Mostrar paneles (Tab)	Nascondi/Mostra pannelli (Tab)
-Hide/Show Right Panels (Shift-Tab)	Rechte Bedienfelder aus-/einblenden (Shift-Tab)	Panneaux de droite (Maj-Tab)	Ocultar/Mostrar paneles derechos (Mayús-Tab)	Nascondi/Mostra pannelli a destra (Maiusc-Tab)
+Hide/Show Panels (Tab)	Bedienfelder (Tab)	Masquer/Afficher panneaux (Tab)	Ocultar/Mostrar paneles (Tab)	Mostra pannelli (Tab)
+Hide/Show Right Panels (Shift-Tab)	Rechte Bedienfelder (Shift-Tab)	Panneaux de droite (Maj-Tab)	Paneles derechos (Mayús-Tab)	Pannelli a destra (Maiusc-Tab)
 Dark Interface	Dunkle Oberfläche	Interface sombre	Interfaz oscura	Interfaccia scura
 Screen Mode	Bildschirmmodus	Mode d'affichage	Modo de pantalla	Modo schermo
 Window	Fenster	Fenêtre	Ventana	Finestra
@@ -2200,3 +2200,181 @@ Select Inverse	Auswahl umkehren	Intervertir la sélection	Invertir selección	Se
 Make Work Path...	Arbeitspfad erstellen...	Créer un tracé de travail...	Hacer trazado de trabajo...	Crea tracciato di lavoro...
 Eyedropper	Pipette	Pipette	Cuentagotas	Contagocce
 Color Sampler	Farbaufnahme	Échantillonnage de couleur	Muestra de color	Campionatore colore
+## 1.2 (r2-menus: View, Actions, Styles, Layer Comps, Search, Preferences)
+Layer Comps to Files...	Ebenenkomp. in Dateien...	Compositions en fichiers...	Composiciones a archivos...	Composizioni su file...
+Flatten All Layer Effects	Alle Ebeneneffekte reduzieren	Aplatir tous les effets de calque	Acoplar todos los efectos de capa	Unisci tutti gli effetti di livello
+Automate	Automatisieren	Automatisation	Automatizar	Automatizza
+Batch...	Stapelverarbeitung...	Traitement par lots...	Lote...	Batch...
+Conditional Mode Change...	Bedingte Modusänderung...	Changement de mode conditionnel...	Cambio de modo condicional...	Cambio metodo condizionale...
+Paste Outside	Außerhalb einfügen	Coller à l'extérieur	Pegar fuera	Incolla fuori
+Search...	Suchen...	Rechercher...	Buscar...	Cerca...
+Trim...	Zuschneiden...	Rogner...	Cortar...	Rifila...
+Layer...	Ebene...	Calque...	Capa...	Livello...
+Distribute Left Edges	Linke Kanten verteilen	Répartir les bords gauches	Distribuir bordes izquierdos	Distribuisci bordi sinistri
+Distribute Right Edges	Rechte Kanten verteilen	Répartir les bords droits	Distribuir bordes derechos	Distribuisci bordi destri
+Distribute Top Edges	Oberkanten verteilen	Répartir les bords supérieurs	Distribuir bordes superiores	Distribuisci bordi superiori
+Distribute Bottom Edges	Unterkanten verteilen	Répartir les bords inférieurs	Distribuir bordes inferiores	Distribuisci bordi inferiori
+Distribute Horizontal Spacing	Horizontalen Abstand verteilen	Répartir l'espacement horizontal	Distribuir espaciado horizontal	Distribuisci spaziatura orizzontale
+Distribute Vertical Spacing	Vertikalen Abstand verteilen	Répartir l'espacement vertical	Distribuir espaciado vertical	Distribuisci spaziatura verticale
+Fit Layer(s) on Screen	Ebene(n) einpassen	Adapter le(s) calque(s) à l'écran	Encajar capa(s) en pantalla	Adatta livello/i allo schermo
+Print Size	Ausgabegröße	Taille d'impression	Tamaño de impresión	Dimensioni di stampa
+Pixel Aspect Ratio	Pixel-Seitenverhältnis	Format des pixels	Proporción de píxeles	Proporzioni pixel
+D1/DV NTSC (0.91)	D1/DV NTSC (0,91)	D1/DV NTSC (0,91)	D1/DV NTSC (0,91)	D1/DV NTSC (0,91)
+D1/DV PAL (1.09)	D1/DV PAL (1,09)	D1/DV PAL (1,09)	D1/DV PAL (1,09)	D1/DV PAL (1,09)
+D1/DV NTSC Widescreen (1.21)	D1/DV NTSC Breitbild (1,21)	D1/DV NTSC écran large (1,21)	D1/DV NTSC panorámico (1,21)	D1/DV NTSC widescreen (1,21)
+HDV 1080/DVCPRO HD 720 (1.33)	HDV 1080/DVCPRO HD 720 (1,33)	HDV 1080/DVCPRO HD 720 (1,33)	HDV 1080/DVCPRO HD 720 (1,33)	HDV 1080/DVCPRO HD 720 (1,33)
+D1/DV PAL Widescreen (1.46)	D1/DV PAL Breitbild (1,46)	D1/DV PAL écran large (1,46)	D1/DV PAL panorámico (1,46)	D1/DV PAL widescreen (1,46)
+DVCPRO HD 1080 (1.5)	DVCPRO HD 1080 (1,5)	DVCPRO HD 1080 (1,5)	DVCPRO HD 1080 (1,5)	DVCPRO HD 1080 (1,5)
+Anamorphic 2:1 (2)	Anamorphotisch 2:1 (2)	Anamorphique 2:1 (2)	Anamórfico 2:1 (2)	Anamorfico 2:1 (2)
+Amiga PAL Low Res (10:11)	Amiga PAL Lores (10:11)	Amiga PAL basse rés. (10:11)	Amiga PAL baja res. (10:11)	Amiga PAL bassa ris. (10:11)
+Amiga PAL High Res (5:11)	Amiga PAL Hires (5:11)	Amiga PAL haute rés. (5:11)	Amiga PAL alta res. (5:11)	Amiga PAL alta ris. (5:11)
+Amiga PAL Low Res Laced (20:11)	Amiga PAL Lores Lace (20:11)	Amiga PAL basse rés. entr. (20:11)	Amiga PAL baja res. entr. (20:11)	Amiga PAL bassa ris. int. (20:11)
+Amiga NTSC Low Res (44:52)	Amiga NTSC Lores (44:52)	Amiga NTSC basse rés. (44:52)	Amiga NTSC baja res. (44:52)	Amiga NTSC bassa ris. (44:52)
+Amiga NTSC High Res (22:52)	Amiga NTSC Hires (22:52)	Amiga NTSC haute rés. (22:52)	Amiga NTSC alta res. (22:52)	Amiga NTSC alta ris. (22:52)
+From Amiga Screen Mode	Aus dem Amiga-Bildschirmmodus	D'après le mode d'écran Amiga	Del modo de pantalla de Amiga	Dal modo schermo Amiga
+Pixel Aspect Ratio Correction	Pixel-Seitenverhältniskorrektur	Correction du format des pixels	Corrección de proporción de píxeles	Correzione proporzioni pixel
+Extras	Extras	Extras	Extras	Extra
+Show	Einblenden	Afficher	Mostrar	Mostra
+Selection Edges	Auswahlkanten	Contours de la sélection	Bordes de selección	Bordi selezione
+Layer Edges	Ebenenkanten	Contours des calques	Bordes de capa	Bordi livello
+Target Path	Zielpfad	Tracé cible	Trazado de destino	Tracciato di destinazione
+Pixel Grid	Pixelraster	Grille de pixels	Cuadrícula de píxeles	Griglia pixel
+New Guide Layout...	Neues Hilfslinienlayout...	Nouvelle disposition repères...	Nuevo diseño de guías...	Nuovo layout guide...
+New Guides From Shape	Neue Hilfslinien aus Form	Nouveaux repères d'après la forme	Nuevas guías desde forma	Nuove guide da forma
+Pattern Preview	Mustervorschau	Aperçu du motif	Previsualización de motivo	Anteprima pattern
+Match Zoom	Zoomfaktor anpassen	Faire correspondre le zoom	Igualar zoom	Corrispondenza zoom
+Match Location	Position anpassen	Faire correspondre la position	Igualar ubicación	Corrispondenza posizione
+Match All	Alle anpassen	Tout faire correspondre	Igualar todo	Corrispondenza totale
+Actions...	Aktionen...	Scripts...	Acciones...	Azioni...
+Stop Recording	Aufzeichnung beenden	Arrêter l'enregistrement	Detener grabación	Interrompi registrazione
+Play Action Again	Aktion erneut ausführen	Exécuter de nouveau le script	Reproducir acción de nuevo	Esegui di nuovo l'azione
+Styles...	Stile...	Styles...	Estilos...	Stili...
+Layer Comps...	Ebenenkompositionen...	Compositions de calques...	Composiciones de capas...	Composizioni livelli...
+Histogram	Histogramm	Histogramme	Histograma	Istogramma
+Based On:	Basierend auf:	D'après :	Basado en:	In base a:
+Trim Away	Wegschneiden	Supprimer	Cortar	Rifila
+There is nothing to trim away.	Es gibt nichts zum Wegschneiden.	Il n'y a rien à rogner.	No hay nada que cortar.	Non c'è nulla da rifilare.
+Use Previous Layer to Create Clipping Mask:	Schnittmaske aus vorheriger Ebene erstellen:	Utiliser le calque précédent pour créer un masque d'écrêtage :	Usar capa anterior para crear máscara de recorte:	Usa livello precedente per creare maschera di ritaglio:
+Conditional Mode Change	Bedingte Modusänderung	Changement de mode conditionnel	Cambio de modo condicional	Cambio metodo condizionale
+Source Mode	Quellmodus	Mode source	Modo de origen	Metodo di origine
+Target Mode:	Zielmodus:	Mode cible :	Modo de destino:	Metodo di destinazione:
+Width : height of a pixel (or a ratio, as 1.09):	Breite : Höhe eines Pixels (oder ein Verhältnis wie 1.09):	Largeur : hauteur d'un pixel (ou un rapport, comme 1.09) :	Anchura : altura de un píxel (o una proporción, como 1.09):	Larghezza : altezza di un pixel (o un rapporto, come 1.09):
+Choose a pixel, type, shape or fill layer to export.	Wählen Sie eine Pixel-, Text-, Form- oder Füllebene zum\nExportieren.	Choisissez un calque de pixels, de texte, de forme ou de\nremplissage à exporter.	Elija una capa de píxeles, texto, forma o relleno que\nexportar.	Scegliere un livello di pixel, testo, forma o\nriempimento da esportare.
+The file couldn't be written.	Die Datei konnte nicht geschrieben werden.	Impossible d'écrire le fichier.	No se pudo escribir el archivo.	Impossibile scrivere il file.
+Rasterize All Layers	Alle Ebenen rastern	Pixelliser tous les calques	Rasterizar todas las capas	Rasterizza tutti i livelli
+There are no type, shape or fill layers to rasterize.	Es gibt keine Text-, Form- oder Füllebenen zum Rastern.	Il n'y a pas de calques de texte, de forme ou de remplissage à pixelliser.	No hay capas de texto, forma o relleno que rasterizar.	Non ci sono livelli di testo, forma o riempimento da rasterizzare.
+No layer has a layer style.	Keine Ebene hat einen Ebenenstil.	Aucun calque n'a de style de calque.	Ninguna capa tiene estilo de capa.	Nessun livello ha uno stile di livello.
+Pick three or more layers to distribute.	Wählen Sie drei oder mehr Ebenen zum Verteilen.	Choisissez trois calques ou plus à répartir.	Elija tres o más capas que distribuir.	Scegliere tre o più livelli da distribuire.
+The picture has no Amiga screen mode (Image > Mode > Amiga Screen Mode chooses one).	Das Bild hat keinen Amiga-Bildschirmmodus\n(Bild > Modus > Amiga-Bildschirmmodus wählt einen).	L'image n'a pas de mode d'écran Amiga\n(Image > Mode > Mode d'écran Amiga en choisit un).	La imagen no tiene modo de pantalla de Amiga\n(Imagen > Modo > Modo de pantalla de Amiga elige uno).	L'immagine non ha un modo schermo Amiga\n(Immagine > Metodo > Modo schermo Amiga ne sceglie uno).
+The active layer is empty and there is no selection.	Die aktive Ebene ist leer und es gibt keine Auswahl.	Le calque actif est vide et il n'y a pas de sélection.	La capa activa está vacía y no hay selección.	Il livello attivo è vuoto e non c'è una selezione.
+New Guide Layout	Neues Hilfslinienlayout	Nouvelle disposition des repères	Nuevo diseño de guías	Nuovo layout guide
+Columns:	Spalten:	Colonnes :	Columnas:	Colonne:
+Rows:	Zeilen:	Rangées :	Filas:	Righe:
+Width (0 to fit):	Breite (0 passend):	Largeur (0 : ajuster) :	Anchura (0 para ajustar):	Larghezza (0 per adattare):
+Height (0 to fit):	Höhe (0 passend):	Hauteur (0 : ajuster) :	Altura (0 para ajustar):	Altezza (0 per adattare):
+Gutter:	Bundsteg:	Gouttière :	Medianil:	Spaziatura:
+Margin top:	Rand oben:	Marge en haut :	Margen superior:	Margine superiore:
+Left:	Links:	Gauche :	Izquierda:	Sinistra:
+Bottom:	Unten:	Bas :	Inferior:	Inferiore:
+Right:	Rechts:	Droite :	Derecha:	Destra:
+Center columns	Spalten zentrieren	Centrer les colonnes	Centrar columnas	Centra colonne
+Clear existing guides	Vorhandene Hilfslinien löschen	Effacer les repères existants	Borrar guías existentes	Cancella guide esistenti
+(All sizes in pixels.)	(Alle Größen in Pixeln.)	(Toutes les tailles en pixels.)	(Todos los tamaños en píxeles.)	(Tutte le dimensioni in pixel.)
+Transparent Pixels	Transparente Pixel	Pixels transparents	Píxeles transparentes	Pixel trasparenti
+Top Left Pixel Color	Farbe des Pixels oben links	Couleur du pixel en haut à gauche	Color de píxel superior izquierdo	Colore pixel in alto a sinistra
+Bottom Right Pixel Color	Farbe des Pixels unten rechts	Couleur du pixel en bas à droite	Color de píxel inferior derecho	Colore pixel in basso a destra
+Std Dev	Std.-Abw.	Écart type	Desv. est.	Dev. std.
+The action stops here.	Die Aktion hält hier an.	Le script s'arrête ici.	La acción se detiene aquí.	L'azione si ferma qui.
+Continue|Stop	Fortfahren|Anhalten	Continuer|Arrêter	Continuar|Detener	Continua|Interrompi
+Choose an action in Window > Actions first.	Wählen Sie zuerst eine Aktion unter Fenster > Aktionen.	Choisissez d'abord un script dans Fenêtre > Scripts.	Elija primero una acción en Ventana > Acciones.	Scegliere prima un'azione in Finestra > Azioni.
+Stop: 	Anhalten: 	Arrêt : 	Detener: 	Interrompi: 
+Action	Aktion	Script	Acción	Azione
+New Action	Neue Aktion	Nouveau script	Nueva acción	Nuova azione
+Action Set	Aktionsset	Ensemble de scripts	Conjunto de acciones	Set di azioni
+The set this action is in:	Das Set, in dem diese Aktion liegt:	L'ensemble de ce script :	El conjunto de esta acción:	Il set di questa azione:
+Delete the action %s?	Die Aktion %s löschen?	Supprimer le script %s ?	¿Eliminar la acción %s?	Eliminare l'azione %s?
+Action Name	Aktionsname	Nom du script	Nombre de la acción	Nome azione
+Insert Stop	Unterbrechung einfügen	Insérer un arrêt	Insertar parada	Inserisci interruzione
+Message:	Meldung:	Message :	Mensaje:	Messaggio:
+Load Actions	Aktionen laden	Charger des scripts	Cargar acciones	Carica azioni
+That isn't an Easel actions file.	Das ist keine Easel-Aktionsdatei.	Ce n'est pas un fichier de scripts d'Easel.	No es un archivo de acciones de Easel.	Non è un file di azioni di Easel.
+Save Actions	Aktionen speichern	Enregistrer les scripts	Guardar acciones	Salva azioni
+Actions	Aktionen	Scripts	Acciones	Azioni
+Rename...	Umbenennen...	Renommer...	Cambiar nombre...	Rinomina...
+Set...	Set...	Ensemble...	Conjunto...	Set...
+Steps	Schritte	Étapes	Pasos	Passi
+On/Off	Ein/Aus	Act./Désact.	Act./Desact.	Att./Disatt.
+Up	Nach oben	Monter	Subir	Su
+Down	Nach unten	Descendre	Bajar	Giù
+Insert Stop...	Unterbrechung einfügen...	Insérer un arrêt...	Insertar parada...	Inserisci interruzione...
+Delete Step	Schritt löschen	Supprimer l'étape	Eliminar paso	Elimina passo
+Record	Aufzeichnen	Enregistrer	Grabar	Registra
+Play	Ausführen	Exécuter	Reproducir	Esegui
+Play from Step	Ab Schritt ausführen	Exécuter à partir de l'étape	Reproducir desde el paso	Esegui dal passo
+Record, then choose menu commands: each becomes a step. A step with\na dialog shows it when the action plays. Window > Stop Recording ends it.	Aufzeichnen und dann Menübefehle wählen: Jeder wird ein Schritt. Ein\nSchritt mit\nDialog zeigt ihn, wenn die Aktion läuft. Fenster > Aufzeichnung beenden\nbeendet sie.	Enregistrez, puis choisissez des commandes : chacune devient une étape.\nUne étape à dialogue l'affiche à l'exécution. Fenêtre > Arrêter\nl'enregistrement termine.	Grabe y elija comandos de menú: cada uno es un paso. Un paso con\ndiálogo lo muestra al reproducirse. Ventana > Detener grabación termina.	Registra, poi scegli comandi di menu: ognuno diventa un passo. Un passo\ncon\nfinestra la mostra durante l'esecuzione. Finestra > Interrompi\nregistrazione termina.
+Open a picture to play the action on.	Öffnen Sie ein Bild, auf dem die Aktion laufen soll.	Ouvrez une image sur laquelle exécuter le script.	Abra una imagen en la que reproducir la acción.	Aprire un'immagine su cui eseguire l'azione.
+Record an action first (Window > Actions).	Zeichnen Sie zuerst eine Aktion auf (Fenster > Aktionen).	Enregistrez d'abord un script (Fenêtre > Scripts).	Grabe primero una acción (Ventana > Acciones).	Registrare prima un'azione (Finestra > Azioni).
+Batch	Stapelverarbeitung	Traitement par lots	Lote	Batch
+Action:	Aktion:	Script :	Acción:	Azione:
+Source drawer:	Quellschublade:	Tiroir source :	Cajón de origen:	Cassetto di origine:
+Destination drawer:	Zielschublade:	Tiroir de destination :	Cajón de destino:	Cassetto di destinazione:
+Save as:	Speichern als:	Enregistrer en :	Guardar como:	Salva come:
+Run	Starten	Exécuter	Ejecutar	Avvia
+Choose a destination drawer other than the source.	Wählen Sie eine andere Zielschublade als die Quelle.	Choisissez un tiroir de destination autre que la source.	Elija un cajón de destino distinto del de origen.	Scegliere un cassetto di destinazione diverso dall'origine.
+The source drawer couldn't be read.	Die Quellschublade konnte nicht gelesen werden.	Impossible de lire le tiroir source.	No se pudo leer el cajón de origen.	Impossibile leggere il cassetto di origine.
+%d pictures done, %d couldn't be opened or saved.	%d Bilder fertig, %d konnten nicht geöffnet oder gespeichert werden.	%d images traitées, %d n'ont pas pu être ouvertes ou enregistrées.	%d imágenes hechas; %d no se pudieron abrir ni guardar.	%d immagini fatte, %d non è stato possibile aprirle o salvarle.
+The active layer has no layer style to save.	Die aktive Ebene hat keinen Ebenenstil zum Speichern.	Le calque actif n'a pas de style de calque à enregistrer.	La capa activa no tiene estilo de capa que guardar.	Il livello attivo non ha uno stile di livello da salvare.
+Style	Stil	Style	Estilo	Stile
+New Style	Neuer Stil	Nouveau style	Nuevo estilo	Nuovo stile
+Style Name	Stilname	Nom du style	Nombre del estilo	Nome stile
+Load Styles	Stile laden	Charger des styles	Cargar estilos	Carica stili
+That isn't an Easel styles file.	Das ist keine Easel-Stildatei.	Ce n'est pas un fichier de styles d'Easel.	No es un archivo de estilos de Easel.	Non è un file di stili di Easel.
+Save Styles	Stile speichern	Enregistrer les styles	Guardar estilos	Salva stili
+Styles	Stile	Styles	Estilos	Stili
+New Style...	Neuer Stil...	Nouveau style...	Nuevo estilo...	Nuovo stile...
+Reset Styles	Stile zurücksetzen	Réinitialiser les styles	Restaurar estilos	Ripristina stili
+Apply puts the style on the picked layers (double-click does it too).\nNew Style saves the active layer's style.	Anwenden legt den Stil auf die gewählten Ebenen (auch per Doppelklick).\nNeuer Stil speichert den Stil der aktiven Ebene.	Appliquer pose le style sur les calques choisis (le double-clic aussi).\nNouveau style enregistre le style du calque actif.	Aplicar pone el estilo en las capas elegidas (también con doble clic).\nNuevo estilo guarda el estilo de la capa activa.	Applica mette lo stile sui livelli scelti (anche con doppio clic).\nNuovo stile salva lo stile del livello attivo.
+visibility	Sichtbarkeit	visibilité	visibilidad	visibilità
+appearance	Aussehen	apparence	aspecto	aspetto
+Layer Comps to Files	Ebenenkompositionen in Dateien	Compositions de calques en fichiers	Composiciones de capas a archivos	Composizioni livelli su file
+Drawer to write them to:	Schublade dafür:	Tiroir où les écrire :	Cajón donde escribirlas:	Cassetto in cui scriverle:
+Some of the files couldn't be written.	Einige Dateien konnten nicht geschrieben werden.	Certains fichiers n'ont pas pu être écrits.	Algunos archivos no se pudieron escribir.	Alcuni file non è stato possibile scriverli.
+A picture keeps at most 24 layer comps.	Ein Bild hat höchstens 24 Ebenenkompositionen.	Une image garde au plus 24 compositions de calques.	Una imagen guarda como máximo 24 composiciones de capas.	Un'immagine conserva al massimo 24 composizioni livelli.
+Layer Comp	Ebenenkomposition	Composition de calques	Composición de capas	Composizione livelli
+New Layer Comp	Neue Ebenenkomposition	Nouvelle composition de calques	Nueva composición de capas	Nuova composizione livelli
+Keep 1 visibility, 2 appearance, 3 both:	Behalten: 1 Sichtbarkeit, 2 Aussehen, 3 beides:	Garder 1 visibilité, 2 apparence, 3 les deux :	Guardar 1 visibilidad, 2 aspecto, 3 ambos:	Conserva 1 visibilità, 2 aspetto, 3 entrambi:
+Layer Comps	Ebenenkompositionen	Compositions de calques	Composiciones de capas	Composizioni livelli
+Update	Aktualisieren	Mettre à jour	Actualizar	Aggiorna
+Previous	Vorherige	Précédente	Anterior	Precedente
+Next	Nächste	Suivante	Siguiente	Successiva
+Export to Files...	In Dateien exportieren...	Exporter en fichiers...	Exportar a archivos...	Esporta su file...
+A comp keeps the layers' visibility and appearance (opacity, fill, mode\nand style). Each Apply is a step in the History.	Eine Komposition behält Sichtbarkeit und Aussehen der Ebenen\n(Deckkraft, Fläche,\nModus und Stil). Jedes Anwenden ist ein Schritt im Protokoll.	Une composition garde la visibilité et l'apparence des calques\n(opacité, fond,\nmode et style). Chaque application est une étape de l'historique.	Una composición guarda la visibilidad y el aspecto de las capas\n(opacidad,\nrelleno, modo y estilo). Cada Aplicar es un paso de la Historia.	Una composizione conserva visibilità e aspetto dei livelli (opacità,\nriempimento,\nmetodo e stile). Ogni Applica è un passo nella Storia.
+Search	Suchen	Rechercher	Buscar	Cerca
+Find:	Suchen:	Rechercher :	Buscar:	Trova:
+Type part of a command's name; Return or a double-click runs it.	Tippen Sie einen Teil des Befehlsnamens; Return oder Doppelklick\nführt ihn aus.	Tapez une partie du nom d'une commande ; Entrée ou un\ndouble-clic l'exécute.	Escriba parte del nombre de un comando; Intro o doble clic lo\nejecuta.	Digitare parte del nome di un comando; Invio o doppio clic lo\nesegue.
+Default Actions	Standardaktionen	Scripts par défaut	Acciones por defecto	Azioni predefinite
+Flatten and Auto Tone	Reduzieren und Auto-Farbton	Aplatir et tons automatiques	Acoplar y tono automático	Unisci e tono automatico
+Grayscale and Sharpen	Graustufen und Scharfzeichnen	Niveaux de gris et renforcement	Escala de grises y enfocar	Scala di grigio e nitidezza
+PostScript (72 points/inch)	PostScript (72 Punkt/Zoll)	PostScript (72 points/pouce)	PostScript (72 puntos/pulgada)	PostScript (72 punti/pollice)
+Traditional (72.27 points/inch)	Traditionell (72,27 Punkt/Zoll)	Traditionnel (72,27 points/pouce)	Tradicional (72,27 puntos/pulgada)	Tradizionale (72,27 punti/pollice)
+Checkerboard Colour	Schachbrettfarbe	Couleur du damier	Color del tablero	Colore scacchiera
+History log (each step to a file):	Protokollliste (jeder Schritt in eine Datei):	Journal de l'historique (chaque étape dans un fichier) :	Registro de historia (cada paso a un archivo):	Registro storia (ogni passo in un file):
+Log file:	Protokolldatei:	Fichier journal :	Archivo de registro:	File di registro:
+Screen resolution (dpi, Print Size):	Bildschirmauflösung (dpi, Ausgabegröße):	Résolution de l'écran (dpi, taille d'impression) :	Resolución de pantalla (ppp, tamaño de impresión):	Risoluzione schermo (dpi, dimensioni di stampa):
+Column width (pixels):	Spaltenbreite (Pixel):	Largeur de colonne (pixels) :	Anchura de columna (píxeles):	Larghezza colonna (pixel):
+Gutter (pixels):	Bundsteg (Pixel):	Gouttière (pixels) :	Medianil (píxeles):	Spaziatura (pixel):
+Point size:	Punktgröße:	Taille du point :	Tamaño de punto:	Dimensione punto:
+Grid style:	Rasterart:	Style de grille :	Estilo de cuadrícula:	Stile griglia:
+Guide style:	Hilfslinienart:	Style des repères :	Estilo de guías:	Stile guide:
+Grid size:	Rastergröße:	Taille du damier :	Tamaño del tablero:	Dimensione scacchiera:
+Grid colours:	Rasterfarben:	Couleurs du damier :	Colores del tablero:	Colori scacchiera:
+Custom colour 1:	Eigene Farbe 1:	Couleur personnalisée 1 :	Color personalizado 1:	Colore personale 1:
+Custom colour 2:	Eigene Farbe 2:	Couleur personnalisée 2 :	Color personalizado 2:	Colore personale 2:
+Apply Layer Comp	Ebenenkomposition anwenden	Appliquer la composition de calques	Aplicar composición de capas	Applica composizione livelli
+Alpha	Alpha	Alpha	Alfa	Alfa
+Light	Hell	Clair	Claro	Chiaro
+Dark	Dunkel	Foncé	Oscuro	Scuro
+Purple	Lila	Violet	Morado	Viola
+Lines	Linien	Lignes	Líneas	Linee
+Dashed Lines	Gestrichelte Linien	Lignes en pointillés	Líneas discontinuas	Linee tratteggiate
+Dots	Punkte	Points	Puntos	Punti

@@ -21,7 +21,35 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
-## New in 1.1: five languages and the right mouse button
+## New in 1.2: menus, actions and panels
+
+- View > Pixel Aspect Ratio: Square, the video presets (D1/DV, HDV, DVCPRO, anamorphic), the Amiga's
+  PAL and NTSC low and high resolution pixels, From Amiga Screen Mode and Custom; with Pixel Aspect
+  Ratio Correction on (it is at first) a lores or interlaced picture is drawn with pixels as tall as
+  the screen would show them. The aspect is kept in IFF ILBM files.
+- View > Extras, Show > Selection Edges, Layer Edges, Target Path, Pixel Grid (from 800%), All and
+  None; Pattern Preview (the picture tiled round itself, for Workbench backdrops); Fit Layer(s) on
+  Screen; Print Size; New Guide Layout (columns, rows, gutters and margins) and New Guides From Shape.
+- Window > Actions: record menu commands as an action and play it back, with sets, stops, steps
+  turned off, Play from Step, and files of actions to load and save. File > Automate > Batch runs an
+  action on every picture in a drawer; Conditional Mode Change changes the mode only when it is one of
+  those ticked. Actions are plain lists of commands: there is no scripting language.
+- Window > Styles (saved layer styles, applied with a click), Window > Layer Comps (the layers'
+  visibility and appearance kept by name, applied, cycled and exported to files), the Info panel's
+  histogram by channel with its mean, standard deviation and median, Window > Arrange > Match Zoom
+  and Location.
+- Edit > Search finds any menu command as you type; Edit > Paste Outside; Image > Trim with its
+  options; Layer > New > Layer... (name, mode, opacity, clipping, colour); Align > Distribute by
+  edges and spacing; Rasterize > All Layers; Layer > Quick Export as PNG; File > Scripts > Flatten
+  All Layer Effects. A copyrighted picture shows © in the title.
+- The canvas's context menu (right mouse button) with the usual commands.
+- Preferences: a Transparency page (checkerboard size and colours), grid and guide line styles,
+  screen resolution, column and gutter widths and point size, and a history log of the commands
+  chosen.
+- EaselConvert INFO describes pictures (format, size, layers, mode, resolution, aspect, screen
+  mode, File Info) without converting them.
+
+## New in 1.2: five languages and the right mouse button
 
 - Easel speaks English, German, French, Spanish and Italian, in Photoshop's own words for each
   (Ebene, Tonwertkorrektur, Zauberstab; calque, Niveaux, Baguette magique ...). It follows the first

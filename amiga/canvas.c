@@ -46,6 +46,9 @@
 #include "../core/shape.h"
 #include "../core/live.h"
 #include "../core/toolopts.h"
+#include "../core/viewx.h"                 /* 1.2 */
+#include "../core/guides.h"
+#include "mxids.h"
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -82,6 +85,8 @@ struct Data {
   UBYTE *view; LONG vw, vh; LONG *xmap; LONG xmapcap;
   /* the view: zoom, the image's top left within the area (ox, oy, may be negative when scrolled) */
   double z; LONG ox, oy;
+  double zy;                             /* 1.2: the vertical zoom (z times the pixel aspect when it is corrected) */
+  int ov_ledges; Box ov_lbox;            /* 1.2: Show > Layer Edges: the active layer's box in the overlay drawn */
   /* the mouse */
   int drag; Stroke *stroke; int changed;
   double ax, ay, bx, by;                 /* where the drag began and where it is (image) */
@@ -172,7 +177,8 @@ static void place(struct Data *d, Object *obj)
     v->placed = 1;
   }
   d->z = v->zoom;
-  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->z);
+  d->zy = d->z * par_view_ratio(v->doc, vx_par_correct);
+  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->zy);
   if (iw <= W) { v->sx = 0; d->ox = (W - iw) / 2; }
   else { if (v->sx > iw - W) v->sx = iw - W; if (v->sx < 0) v->sx = 0; d->ox = -v->sx; }
   if (ih <= H) { v->sy = 0; d->oy = (H - ih) / 2; }
@@ -180,14 +186,14 @@ static void place(struct Data *d, Object *obj)
 }
 /* window pixel to image (fractional) and back */
 static double to_ix(struct Data *d, Object *obj, LONG mx) { return (mx - _mleft(obj) - d->ox) / d->z; }
-static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->z; }
+static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->zy; }
 static LONG to_sx(struct Data *d, Object *obj, double ix) { return _mleft(obj) + d->ox + (LONG)floor(ix * d->z + 0.5); }
-static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->z + 0.5); }
+static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->zy + 0.5); }
 static void update_props(struct Data *d, Object *obj)
 {
   DocView *v = cur_view();
   if (!v || !v->doc) return;
-  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->z), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
+  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->zy), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
   if (d->hprop) SetAttrs(d->hprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->w * d->z), MUIA_Prop_Visible, _mwidth(obj), MUIA_Prop_First, v->sx, TAG_DONE);
 }
 
@@ -254,38 +260,40 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
 {
   GuideSet *g = &doc->guides;
   LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
-  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
+  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->zy), x, y;
   int i, k;
   if (extras_hidden) return;                             /* (1.1: View > Extras off) */
   if (ix1 > x1) ix1 = x1;
   if (iy1 > y1) iy1 = y1;
   if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
     for (k = 0; k < 2; k++) {
-      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->z, 1, &step);
-      if (step * d->z < 4) continue;                     /* (too close together to see) */
+      double zk = k == 0 ? d->z : d->zy;
+      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->zy, 1, &step);
+      if (step * zk < 4) continue;                     /* (too close together to see) */
       for (; ; p += step) {
-        LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
+        LONG s = (LONG)floor(p * zk) + (k == 0 ? d->ox : d->oy);
         if (s >= (k == 0 ? ix1 : iy1)) break;
-        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, prefs.grid_color, 1); }
-        else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, prefs.grid_color, 1);
+        /* (1.2: in the preferences' line style) */
+        if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) { if (line_style_on(prefs.grid_style, y - d->oy)) vpix(d, s, y, prefs.grid_color, 1); } }
+        else if (s >= iy0) for (x = ix0; x < ix1; x++) if (line_style_on(prefs.grid_style, x - d->ox)) vpix(d, x, s, prefs.grid_color, 1);
       }
     }
   }
   if (g->show_guides) {
-    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, prefs.guide_color, 0); }
-    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
+    for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) if (line_style_on(prefs.guide_style, y)) vpix(d, s, y, prefs.guide_color, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->zy) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) if (line_style_on(prefs.guide_style, x)) vpix(d, x, s, prefs.guide_color, 0); }
   }
   if (g->show_rulers) {
-    int minor, major = ruler_step(d->z, 50, &minor);
-    double mstep = (double)major / (minor > 0 ? minor : 1);
     for (k = 0; k < 2; k++) {
       LONG a0 = k == 0 ? x0 : y0, a1 = k == 0 ? x1 : y1, b0 = k == 0 ? y0 : x0, b1 = k == 0 ? y1 : x1, off = k == 0 ? d->ox : d->oy, s, b;
-      double p;
+      double p, zk = k == 0 ? d->z : d->zy;
+      int minor, major = ruler_step(zk, 50, &minor);
+      double mstep = (double)major / (minor > 0 ? minor : 1);
       if (b0 >= RULER) continue;
       for (s = a0; s < a1; s++) for (b = b0; b < b1 && b < RULER; b++) { if (k == 0) vpix(d, s, b, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); else vpix(d, b, s, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); }
-      for (p = floor((a0 - off) / d->z / mstep) * mstep; ; p += mstep) {
+      for (p = floor((a0 - off) / zk / mstep) * mstep; ; p += mstep) {
         LONG len;
-        s = (LONG)floor(p * d->z) + off;
+        s = (LONG)floor(p * zk) + off;
         if (s >= a1) break;
         if (s < a0) continue;
         len = fmod(fabs(p) + 0.001, major) < 0.01 ? RULER : RULER / 3;
@@ -315,8 +323,9 @@ static void ruler_labels(struct Data *d, Object *obj)
     unit_text(buf, p, doc->w, doc->dpi, 0);             /* (0.8: in the preferences' units) */
     Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
   }
-  for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
-    LONG s = (LONG)floor(p * d->z) + d->oy;
+  major = ruler_step(d->zy, 50, &minor);
+  for (p = floor(-d->oy / d->zy / major) * major; (LONG)(p * d->zy) + d->oy < d->vh; p += major) {
+    LONG s = (LONG)floor(p * d->zy) + d->oy;
     int c, n;
     if (s < RULER) continue;
     unit_text(buf, p, doc->h, doc->dpi, 0);
@@ -339,14 +348,17 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
   if (x1 <= x0 || y1 <= y0) return;
   for (x = x0; x < x1; x++) {
     double ix = floor((x - d->ox) / d->z);
+    if (vx_tile && doc) ix = (double)wrap_coord((long)ix, doc->w);     /* (1.2: Pattern Preview tiles the picture) */
     d->xmap[x] = doc && ix >= 0 && ix < doc->w ? (LONG)ix : -1;
     if (d->xmap[x] >= 0) { if (cx0 < 0 || d->xmap[x] < cx0) cx0 = d->xmap[x]; if (d->xmap[x] + 1 > cx1) cx1 = d->xmap[x] + 1; }
   }
   d->rowdoc = NULL;                    /* (the row cache is for this pass's columns only) */
   for (y = y0; y < y1; y++) {
     UBYTE *o = d->view + (y * d->vw + x0) * 3;
-    double iyf = floor((y - d->oy) / d->z);
-    LONG iy = doc && iyf >= 0 && iyf < doc->h ? (LONG)iyf : -1;
+    double iyf = floor((y - d->oy) / d->zy);
+    LONG iy;
+    if (vx_tile && doc) iyf = (double)wrap_coord((long)iyf, doc->h);
+    iy = doc && iyf >= 0 && iyf < doc->h ? (LONG)iyf : -1;
     const u8 *row = iy < 0 ? NULL : d->comp ? d->comp + (long)iy * doc->w * 4 : comp_row(d, doc, iy, cx0, cx1);
     for (x = x0; x < x1; x++, o += 3) {
       LONG ix = d->xmap[x];
@@ -356,11 +368,11 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
         int a = p[3];
         if (a == 255) { o[0] = p[0]; o[1] = p[1]; o[2] = p[2]; }
         else {
-          /* over the checkerboard: 8 pixel squares of white and light grey, fixed to the image */
-          int c = ((((x - d->ox) >> 3) + ((y - d->oy) >> 3)) & 1) ? 0xCC : 0xFF;
-          o[0] = (UBYTE)((p[0] * a + c * (255 - a) + 127) / 255);
-          o[1] = (UBYTE)((p[1] * a + c * (255 - a) + 127) / 255);
-          o[2] = (UBYTE)((p[2] * a + c * (255 - a) + 127) / 255);
+          /* over the checkerboard, fixed to the image (1.2: its size and colours from the preferences) */
+          u32 c = checker_at(x - d->ox, y - d->oy, prefs.checker_size, prefs.checker_scheme, prefs.checker_c1, prefs.checker_c2);
+          o[0] = (UBYTE)((p[0] * a + (int)(c >> 16) * (255 - a) + 127) / 255);
+          o[1] = (UBYTE)((p[1] * a + (int)((c >> 8) & 255) * (255 - a) + 127) / 255);
+          o[2] = (UBYTE)((p[2] * a + (int)(c & 255) * (255 - a) + 127) / 255);
         }
         /* 0.7: in Quick Mask mode, what isn't selected under half-strength red */
         if (doc->qmask) {
@@ -368,6 +380,14 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
           if (t) { o[0] = (UBYTE)(o[0] + ((255 - o[0]) * t + 127) / 255); o[1] = (UBYTE)((o[1] * (255 - t) + 127) / 255); o[2] = (UBYTE)((o[2] * (255 - t) + 127) / 255); }
         }
       }
+    }
+  }
+  /* 1.2: the pixel grid from 800% up, a thin line where each image pixel starts */
+  if (doc && vx_pixgrid && !extras_hidden && d->z >= PIXGRID_MIN_ZOOM) {
+    ULONG pg = theme_is_dark() ? 0x505050 : 0xB0B0B0;
+    for (y = y0; y < y1; y++) {
+      int rowline = pixgrid_line(y, d->oy, d->zy);
+      for (x = x0; x < x1; x++) if (d->xmap[x] >= 0 && (rowline || pixgrid_line(x, d->ox, d->z))) vpix(d, x, y, pg, 1);
     }
   }
   if (doc) guides_render(d, doc, x0, y0, x1, y1);
@@ -399,7 +419,7 @@ static void ants(struct Data *d, Object *obj, LONG x0, LONG y0, LONG x1, LONG y1
   struct RastPort *rp = _rp(obj);
   int i;
   UWORD pat;
-  if (!d->nedges || !d->edges || extras_hidden) return;
+  if (!d->nedges || !d->edges || extras_hidden || !vx_seledges) return;   /* (1.2: View > Show > Selection Edges) */
   pat = (UWORD)((0xF0F0F0F0UL >> (d->phase & 7)) & 0xFFFF);
   SetDrMd(rp, JAM2);
   SetAPen(rp, theme_is_dark() ? tpen(T_WHITE) : tpen(T_TEXT));
@@ -521,7 +541,7 @@ static void path_snapshot(struct Data *d)
   Doc *doc = cur_doc();
   Path *p = cur_path(doc, 0);
   int t = d->ov_tool;
-  d->ov_path = p && p->na > 0;
+  d->ov_path = p && p->na > 0 && ((vx_path && !extras_hidden) || PATH_TOOL(t));   /* (1.2: Show > Target Path) */
   d->ov_anchors = PATH_TOOL(t);
   d->ov_handles = PATH_TOOL(t) && t != TL_PATHSEL;
   if (!d->ov_path || !d->path_dirty) return;
@@ -643,7 +663,7 @@ static void ov_draw(struct Data *d, Object *obj)
   if (d->cur_in && brushlike(t) && d->drag != DR_LINE) {
     LONG r = brush_r(d);
     int cross = d->ov_cursor != 0;
-    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
+    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, (LONG)(r * d->zy / d->z + 0.5));   /* (1.2: as tall as the aspect draws it) */
     if (cross && (r >= 3 || d->ov_cursor == 1)) { xline(rp, d->cur_x - 6, d->cur_y, d->cur_x + 6, d->cur_y); xline(rp, d->cur_x, d->cur_y - 6, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 6); }
     else if (r < 3) { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
   }
@@ -727,6 +747,12 @@ static void ov_draw(struct Data *d, Object *obj)
     bounds_handles(x0, y0, x1, y1, hx, hy);
     for (k = 0; k < 8; k++) xrect(rp, hx[k] - 3, hy[k] - 3, hx[k] + 3, hy[k] + 3);
   }
+  if (d->ov_ledges) {
+    /* 1.2: Show > Layer Edges, dotted */
+    SetDrPt(rp, 0xAAAA);
+    xrect(rp, to_sx(d, obj, d->ov_lbox.x0), to_sy(d, obj, d->ov_lbox.y0), to_sx(d, obj, d->ov_lbox.x1) - 1, to_sy(d, obj, d->ov_lbox.y1) - 1);
+    SetDrPt(rp, 0xFFFF);
+  }
   if (d->ov_path) path_overlay(d, obj, rp);
   if (d->ov_type) type_overlay(d, obj, rp);
   for (i = 0; i < d->ov_nsamp; i++) {
@@ -780,6 +806,7 @@ static void ov_show(struct Data *d, Object *obj)
   d->ov_type = type_editing && ty.doc == cur_doc() && ty.tl;
   d->ov_crop = opt.crop_overlay;
   d->ov_bounds = tool == TL_MOVE && opt.move_bounds && !d->xf_on && d->drag != DR_MOVE && move_bounds(d, &d->ov_bbox);
+  d->ov_ledges = vx_layeredges && !extras_hidden && !d->ov_bounds && !d->xf_on && d->drag != DR_MOVE && move_bounds(d, &d->ov_lbox);
   {
     DocView *v = cur_view();
     int i;
@@ -818,8 +845,9 @@ static void update_box(struct Data *d, Object *obj, Box b)
   if (box_empty(b)) return;
   /* (without comp, render composites the rows itself) */
   if (comp_ready(d)) doc_composite(doc, b, d->comp + ((long)b.y0 * doc->w + b.x0) * 4, (long)doc->w * 4);
-  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->z) + d->oy - 1;
-  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->z) + d->oy + 1;
+  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->zy) + d->oy - 1;
+  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->zy) + d->oy + 1;
+  if (vx_tile) { x0 = y0 = 0; x1 = d->vw; y1 = d->vh; }      /* (1.2: Pattern Preview shows the change in every tile) */
   render(d, x0, y0, x1, y1);
   ov_hide(d, obj);
   blit(d, obj, x0, y0, x1, y1);
@@ -848,7 +876,7 @@ static void zoom_to(struct Data *d, Object *obj, double z, LONG mx, LONG my)
   ix = to_ix(d, obj, mx); iy = to_iy(d, obj, my);
   v->zoom = z;
   v->sx = (LONG)(ix * z) - (mx - _mleft(obj));
-  v->sy = (LONG)(iy * z) - (my - _mtop(obj));
+  v->sy = (LONG)(iy * z * par_view_ratio(v->doc, vx_par_correct)) - (my - _mtop(obj));
   draw_all(d, obj);
   set(obj, MUIA_Canvas_Zoomed, TRUE);
 }
@@ -2708,19 +2736,23 @@ static Object *canvas_context(struct Data *d, Object *obj, LONG mx, LONG my)
     }
   }
   ctx_set_under(&s, under, n);
-  return ctx_show(CTX_CANVAS, &s);
+  {
+    /* a tool without a menu of its own: the general one (menux.c, 1.2) */
+    Object *m = ctx_show(CTX_CANVAS, &s);
+    return m ? m : doc ? mx_context_menu() : NULL;
+  }
 }
 static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   struct Data *d;
   switch (msg->MethodID) {
   case MUIM_ContextMenuBuild: return (ULONG)canvas_context(INST_DATA(cl, obj), obj, ((struct MUIP_ContextMenuBuild *)msg)->mx, ((struct MUIP_ContextMenuBuild *)msg)->my);
-  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);
+  case MUIM_ContextMenuChoice: return ctx_choice(obj, ((struct MUIP_ContextMenuChoice *)msg)->item);   /* (either menu's item: its command, as if from the menus) */
   case OM_NEW:
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
-    d->obj = obj; d->z = 1;
+    d->obj = obj; d->z = 1; d->zy = 1;
     poly_init(&d->prev); poly_init(&d->pp); d->path_dirty = 1;
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = EV;
     d->ihn.ihn_Object = obj; d->ihn.ihn_Flags = MUIIHNF_TIMER; d->ihn.ihn_Method = MUIM_Canvas_Tick;
@@ -2805,7 +2837,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     d = INST_DATA(cl, obj);
     if (!v || !d->shown) return 0;
     v->sx = (LONG)(m->x * v->zoom) - _mwidth(obj) / 2;
-    v->sy = (LONG)(m->y * v->zoom) - _mheight(obj) / 2;
+    v->sy = (LONG)(m->y * v->zoom * par_view_ratio(v->doc, vx_par_correct)) - _mheight(obj) / 2;
     draw_all(d, obj);
     return 0; }
   case MUIM_Canvas_StrokeTick: {

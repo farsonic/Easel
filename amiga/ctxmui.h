@@ -10,6 +10,7 @@
 
 void    ctx_attach(Object *obj, int target);      /* CTX_ */
 void    ctx_detach(Object *obj, int target);
+void    ctx_free(void);                           /* the menus disposed: after the application is */
 int     ctx_tool_kind(int tool);                  /* TL_ -> CK_ */
 void    ctx_state(CtxState *s);                   /* the picture, its active layer and the tool in use */
 void    ctx_set_under(CtxState *s, const int *layers, int n);   /* the layers under the pointer, top first */

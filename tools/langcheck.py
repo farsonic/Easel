@@ -134,7 +134,9 @@ CORE_LISTS = [('core/adjust10.c', 'photo_filter_names', 'all'), ('core/adjust10.
               ('core/adjust10.c', 'hs_presets', 'first'), ('core/fx.c', 'fx_names', 'all'),
               ('core/toolopts.c', 'crop_overlay_names', 'all'), ('core/crop.c', 'crop_presets', 'first'),
               ('core/gallery.c', 'gallery_defs', 'all')] + \
-             [('core/gallery.c', n, 'all') for n in ('tex_names', 'light_names', 'daub_names', 'dir_names', 'grain_names', 'glow_names')]
+             [('core/gallery.c', n, 'all') for n in ('tex_names', 'light_names', 'daub_names', 'dir_names', 'grain_names', 'glow_names')] + \
+             [('core/viewx.c', n, 'all') for n in ('checker_names', 'checker_size_names', 'line_style_names')] + \
+             [('core/actions.c', 'histo_channel_names', 'all')]
 def core_list_names():
     """the names in CORE_LISTS: (file, line, text)"""
     out = []

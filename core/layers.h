@@ -52,7 +52,9 @@ void doc_pick_layer(Doc *d, int i, int how);               /* 0 only this, 1 tog
 int  doc_npicked(const Doc *d);
 
 /* ------------------------------------------------------------------ aligning */
-enum { AL_LEFT, AL_HCENTER, AL_RIGHT, AL_TOP, AL_VCENTER, AL_BOTTOM, AL_DIST_H, AL_DIST_V };
+enum { AL_LEFT, AL_HCENTER, AL_RIGHT, AL_TOP, AL_VCENTER, AL_BOTTOM, AL_DIST_H, AL_DIST_V,
+       /* 1.2: Distribute by edges, and equal spacing between the layers */
+       AL_DIST_LEFT, AL_DIST_RIGHT, AL_DIST_TOP, AL_DIST_BOTTOM, AL_SPACE_H, AL_SPACE_V };
 int  doc_align(Doc *d, int how);                      /* the picked pixel layers' content, to the selection or canvas */
 int  layer_content_box(const Doc *d, int i, Box *b);  /* the non-transparent part of a pixel layer */
 Box  doc_move_group(Doc *d, int g, i32 dx, i32 dy);   /* the Move tool on a group: all its layers */

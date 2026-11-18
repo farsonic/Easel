@@ -26,15 +26,21 @@ static int under_index[CTX_MAXUNDER], nunder_now;
 
 void ctx_attach(Object *obj, int target)
 {
-  if (target < 0 || target >= CTX_N || ctx[target].strip) return;
-  if ((ctx[target].strip = MenustripObject, End)) { ctx[target].owner = obj; set(obj, MUIA_ContextMenu, (ULONG)ctx[target].strip); }
+  if (target < 0 || target >= CTX_N) return;
+  if (!ctx[target].strip) ctx[target].strip = MenustripObject, End;
+  if (ctx[target].strip) { ctx[target].owner = obj; set(obj, MUIA_ContextMenu, (ULONG)ctx[target].strip); }
 }
 void ctx_detach(Object *obj, int target)
 {
   if (target < 0 || target >= CTX_N || !ctx[target].strip || ctx[target].owner != obj) return;
   set(obj, MUIA_ContextMenu, 0);
-  MUI_DisposeObject(ctx[target].strip);        /* (the menu inside it goes with it) */
-  ctx[target].strip = ctx[target].menu = ctx[target].owner = NULL;
+  ctx[target].owner = NULL;                    /* (the strip is disposed by ctx_free, after the application) */
+}
+/* (see ctxmui.h) the strips disposed (MUI leaves a context menu when its object goes) */
+void ctx_free(void)
+{
+  int i;
+  for (i = 0; i < CTX_N; i++) if (ctx[i].strip) { MUI_DisposeObject(ctx[i].strip); ctx[i].strip = ctx[i].menu = NULL; }
 }
 /* the tool's kind, for its menu */
 int ctx_tool_kind(int t)
