@@ -190,94 +190,100 @@ Items handled elsewhere in this document are listed in "How to read this".
 
 ### 2.1 File
 
+Re-checked 2026-11-18 (Easel 1.1) against `menus[]` in `E:amiga/main.c`.
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| New… `file.new`: presets (`engine/src/cmd/document_preset_cmds.rs`), colour mode, bit depth, resolution, units, background contents, pixel aspect | **Partial**: sizes from 320 × 256 PAL up, dpi, and white, background or transparent; colour mode, depth, units, saved presets and the pixel aspect are missing | Easy | P2 |
-| Open… `file.open` | **Have**: about 40 formats (`E:core/codec.h` `FMT_`) | Done | — |
+| New… `file.new`: presets (`engine/src/cmd/document_preset_cmds.rs`), colour mode (Bitmap at 1 bit, #14497), bit depth, resolution, units, background contents, pixel aspect | **Partial**: sizes from 320 × 256 PAL up, dpi, and white, background or transparent; colour mode, units, saved presets and the pixel aspect are missing (the mode is set afterwards in Image › Mode) | Easy | P2 |
+| Open… `file.open` | **Have**: about 45 formats (`E:core/codec.h` `FMT_`), SVG drawings as shape layers (1.1), anything else through datatypes | Done | — |
 | Open As… `file.openAs`: forces the format | **Missing** | Easy | P3 |
+| Open as Smart Object… (#12212 since eb6c1ab) | **Missing**: there are no smart objects | Moderate | P3 |
 | Open EXR Parts… `file.openExrParts` | **Missing** | Moderate: needs an EXR reader first | P3 |
 | Close `file.close` | **Have** | Done | — |
 | Close All `file.closeAll` | **Have** | Done | — |
-| Close Others `file.closeOthers` | **Missing** | Easy | P3 |
-| Save `file.save` | **Have**: ORA or a flat format, and offers to flatten | Done | — |
+| Close Others `file.closeOthers` | **Have** (1.1) | Done | — |
+| Save `file.save` | **Have**: ORA or a flat format (1.1: every format Easel writes), and offers to flatten | Done | — |
 | Save As… `file.saveAs` | **Have** | Done | — |
-| Save a Copy… `file.saveACopy` | **Partial**: File › Export writes a flat copy; there's no layered copy | Easy | P2 |
+| Save a Copy… `file.saveACopy` | **Have** (0.6): in the format its name asks for, layers kept in ORA and PSD | Done | — |
 | Revert `file.revert` | **Have** | Done | — |
-| Export › Quick Export as PNG | **Partial**: Export › PNG asks for a file name each time | Easy | P3 |
-| Export › Export As…: format, quality, scale, transparency, metadata, preview, size estimate | **Partial**: one item per format, with JPEG quality and ILBM colours; scale, preview, size estimate and the single dialog are missing | Easy (scale); Moderate (preview) | P2 |
+| Export › Quick Export as PNG | **Have** (1.1): beside the picture's file, or in the last drawer, without a requester | Done | — |
+| Export › Export As…: format, quality, scale, transparency, metadata, preview, size estimate | **Partial** (0.6): Export As (with scale) takes the format from the name (every writer), with JPEG quality; one item per format too. Preview, size estimate, matte and metadata choice are missing | Easy (matte); Moderate (preview) | P2 |
 | Export › Export Preferences… | **Missing** | Easy | P3 |
-| Export › Save for Web (Legacy)…: palette, dither, colours, 2-up preview | **Missing** | Moderate. Amiga stand-in: a "Save for Screen" dialog (see section 21) | P2 |
+| Export › Save for Web (Legacy)…: palette, dither, colours, 2-up preview | **Missing** | Moderate. Amiga stand-in: a "Save for Screen" dialog (section 21.5) | P2 |
 | Export › Artboards to Files… | **Missing** | Easy, once artboards exist | P3 |
-| Export › Artboards to PDF… | **Missing** | Moderate: a small PDF writer holding a JPEG or Flate image | P3 |
-| Export › Layers to Files… | **Missing** | Easy: useful for game and demo assets | P2 |
+| Export › Artboards to PDF… | **Missing**: Easel writes a one-page PDF (1.1) but has no artboards | Easy, once artboards exist | P3 |
+| Export › Layers to Files… | **Have** (0.6) | Done | — |
 | Export › Layer Comps to Files… | **Missing** | Easy, once layer comps exist | P3 |
-| Export › Color Lookup Tables… (.cube) | **Missing** | Easy, once adjustment layers exist | P3 |
+| Export › Color Lookup Tables… (.cube) | **Missing** | Easy: the adjustment layers exist | P3 |
 | Export › Data Sets as Files… | **Missing** | Moderate | P3 |
-| Export › Paths to Illustrator… | **Missing** | Easy, once paths exist (a text EPS/AI writer) | P3 |
-| Export › Render Video… | **Missing** | Not sensible for MP4 or H.264 on a 68040. Stand-in: write an IFF ANIM (section 21) | P3 |
+| Export › Paths to Illustrator… | **Have** (1.1) as SVG: Export › Paths to SVG, with the shape layers and the document's bounds | Done | — |
+| Export › Render Video… | **Have** (1.1) as the Amiga's and the web's animations: Export › Layers as IFF ANIM and Layers as Animated GIF (MP4 and H.264 are **Left out**: far too slow on a 68040) | Done | — |
 | Generate › Image Assets | **Missing** | Easy | P3 |
-| Place Embedded… `file.placeEmbedded` | **Partial**: Place as Layer rasterises the picture at once; there's no transform on placing and no smart object | Easy | P2 |
+| Place Embedded… `file.placeEmbedded` | **Partial** (0.6): Place as Layer goes on into Free Transform; there's no smart object | Moderate (smart objects) | P3 |
 | Place Linked… | **Missing** | Moderate | P3 |
 | Package… | **Missing** | Easy | P3 |
-| Automate › Batch… | **Missing** | Moderate: needs actions | P2 |
+| Automate › Batch… | **Partial**: EaselConvert (Shell) converts, resizes and reduces colours in batches; there are no actions to run | Moderate: needs actions | P2 |
 | Automate › Create Droplet… | **Missing** | Easy. Amiga stand-in: a Workbench tool icon that runs an action on the files dropped on it | P3 |
 | Automate › Crop and Straighten Photos | **Missing** | Moderate (`algo/src/scancrop.rs`) | P3 |
 | Automate › Contact Sheet II… | **Missing** | Easy | P3 |
 | Automate › Conditional Mode Change… | **Missing** | Easy | P3 |
-| Automate › Fit Image… | **Missing** | Easy | P3 |
-| Automate › Lens Correction… | **Missing** | Moderate | P3 |
+| Automate › Fit Image… | **Have** (1.1): File › Scripts › Fit Image (`doc_fit_image`) | Done | — |
+| Automate › Lens Correction… | **Missing** (Filter › Lens Correction exists, 1.0) | Easy, once batches run filters | P3 |
 | Automate › Merge to HDR Pro… | **Missing** | Hard: float stacks of several exposures overflow 16-64 MB | P3 |
 | Automate › Photomerge… | **Missing** | Hard: feature matching and warping take too much CPU and RAM (`algo/src/panorama.rs`) | P3 |
-| Scripts › Image Processor… (batch convert and resize) | **Missing** | Easy: the ADPro-style batch converter Amiga users expect | P2 |
-| Scripts › Delete All Empty Layers | **Missing** | Easy | P3 |
+| Scripts › Image Processor… (batch convert and resize; the open documents as a source, #12858) | **Partial**: EaselConvert does it from the Shell; there's no window for it | Easy | P2 |
+| Scripts › Delete All Empty Layers | **Have** (1.1): one undo step (`doc_delete_empty_layers` in `E:core/scripts.c`) | Done | — |
 | Scripts › Flatten All Layer Effects | **Missing** | Easy, once effects exist | P3 |
-| Scripts › Flatten All Masks | **Missing** | Easy, once masks exist | P3 |
+| Scripts › Flatten All Masks | **Have** (1.1): one undo step (`doc_flatten_all_masks`) | Done | — |
 | Scripts › Script Events Manager… | **Missing** | Easy if it only runs actions on events (open, save) | P3 |
-| Scripts › Load Files into Stack… | **Missing** | Easy: opens files as layers | P2 |
+| Scripts › Load Files into Stack… | **Have** (0.6) | Done | — |
 | Scripts › Statistics… (stack modes) | **Missing** | Moderate | P3 |
 | Scripts › Browse… (run a script) | **Excluded** by request: the Amiga script host is ARexx | — | — |
 | Import › Variable Data Sets… | **Missing** | Moderate | P3 |
-| Import › Video Frames to Layers… | **Missing** | Moderate. Amiga stand-in: IFF ANIM frames to layers | P2 |
+| Import › Video Frames to Layers… | **Have** (1.1): File › Import Frames to Layers, every frame of an animated GIF or IFF ANIM a layer, its time in the name | Done | — |
 | Import › Notes… | **Missing** | Easy | P3 |
-| Import › WIA Support… | **Missing** | Not sensible: WIA is the Windows scanner API. Stand-in: open from an Amiga scanner program's output, or a datatype | P3 |
-| File Info… (XMP/IPTC/EXIF metadata) | **Missing** | Easy: keep it in PNG tEXt and IFF ANNO/AUTH/(c)/NAME chunks | P2 |
+| Import › WIA Support… | **Left out**: WIA is the Windows scanner API (datatypes and a scanner program's files stand in) | Not sensible | — |
+| File Info… (XMP/IPTC/EXIF metadata) | **Have** (0.6): six fields, kept in PNG, JPEG, TIFF, PSD, ORA and (1.1) PDF | Done | — |
+| File Info: a copyrighted picture shows © before its name in the tab and title (#13985) | **Missing** | Easy | P3 |
 | Print… | **Excluded** by request | — | — |
 | Print One Copy | **Excluded** by request | — | — |
 | Exit `file.exit` | **Have**: Quit | Done | — |
 
 ### 2.2 Edit (Edit › Preferences is in section 17)
 
+Re-checked 2026-11-18 (Easel 1.1).
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Undo `edit.undo` | **Have**: names the step, with a 40 MB budget (`E:core/doc.h` `UNDO_BUDGET`) | Done | — |
+| Undo `edit.undo` | **Have**: names the step; levels and memory are preferences, older steps can go to a scratch drawer (0.8) | Done | — |
 | Redo `edit.redo` | **Have** | Done | — |
-| Toggle Last State `edit.toggleLastState` | **Missing** | Easy | P2 |
-| Fade… `edit.fade` | **Missing** | Easy: blend the last step's result with the undo copy | P2 |
-| Cut `edit.cut` | **Have**: Easel's own clipboard | Done | — |
-| Copy `edit.copy` | **Have**: own clipboard | Done | — |
+| Toggle Last State `edit.toggleLastState` | **Have** (0.6) | Done | — |
+| Fade… `edit.fade` (with every blend mode, #13852) | **Have** (0.6): opacity and every blend mode (`doc_fade`) | Done | — |
+| Cut `edit.cut` | **Have**: Easel's clipboard and the Amiga's (0.6) | Done | — |
+| Copy `edit.copy` | **Have**: Easel's and the Amiga's | Done | — |
 | Copy Merged `edit.copyMerged` | **Have** | Done | — |
-| Paste `edit.paste` | **Partial**: only from Easel's own clipboard; there's no clipboard.device or iffparse exchange (see section 21) | Easy | P1 |
+| Paste `edit.paste` | **Have** (0.6): from Easel's clipboard, else the Amiga's (iffparse); Paste from Amiga Clipboard too | Done | — |
 | Paste Special › Paste in Place | **Have** | Done | — |
-| Paste Special › Paste Into (with a mask) | **Missing** | Easy, once layer masks exist | P2 |
-| Paste Special › Paste Outside | **Missing** | Easy, once layer masks exist | P3 |
+| Paste Special › Paste Into (with a mask) | **Have** (0.3) | Done | — |
+| Paste Special › Paste Outside | **Missing** | Easy | P3 |
 | Clear `edit.clear` | **Have** | Done | — |
 | Search… (command palette, ⌘F) | **Missing** | Easy: a MUI list of the menu commands, filtered as you type | P3 |
-| Check Spelling… | **Missing** | Moderate: needs dictionaries | P3 |
-| Find and Replace Text… | **Missing** | Easy, once type layers exist | P3 |
-| Fill… `edit.fill`: Foreground/Background/Color/Pattern/History/Black/50% Gray/White/Content-Aware, Mode, Opacity, Preserve Transparency | **Partial**: colour, mode and opacity; Pattern, History, Content-Aware and Preserve Transparency are missing | Easy | P2 |
+| Check Spelling… | **Missing** | Moderate: needs dictionaries (Quill's could be shared) | P3 |
+| Find and Replace Text… | **Missing** | Easy: type layers exist (0.9) | P3 |
+| Fill… `edit.fill`: Foreground/Background/Color/Pattern/History/Black/50% Gray/White/Content-Aware, Mode, Opacity, Preserve Transparency | **Partial**: foreground, background, black, 50% grey, white or a colour, with mode and opacity; the pattern through Edit › Fill with Pattern (0.5). History, Content-Aware and Preserve Transparency are missing | Easy | P3 |
 | Stroke… `edit.stroke`: width, colour, location, mode, opacity, preserve transparency | **Partial**: width, inside, centre or outside, and opacity; Mode and Preserve Transparency are missing | Easy | P3 |
-| Content-Aware Fill… | **Missing** | Hard: PatchMatch at a reduced size takes minutes | P3 |
+| Content-Aware Fill… | **Missing** (the Spot Healing Brush, 1.0, does small areas) | Hard: PatchMatch at a reduced size takes minutes | P3 |
 | Content-Aware Scale | **Missing** | Moderate: seam carving (`algo/src/seam.rs`) | P3 |
 | Puppet Warp | **Missing** | Hard: an interactive mesh deformation | P3 |
 | Perspective Warp | **Missing** | Hard | P3 |
-| Free Transform `edit.freeTransform`: on-canvas handles, scale, rotate, skew, distort, perspective, reference point, warp | **Partial**: a dialog that scales and rotates by numbers (`transform_layer` in `E:core/paint.h`); handles on the canvas, skew, distort and perspective are missing | Moderate: preview a proxy at screen resolution and resample on Return | P1 |
-| Transform › Again | **Missing** | Easy | P2 |
-| Transform › Scale | **Partial**: by numbers, through Free Transform | Easy | P1 |
-| Transform › Rotate | **Partial**: by numbers, through Free Transform | Easy | P1 |
-| Transform › Skew | **Missing** | Easy: an affine matrix, which `transform_layer` already takes | P2 |
-| Transform › Distort | **Missing** | Moderate: projective | P2 |
-| Transform › Perspective | **Missing** | Moderate | P2 |
-| Transform › Warp (bend presets and mesh) | **Missing** | Hard | P3 |
+| Free Transform `edit.freeTransform`: on-canvas handles, scale, rotate, skew, distort, perspective, reference point, warp | **Have** (0.7): on the canvas with handles; warp is missing (below) | Done | — |
+| Transform › Again | **Have** (0.7) | Done | — |
+| Transform › Scale | **Have** (0.7) | Done | — |
+| Transform › Rotate | **Have** (0.7) | Done | — |
+| Transform › Skew | **Have** (0.7) | Done | — |
+| Transform › Distort | **Have** (0.7) | Done | — |
+| Transform › Perspective | **Have** (0.7) | Done | — |
+| Transform › Warp (bend presets and mesh) | **Missing** (type layers have Warp Text's 15 styles) | Hard | P3 |
 | Transform › Split Warp Horizontally/Vertically/Crosswise, Remove Warp Split (4 items) | **Missing** | Hard | P3 |
 | Transform › Rotate 180° | **Have** | Done | — |
 | Transform › Rotate 90° Clockwise | **Have** | Done | — |
@@ -286,21 +292,21 @@ Items handled elsewhere in this document are listed in "How to read this".
 | Transform › Flip Vertical | **Have** | Done | — |
 | Auto-Align Layers… | **Missing** | Hard | P3 |
 | Auto-Blend Layers… | **Missing** | Hard | P3 |
-| Define Brush Preset… | **Missing** | Easy: the selection becomes a greyscale tip (and a DPaint-style brush, section 21) | P1 |
-| Define Pattern… | **Missing** | Easy | P2 |
-| Define Custom Shape… | **Missing** | Easy, once paths exist | P3 |
+| Define Brush Preset… | **Have** (0.5), and Pick Up Brush for DPaint brushes | Done | — |
+| Define Pattern… | **Have** (0.5) | Done | — |
+| Define Custom Shape… | **Partial**: any saved path is drawn by the Custom Shape tool (0.9); there's no shape library to add it to | Easy | P3 |
 | Purge › Undo | **Have**: Purge Undo History | Done | — |
 | Purge › Clipboard | **Missing** | Easy | P3 |
 | Purge › Histories (every document) | **Partial**: only the current document's history can be purged | Easy | P3 |
-| Purge › Video Cache | **Missing** | Not sensible: Easel has no video | P3 |
+| Purge › Video Cache | **Left out**: Easel has no video cache | Not sensible | — |
 | Purge › All | **Missing** | Easy | P3 |
-| Presets › Preset Manager… | **Missing** | Easy | P3 |
-| Presets › Migrate Presets | **Missing** | Not sensible: it imports from an older desktop install | P3 |
-| Presets › Export/Import Presets… | **Missing** | Easy | P3 |
+| Presets › Preset Manager… | **Missing** (brushes, gradients, patterns and swatches each load and save their own) | Easy | P3 |
+| Presets › Migrate Presets | **Left out**: it imports from an older desktop install | Not sensible | — |
+| Presets › Export/Import Presets… | **Partial**: each kind loads and saves on its own (0.5, 1.0 adjustment presets) | Easy | P3 |
 | Color Settings… (working spaces, policies) | **Missing** | Moderate, once there's a CMS | P3 |
 | Assign Profile… | **Missing** | Moderate | P3 |
 | Convert to Profile… (4 intents, BPC) | **Missing** | Moderate: matrix/TRC profiles are cheap, CLUT profiles slower | P3 |
-| Keyboard Shortcuts… (+ .kys) | **Missing** | Easy: a MUI list editor saved in `Easel.prefs` | P2 |
+| Keyboard Shortcuts… (+ .kys) | **Have** (0.8): Edit › Keyboard Shortcuts, PROGDIR:Easel.keys (.kys isn't read) | Done | — |
 | Menus… (hide or colour items) | **Missing** | Moderate: items can be hidden, but Intuition menus have no colours | P3 |
 | Toolbar… (customise the toolbox) | **Missing** | Easy | P3 |
 
@@ -376,10 +382,12 @@ Items handled elsewhere in this document are listed in "How to read this".
 
 ### 2.5 View (Proof Setup, Proof Colors, Gamut Warning and 32-bit preview are in section 11)
 
+Re-checked 2026-11-18 (Easel 1.1).
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Missing** | Easy: draw the canvas stretched by the ratio. Very relevant on the Amiga, where PAL/NTSC lores and hires-interlace pixels aren't square; add Amiga presets | P1 |
-| Pixel Aspect Ratio Correction (toggle) | **Missing** | Easy | P1 |
+| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Partial**: a picture's pixel aspect is kept and set from its Amiga screen mode (Image › Amiga Screen Mode, ILBM's BMHD), but the canvas always draws square pixels and there are no video presets | Easy: a vertical zoom of its own in `E:amiga/canvas.c` (to_iy/to_sy and the rows drawn). Very relevant on the Amiga, where PAL/NTSC lores and hires-interlace pixels aren't square | P1 |
+| Pixel Aspect Ratio Correction (toggle) | **Missing** | Easy, with the above | P1 |
 | Zoom In | **Have** | Done | — |
 | Zoom Out | **Have** | Done | — |
 | Fit on Screen | **Have** | Done | — |
@@ -389,31 +397,33 @@ Items handled elsewhere in this document are listed in "How to read this".
 | 200% | **Have** (Easel adds 50%) | Done | — |
 | Print Size | **Missing** | Easy (zoom to the dpi) | P3 |
 | Flip Horizontal (the view only) | **Missing** | Moderate: mirror the rows as they're drawn | P3 |
-| Screen Mode › Standard, Full Screen With Menu Bar, Full Screen (3 items) | **Partial**: a window on a public screen (`PUBSCREEN=`); a borderless backdrop window or Easel's own screen are missing | Easy: open its own screen through a ScreenMode requester | P2 |
-| Extras (toggle all overlays) | **Missing** | Easy | P2 |
+| Screen Mode › Standard, Full Screen With Menu Bar, Full Screen (3 items) | **Have** (0.8): View › Screen Mode: in a window, on Easel's own screen, or full screen in any mode | Done | — |
+| Extras (toggle all overlays) | **Missing** (Tab hides the panels, which is something else) | Easy | P2 |
 | Show › Layer Edges | **Missing**: `ID_SHOWEDGES` is defined in `E:amiga/ids.h` but never used | Easy | P3 |
 | Show › Selection Edges | **Missing**: the marching ants can't be hidden | Easy | P3 |
-| Show › Grid | **Missing** | Easy | P1 |
-| Show › Guides / Canvas Guides (2 items) | **Missing** | Easy | P1 |
+| Show › Grid | **Have** (0.4) | Done | — |
+| Show › Guides / Canvas Guides (2 items) | **Have** (0.4) | Done | — |
 | Show › Pixel Grid | **Missing** | Easy: the pixel-art grid at high zoom | P2 |
-| Show › Target Path, Artboard Guides, Count, Smart Guides, Slices, Notes, Brush Preview, Mesh, Edit Pins, All, Show Extras Options (11 items) | **Missing** | Easy to Moderate, each with its feature | P3 |
-| Rulers | **Missing** | Easy | P1 |
-| Snap | **Missing** | Easy | P1 |
-| Snap To › Guides, Grid, Layers, Slices, Document Bounds, All (6 items) | **Missing** | Easy | P2 |
-| Lock Guides, Clear Guides, Clear Selected Artboard Guides, Clear Canvas Guides, New Guide…, New Guide Layout…, New Guides From Shape (7 items) | **Missing** | Easy | P1 |
+| Show › Target Path, Artboard Guides, Count, Smart Guides, Slices, Notes, Brush Preview, Mesh, Edit Pins, All, Show Extras Options (11 items) | **Missing** (the active path always shows) | Easy to Moderate, each with its feature | P3 |
+| Rulers | **Have** (0.4) | Done | — |
+| Snap | **Have** (0.4) | Done | — |
+| Snap To › Guides, Grid, Layers, Slices, Document Bounds, All (6 items) | **Partial** (1.1): View › Snap To › Guides, Grid, Document Bounds, Centre Lines and Pixels; Layers and Slices are missing | Easy (layers) | P3 |
+| Lock Guides, Clear Guides, Clear Selected Artboard Guides, Clear Canvas Guides, New Guide…, New Guide Layout…, New Guides From Shape (7 items) | **Partial**: New Guide and Clear Guides (0.4), Lock Guides (1.1); New Guide Layout and New Guides From Shape are missing (no artboards) | Easy | P2 |
 | Lock Slices / Clear Slices (2 items) | **Missing** | Easy | P3 |
 | Pattern Preview (tiles the document) | **Missing** | Easy: handy for Workbench backdrop patterns | P2 |
 | Pixel Art Preview | **Missing** | Easy | P2 |
 
 ### 2.6 Window › Arrange and Workspace (the panels are in section 15)
 
+Re-checked 2026-11-18 (Easel 1.1): unchanged since 0.2 apart from the rows' notes.
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Arrange › Tile All Vertically/Horizontally, 2-up, 3-up, 4-up, 6-up, Cascade, Tile (11 items) | **Missing**: one canvas, with tabs | Moderate: several canvas objects or windows | P3 |
+| Arrange › Tile All Vertically/Horizontally, 2-up, 3-up, 4-up, 6-up, Cascade, Tile (11 items; borders between them dragged, #10695) | **Missing**: one canvas, with tabs | Moderate: several canvas objects or windows | P3 |
 | Arrange › Consolidate All to Tabs | **Have**: Easel only has tabs | Done | — |
 | Arrange › Float in Window / Float All in Windows / New Window for Document (3 items) | **Missing** | Moderate | P3 |
 | Arrange › Match Zoom / Location / Rotation / All (4 items) | **Missing** | Easy | P3 |
-| Workspace › Essentials, Photography, Painting, Pixel Art, Graphic and Web, Motion (6 items) | **Missing** | Moderate: needs dockable panels | P3 |
+| Workspace › Essentials, Photography, Painting, Pixel Art, Graphic and Web, Motion (6 items) | **Missing** (Tab and Shift-Tab hide the panels) | Moderate: needs dockable panels | P3 |
 | Workspace › Reset, New, Delete, Lock Workspace (4 items; Keyboard Shortcuts… repeats Edit's) | **Missing** | Moderate | P3 |
 
 ## 3. Layers: types, masks, groups, clipping, styles and effects, smart objects, adjustment layers
@@ -786,93 +796,107 @@ PhotoCraft's engine is `crates/paint` (BRUSH; `dynamics.rs`, `render.rs`, `mixer
 ## 9. Type and text
 
 PhotoCraft's model is `TextLayer` in DOC and TXT, with commands in `engine/src/cmd/type_*`. Easel's
-is `text_layer` in `E:core/text.h`: TrueType text drawn by Easel's own rasteriser (`E:core/ttraster.c`), with fonts from `FONTS:`
-(through `.otag` files) or Easel's own Fonts and TrueType drawers. It is rendered once into a new
-pixel layer.
+(0.9) is the type layer in `E:core/type.h`: a `TextParams` (UTF-8 text in style runs, point or
+paragraph text, alignment, leading, indents, warp, a transform) drawn by the compositor whenever it
+is wanted, edited on the canvas with a caret (`E:amiga/canvas.c`), with the Character, Paragraph
+and Warp Text dialogs in `E:amiga/typedlg.c`. Fonts are TrueType/OpenType (`E:core/ttraster.c`)
+or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Editable type layers, edited on the canvas with a caret (`type_caret_cmds.rs`) | **Missing**: the text is rasterised when committed, and "\|" starts a new line | Moderate: keep the string and style, and re-render a layer when it changes | P1 |
-| Font families and styles: weight, italic, PostScript name, variable axes, font library and favourites | **Partial**: chooses a TrueType family; style and weight selection, variable fonts and favourites are missing | Easy (styles); Moderate (variable fonts) | P2 |
-| Faux Bold and Faux Italic | **Missing** | Easy | P3 |
-| Size | **Have** (4-1000 px) | Done | — |
-| Leading | **Missing**: the line spacing is fixed | Easy | P2 |
-| Tracking, and kerning metric/optical/manual | **Missing** | Easy (tracking, kern-table metric); Moderate (optical) | P2 |
-| Baseline shift, horizontal and vertical scale | **Missing** | Easy | P3 |
-| Underline and strikethrough | **Missing** | Easy | P2 |
-| All Caps, Small Caps, superscript and subscript (`Caps`, `FontBaseline`) | **Missing** | Easy | P3 |
-| Colour per character run (`TextRun`) | **Missing**: one colour for the whole text | Easy | P2 |
+| Editable type layers, edited on the canvas with a caret (`type_caret_cmds.rs`) | **Have** (0.9): `LK_TEXT`, `text_hit`, `text_caret_move`, Shift and the arrows select, Esc finishes | Done | — |
+| Font families and styles: weight, italic, PostScript name, variable axes, font library and favourites | **Partial**: family, bold and italic faces per run (`TextRun`); variable fonts draw at their default design (`cff2` in `E:core/ttraster.h`); weights beyond bold, axes and favourites are missing | Easy (weights); Moderate (variable axes) | P3 |
+| Faux Bold and Faux Italic | **Have** (0.9): `faux_bold`, `faux_italic` | Done | — |
+| Size | **Have** (1-2000 px a run) | Done | — |
+| Leading | **Have** (0.9): `leading`, auto or pixels | Done | — |
+| Tracking, and kerning metric/optical/manual | **Partial**: tracking per run and the font's kerning pairs (`kern`, `text_kern`); optical and manual kerning are missing | Moderate (optical) | P3 |
+| Baseline shift, horizontal and vertical scale | **Partial**: baseline shift per run; horizontal and vertical scale are missing | Easy | P3 |
+| Underline and strikethrough | **Have** (0.9) | Done | — |
+| All Caps, Small Caps, superscript and subscript (`Caps`, `FontBaseline`) | **Missing** (size and baseline shift can be set by hand) | Easy: per-glyph size in the layout (`E:core/type.c`) | P3 |
+| Colour per character run (`TextRun`) | **Have** (0.9) | Done | — |
 | Alignment Left/Center/Right | **Have** | Done | — |
-| Justify Left/Center/Right/All (`TextAlign`) | **Missing** | Easy | P3 |
-| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Missing** | Easy (indents); Moderate (hyphenation) | P3 |
-| Paragraph text in a box with wrapping (`TextShape::Box`) | **Missing** | Easy | P2 |
-| Type on a path (`TextShape::Path`) | **Missing** | Moderate: needs paths | P3 |
+| Justify Left/Center/Right/All (`TextAlign`) | **Partial**: `TA_JUSTIFY` (last line left) and `TA_JUSTIFY_ALL`; last line centred or right is missing | Easy | P3 |
+| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Partial**: first-line indent and space before and after (`indent`, `space_before`, `space_after`); left/right indents and hyphenation are missing | Easy (indents); Moderate (hyphenation) | P3 |
+| Paragraph text in a box with wrapping (`TextShape::Box`) | **Have** (0.9): drag a box with the Type tool | Done | — |
+| Type on a path (`TextShape::Path`) | **Missing** | Moderate: paths exist (`E:core/path.h`) | P3 |
 | Area type (`TextShape::Area`) | **Missing** | Moderate | P3 |
-| Type › Orientation › Horizontal / Vertical (2 items) | **Missing** (horizontal only) | Moderate | P3 |
-| Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Partial**: an on/off tick. On the Amiga, None/Sharp/Smooth would do; the LCD modes aren't sensible | Easy | P3 |
-| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Missing** | Moderate: GSUB parsing in `ttraster.c` | P3 |
-| Type › Panels › Character, Paragraph, Glyphs, Character Styles, Paragraph Styles (5 items; the panels are rated in section 15) | **Missing** | Easy to Moderate | P2 |
-| Type › Create Work Path | **Missing** | Easy once paths exist: `ttraster.c` already has the glyph outlines | P3 |
-| Type › Convert to Shape | **Missing** | Easy, once shape layers exist | P3 |
-| Type › Rasterize Type Layer | **Missing**: everything is already rasterised; needed once type layers exist | Easy | P1 |
+| Type › Orientation › Horizontal / Vertical (2 items) | **Have** (0.9): Layer › Type › Horizontal / Vertical, the Vertical Type tool | Done | — |
+| Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Have** for the Amiga's three: None, Sharp (hinted) and Smooth (`TAA_`); Crisp and Strong are missing; the Windows ones are **Left out** (they are Windows' own rendering) | Easy (Crisp, Strong) | P3 |
+| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Missing**: no GSUB lookups | Moderate: GSUB parsing in `ttraster.c` | P3 |
+| Type › Panels › Character, Paragraph, Glyphs, Character Styles, Paragraph Styles (5 items; the panels are rated in section 15) | **Partial**: Character and Paragraph are dialogs (Layer › Type); Glyphs and the style panels are missing | Easy to Moderate | P3 |
+| Type › Create Work Path | **Have** (0.9): `text_to_path` | Done | — |
+| Type › Convert to Shape | **Missing** (Create Work Path, then a Custom Shape from it, does the same in two steps) | Easy | P3 |
+| Type › Rasterize Type Layer | **Have** (0.9) | Done | — |
 | Type › Convert to Paragraph Text / Convert to Point Text (2 items) | **Missing** | Easy | P3 |
-| Type › Warp Text… (Arc, Arc Lower and Upper, Arch, Bulge, Shell Lower and Upper, Flag, Wave, Fish, Rise, Fisheye, Inflate, Squeeze, Twist; `TextWarp`) | **Missing** | Moderate: a mesh warp of the rendered text | P2 |
+| Type › Warp Text… (Arc, Arc Lower and Upper, Arch, Bulge, Shell Lower and Upper, Flag, Wave, Fish, Rise, Fisheye, Inflate, Squeeze, Twist; `TextWarp`) | **Have** (0.9; 1.1 added Arc Lower and Upper, Shell Lower and Upper, Fisheye and Inflate): all 15, with bend and both distortions (`map_pt` in `E:core/type.c`). The Vertical direction is kept but drawn as horizontal | Done | — |
 | Type › Font Preview Size › Small…Huge (5 items) | **Missing** | Easy | P3 |
 | Type › Language Options › Default, East Asian, Middle Eastern, Middle Eastern & South Asian composer (4 items) | **Missing** | Hard: complex shaping and RTL text | P3 |
-| Type › Update All Text Layers | **Missing** | Easy | P3 |
-| Type › Replace All Missing Fonts / Resolve Missing Fonts… (2 items) | **Missing** | Easy | P3 |
-| Type › Paste Lorem Ipsum | **Missing** | Easy | P3 |
+| Type › Update All Text Layers | **Missing** (type layers are drawn from their settings, but nothing redraws them all after the fonts change) | Easy | P3 |
+| Type › Replace All Missing Fonts / Resolve Missing Fonts… (2 items) | **Partial**: a missing family is substituted automatically (`E:core/fonts.h`); there's no dialog to choose the replacement | Easy | P3 |
+| Type › Paste Lorem Ipsum | **Have** (1.1): Layer › Type › Paste Lorem Ipsum, into the active type layer or as a new paragraph (`lorem_ipsum` in `E:core/scripts.c`) | Done | — |
 | Type › Load / Save Default Type Styles (2 items) | **Missing** | Easy | P3 |
+| Type options bar: a list of preset font sizes (PhotoCraft #12718, since eb6c1ab) | **Missing**: the size is a slider | Easy | P3 |
+| Type options bar: a button showing the Character and Paragraph panels (#13020) | **Missing** | Easy | P3 |
+| Cmd-. (Ctrl-.) cancels a type editing session (#12076) | **Partial**: Esc finishes editing; there's no key that throws the edit away (Undo does) | Easy | P3 |
 
 ## 10. Vector paths and shapes
 
 PhotoCraft's model is VEC (`Path`, `Subpath`, `LiveShape`, `ShapeStroke`), with commands in
-`engine/src/cmd/vector_cmds.rs` and `path_edit_cmds.rs`. Easel has pixel shapes only
-(`shape_rect`, `shape_ellipse` and `shape_line` in `E:core/paint.h`).
+`engine/src/cmd/vector_cmds.rs` and `path_edit_cmds.rs`. Easel's (0.9) are Bézier paths
+(`E:core/path.h`: the work path and saved paths, the Pen and selection tools, the Paths panel),
+their operations (`E:core/pathops.h`) and shape layers (`E:core/shape.h`), drawn by the compositor
+whenever wanted. Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Bézier paths: subpaths, path operations, fill rule, work path and saved paths | **Missing** | Moderate | P2 |
-| Fill Path (with a colour, pattern or history) | **Missing** | Easy: Easel's polygon fill (`sel_polygon`) with the curves flattened | P2 |
-| Stroke Path (with a painting tool, simulated pressure) | **Missing** | Easy: run `stroke_to` along the flattened path | P2 |
-| Path to selection (`path.toSelection`) | **Missing** | Easy | P2 |
-| Selection to work path (tolerance) | **Missing** | Moderate | P3 |
-| Shape layers: resolution-independent, solid/gradient/pattern fill, stroke width, dashes, align inside/centre/outside, caps, joins (`StrokeAlign`, `LineCap`) | **Missing** | Moderate: re-render on edit, cached as pixels | P2 |
-| Live shape properties: per-corner radii, polygon sides and star ratio, editing in Properties | **Missing** | Easy | P3 |
+| Bézier paths: subpaths, path operations, fill rule, work path and saved paths | **Have** (0.9) | Done | — |
+| Fill Path (with a colour, pattern or history) | **Partial**: with a colour, opacity and mode (`path_fill`); pattern and history fills are missing | Easy | P3 |
+| Stroke Path (with a painting tool, simulated pressure) | **Have** (0.9): `path_stroke` with the brush and simulated pressure | Done | — |
+| Path to selection (`path.toSelection`) | **Have** (0.9): `path_to_selection` with the four operations, feather and anti-alias | Done | — |
+| Selection to work path (tolerance) | **Have** (0.9): `path_from_selection` | Done | — |
+| Shape layers: resolution-independent, solid/gradient/pattern fill, stroke width, dashes, align inside/centre/outside, caps, joins (`StrokeAlign`, `LineCap`) | **Partial** (0.9): solid fill and stroke with opacity, width, dashes, alignment, caps, joins and miter limit; gradient and pattern fills are missing | Easy | P2 |
+| Live shape properties: per-corner radii, polygon sides and star ratio, editing in Properties | **Partial**: Shape Properties edits one corner radius, polygon sides, star indent and angle, line arrowheads; per-corner radii are missing | Easy | P3 |
 | Layer › Combine Shapes › Unite Shapes, Subtract Front Shape, Intersect Shape Areas, Exclude Overlapping Shapes, Merge Shape Components (5 items) | **Missing** | Moderate: polygon boolean operations | P3 |
-| Custom shape library (built-ins and Shapes panel; PhotoCraft can't read .csh either) | **Missing** | Easy, once shapes exist | P3 |
-| Anti-aliased pixel shapes (the Pixels mode) | **Have**: rectangle with radius, ellipse, line | Done | — |
-| Snap vector tools and transforms to the pixel grid (preference) | **Missing** | Easy | P3 |
+| Custom shape library (built-ins and Shapes panel; PhotoCraft can't read .csh either) | **Partial**: the Custom Shape tool draws the active path (any saved path is a shape); there's no built-in library or Shapes panel | Easy | P3 |
+| Anti-aliased pixel shapes (the Pixels mode) | **Have**: every shape tool can draw pixels (or a path) instead of a layer | Done | — |
+| Snap vector tools and transforms to the pixel grid (preference) | **Have** (0.4, 1.1 in the menu): View › Snap To › Pixels (`SNAP_PIXEL` in `E:core/guides.h`) | Done | — |
+| Export › Paths to Illustrator / paths to a file, with Document Bounds (#14068 since eb6c1ab) | **Have** (1.1) as SVG: File › Export › Paths to SVG writes the saved paths, the work path and every shape layer (fill, stroke, opacity), and the document's bounds as a frame (`svg_write_paths` in `E:core/svg.c`). An Illustrator .ai isn't written | Done | — |
+| Shapes from an SVG drawing (`io::svg` as shape layers or a vector smart object) | **Partial** (1.1): an SVG opens as editable shape layers: paths, rectangles, circles, ellipses, lines, polylines and polygons, in groups, with transforms, fill, stroke, opacity and the viewBox (`svg_load_doc`). Text, images, gradients, CSS classes, clipping and filters are left out; there's no vector smart object | Moderate | P3 |
+| Path mode for the Shape tools (#9453) | **Have** (0.9): each shape tool draws a shape layer, a path or pixels | Done | — |
 
 ## 11. Colour management, colour modes and bit depths
 
 PhotoCraft's model is `ColorMode` in `crates/color/src/lib.rs`, with the depth as runtime data.
 Image › Mode is CAT `image.mode.*`, colour management is `crates/cms`, and indexed conversion is
-QNT. Easel has one mode: 8-bit RGBA, with no profiles. It shows pictures on RTG screens exactly,
-or dithered to a colour cube on AGA and ECS.
+QNT. Easel (0.4) has RGB, Grayscale, Indexed and Bitmap documents (`MODE_` in `E:core/doc.h`,
+conversion in `E:core/palette.c`), all 8 bits a channel, with no colour profiles. It shows pictures
+on RTG screens exactly, or dithered to a colour cube on AGA and ECS (an indexed picture with its
+own palette). Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Mode › Bitmap (50% threshold, pattern dither, diffusion, halftone screen, custom pattern; QNT 1-bit methods) | **Missing** | Easy: useful for 1-bit icons, fonts and masks | P2 |
-| Mode › Grayscale (a single-channel document) | **Missing**: only Desaturate | Moderate: 2 bytes a pixel with alpha saves memory | P2 |
-| Mode › Duotone (mono, duo, tri, quadtone with curves) | **Missing** | Moderate | P3 |
-| Mode › Indexed Color: palettes Exact, System (Mac OS), System (Windows), Web, Uniform, Perceptual, Selective, Adaptive, Custom, Previous; forced colours; transparency; matte; dither None/Diffusion/Pattern/Noise with amount; preserve exact colours | **Partial**: only when exporting an ILBM, as 256 colours by median cut with Floyd-Steinberg (`quantize` in `E:core/ilbm.c`); there's no indexed document mode | Moderate: 1 byte a pixel, a quarter of RGBA's memory. Use the Workbench, MagicWB and AGA default palettes instead of the System (Mac OS) and System (Windows) ones | P1 |
+| Mode › Bitmap (50% threshold, pattern dither, diffusion, halftone screen, custom pattern; QNT 1-bit methods) | **Have** (0.4): 50% Threshold, Pattern Dither, Diffusion Dither and Halftone Screen (`bitmap_names`); a custom pattern is missing | Done | — |
+| Mode › Grayscale (a single-channel document) | **Have** (0.4): `MODE_GRAY`, saved as grey PNG, TIFF, Targa, PGM and PDF | Done | — |
+| Mode › Duotone (mono, duo, tri, quadtone with curves) | **Missing** (Photoshop duotones open as their grey composite) | Moderate | P3 |
+| Mode › Indexed Color: palettes Exact, System (Mac OS), System (Windows), Web, Uniform, Perceptual, Selective, Adaptive, Custom, Previous; forced colours; transparency; matte; dither None/Diffusion/Pattern/Noise with amount; preserve exact colours | **Have** (0.4): median cut, octree and Wu from the picture, the current palette, Workbench, MagicWB, AGA and web presets instead of the Mac and Windows ones, OCS 12-bit, forced colours, transparency, 12 dithers; exact when the picture has few enough colours. The matte (below) and a dither amount are missing | Done | — |
+| Indexed Color › Matte (#9887 since eb6c1ab): the colour transparent edges are blended against | **Missing** | Easy | P3 |
 | Mode › RGB Color | **Have** | Done | — |
-| Mode › CMYK Color | **Missing** | Moderate: 5 bytes a pixel with alpha | P3 |
-| Mode › Lab Color | **Missing** | Moderate | P3 |
+| Mode › CMYK Color | **Missing** (CMYK JPEG, TIFF and PSD open converted to RGB) | Moderate: 5 bytes a pixel with alpha | P3 |
+| Mode › Lab Color | **Missing** (Lab TIFF and PSD open converted) | Moderate | P3 |
 | Mode › Multichannel | **Missing** | Moderate | P3 |
 | Mode › 8 Bits/Channel | **Have** | Done | — |
-| Mode › 16 Bits/Channel | **Missing**: 16-bit PNG and TIFF are cut to 8 bits on opening | Hard: doubles the memory (24 MB for a 2000 × 1500 layer), and every routine needs a 16-bit path | P3 |
-| Mode › 32 Bits/Channel (float, HDR) | **Missing**: HDR, PFM and float TIFF are tone-mapped on opening | Not sensible: 16 bytes a pixel and slow floats. Stand-in: Easel's tone-map on import, plus an exposure control in the HDR open dialog | P3 |
-| Mode › Color Table… (edit the palette, load and save .act) | **Missing** | Easy: tie it to the palette editor (section 21) | P1 |
+| Mode › 16 Bits/Channel | **Missing**: 16-bit PNG, TIFF and PSD layers are cut to 8 bits on opening | Hard: doubles the memory (24 MB for a 2000 × 1500 layer), and every routine needs a 16-bit path | P3 |
+| Mode › 32 Bits/Channel (float, HDR) | **Left out**: 16 bytes a pixel and slow floats on a 68040; HDR, PFM, float TIFF and FITS are tone-mapped or scaled on opening instead | Not sensible | — |
+| Mode › Color Table… (edit the palette, load and save .act) | **Have** (0.4): Image › Color Table | Done | — |
+| A 1-bit TIFF (or PBM) opens in Bitmap mode (#10539 since eb6c1ab) | **Missing**: it opens as RGB (a 1-bit ILBM opens indexed) | Easy | P3 |
 | ICC profiles kept when opening and saving (PNG iCCP, JPEG APP2, TIFF tag 34675, PSD) | **Missing** | Easy (keep the bytes); Moderate (honour them) | P3 |
 | A pure-code CMS: v2/v4 matrix/TRC and CLUT profiles, 4 intents, black point compensation (`crates/cms`) | **Missing** | Moderate: matrix/TRC transforms through lookup tables are fast; CLUT transforms are slower | P3 |
-| View › Proof Colors (⌘Y), computed on the GPU in PhotoCraft | **Missing** | Not sensible on a GPU. Stand-in: a CPU 3D LUT applied in `draw_rgb` (Moderate) | P3 |
+| View › Proof Colors (⌘Y), computed on the GPU in PhotoCraft | **Missing** | Moderate: a CPU 3D LUT applied as the canvas is drawn | P3 |
 | View › Gamut Warning (⇧⌘Y) | **Missing** | Moderate | P3 |
 | Proof Setup › Custom, Working CMYK and the Cyan/Magenta/Yellow/Black/CMY plates (7 items) | **Missing** | Moderate | P3 |
 | Proof Setup › Legacy Macintosh RGB, Internet Standard RGB, Monitor RGB (3 items) | **Missing** | Easy: gamma 1.8 and 2.2 matrices | P3 |
 | Proof Setup › Color Blindness Protanopia and Deuteranopia (2 items) | **Missing** | Easy: one 3 × 3 matrix each | P3 |
-| View › 32-bit Preview Options… | **Missing** | Not sensible without 32-bit documents | P3 |
+| View › 32-bit Preview Options… | **Left out**: there are no 32-bit documents | Not sensible | — |
 | Monitor profile for the display (`apps/photocraft/src/monitor_profile.rs`) | **Missing** | Moderate. Amiga stand-in: a display gamma preference | P3 |
 
 ## 12. History and undo
@@ -897,20 +921,26 @@ keeps undo steps that save only the changed regions (`doc_note_layer`), within 4
 ## 13. File formats
 
 PhotoCraft's formats are in FMT, FFP and `crates/io` (PSD/PSB, layered TIFF, ORA, PDN, XCF, KRA,
-SVG, `.pcraft`, Affinity, `crates/raw`, `crates/heif`). Easel's are in `E:core/codec.h`
-(`FMT_` and `codec_writable`), and `E:core/rasters.c` and `E:core/amigafmt.c`.
+SVG, `.pcraft`, Affinity, `crates/raw`, `crates/heif`). Easel's readers are in `E:core/codec.h`
+(`FMT_`), `E:core/rasters.c`, `E:core/amigafmt.c`, `E:core/psd.c`, `E:core/ora.c`,
+`E:core/frames.c` (1.1: animation frames) and `E:core/svg.c` (1.1); its writers in `codec.h`,
+`E:core/tiffw.c`, `E:core/tgaw.c`, `psd.c`, `ora.c` and (1.1) `E:core/xwrite.c` and `frames.c`.
+Every writer is read back by Easel's own reader in the native tests and checked by an independent
+one (Pillow, and ImageMagick, poppler and psd-tools where installed: `E:tests/check_*.py`); the
+1.1 readers and writers are also fuzzed with a work bound per file (`E:tests/xwritetest.c`,
+`E:tests/frametest.c`). Re-checked 2026-11-18 (Easel 1.1).
 
 ### 13.1 Read
 
 | Format (PhotoCraft source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| PSD/PSB with layers, groups, masks, effects, text, smart objects, 1-32 bits, every mode (`crates/psd`) | **Partial**: the flattened composite only (`E:core/psd.c`) | Moderate for pixel layers, masks, opacity and modes (groups need section 3); Hard for full fidelity | P2 |
-| TIFF: every page, layered TIFF, 8/16/32f, CMYK/Lab, BigTIFF | **Partial**: the first page, flattened, cut to 8 bits | Easy (more pages); Moderate (layers) | P3 |
-| JPEG: 8-bit Gray/RGB/CMYK, ICC/EXIF/XMP, EXIF orientation (`algo/src/exif.rs`) | **Partial**: baseline and progressive, opened at a reduced size when memory is short; EXIF orientation isn't applied (no `0x0112` handling in `E:core/image.c`) | Easy (orientation) | P2 |
-| PNG: 8/16-bit, palette PNGs as Indexed, APNG first frame, sTER | **Have**: every kind (16 bits keep the high byte) | Done | — |
-| GIF: first frame, and every frame for video layers | **Have**: the first frame | Done | — |
-| BMP (palette BMPs open as Indexed) | **Have** | Done | — |
-| WebP: lossy, lossless, animation's first frame | **Have** | Done | — |
+| PSD/PSB with layers, groups, masks, effects, text, smart objects, 1-32 bits, every mode (`crates/psd`) | **Partial** (0.6): 8- and 16-bit RGB and grey layers with names, opacity, blend modes, visibility, clipping, fill opacity, locks, Blend If, masks (density, feather) and groups; any other kind opens flattened. Effects, type, smart objects (and their filters, such as Puppet Warp, #8140), frame animation (#8633) and CMYK/Lab layers are missing | Moderate (effects); Hard (full fidelity) | P3 |
+| TIFF: every page, layered TIFF, 8/16/32f, CMYK/Lab, BigTIFF | **Partial**: the first page, flattened, cut to 8 bits; every compression and colour space (`E:core/tiff.c`) | Easy (more pages, as layers); Moderate (layers) | P3 |
+| JPEG: 8-bit Gray/RGB/CMYK, ICC/EXIF/XMP, EXIF orientation (`algo/src/exif.rs`) | **Have**: baseline and progressive, grey, RGB and CMYK, turned upright from EXIF (0.6), File Info from XMP and the comment; opened at a reduced size when memory is short. ICC profiles aren't kept (section 11) | Done | — |
+| PNG: 8/16-bit, palette PNGs as Indexed, APNG first frame, sTER | **Partial**: every kind (16 bits keep the high byte, an APNG shows its first frame); a palette PNG opens as RGB, not indexed | Easy | P3 |
+| GIF: first frame, and every frame for video layers | **Have**: the first frame when opened; every frame (with disposal, transparency and times) through File › Import Frames to Layers (1.1) | Done | — |
+| BMP (palette BMPs open as Indexed) | **Have** (palette BMPs open as RGB) | Done | — |
+| WebP: lossless, lossy, animation's first frame | **Have** | Done | — |
 | AVIF (PhotoCraft can't read it, FFP #463) | **Have**: dav1d, 8/10/12-bit, grids; Easel is ahead here | Done | — |
 | HEIF/HEIC (`crates/heif`) | **Missing** | Hard: HEVC decoding takes minutes per photo on a 68040 | P3 |
 | OpenEXR (half and float, deep, Cryptomatte) | **Missing** | Moderate: PIZ and ZIP decoding, then the tone-map Easel uses for HDR | P3 |
@@ -926,56 +956,57 @@ SVG, `.pcraft`, Affinity, `crates/raw`, `crates/heif`). Easel's are in `E:core/c
 | DDS (BC1-BC3 in PhotoCraft) | **Have**: also BC4, BC5 and BC7 | Done | — |
 | QOI | **Have** | Done | — |
 | ICO | **Have**: the biggest picture (also CUR) | Done | — |
-| Amiga IFF ILBM/PBM (PhotoCraft: 1-8 planes, 24-bit) | **Have**: also EHB, HAM6/8, 32-bit deep, ACBM, RGBN/RGB8, DEEP, SHAM/CTBL/PCHG, ANIM's first frame and Workbench icons; Easel is far ahead | Done | — |
-| Camera raw: DNG, CR2, NEF/NRW, ARW, RW2, PEF, ORF, RAF (`crates/raw`) | **Missing** | Hard: a full-size demosaic of 24 MP needs 96 MB. Stand-in: open the embedded JPEG preview (Easy), or demosaic at half size (Moderate) | P3 |
-| SVG as editable shape layers or a vector smart object | **Missing** | Moderate: Easel has an XML parser (`E:core/xml.c`); it needs a path rasteriser | P3 |
-| OpenRaster with groups and masks (`docs/ora.md`) | **Partial**: layers, opacity, modes, visibility and locks; groups are flattened (`E:core/ora.c`) | Easy, once groups exist | P2 |
+| Amiga IFF ILBM/PBM (PhotoCraft: 1-8 planes, 24-bit) | **Have**: also EHB, HAM6/8, 32-bit deep, ACBM, RGBN/RGB8, DEEP, SHAM/CTBL/PCHG, every frame of an ANIM (1.1, op 0 and 5) and Workbench icons; palette pictures open indexed with their cycling; Easel is far ahead | Done | — |
+| Camera raw: DNG, CR2 (and sRAW/mRAW, #7122), NEF/NRW, ARW, RW2, PEF, ORF, RAF (`crates/raw`) | **Missing** | Hard: a full-size demosaic of 24 MP needs 96 MB. Stand-in: open the embedded JPEG preview (Easy), or demosaic at half size (Moderate) | P3 |
+| SVG as editable shape layers or a vector smart object | **Partial** (1.1): opens as shape layers (section 10, `E:core/svg.c`); text, images and gradients are left out | Moderate | P3 |
+| OpenRaster with groups and masks (`docs/ora.md`) | **Have** (0.3): groups, masks, clipping, adjustment, fill, type and shape layers | Done | — |
 | Paint.NET .pdn | **Missing** | Moderate | P3 |
 | GIMP .xcf (layers, groups, masks, channels, selection) | **Missing** | Moderate: tiles with RLE or zlib | P3 |
 | Krita .kra | **Missing** | Moderate: zip, XML and LZF tiles | P3 |
 | Affinity .af/.afphoto/.afdesign/.afpub | **Missing** | Hard | P3 |
 | PhotoCraft .pcraft (native, incremental) | **Missing** | Moderate | P3 |
-| Metadata kept: ICC, EXIF, XMP, text and dpi (FMT caps) | **Partial**: dpi only (PNG pHYs, JPEG JFIF, BMP, ORA, the ILBM DPI chunk) | Easy (keep the blocks) | P3 |
+| Metadata kept: ICC, EXIF, XMP, text and dpi (FMT caps) | **Partial**: dpi, and File Info (title, author, description, keywords, copyright, URL) from PNG text chunks, JPEG XMP and comment, TIFF tags, PSD and ORA (0.6); ICC and EXIF aren't kept | Easy (keep the blocks) | P3 |
+| Open As (a format forced, #14286) | **Missing** | Easy | P3 |
 
 ### 13.2 Write
 
 | Format (PhotoCraft source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| PSD/PSB with layers (`crates/psd`) | **Missing** | Moderate for pixel layers with masks and modes, which is useful for exchange with modern machines | P2 |
-| TIFF: 8/16/32f, none/LZW/ZIP, layered (`tiffCompression`) | **Missing** | Easy (8-bit; none, LZW or PackBits) | P2 |
-| JPEG: quality 0-12 (or 1-100), keeps an opened file's quality, ICC/EXIF | **Have**: quality 1-100, JFIF dpi, 4:4:4 at quality 90 and above | Done | — |
-| PNG: 8/16-bit, gray, palette for Indexed, ICC, text | **Partial**: 8-bit RGB or RGBA only (`png_encode`); palette, gray, 16-bit and text chunks are missing | Easy | P1 |
-| GIF: 256-colour palette | **Missing** | Easy: LZW (its patents have expired); a natural partner for palette work | P1 |
-| BMP (palette BMP for Indexed) | **Have**: 24-bit or 32-bit; palette BMP is missing | Done | — |
-| WebP: lossless, and lossy VP8 | **Missing** | Moderate (lossless); Hard (a lossy VP8 encoder is slow) | P3 |
-| AVIF (optional `avif` feature) | **Missing** | Not sensible: AV1 encoding takes hours on a 68040 | P3 |
-| OpenEXR | **Missing** | Not sensible without float documents | P3 |
+| PSD/PSB with layers (`crates/psd`) | **Have** (0.6): 8-bit RGB with layers, masks, groups, blend modes, File Info and the merged composite (which PhotoCraft's maximizeCompatibility choice, #10001, makes optional); PSB isn't written | Done | — |
+| TIFF: 8/16/32f, none/LZW/ZIP, layered (`tiffCompression`) | **Partial** (0.6): 8-bit RGB(A), grey, palette and 1-bit, uncompressed, PackBits, LZW or Deflate (`tiff_encode_doc`; the menus write LZW); 16/32 bits and layers are missing | Easy (the compression choice); Moderate (layers) | P3 |
+| JPEG: quality 0-12 (or 1-100), keeps an opened file's quality, ICC/EXIF | **Have**: quality 1-100, JFIF dpi, File Info as XMP and comment; 1.1: Save keeps an opened JPEG's quality (`jpeg_estimate_quality`). Progressive JPEG (#13773) and ICC/EXIF aren't written | Done | — |
+| PNG: 8/16-bit, gray, palette for Indexed, ICC, text | **Have**: RGB(A), palette with tRNS for Indexed and Bitmap, grey (0.4), File Info text chunks and XMP (0.6), pHYs; 16-bit and ICC are missing (no 16-bit documents) | Done | — |
+| GIF: 256-colour palette | **Have** (0.4): the picture's palette or 256 colours; 1.1: animated, from the layers | Done | — |
+| BMP (palette BMP for Indexed) | **Partial**: 24-bit, or 32-bit with transparency; palette BMPs are missing | Easy | P3 |
+| WebP: lossless, and lossy VP8 | **Partial** (1.1): lossless (VP8L with the subtract-green and predictor transforms, LZ77 and Huffman codes: `webp_encode_lossless`; Pillow reads it exactly); lossy VP8 is missing | Hard (a lossy VP8 encoder is slow) | P3 |
+| AVIF (optional `avif` feature) | **Left out**: AV1 encoding takes hours on a 68040 | Not sensible | — |
+| OpenEXR | **Left out**: there are no float documents | Not sensible | — |
 | Radiance HDR | **Missing** | Easy, but of little use without float data | P3 |
-| PBM/PGM/PPM/PAM/PFM | **Missing** | Easy | P3 |
-| FITS (header cards kept) | **Missing** | Easy | P3 |
-| Targa (RLE) | **Missing** | Easy: game assets | P2 |
-| DPX (8/10/12/16 bits) | **Missing** | Easy | P3 |
+| PBM/PGM/PPM/PAM/PFM | **Have** (1.1): PBM for Bitmap, PGM for grey, PPM, PAM with alpha (`pnm_encode`); PFM is missing (no float data) | Done | — |
+| FITS (header cards kept) | **Have** (1.1): 8-bit, one plane or three (`fits_encode`); an opened file's header cards aren't kept | Done | — |
+| Targa (RLE) | **Have** (0.6): raw or RLE, true colour, grey and colour-mapped | Done | — |
+| DPX (8/10/12/16 bits) | **Have** (1.1): 8 bits, or 10 bits packed (Method A), RGB or RGBA (`dpx_encode`; ImageMagick reads both); 12 and 16 bits are missing | Done | — |
 | Cineon | **Missing** | Easy | P3 |
-| ICO | **Missing** | Easy | P3 |
-| QOI | **Missing** | Easy | P3 |
-| DDS (uncompressed or BC1-BC3, mipmaps) | **Missing** | Moderate (the BC encoder) | P3 |
-| Amiga IFF ILBM (PhotoCraft writes 24-plane ByteRun1 with a 1-bit mask) | **Have**: 24-bit, or 8-plane with 256 colours; HAM/EHB/mask writing are in section 21 | Done | — |
+| ICO | **Have** (1.1): every standard size from 16 to 256 up to the picture's, small ones as DIBs with a mask, 128 and 256 as PNG (`ico_encode`) | Done | — |
+| QOI | **Have** (1.1): `qoi_encode` | Done | — |
+| DDS (uncompressed or BC1-BC3, mipmaps) | **Have** (1.1): uncompressed BGRA, BC1 (with transparency) or BC3, with the mipmaps (`dds_encode`); BC2 is missing | Done | — |
+| Amiga IFF ILBM (PhotoCraft writes 24-plane ByteRun1 with a 1-bit mask) | **Have**: 24-bit, 1-8 planes, EHB, HAM6/8, SHAM, mask plane or transparent colour, CRNG, ModeID (0.4); an IFF ANIM from the layers (1.1) | Done | — |
 | OpenRaster | **Have**: Easel's own format | Done | — |
-| PDF, one flattened page (`io::pdf::export`) | **Missing** | Easy: one JPEG or Flate image object | P3 |
+| PDF, one flattened page (`io::pdf::export`) | **Have** (1.1): one page the picture's size at its resolution, the picture lossless (Flate, with a soft mask for transparency) or as a JPEG, grey for Grayscale and Bitmap pictures, File Info as the document information (`pdf_encode`; poppler reads it exactly) | Done | — |
 | .pcraft | **Missing** | Moderate | P3 |
 
 ### 13.3 Presets and data files (read and write; FFP "Presets and data files")
 
 | Format | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Brushes .abr: read and write | **Missing** both ways | Moderate | P3 |
-| Gradients .grd: read and write | **Missing** both ways | Easy | P3 |
-| Patterns .pat: read and write | **Missing** both ways | Easy | P3 |
-| Swatches .aco, .act, .ase: read and write | **Missing** both ways | Easy. Add the ILBM CMAP and the Amiga palette-prefs files for read and write (section 21) | P2 |
+| Brushes .abr: read and write | **Partial** (0.5): read (versions 1, 2 and 6-10); not written. Easel's own brush presets and DPaint ILBM brushes load and save | Moderate | P3 |
+| Gradients .grd: read and write | **Missing** both ways (GIMP .ggr gradients load and save, 0.5) | Easy | P3 |
+| Patterns .pat: read and write | **Missing** both ways (pattern sets load and save as IFF, 0.5) | Easy | P3 |
+| Swatches .aco, .act, .ase: read and write | **Have** (0.5): .aco, .act, .ase, GIMP .gpl, JASC/RIFF .pal, IFF CMAP and Easel's own, both ways | Done | — |
 | LUTs .cube (read and write), .3dl and .look (read) | **Missing** | Moderate | P3 |
-| Keyboard shortcuts .kys: read and write | **Missing** | Easy | P3 |
+| Keyboard shortcuts .kys: read and write | **Missing** (Easel keeps its own in PROGDIR:Easel.keys, 0.8) | Easy | P3 |
 | ICC profiles: read | **Missing** | Moderate | P3 |
-| Actions .atn: read and write (`psd/src/atn.rs`) | **Missing** | Moderate: map the events to Easel's commands | P3 |
+| Actions .atn: read and write (`psd/src/atn.rs`) | **Missing** | Moderate: map the events to Easel's commands, once there are actions | P3 |
 | Styles .asl: read and write | **Missing** | Moderate | P3 |
 | Contours .shc: read and write | **Missing** | Easy | P3 |
 
@@ -983,26 +1014,32 @@ SVG, `.pcraft`, Affinity, `crates/raw`, `crates/heif`). Easel's are in `E:core/c
 
 PhotoCraft's options are in `crates/codecs` (`EncodeOptions`), `engine/src/cmd/file_cmds.rs`,
 `export_preset_cmds.rs` and PREFS (export, file handling). Easel's are in `dlg_export` in
-`E:amiga/dialogs.c` and the Save logic in `E:amiga/main.c`.
+`E:amiga/dialogs.c`, the Save and Export logic in `E:amiga/main.c`, the Amiga ILBM options in
+`E:amiga/modedlg.c` and EaselConvert's arguments (`E:amiga/convert.c`). Re-checked 2026-11-18
+(Easel 1.1).
 
 | PhotoCraft option (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| JPEG options: quality, keeping an opened file's quality (FFP #2399) | **Partial**: a quality slider; it doesn't remember the opened file's quality | Easy | P3 |
-| PNG options: depth, palette, metadata | **Partial**: no choices at all | Easy | P2 |
-| WebP options: lossless, quality | **Missing**: Easel doesn't write WebP | Moderate | P3 |
-| TIFF options: compression none/LZW/ZIP, layers | **Missing**: Easel doesn't write TIFF | Easy | P2 |
-| DDS options: BC1/BC2/BC3, mipmaps | **Missing** | Moderate | P3 |
-| DPX bits (8/10/12/16) | **Missing** | Easy | P3 |
-| IFF options: PhotoCraft has none (24-plane only) | **Have**: 24-bit, or 256 colours with median cut and Floyd-Steinberg (`ilbm_encode`). Easel is ahead; see section 21 for more | Done | — |
-| Export As: scale, resample method, canvas size, transparency or matte | **Missing** | Easy | P2 |
-| Export metadata choice: none, copyright, all (PREFS `metadata`) | **Missing** | Easy | P3 |
+| JPEG options: quality, keeping an opened file's quality (FFP #2399), remembering the last quality and format (#9661) | **Have** (1.1): the quality slider remembers the last quality; Save keeps an opened JPEG's quality, estimated from its tables | Done | — |
+| JPEG options: the size the file will be (#9952), progressive at every quality (#13773) | **Missing** | Easy (progressive); Moderate (the size, an encode per change) | P3 |
+| PNG options: depth, palette, metadata | **Partial**: chosen by the picture's mode (palette for Indexed and Bitmap, grey for Grayscale), File Info always kept; there are no choices | Easy | P3 |
+| WebP options: lossless, quality | **Partial** (1.1): lossless only | Hard (lossy) | P3 |
+| TIFF options: compression none/LZW/ZIP, layers | **Partial**: the writer has None, PackBits, LZW and Deflate, but Export always uses LZW; no layers | Easy | P3 |
+| DDS options: BC1/BC2/BC3, mipmaps | **Have** (1.1): BC3, BC1 or uncompressed, each with mipmaps (BC2 missing) | Done | — |
+| DPX bits (8/10/12/16) | **Partial** (1.1): 8 or 10 | Easy | P3 |
+| PDF: lossless or JPEG (PhotoCraft's export settings) | **Have** (1.1): asked on export | Done | — |
+| IFF options: PhotoCraft has none (24-plane only) | **Have**: 24-bit, 1-8 planes, EHB, HAM6/8, SHAM, mask or transparent colour, cycling, ModeID, compression (`IlbmOpts`). Easel is ahead; see section 21 | Done | — |
+| Export As: scale, resample method, canvas size, transparency or matte | **Partial** (0.6): scaled by a percentage (bicubic), the format by the name's extension (every writer, 1.1); the resample method, canvas size and matte are missing | Easy | P2 |
+| Export metadata choice: none, copyright, all (PREFS `metadata`; the CLI's `--metadata`, #9975) | **Missing**: File Info is always written where the format keeps it | Easy | P3 |
 | Convert to sRGB on export | **Missing** | Moderate, once there's a CMS | P3 |
 | Warnings about what a format loses (`fidelity_warnings`: depth reduced, CMYK converted, layers flattened) | **Have**: saving layers to a flat format offers ORA or flattening | Done | — |
-| Quick Export format and location preferences | **Missing** | Easy | P3 |
-| Place options: resize while placing, always create smart objects | **Missing** | Easy (resize) | P3 |
-| Paste or open from the system clipboard as a document (PREFS `export_clipboard`) | **Missing** | Easy with iffparse (section 21) | P1 |
-| Drag and drop files onto the window | **Missing**: Workbench start-up arguments work (`E:amiga/main.c` `sm_ArgList`), but there's no AppWindow | Easy: `MUIA_AppMessage` on the window | P2 |
+| Quick Export format and location preferences | **Partial** (1.1): Quick Export as PNG writes beside the picture's file (or in the last drawer); there's no choice of format or place | Easy | P3 |
+| Export dialogs start in the last exported folder (#10448) | **Partial**: they start in the picture's own drawer, or the last drawer used | Easy | P3 |
+| Place options: resize while placing, always create smart objects; Skip Transform when Placing (#9075) | **Partial** (0.6): Place goes on into Free Transform to size it; there are no smart objects and no preference to skip the transform | Easy | P3 |
+| Paste or open from the system clipboard as a document (PREFS `export_clipboard`) | **Have** (0.6): Edit › Paste from Amiga Clipboard (ILBM through iffparse) | Done | — |
+| Drag and drop files onto the window | **Have** (0.6): AppWindow and AppIcon (`E:amiga/appdrop.c`) | Done | — |
 | Opening a JPEG at a reduced size when memory is short (Easel only) | **Have** (Easel extra) | Done | — |
+| Frames of an animation: how many, and the memory they may take (Easel only) | **Have** (1.1): Import Frames to Layers takes up to 100 frames within three eighths of the free memory and says when it stopped | Done | — |
 
 ## 15. Panels
 
@@ -1110,13 +1147,15 @@ arguments or tool types.
 ## 18. Automation and actions
 
 PhotoCraft's automation is `crates/automation`, `engine/src/cmd/actions_*`, `atn_cmds.rs`,
-`apps/photocraft-cli` and `book/src/automation/`. Easel has none.
+`apps/photocraft-cli` and `book/src/automation/`. Easel has EaselConvert, a Shell command for
+batch conversion (0.6, `E:amiga/convert.c` with `E:core/batch.c`), and no actions. Re-checked
+2026-11-18 (Easel 1.1).
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Actions: record, play, stop, insert, conditional steps, dialog toggles, sets, colours (`actions.*`) | **Missing** | Moderate: record each `ID_` command with its dialog values (needs a command and parameter layer, below) | P2 |
 | One registry of 500+ commands with JSON parameters, used by the UI, CLI and agents | **Missing**: menu IDs go straight to code (`E:amiga/ids.h`) | Moderate: a table of commands with parameter blocks; actions and batch depend on it | P2 |
-| Command-line front end: `photocraft-cli convert/info/run/batch/droplet/commands` | **Missing** | Easy: the core is portable C, so a Shell command such as `Easel FROM a TO b FORMAT png` is possible, in the ADPro tradition. A Shell command isn't ARexx | P2 |
+| Command-line front end: `photocraft-cli convert/info/run/batch/droplet/commands` | **Partial**: EaselConvert converts and resizes any picture Easel reads (datatypes as a last resort) to every format Easel writes (1.1: also TIFF, Targa, PSD, WebP, PDF, Netpbm, QOI, ICO, DDS, DPX and FITS), reduces colours and writes icons, in the ADPro tradition; `info`, `run` and actions are missing | Easy (info) | P3 |
 | JSON-lines control channel (`photocraft --control`, `control-protocol.md`) | **Excluded** by request: external control is ARexx's role | — | — |
 | MCP server for AI agents (`photocraft-cli mcp`) | **Excluded** by request (external control); also Not sensible (AI service) | — | — |
 | Running scripts (Scripts › Browse) | **Excluded** by request (ARexx) | — | — |
@@ -1124,15 +1163,16 @@ PhotoCraft's automation is `crates/automation`, `engine/src/cmd/actions_*`, `atn
 ## 19. Plug-ins
 
 PhotoCraft's plug-ins are WebAssembly modules run in the wasmi interpreter, with ABI v1
-(`crates/plugins`, `docs/plugins.md`). Easel has no plug-ins.
+(`crates/plugins`, `docs/plugins.md`). Easel has no plug-ins of its own; the system's datatypes
+open what its own readers don't (0.6). Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| WebAssembly filter plug-ins (install, list, run, remove, reload) | **Missing** | Not sensible: a WASM interpreter is 50-100 times slower than native code on a 68040. Stand-in: native plug-ins as Amiga shared libraries (`PROGDIR:Plugins/*.library`), like ImageFX modules and ADPro loaders and savers | P3 |
+| WebAssembly filter plug-ins (install, list, run, remove, reload) | **Left out**: a WASM interpreter is 50-100 times slower than native code on a 68040. Stand-in (missing): native plug-ins as Amiga shared libraries (`PROGDIR:Plugins/*.library`), like ImageFX modules and ADPro loaders and savers | Not sensible | — |
 | Filter › Plug-ins submenu and Install Plug-in… | **Missing** | Easy, with native plug-ins | P3 |
 | A generated parameter dialog with live preview | **Missing** | Easy: reuse `slider_dialog` (`E:amiga/dialogs.c`) | P3 |
-| Hosting .8BF, UXP or CEP (PhotoCraft has none either) | **Missing** | Not sensible | P3 |
-| Format plug-ins | **Missing** | Moderate. Amiga stand-in: datatypes (section 21) | P2 |
+| Hosting .8BF, UXP or CEP (PhotoCraft has none either) | **Left out**: Windows and macOS code | Not sensible | — |
+| Format plug-ins | **Have** (0.6) through the Amiga's own: datatypes open any picture a datatype reads (`E:amiga/dtload.c`, EaselConvert too) | Done | — |
 
 ## 20. Anything else
 
@@ -1160,25 +1200,28 @@ memory is short.
 
 These are what users of Deluxe Paint (DPaint), Personal Paint (PPaint), ImageFX, ADPro, TVPaint and
 Brilliance would look for. They aren't PhotoCraft features, so they're left out of the coverage
-figures in section 23. Easel's status was checked against its code:
+figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) against its code:
 
-- `E:core/ilbm.c` reads EHB and HAM, and writes `CAMG` as 0 with no CRNG.
-- `E:core/amigafmt.c` reads ACBM, RGBN, DEEP, SHAM/CTBL/PCHG, ANIM's first frame and icons. There
-  are no CRNG, CCRT, DRNG or GRAB handlers.
-- There's no iffparse, clipboard.device or datatypes code in `E:amiga/` or `E:core/`.
+- `E:core/ilbm.c` reads and writes 1-8 planes, EHB, HAM6/HAM8, SHAM and 24-bit, with CAMG, the
+  aspect, a mask plane or transparent colour and CRNG; `ilbm_read_indexed` keeps the CMAP, CRNG,
+  CCRT and DRNG.
+- `E:core/amigafmt.c` reads ACBM, RGBN, DEEP, SHAM/CTBL/PCHG, ANIM's first frame and icons;
+  `E:core/frames.c` (1.1) reads every frame of an ANIM (op 0 and 5) and writes ANIM op 5.
+- `E:amiga/clipboard.c` (iffparse, `clipboard.device`), `E:amiga/dtload.c` (datatypes),
+  `E:amiga/appdrop.c` (AppWindow and AppIcon), `E:core/amifont.c` (bitmap fonts).
 
 ### 21.1 Palette and indexed work
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Indexed documents (2-256 colours) as a working mode, painting with pens rather than RGB | DPaint, PPaint, Brilliance | **Missing**: RGBA only; palettes are made only at ILBM export | Moderate: 1 byte a pixel, and the colour index is kept through every tool | P1 |
-| Keep an opened ILBM's palette (CMAP), and save it back with the same palette | all | **Missing**: the ILBM is converted to RGBA and its CMAP is lost | Easy, with indexed mode | P1 |
-| Palette editor: RGB/HSV sliders, Spread (a gradient between two entries), Copy, Swap, Exchange, Undo, ranges | DPaint, PPaint | **Missing** | Easy | P1 |
-| Palette locking: lock entries so a remap or quantize keeps them; reserve the Workbench or system pens | PPaint, ADPro (locked pens), ImageFX | **Missing** | Easy | P1 |
-| Remap to a palette: the nearest colour or a dither; load the palette from an ILBM, `.pal`, `.act` or a prefs file | ADPro, ImageFX, PPaint | **Missing** | Easy: `quantize` and `nearest` already exist in `E:core/ilbm.c` | P1 |
-| Colour reduction choices: median cut (Have), Floyd-Steinberg (Have), Burkes/Stucki/Sierra/Jarvis, ordered Bayer 2/4/8, random, none | ADPro, ImageFX | **Partial**: median cut plus Floyd-Steinberg, at ILBM export only | Easy | P1 |
-| OCS/ECS 12-bit palettes (4 bits per gun, 4096 colours) and AGA 24-bit palettes when quantizing | all | **Missing** | Easy | P1 |
-| Halfbrite (EHB) editing: edit the 32 base colours and see their 32 half-bright twins | DPaint IV, PPaint | **Missing** (EHB is read only) | Easy | P2 |
+| Indexed documents (2-256 colours) as a working mode, painting with pens rather than RGB | DPaint, PPaint, Brilliance | **Have** (0.4): Image › Mode › Indexed Color; everything drawn is brought back to the palette (`doc_index_sync` in `E:core/palette.h`) | Done | — |
+| Keep an opened ILBM's palette (CMAP), and save it back with the same palette | all | **Have** (0.4): `ilbm_read_indexed`, `ilbm_write_doc` | Done | — |
+| Palette editor: RGB/HSV sliders, Spread (a gradient between two entries), Copy, Swap, Exchange, Undo, ranges | DPaint, PPaint | **Have** (0.4): Image › Color Table / Window › Palette (`E:amiga/palwin.c`) | Done | — |
+| Palette locking: lock entries so a remap or quantize keeps them; reserve the Workbench or system pens | PPaint, ADPro (locked pens), ImageFX | **Have** (0.4): `pal_lock` in `E:core/doc.h`, forced colours (Workbench 4, primaries...) in `E:amiga/modedlg.c` | Done | — |
+| Remap to a palette: the nearest colour or a dither; load the palette from an ILBM, `.pal`, `.act` or a prefs file | ADPro, ImageFX, PPaint | **Have** (0.4): Indexed Color with the current palette or a preset; palettes load from .act, .aco, .ase, .gpl, .pal, IFF and PNG (`palfile_read`) | Done | — |
+| Colour reduction choices: median cut, Floyd-Steinberg, Burkes/Stucki/Sierra/Jarvis, ordered Bayer 2/4/8, random, none | ADPro, ImageFX | **Have** (0.4): median cut, octree, Wu; 12 dithers (`dither_names` in `E:core/palette.c`) | Done | — |
+| OCS/ECS 12-bit palettes (4 bits per gun, 4096 colours) and AGA 24-bit palettes when quantizing | all | **Have** (0.4): `QM_OCS12` | Done | — |
+| Halfbrite (EHB) editing: edit the 32 base colours and see their 32 half-bright twins | DPaint IV, PPaint | **Have** (0.4): Make Extra Half-Brite palette in the Color Table; EHB writing | Done | — |
 | Stencils: protect chosen colours, or an area, from painting | DPaint ("Stencil", "Fix Background"), PPaint | **Missing** | Easy: a frozen mask, like the selection | P2 |
 | Shade, Cycle, Tint and Blend draw modes over a palette range | DPaint | **Missing**. Partial equivalents: Smudge for Smear, Blur for Smooth | Easy, with indexed mode | P2 |
 | Range fills: a gradient through a palette range, with dither styles | DPaint | **Missing** (only RGB gradients) | Easy | P2 |
@@ -1187,9 +1230,9 @@ figures in section 23. Easel's status was checked against its code:
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Read the CRNG (DPaint), CCRT (Graphicraft) and DRNG (DPaint IV enhanced) ranges | DPaint, PPaint, Brilliance | **Missing**: the reader skips them | Easy | P1 |
-| Play cycling (Tab in DPaint), with speed and direction | DPaint | **Missing** | Easy on a native palette screen (`LoadRGB32` from a timer); Moderate on RTG (re-render the indexed document) | P1 |
-| Edit and save cycle ranges | DPaint, PPaint | **Missing** | Easy | P2 |
+| Read the CRNG (DPaint), CCRT (Graphicraft) and DRNG (DPaint IV enhanced) ranges | DPaint, PPaint, Brilliance | **Have** (0.4): `ilbm_read_indexed` | Done | — |
+| Play cycling (Tab in DPaint), with speed and direction | DPaint | **Have** (0.4): cycling plays on the canvas (`E:amiga/palwin.c`) | Done | — |
+| Edit and save cycle ranges | DPaint, PPaint | **Have** (0.4): edited in the Color Table, written as CRNG | Done | — |
 
 ### 21.3 Brushes (DPaint style)
 
@@ -1210,59 +1253,58 @@ figures in section 23. Easel's status was checked against its code:
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| HAM6 writing, with a good encoder (optimised base palette, look-ahead) | ADPro, ImageFX, PPaint | **Missing** (read only) | Moderate: a search per pixel; seconds on a 68040 | P1 |
-| HAM8 writing | ADPro, ImageFX | **Missing** (read only) | Moderate | P1 |
-| EHB writing (32 colours plus half-bright, 64 in all) | DPaint, ADPro | **Missing** (read only) | Easy | P1 |
-| SHAM, PCHG and CTBL writing (a palette per line, "dynamic" HAM and hires) | ADPro, ImageFX, Photon Paint | **Missing** (read only) | Moderate | P2 |
-| A choice of bitplane depth (1-8) and the ByteRun1 or uncompressed setting | all | **Partial**: 24-bit or 8 planes only (`ilbm_encode`) | Easy | P1 |
-| Masking in the ILBM header: `mskHasMask` and `mskHasTransparentColor`, and a transparent colour for genlock | DPaint, TVPaint, ImageFX | **Missing**: Easel doesn't write alpha to an ILBM | Easy | P2 |
+| HAM6 writing, with a good encoder (optimised base palette, look-ahead) | ADPro, ImageFX, PPaint | **Have** (0.4): File › Export › IFF ILBM (Amiga options) | Done | — |
+| HAM8 writing | ADPro, ImageFX | **Have** (0.4) | Done | — |
+| EHB writing (32 colours plus half-bright, 64 in all) | DPaint, ADPro | **Have** (0.4) | Done | — |
+| SHAM, PCHG and CTBL writing (a palette per line, "dynamic" HAM and hires) | ADPro, ImageFX, Photon Paint | **Partial** (0.4): SHAM is written (`IK_SHAM`); PCHG and CTBL aren't | Moderate | P3 |
+| A choice of bitplane depth (1-8) and the ByteRun1 or uncompressed setting | all | **Have** (0.4): `IlbmOpts` planes and compress | Done | — |
+| Masking in the ILBM header: `mskHasMask` and `mskHasTransparentColor`, and a transparent colour for genlock | DPaint, TVPaint, ImageFX | **Have** (0.4): `IMK_PLANE`, `IMK_TRANSPARENT` | Done | — |
 | Export as raw interleaved bitplanes plus a palette, or as C or assembler source, or as hardware sprites | coders' converters, PPaint | **Missing** | Easy | P3 |
 
 ### 21.5 Screen-mode-aware output
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Pick the target ModeID from the ASL ScreenMode requester, and write CAMG and the page size to match | all | **Missing**: CAMG is written as 0 | Easy | P1 |
-| Enforce the chipset's limits: OCS/ECS 32 colours in lores, 16 in hires, 64 EHB, 4096 HAM; AGA 256 or HAM8 | all | **Missing** | Easy | P1 |
-| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Missing**. The View menu has no pixel aspect (section 2.5) | Easy | P1 |
-| Overscan presets (352 × 283, 704 × 566, 368 × 241…) and safe-area guides | DPaint, Brilliance, TVPaint | **Partial**: New offers PAL sizes from 320 × 256 | Easy | P2 |
-| A "Save for Screen" preview that dithers and quantizes to the chosen mode before saving | ADPro, ImageFX | **Missing** | Moderate | P2 |
-| A display dither choice on palette screens: none, ordered or Floyd-Steinberg; a HAM8 preview on AGA | ImageFX, TVPaint | **Partial**: AGA and ECS screens get a fixed colour cube with ordered dither (`draw_rgb` in `E:amiga/widgets.c`) | Moderate | P2 |
+| Pick the target ModeID from the ASL ScreenMode requester, and write CAMG and the page size to match | all | **Have** (0.4): Image › Amiga Screen Mode (`E:amiga/modedlg.c`, `E:core/amigamodes.c`), CAMG and page size written | Done | — |
+| Enforce the chipset's limits: OCS/ECS 32 colours in lores, 16 in hires, 64 EHB, 4096 HAM; AGA 256 or HAM8 | all | **Have** (0.4): the mode dialog warns when the picture doesn't fit the mode and chipset | Done | — |
+| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Partial**: each mode's aspect is known, kept in the document (`aspect_x`, `aspect_y`) and written to ILBM's BMHD; the canvas doesn't draw it (section 2.5) | Easy: a separate vertical zoom in `E:amiga/canvas.c` | P1 |
+| Overscan presets (352 × 283, 704 × 566, 368 × 241…) and safe-area guides | DPaint, Brilliance, TVPaint | **Partial**: New and the Crop presets have the PAL and NTSC sizes; overscan sizes and safe-area guides are missing | Easy | P2 |
+| A "Save for Screen" preview that dithers and quantizes to the chosen mode before saving | ADPro, ImageFX | **Partial**: Image › Mode › Indexed Color previews the palette and dither on the canvas, and undo takes it back; there's no side-by-side preview at export | Moderate | P2 |
+| A display dither choice on palette screens: none, ordered or Floyd-Steinberg; a HAM8 preview on AGA | ImageFX, TVPaint | **Partial**: AGA and ECS screens get a fixed colour cube with ordered dither (`draw_rgb` in `E:amiga/widgets.c`); an indexed picture shows its own palette | Moderate | P2 |
 | Copper-list gradients: design a per-line background colour gradient, preview it with a user copper list, save it as PCHG or SHAM | Brilliance, DPaint IV, ImageFX | **Missing** | Moderate | P3 |
 
 ### 21.6 Workbench icons
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Save as a classic `.info` icon (planar, 4 or 8 colours, in the WB 1.x, 2.x or MagicWB palette) | IconEdit, PPaint | **Missing**: Easel reads all icon kinds (`FMT_INFO`) | Easy: `icon.library` `PutDiskObject`, or Easel's own writer | P1 |
-| Save as NewIcons (the image in tool types) | NewIcons tools | **Missing** | Easy | P2 |
-| Save as GlowIcons (an IFF FORM ICON with ARGB or palette images, OS 3.5) | IconEdit 3.5 | **Missing** | Easy | P1 |
-| Save as a PNG icon (OS4, AROS, MorphOS) | — | **Missing** | Easy: PNG writer plus an icon chunk | P2 |
-| Two images for selected and unselected, and the icon's tool type and default tool | IconEdit | **Missing** | Easy | P2 |
+| Save as a classic `.info` icon (planar, 4 or 8 colours, in the WB 1.x, 2.x or MagicWB palette) | IconEdit, PPaint | **Have** (0.6): `E:core/iconwrite.c`, `ICONPAL_WB20`/`ICONPAL_MWB` | Done | — |
+| Save as NewIcons (the image in tool types) | NewIcons tools | **Have** (0.6) | Done | — |
+| Save as GlowIcons (an IFF FORM ICON with ARGB or palette images, OS 3.5) | IconEdit 3.5 | **Have** (0.6): the default when saving a picture's icon | Done | — |
+| Save as a PNG icon (OS4, AROS, MorphOS) | — | **Have** (0.6) | Done | — |
+| Two images for selected and unselected, and the icon's tool type and default tool | IconEdit | **Partial**: a selected image (the picture darkened) and the default tool (`IconOpts`); tool types can't be set | Easy | P3 |
 
 ### 21.7 Animation
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| Open every frame of an IFF ANIM (ANIM5/7/8) as frames or layers | DPaint, Brilliance, PPaint | **Partial**: the first frame only | Moderate: memory is frames × size, so offer to load a range | P2 |
-| Edit the frames: a frame strip, add or delete or move frames, onion skin, play, timing (ANHD and DPAN) | DPaint, Brilliance, TVPaint | **Missing** | Moderate | P2 |
-| Write an IFF ANIM (ANIM5 delta, and ANIM7/8) | DPaint, Brilliance | **Missing** | Moderate | P2 |
-| Animated GIF writing | PPaint 7 | **Missing** | Easy, once GIF writing exists | P3 |
+| Open every frame of an IFF ANIM (ANIM5/7/8) as frames or layers | DPaint, Brilliance, PPaint | **Have** (1.1): File › Import Frames to Layers reads ANIM op 0 and op 5 with both buffers, palette changes and the frame times; DPaint's two looping frames are left out (`anim_read_frames` in `E:core/frames.c`). Ops 7 and 8 aren't read (the frames up to one are kept). Animated GIFs too, with their disposal | Done | — |
+| Edit the frames: a frame strip, add or delete or move frames, onion skin, play, timing (ANHD and DPAN) | DPaint, Brilliance, TVPaint | **Partial**: frames are layers, so the Layers panel adds, deletes and moves them; each frame's time is in its layer's name ("Frame 3 (0.25 s)"); there's no frame strip, onion skin or playback | Moderate | P2 |
+| Write an IFF ANIM (ANIM5 delta, and ANIM7/8) | DPaint, Brilliance | **Have** (1.1): File › Export › Layers as IFF ANIM writes op 5 for two buffers with the loop frames (`anim_write`); ANIM7/8 aren't written | Done | — |
+| Animated GIF writing | PPaint 7 | **Have** (1.1): File › Export › Layers as Animated GIF: one palette, loops, each frame only where it changed (`gif_write_anim`; Pillow checks it, `E:tests/check_frames.py`) | Done | — |
 
 ### 21.8 Exchange with the rest of the Amiga
 
 | Feature | Expected from | Easel today | Amiga feasibility | Pri |
 |---|---|---|---|---|
-| The clipboard through iffparse (`clipboard.device` unit 0): copy out as ILBM, paste ILBM in, FTXT text into the Text tool | all | **Missing**: Easel's own clipboard only; the README says "may come later" | Easy | P1 |
-| Datatypes import: open anything `picture.datatype` (V43) has a datatype for | MultiView, PPaint 7, ImageFX 4 | **Missing** | Easy | P1 |
+| The clipboard through iffparse (`clipboard.device` unit 0): copy out as ILBM, paste ILBM in, FTXT text into the Text tool | all | **Have** (0.6): `E:amiga/clipboard.c` (ILBM both ways, FTXT) | Done | — |
+| Datatypes import: open anything `picture.datatype` (V43) has a datatype for | MultiView, PPaint 7, ImageFX 4 | **Have** (0.6): `E:amiga/dtload.c`, the last resort when no reader of Easel's knows the file | Done | — |
 | Datatypes export: `DTM_WRITE` where the datatype supports it | PPaint 7 | **Missing** | Moderate: few datatypes can write | P3 |
-| Amiga bitmap fonts (`diskfont.library` `.font`) and ColorFonts in the Text tool | DPaint, PPaint | **Missing**: TrueType through `.otag` only (`E:amiga/sysfonts.c`) | Easy: `OpenDiskFont` plus `Text()` into a bitmap | P2 |
+| Amiga bitmap fonts (`diskfont.library` `.font`) and ColorFonts in the Text tool | DPaint, PPaint | **Partial** (0.9): bitmap fonts from FONTS: in type layers (`E:core/amifont.c`); ColorFonts' own colours aren't used (they draw in the text colour) | Easy | P3 |
 | Grab a public screen as a new document | ScreenGrab tools, PPaint | **Missing** | Easy | P3 |
-| AppIcon and AppWindow drops (open files dropped on the window or the icon) | all | **Missing** (Workbench arguments work) | Easy | P2 |
-| A Shell CLI for batch conversion (not ARexx) | ADPro, ImageFX | **Missing** | Easy (section 18) | P2 |
+| AppIcon and AppWindow drops (open files dropped on the window or the icon) | all | **Have** (0.6): `E:amiga/appdrop.c` | Done | — |
+| A Shell CLI for batch conversion (not ARexx) | ADPro, ImageFX | **Have** (0.6): EaselConvert (`E:amiga/convert.c`, `E:core/batch.c`); 1.1: it writes every format Easel writes | Done | — |
 | ARexx port and scripts | ADPro, ImageFX, DPaint V, PPaint, TVPaint | **Excluded** by request | — | — |
 | Printing (printer.device, TurboPrint) | DPaint, PPaint | **Excluded** by request | — | — |
-
 
 ## 22. Recommended roadmap
 
