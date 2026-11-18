@@ -515,6 +515,31 @@ static void test_exr2(void)
   }
 }
 
+static void test_camraw(void)
+{
+  static const char *const files[] = { "cam.nef", "cam.dng", "cam.cr2", "cam.raf", "cam.cr3", NULL };
+  int i;
+  for (i = 0; files[i]; i++) {
+    size_t len;
+    u8 *d = slurp(files[i], &len);
+    char msg[100];
+    snprintf(msg, sizeof msg, "%s is a camera raw", files[i]);
+    CHECK(d && camraw_detect(d, len), msg);
+    free(d);
+    check_expect(files[i], 4);                          /* (Pillow's JPEG decoder and Easel's differ a little) */
+    fuzz(files[i], 200);
+  }
+  /* a camera's ordinary TIFF (no sensor data) stays a TIFF */
+  {
+    Doc *t = doc_new(16, 12, 0x336699, 0);
+    size_t tl;
+    u8 *f = tiff_encode_doc(t, TIFFC_NONE, &tl);
+    CHECK(f && !camraw_detect(f, tl), "a plain TIFF isn't a raw");
+    free(f);
+    doc_free(t);
+  }
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -572,6 +597,7 @@ int main(int argc, char **argv)
   test_exif();
   test_layered();
   test_exr2();
+  test_camraw();
   test_xcf();
   test_kra();
   test_pdn();

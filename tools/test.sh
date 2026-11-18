@@ -13,7 +13,7 @@ CORE="$CORE core/cafill.c core/selsmart.c"   # 1.2: content-aware fill, Quick an
 CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Amiga-era extras
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
-CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c"   # round 3: file formats, import and export
+CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c"   # round 3: file formats, import and export
   # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
   # interface translated and every row used (langcheck lists what is missing), then tr() and the table
   python3 tools/mklang.py --check

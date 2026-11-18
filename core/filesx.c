@@ -315,7 +315,7 @@ Doc *tiff_read_layers(const u8 *d, size_t n, char *err, size_t errcap)
   const u8 *isd;
   Doc *doc = NULL;
   int np, k;
-  if (n < 8 || codec_detect(d, n) != FMT_TIFF) return NULL;
+  if (n < 8 || codec_detect(d, n) != FMT_TIFF || camraw_detect(d, n)) return NULL;
   if ((isd = isd_of(d, n, &il)) != NULL && il > sizeof ISD_SIG + 12 && !memcmp(isd, ISD_SIG, sizeof ISD_SIG)) {
     /* the tagged blocks after the signature: Layr (8 bits) or Lr16 inside a PSD made around it */
     pos = (u32)sizeof ISD_SIG;

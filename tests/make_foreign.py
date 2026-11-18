@@ -560,4 +560,78 @@ make_exr2("pxr24_tiled.exr", 5, [("B", 1), ("G", 1), ("R", 1)], tiled=(20, 20))
 make_exr2("b44.exr", 6, [("A", 1), ("B", 1), ("G", 1), ("R", 2)], tol=0.02)
 make_exr2("b44a.exr", 7, [("B", 1), ("G", 1), ("R", 1)], tol=0.02)
 
+# ---------------------------------------------------------------- camera raw: the JPEG inside
+def jpeg_bytes(w, h, seed, quality=95):
+    from PIL import Image
+    import io
+    im = Image.new("RGB", (w, h))
+    im.putdata([(x * 4 + seed, y * 6 + seed, 100 + x + y) for y in range(h) for x in range(w)])   # (smooth: decoders agree)
+    b = io.BytesIO(); im.save(b, "JPEG", quality=quality, subsampling=0)
+    return b.getvalue(), Image.open(io.BytesIO(b.getvalue())).convert("RGB")   # (what a decoder makes of it)
+
+def tiff_raw(name, make, dng=False, cr2=False, orient=1, strip=False):
+    """IFD0 (a small preview, Make, Orientation, SubIFDs) -> SubIFD 0: the full-size JPEG, SubIFD 1: CFA data"""
+    from PIL import Image
+    import io
+    big, im = jpeg_bytes(48, 32, 7)
+    small, _ = jpeg_bytes(12, 8, 99)
+    le = True
+    P = "<"
+    body = bytearray(b"II*\0" + struct.pack("<I", 16) + (b"CR\2\0\0\0\0\0" if cr2 else bytes(8)))
+    def ifd(entries, nxt=0):
+        at = len(body)
+        body.extend(struct.pack("<H", len(entries)))
+        for tag, typ, cnt, val in sorted(entries):
+            body.extend(struct.pack("<HHI", tag, typ, cnt) + (struct.pack("<HH", val, 0) if typ == 3 and cnt == 1 else struct.pack("<I", val)))
+        body.extend(struct.pack("<I", nxt))
+        return at
+    # data first, after the header: make string, the JPEGs, the CFA bytes
+    def put(b):
+        while len(body) % 2: body.append(0)
+        at = len(body); body.extend(b); return at
+    # (IFD0 must be at 16: reserve its place by building data after a placeholder)
+    head = bytes(body); body.clear(); body.extend(head)
+    placeholder = len(body); body.extend(bytes(2 + 12 * 8 + 4))
+    mk = put(make.encode() + b"\0")
+    bj = put(big); sj = put(small); cfa = put(bytes(64))
+    sub0 = ifd([(0x0201, 4, 1, bj), (0x0202, 4, 1, len(big)), (0x0103, 3, 1, 6)] if not strip else
+               [(0x0103, 3, 1, 7), (0x0106, 3, 1, 6), (0x0111, 4, 1, bj), (0x0117, 4, 1, len(big)), (0x0100, 4, 1, 48), (0x0101, 4, 1, 32)])
+    sub1 = ifd([(0x0103, 3, 1, 1), (0x0106, 3, 1, 32803), (0x0111, 4, 1, cfa), (0x0117, 4, 1, 64), (0x0100, 4, 1, 8), (0x0101, 4, 1, 4)])
+    subs = put(struct.pack("<II", sub0, sub1))
+    e0 = [(0x010F, 2, len(make) + 1, mk), (0x0112, 3, 1, orient), (0x014A, 4, 2, subs),
+          (0x0201, 4, 1, sj), (0x0202, 4, 1, len(small))]
+    if dng: e0.append((0xC612, 1, 4, 0x00000401))
+    tail = bytes(body)
+    body.clear(); body.extend(tail[:placeholder])
+    ifd(e0)
+    body.extend(tail[len(body):])
+    want = im.transpose(Image.Transpose.ROTATE_270) if orient == 6 else im
+    rawmeta(name, bytes(body), want)
+
+def rawmeta(name, data, im):
+    meta = dict(w=im.size[0], h=im.size[1], layers=[dict(name="Background", kind="pixel", depth=0, opacity=255, visible=1, mode="normal")], probes=[])
+    for (x, y) in [(0, 0), (5, 7), (im.size[0] - 1, im.size[1] - 1), (20, 11)]:
+        if x < im.size[0] and y < im.size[1]: meta["probes"].append(dict(layer="Background", x=x, y=y, rgba=list(im.getpixel((x, y))) + [255]))
+    save(name, data, meta)
+
+def raf(name):
+    big, im = jpeg_bytes(40, 28, 3)
+    hdr = bytearray(b"FUJIFILMCCD-RAW 0201FF383501" + bytes(200))
+    struct.pack_into(">II", hdr, 84, len(hdr), len(big))
+    rawmeta(name, bytes(hdr) + big + bytes(100), im)
+
+def cr3(name):
+    big, im = jpeg_bytes(44, 30, 5)
+    small, _ = jpeg_bytes(16, 10, 50)
+    ftyp = struct.pack(">I", 24) + b"ftypcrx " + struct.pack(">I", 1) + b"crx isom"
+    box = lambda t, b: struct.pack(">I", 8 + len(b)) + t + b
+    data = ftyp + box(b"moov", box(b"uuid", bytes(16) + box(b"THMB", bytes(8) + small))) + box(b"uuid", bytes(16) + box(b"PRVW", bytes(8) + big)) + box(b"mdat", bytes(300))
+    rawmeta(name, data, im)
+
+tiff_raw("cam.nef", "NIKON CORPORATION")
+tiff_raw("cam.dng", "Some Maker", dng=True, orient=6, strip=True)
+tiff_raw("cam.cr2", "Canon", cr2=True)
+raf("cam.raf")
+cr3("cam.cr3")
+
 print("made", len([f for f in os.listdir(OUT) if not f.endswith((".json", ".txt", ".png"))]), "files in", OUT)

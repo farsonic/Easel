@@ -31,6 +31,11 @@ int  tiff_pages(const u8 *d, size_t n, u32 *ifd, int max);
    returns it grown (or unchanged when it can't); NULL if out of memory */
 u8  *tiff_add_tag(u8 *t, size_t *len, int tag, int type, const u8 *data, u32 count);
 
+/* camraw.c: camera raw files (DNG, CR2, CR3, NEF, ARW, PEF, ORF, RW2, RAF and the other TIFF-structured
+   ones) as the full-size JPEG the camera keeps in them, turned upright; codec_decode tries it first */
+int  camraw_detect(const u8 *d, size_t n);
+int  camraw_decode(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap);
+
 /* what codec_load_doc adds from a file: its EXIF */
 void filesx_load_extras(Doc *doc, const u8 *d, size_t n);
 

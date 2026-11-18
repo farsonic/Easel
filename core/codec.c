@@ -151,6 +151,7 @@ int codec_decode(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
 {
   out->w = out->h = 0; out->px = NULL;
   codec_oom = 0;
+  if (camraw_detect(d, n)) return camraw_decode(d, n, out, err, errcap);   /* round 3: camera raw, its JPEG */
   switch (codec_detect(d, n)) {
   case FMT_PNG: return png_read(d, n, out, err, errcap);
   case FMT_JPEG: return jpeg_read(d, n, out, err, errcap);
