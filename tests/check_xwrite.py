@@ -190,6 +190,28 @@ if shutil.which("pdftoppm"):
 else:
     skipped.append("PDF (no pdftoppm)")
 
+# SVG: well-formed, every path's data there, and (ImageMagick) drawn where Easel put the shapes
+import xml.etree.ElementTree as ET
+try:
+    root = ET.parse(path("shapes.svg")).getroot()
+    ns = "{http://www.w3.org/2000/svg}"
+    paths = root.findall(ns + "path")
+    ok("shapes.svg: six paths", len(paths) == 6 and all(p.get("d", "").startswith("M ") for p in paths))
+    ok("shapes.svg: size", root.get("width") == "200" and root.get("viewBox") == "0 0 200 100")
+except Exception as e:
+    ok("shapes.svg parses: %s" % e, False)
+if magick:
+    with tempfile.TemporaryDirectory() as td:
+        png = os.path.join(td, "s.png")
+        r = subprocess.run([magick, "-background", "white", path("shapes.svg"), png], capture_output=True)
+        if r.returncode or not os.path.exists(png):
+            skipped.append("SVG rendering (ImageMagick couldn't: %s)" % r.stderr.decode(errors="replace")[:80])
+        else:
+            im = Image.open(png).convert("RGB")
+            ok("shapes.svg drawn: red box", im.size == (200, 100) and im.getpixel((35, 25)) == (255, 0, 0))
+            ok("shapes.svg drawn: blue dot", im.getpixel((125, 15)) == (0, 0, 255))
+            ok("shapes.svg drawn: green triangle", im.getpixel((120, 66)) == (0, 128, 0))
+
 for s in skipped:
     print("skipped:", s)
 print("%d checks, %d failed" % (tests, fails))

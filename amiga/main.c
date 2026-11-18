@@ -44,6 +44,7 @@
 #include "../core/xwrite.h"
 #include "../core/frames.h"
 #include "../core/scripts.h"
+#include "../core/svg.h"
 #include "../core/type.h"
 #include "palwin.h"
 #include "modedlg.h"
@@ -139,7 +140,7 @@ static struct NewMenu menus[] = {
   H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
   S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
   S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7), SBAR,
-  S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), SBAR,
+  S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), S("Paths to SVG...", 0, ID_EXPSVG), SBAR,
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
   H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE),
   I("File Info...", 0, ID_FILEINFO), BAR,
@@ -845,6 +846,7 @@ static Doc *load(const char *path, int *fmt)
   err[0] = 0;
   /* 0.4: a palette ILBM (or PBM, ACBM) opens as an indexed picture, its colours and cycling kept */
   d = ilbm_indexable(data, len) ? ilbm_read_indexed(data, len, err, sizeof err) : NULL;
+  if (!d && svg_detect(data, len)) d = svg_load_doc(data, len, err, sizeof err);   /* (1.1: SVG drawings as shape layers) */
   if (!d) d = load_doc_big_stack(data, len, err, sizeof err);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
@@ -864,7 +866,7 @@ static Doc *load(const char *path, int *fmt)
   return d;
 }
 /* the pictures Easel opens, for the file requester (any file can still be typed in) */
-#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
+#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
 static char lastdir[512];
 static void recent_add(const char *path)
 {
@@ -1218,6 +1220,20 @@ static void quick_png(void)
     if (!ask("Replace|Cancel", tr("%s is there already. Replace it?"), (const char *)FilePart((STRPTR)path))) return;
   }
   write_doc(v->doc, path, FMT_PNG);
+}
+/* 1.1: File > Export > Paths to SVG: the paths and shape layers, with the document's bounds */
+static void export_svg(void)
+{
+  DocView *v = cur_view();
+  char path[512];
+  u8 *data;
+  size_t len = 0;
+  if (!v) return;
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, ".svg");
+  if (!file_request(1, "Export the paths and shapes as SVG", path, sizeof path, "#?.svg")) return;
+  if (!(data = svg_write_paths(v->doc, 1, &len)) || !write_file(path, data, len)) ask("OK", "%s", tr("The SVG file couldn't be written (out of memory, or the disk is full or write-protected)."));
+  free(data);
 }
 /* 1.1: File > Close Others */
 static int doc_close(int i);
@@ -1840,6 +1856,7 @@ static void command(ULONG id)
   case ID_EXPANIMGIF: export_anim(1); return;
   case ID_EXPANIM: export_anim(0); return;
   case ID_QUICKPNG: quick_png(); return;
+  case ID_EXPSVG: export_svg(); return;
   case ID_IMPFRAMES: import_frames(); return;
   case ID_CLOSEOTHERS: close_others(); return;
   case ID_FILEINFO: if (d) dlg_file_info(d); return;

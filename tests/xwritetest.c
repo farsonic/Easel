@@ -11,11 +11,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "core/xwrite.h"
 #include "core/rasters.h"
 #include "core/amigafmt.h"
 #include "core/batch.h"
 #include "core/palette.h"
+#include "core/svg.h"
+#include "core/shape.h"
+#include "core/path.h"
 
 static int ntests, nfailed;
 static const char *outdir = "/tmp/easel_xwrite_out";
@@ -370,6 +374,85 @@ int main(int argc, char **argv)
       free(f);
     }
     ok("batch ext", !strcmp(batch_ext(FMT_WEBP), ".webp") && !strcmp(batch_ext(FMT_TIFF), ".tif") && !strcmp(batch_ext(FMT_PDF_OUT), ".pdf"));
+  }
+
+  /* SVG: shapes in, paths and shapes out */
+  {
+    static const char svg[] =
+      "<?xml version=\"1.0\"?>\n<!-- a test drawing -->\n"
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\" viewBox=\"0 0 400 200\">\n"
+      "<defs><linearGradient id=\"g\"><stop offset=\"0\"/></linearGradient><rect id=\"hidden\" width=\"9\" height=\"9\"/></defs>\n"
+      "<rect id=\"box\" x=\"20\" y=\"20\" width=\"100\" height=\"60\" fill=\"#f00\"/>\n"
+      "<g fill=\"blue\" transform=\"translate(200,0)\"><circle id=\"dot\" cx=\"50\" cy=\"50\" r=\"40\"/>"
+      "<g transform=\"scale(2)\"><polygon id=\"tri\" points=\"10,60 30,60 20,90\" style=\"fill: rgb(0, 128, 0); stroke:#000000; stroke-width:2\"/></g></g>\n"
+      "<path id=\"p\" d=\"M 300 150 L 380 150 L 380 190 Z\" fill=\"none\" stroke=\"black\" stroke-width=\"4\" opacity=\"0.5\"/>\n"
+      "<line x1=\"0\" y1=\"0\" x2=\"400\" y2=\"200\" stroke=\"#123456\"/>\n"
+      "<text x=\"5\" y=\"5\">skipped</text><ellipse cx=\"1\" cy=\"1\" rx=\"0\" ry=\"3\"/>\n"
+      "</svg>\n";
+    Doc *sd;
+    char err[160] = "";
+    const ShapeParams *sp;
+    double x0, y0, x1, y1;
+    ok("svg detected", svg_detect((const u8 *)svg, sizeof svg - 1) && !svg_detect((const u8 *)"<html>", 6));
+    sd = svg_load_doc((const u8 *)svg, sizeof svg - 1, err, sizeof err);
+    ok("svg opened", sd && sd->w == 200 && sd->h == 100);
+    if (sd) {
+      ok("svg: five shapes", sd->nlay == 5);
+      if (sd->nlay == 5) {
+        Path p;
+        sp = layer_shape(sd->lay[0]); p = shape_path(sp);
+        ok("svg rect", sp && !strcmp(sd->lay[0]->name, "box") && sp->fill_color == 0xFF0000 && path_bounds(&p, &x0, &y0, &x1, &y1) &&
+           fabs(x0 - 10) < 0.01 && fabs(y1 - 40) < 0.01 && fabs(x1 - 60) < 0.01);
+        sp = layer_shape(sd->lay[1]); p = shape_path(sp);
+        ok("svg circle: group fill and transform", sp && sp->fill_color == 0x0000FF && path_bounds(&p, &x0, &y0, &x1, &y1) && fabs(x0 - 105) < 0.5 && fabs(x1 - 145) < 0.5);
+        sp = layer_shape(sd->lay[2]); p = shape_path(sp);
+        ok("svg polygon: style, nested scale", sp && sp->fill_color == 0x008000 && sp->stroke_on && fabs(sp->stroke_width - 2) < 0.01 &&
+           path_bounds(&p, &x0, &y0, &x1, &y1) && fabs(x0 - 110) < 0.01 && fabs(y1 - 90) < 0.01);
+        sp = layer_shape(sd->lay[3]);
+        ok("svg path: stroke only, opacity", sp && !sp->fill_on && sp->stroke_on && fabs(sp->stroke_width - 2) < 0.01 && sp->stroke_alpha >= 126 && sp->stroke_alpha <= 128);
+        sp = layer_shape(sd->lay[4]);
+        ok("svg line: stroked", sp && !sp->fill_on && sp->stroke_color == 0x123456);
+      }
+      {
+        /* out again as SVG, with a work path, and back */
+        u8 *out;
+        size_t ol;
+        Doc *back;
+        Path *wp = doc_path(sd, -1, 1);
+        path_move_to(wp, 1, 2); path_line_to(wp, 50, 60);
+        out = svg_write_paths(sd, 1, &ol);
+        ok("svg written", out && svg_detect(out, ol));
+        if (out) {
+          save("shapes.svg", out, ol);
+          back = svg_load_doc(out, ol, NULL, 0);
+          ok("svg read back", back && back->w == 200 && back->nlay == 6);
+          if (back && back->nlay == 6) {
+            Path a = shape_path(layer_shape(sd->lay[2])), b = shape_path(layer_shape(back->lay[3]));
+            double a0, a1, a2, a3;
+            ok("svg read back: same polygon", path_bounds(&a, &x0, &y0, &x1, &y1) && path_bounds(&b, &a0, &a1, &a2, &a3) &&
+               fabs(x0 - a0) < 0.01 && fabs(y1 - a3) < 0.01 && layer_shape(back->lay[3])->fill_color == 0x008000 && !strcmp(back->lay[0]->name, "Work Path"));
+          }
+          doc_free(back);
+          {
+            /* fuzzed */
+            int r;
+            u8 *m = (u8 *)malloc(ol);
+            for (r = 0; r < 300 && m; r++) {
+              size_t k, ml = ol;
+              Doc *fd;
+              memcpy(m, out, ol);
+              for (k = 0; k < 1 + rnd() % 6; k++) { size_t at = rnd() % ol; if (rnd() & 1) m[at] = (u8)rnd(); else ml = at + 1; }
+              if ((fd = svg_load_doc(m, ml, NULL, 0))) doc_free(fd);
+              nfuzzed++;
+            }
+            free(m);
+          }
+          free(out);
+        }
+      }
+      doc_free(sd);
+    }
+    { static const char e[] = "<svg width=\"10\" height=\"10\"></svg>"; ok("svg without shapes", !svg_load_doc((const u8 *)e, sizeof e - 1, err, sizeof err) && err[0]); }
   }
 
   /* a picture too big for the format */
