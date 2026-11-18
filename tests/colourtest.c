@@ -19,6 +19,7 @@
 #include "core/colorx.h"
 #include "core/xread2.h"
 #include "core/type.h"
+#include "core/frames.h"
 #include "core/exportx.h"
 #include "core/paint.h"
 #include "core/resample.h"
@@ -760,6 +761,130 @@ static void test_export(void)
   doc_free(d);
 }
 
+/* ------------------------------------------------------------------ IFF ANIM ops 7 and 8 */
+#define AW 40
+#define AH 12
+#define ARB 6                          /* (row bytes: 40 pixels, a multiple of 16 bits; 6 isn't one of 4: the last long column is short) */
+#define ANP 2
+static void put32b(Buf *b, u32 v) { buf_addc(b, (int)(v >> 24)); buf_addc(b, (int)(v >> 16 & 255)); buf_addc(b, (int)(v >> 8 & 255)); buf_addc(b, (int)(v & 255)); }
+static void put16b(Buf *b, u32 v) { buf_addc(b, (int)(v >> 8 & 255)); buf_addc(b, (int)(v & 255)); }
+static u32 word_at(const u8 *pl, int p, int y, int col, int ws)
+{
+  u32 v = 0;
+  int k;
+  for (k = 0; k < ws; k++) { int x = col * ws + k; v = v << 8 | (x < ARB ? pl[((size_t)p * AH + y) * ARB + x] : 0); }
+  return v;
+}
+/* a DLTA turning planes a into planes b, op 7 or 8, words of ws bytes */
+static void make_delta(Buf *o, const u8 *a, const u8 *b, int op8, int ws)
+{
+  Buf ops[ANP], dat[ANP];
+  int p, ncol = (ARB + ws - 1) / ws, k;
+  u32 at;
+  for (p = 0; p < ANP; p++) {
+    int col;
+    buf_init(&ops[p]); buf_init(&dat[p]);
+    for (col = 0; col < ncol; col++) {
+      Buf one;
+      int y = 0, n = 0;
+      buf_init(&one);
+      while (y < AH) {
+        int r = 0;
+        while (y + r < AH && word_at(a, p, y + r, col, ws) == word_at(b, p, y + r, col, ws)) r++;
+        if (r) { if (op8) { if (ws == 4) put32b(&one, 0x80000000UL | (u32)r); else put16b(&one, 0x8000 | (u32)r); } else buf_addc(&one, 0x80 | r); y += r; n++; continue; }
+        r = 1;
+        while (y + r < AH && word_at(b, p, y + r, col, ws) == word_at(b, p, y, col, ws)) r++;
+        if (r >= 3) {
+          if (op8) { if (ws == 4) { put32b(&one, 0); put32b(&one, (u32)r); put32b(&one, word_at(b, p, y, col, ws)); } else { put16b(&one, 0); put16b(&one, (u32)r); put16b(&one, word_at(b, p, y, col, ws)); } }
+          else { buf_addc(&one, 0); buf_addc(&one, r); if (ws == 4) put32b(&dat[p], word_at(b, p, y, col, ws)); else put16b(&dat[p], word_at(b, p, y, col, ws)); }
+          y += r; n++; continue;
+        }
+        r = 0;
+        while (y + r < AH && word_at(a, p, y + r, col, ws) != word_at(b, p, y + r, col, ws)) r++;
+        if (op8) { if (ws == 4) put32b(&one, (u32)r); else put16b(&one, (u32)r); } else buf_addc(&one, r);
+        for (k = 0; k < r; k++) { Buf *dst = op8 ? &one : &dat[p]; if (ws == 4) put32b(dst, word_at(b, p, y + k, col, ws)); else put16b(dst, word_at(b, p, y + k, col, ws)); }
+        y += r; n++;
+      }
+      if (op8) { if (ws == 4) put32b(&ops[p], (u32)n); else put16b(&ops[p], (u32)n); } else buf_addc(&ops[p], n);
+      buf_add(&ops[p], one.data, one.len);
+      buf_free(&one);
+    }
+  }
+  at = op8 ? 32 : 64;
+  for (p = 0; p < 8; p++) { if (p < ANP) { put32b(o, at); at += (u32)ops[p].len; } else put32b(o, 0); }
+  if (!op8) for (p = 0; p < 8; p++) { if (p < ANP) { put32b(o, at); at += (u32)dat[p].len; } else put32b(o, 0); }
+  for (p = 0; p < ANP; p++) buf_add(o, ops[p].data, ops[p].len);
+  if (!op8) for (p = 0; p < ANP; p++) buf_add(o, dat[p].data, dat[p].len);
+  for (p = 0; p < ANP; p++) { buf_free(&ops[p]); buf_free(&dat[p]); }
+}
+static void ilbm_head(Buf *b, int body, const u8 *planes)
+{
+  static const u8 cmap[12] = { 0, 0, 0, 255, 0, 0, 0, 255, 0, 255, 255, 255 };
+  int y, p;
+  buf_add(b, "BMHD", 4); put32b(b, 20); put16b(b, AW); put16b(b, AH); put16b(b, 0); put16b(b, 0);
+  buf_addc(b, ANP); buf_addc(b, 0); buf_addc(b, 0); buf_addc(b, 0); put16b(b, 0); buf_addc(b, 10); buf_addc(b, 11); put16b(b, AW); put16b(b, AH);
+  buf_add(b, "CMAP", 4); put32b(b, 12); buf_add(b, cmap, 12);
+  if (body) { buf_add(b, "BODY", 4); put32b(b, ARB * ANP * AH); for (y = 0; y < AH; y++) for (p = 0; p < ANP; p++) buf_add(b, planes + ((size_t)p * AH + y) * ARB, ARB); }
+}
+static void test_anim78(void)
+{
+  u8 pl[3][ANP * AH * ARB];
+  Buf b, f, dl;
+  Frames fr;
+  char err[100];
+  int i, k, fpos;
+  u32 seed = 7;
+  /* three frames of noise, each changing some columns, with runs */
+  for (i = 0; i < ANP * AH * ARB; i++) { seed = seed * 1103515245u + 12345u; pl[0][i] = (u8)(seed >> 16); }
+  memcpy(pl[1], pl[0], sizeof pl[0]); memcpy(pl[2], pl[0], sizeof pl[0]);
+  for (i = 0; i < ANP * AH * ARB; i++) { seed = seed * 1103515245u + 12345u; if ((seed >> 20) & 1) pl[1][i] = (u8)(seed >> 8); }
+  for (i = 0; i < AH; i++) pl[1][i * ARB + 2] = 0x5A;           /* (a run down a column) */
+  memcpy(pl[2], pl[1], sizeof pl[1]);
+  for (i = 0; i < ANP * AH * ARB; i += 3) { seed = seed * 1103515245u + 12345u; pl[2][i] = (u8)(seed >> 12); }
+  buf_init(&b);
+  buf_add(&b, "FORM\0\0\0\0ANIM", 12);
+  for (k = 0; k < 3; k++) {
+    buf_init(&f);
+    buf_add(&f, "ILBM", 4);
+    if (k == 0) ilbm_head(&f, 1, pl[0]);
+    else {
+      buf_add(&f, "ANHD", 4); put32b(&f, 40);
+      buf_addc(&f, k == 1 ? 7 : 8); buf_addc(&f, 0); put16b(&f, AW); put16b(&f, AH); put16b(&f, 0); put16b(&f, 0);
+      put32b(&f, 0); put32b(&f, 6); buf_addc(&f, 1); buf_addc(&f, 0); put32b(&f, k == 2 ? 1 : 0);    /* frame 2: op 8 with long words */
+      for (i = 0; i < 16; i++) buf_addc(&f, 0);
+      buf_init(&dl);
+      make_delta(&dl, pl[k - 1], pl[k], k == 2, k == 2 ? 4 : 2);
+      buf_add(&f, "DLTA", 4); put32b(&f, (u32)dl.len); buf_add(&f, dl.data, dl.len); if (dl.len & 1) buf_addc(&f, 0);
+      buf_free(&dl);
+    }
+    buf_add(&b, "FORM", 4); put32b(&b, (u32)f.len); buf_add(&b, f.data, f.len); if (f.len & 1) buf_addc(&b, 0);
+    buf_free(&f);
+  }
+  b.data[4] = (char)((b.len - 8) >> 24); b.data[5] = (char)((b.len - 8) >> 16); b.data[6] = (char)((b.len - 8) >> 8); b.data[7] = (char)(b.len - 8);
+  CHECK(anim_read_frames((u8 *)b.data, b.len, &fr, 0, 0, err, sizeof err) && fr.n == 3 && !fr.truncated, "an ANIM with op 7 and op 8 deltas read");
+  for (k = 0; k < 3 && k < fr.n; k++) {
+    Buf il;
+    Rgba want;
+    buf_init(&il);
+    buf_add(&il, "FORM\0\0\0\0ILBM", 12);
+    ilbm_head(&il, 1, pl[k]);
+    il.data[4] = (char)((il.len - 8) >> 24); il.data[5] = (char)((il.len - 8) >> 16); il.data[6] = (char)((il.len - 8) >> 8); il.data[7] = (char)(il.len - 8);
+    CHECK(codec_decode((u8 *)il.data, il.len, &want, err, sizeof err), "the frame as an ILBM");
+    CHECK(want.px && !memcmp(want.px, fr.fr[k].px, AW * AH * 4), k == 1 ? "op 7 (short) frame exact" : k == 2 ? "op 8 (long) frame exact" : "first frame exact");
+    rgba_free(&want);
+    buf_free(&il);
+  }
+  for (k = 0; k < fr.n; k++) rgba_free(&fr.fr[k]);
+  /* damaged: each byte in turn */
+  for (fpos = 12; fpos < (int)b.len; fpos += 3) {
+    u8 *c = (u8 *)malloc(b.len);
+    memcpy(c, b.data, b.len); c[fpos] ^= 0x77;
+    if (anim_read_frames(c, b.len, &fr, 0, 0, err, sizeof err)) for (k = 0; k < fr.n; k++) rgba_free(&fr.fr[k]);
+    free(c);
+  }
+  buf_free(&b);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -777,6 +902,7 @@ int main(int argc, char **argv)
   test_cineon_hdr_dicom();
   test_type();
   test_export();
+  test_anim78();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }
