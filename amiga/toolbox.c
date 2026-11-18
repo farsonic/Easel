@@ -634,7 +634,15 @@ static void ob_layout(struct OData *d, Object *obj)
     case F_SCRUB: vw = theme_textlen(rp, theme_font(), "2500px") + 12; break;
     case F_CHOICE: {
       int k;
-      for (k = 0; k < f->nchoices; k++) { LONG w = theme_textlen(rp, theme_font(), tr(f->choices[k])); if (w > vw) vw = w; }
+      LONG ew = 0;
+      for (k = 0; k < f->nchoices; k++) {
+        LONG w = theme_textlen(rp, theme_font(), tr(f->choices[k])), e = theme_textlen(rp, theme_font(), f->choices[k]);
+        if (w > vw) vw = w;
+        if (e > ew) ew = e;
+      }
+      /* (1.1: a translation gets the English's room and a little more; longer words are cut, so the
+         bar keeps its width in every language) */
+      if (vw > ew + 8) vw = ew + 8;
       if (vw > (f->choices == fontlist ? 110 : 160)) vw = f->choices == fontlist ? 110 : 160;
       vw += 26;
       break; }

@@ -15,6 +15,9 @@ CORE="$CORE core/toolopts.c"     # 1.1: tool options
   cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/langtest.c -o $T/easel_langtest
   $T/easel_langtest > $T/easel_langtest.txt || { cat $T/easel_langtest.txt; exit 1; }
   tail -1 $T/easel_langtest.txt
+  # the translations still fit 640x480 (measured with QuillSans 11 when a Fonts drawer is found; EASEL_FONTS=<dir>)
+  python3 tools/langfit.py > $T/easel_langfit.txt || { cat $T/easel_langfit.txt; exit 1; }
+  tail -1 $T/easel_langfit.txt
   # 1.1: the context menus' contents (amiga/ctxmenu.c is plain C)
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
