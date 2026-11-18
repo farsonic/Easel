@@ -16,6 +16,8 @@ typedef struct { int n; float *t; float dmin[3], dmax[3]; char title[64]; } Lut3
 /* a .cube file's text (Adobe/Resolve: LUT_3D_SIZE, or LUT_1D_SIZE made a 3D table, DOMAIN_MIN/MAX,
    TITLE, # comments) as a table; NULL with a reason in err if it isn't one or memory runs out */
 Lut3D *lut_parse_cube(const char *text, long len, char *err, int errcap);
+/* 1.2: an Autodesk .3dl (lut3dl.c); lut_load_cube tries it when the file isn't a .cube */
+Lut3D *lut_parse_3dl(const char *text, long len, char *err, int errcap);
 Lut3D *lut_load_cube(const char *path, char *err, int errcap);
 Lut3D *lut_identity(int n);
 void   lut_free(Lut3D *l);

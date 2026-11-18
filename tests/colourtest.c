@@ -21,6 +21,7 @@
 #include "core/type.h"
 #include "core/frames.h"
 #include "core/fx.h"
+#include "core/adjustx.h"
 #include "core/exportx.h"
 #include "core/paint.h"
 #include "core/resample.h"
@@ -1082,6 +1083,33 @@ static void test_fuzz(void)
   CHECK(1, "fuzzed without a fault");
 }
 
+/* ------------------------------------------------------------------ .3dl LUTs */
+static void test_3dl(void)
+{
+  Buf b;
+  int n = 5, r, g, bl, k;
+  Lut3D *l, *c;
+  char err[80];
+  buf_init(&b);
+  buf_adds(&b, "# a test LUT: red and blue swapped, 12-bit\n");
+  for (k = 0; k < n; k++) buf_printf(&b, "%d ", k * 1023 / (n - 1));
+  buf_adds(&b, "\n");
+  for (r = 0; r < n; r++) for (g = 0; g < n; g++) for (bl = 0; bl < n; bl++) buf_printf(&b, "%d %d %d\n", bl * 4095 / (n - 1), g * 4095 / (n - 1), r * 4095 / (n - 1));
+  l = lut_parse_3dl(b.data, (long)b.len, err, sizeof err);
+  CHECK(l && l->n == 5, "a .3dl LUT read");
+  if (l) {
+    u8 px[3] = { 255, 128, 0 };
+    double o[3];
+    lut_lookup(l, px, 1, o);
+    CHECK(fabs(o[0] - 0) < 0.01 && fabs(o[1] - 128 / 255.0) < 0.01 && fabs(o[2] - 1) < 0.01, "its colours (red and blue swapped)");
+  }
+  c = lut_parse_cube(b.data, (long)b.len, err, sizeof err);
+  CHECK(!c, "(and it isn't taken for a .cube)");
+  lut_free(c); lut_free(l);
+  CHECK(!lut_parse_3dl("0 512 1023\n1 2 3\n", 18, err, sizeof err), "a short .3dl refused");
+  buf_free(&b);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
@@ -1104,6 +1132,7 @@ int main(int argc, char **argv)
   test_progressive();
   test_webp_lossy();
   test_fuzz();
+  test_3dl();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }
