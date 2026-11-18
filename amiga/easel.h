@@ -28,6 +28,7 @@ extern struct Library *MUIMasterBase, *CyberGfxBase;
 #define QTAG (TAG_USER | 0x45530000UL)
 
 /* ------------------------------------------------------------------ the documents (main.c) */
+#define MAXSAMPLERS 10
 typedef struct {
   Doc *doc;
   char path[512];                     /* where it was loaded from or saved to ("" new) */
@@ -39,7 +40,7 @@ typedef struct {
   Snapshot *snap;                     /* 0.5: what the History Brush paints back (taken at opening) */
   char recov[160]; ULONG asig;        /* 0.6: its autosaved copy in PROGDIR:Recovery, and the state it holds */
   /* 0.8: the Color Sampler tool's points (image pixels), shown on the canvas and in the Info panel */
-  LONG samp_x[4], samp_y[4]; int nsamp;
+  LONG samp_x[MAXSAMPLERS], samp_y[MAXSAMPLERS]; int nsamp;   /* (1.3: ten, was four) */
   /* 0.8: the History panel's snapshots: whole copies of the picture as it was, and their names */
   Doc *hsnap[8]; char hsnap_name[8][24]; int nhsnap;
   double vrot;                        /* 1.2: Rotate View: the view's turn, degrees clockwise */
@@ -139,6 +140,8 @@ typedef struct {
   int patch_mode, patch_transparent, patch_structure, patch_color;   /* Patch: 0 source, 1 destination, 2 content-aware */
   int heal_source, heal_diffusion, spot_type;             /* Healing Brush: sampled/pattern, 1-7; Spot Healing: SPOT_ */
   int crop_angle;                     /* Crop: the box's turn (degrees), a drag outside it turns it */
+  /* 1.3 (r3) */
+  int wand_sample;                    /* Magic Wand and Paint Bucket: the Sample Size (pick_sizes[] index) */
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */

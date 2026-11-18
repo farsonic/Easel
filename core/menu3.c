@@ -330,7 +330,7 @@ Doc *newdoc_make(const NewPreset *p, u32 bgcolor, char *err, size_t errcap)
   int transparent = p->bg == NB_TRANSPARENT && p->mode != NM_BITMAP;
   u32 fill = p->bg == NB_BLACK ? 0 : p->bg == NB_BGCOLOR ? bgcolor : 0xFFFFFF;
   Doc *d;
-  if (w < 1 || h < 1 || w > MAXDIM || h > MAXDIM) { snprintf(err, errcap, "The width and height must be between 1 and %d pixels.", MAXDIM); return NULL; }
+  if (w < 1 || h < 1 || w > MAXDIM || h > MAXDIM) { snprintf(err, errcap, "The width and height must be between 1 and 16384 pixels."); return NULL; }
   if (!(d = doc_new(w, h, fill, transparent))) { snprintf(err, errcap, "There isn't enough memory for a picture that size."); return NULL; }
   d->dpi = (u16)p->dpi;
   d->aspect_x = p->ax ? p->ax : 1; d->aspect_y = p->ay ? p->ay : 1;
@@ -761,6 +761,34 @@ int assets_generate(Doc *d, const char *drawer, char *log, size_t logcap)
     free(all);
   }
   return files;
+}
+
+int layer_to_file(Doc *d, int i, const char *path)
+{
+  Box b = layer_bounds(d, i);
+  u8 *all, *px;
+  Doc *t;
+  BatchOpts bo;
+  i32 y;
+  u8 *data;
+  size_t len = 0;
+  char err[80];
+  int ok;
+  if (box_empty(b) || !(all = layer_alone(d, i))) return 0;
+  px = (u8 *)malloc((size_t)(b.x1 - b.x0) * (b.y1 - b.y0) * 4);
+  if (px) for (y = b.y0; y < b.y1; y++) memcpy(px + (long)(y - b.y0) * (b.x1 - b.x0) * 4, all + ((long)y * d->w + b.x0) * 4, (size_t)(b.x1 - b.x0) * 4);
+  free(all);
+  if (!px) return 0;
+  if (!(t = doc_adopt(b.x1 - b.x0, b.y1 - b.y0, px))) { free(px); return 0; }
+  t->dpi = d->dpi;
+  batch_opts_default(&bo);
+  bo.format = batch_format_of_path(path);
+  if (bo.format == FMT_UNKNOWN) bo.format = FMT_PNG;
+  data = batch_encode(t, &bo, &len, err, sizeof err);
+  ok = data && file_write(path, data, len);
+  free(data);
+  doc_free(t);
+  return ok;
 }
 
 /* ================================================================== Find and Replace Text */

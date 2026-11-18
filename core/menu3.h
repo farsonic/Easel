@@ -159,6 +159,10 @@ int  assets_parse(const char *layername, AssetSpec *out, int max);
    members merged) trimmed to what isn't transparent, scaled. How many files; a line each in log */
 int  assets_generate(Doc *d, const char *drawer, char *log, size_t logcap);
 
+/* Export As for a layer: layer i (a group: its members merged) alone, trimmed to what isn't
+   transparent, written in the format path's extension asks (PNG if none); 1 done */
+int  layer_to_file(Doc *d, int i, const char *path);
+
 /* ------------------------------------------------------------------ Find and Replace Text */
 /* every type layer's text (only layer `only` when it is >= 0): find replaced by repl (case-sensitive
    or not, whole words only or not, all of them or only the first found); one undo step. How many */

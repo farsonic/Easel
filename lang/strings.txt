@@ -182,7 +182,6 @@ Move Handle	Griff verschieben	Déplacer la poignée	Mover manejador	Sposta manig
 Move Segment	Segment verschieben	Déplacer le segment	Mover segmento	Sposta segmento
 Move Path	Pfad verschieben	Déplacer le tracé	Mover trazado	Sposta tracciato
 Magnetic Lasso Tool	Magnetisches-Lasso-Werkzeug	Outil Lasso magnétique	Herramienta Lazo magnético	Strumento Lazo magnetico
-There can be four colour samplers: drag one somewhere else, or Alt-click one to remove it.	Es kann vier Farbaufnehmer geben: Ziehen Sie einen woandershin oder entfernen Sie einen mit Alt-Klick.	Il peut y avoir quatre échantillonnages de couleur : déplacez-en un ou supprimez-en un par Alt-clic.	Puede haber cuatro muestras de color: arrastre una a otro lugar o quite una con Alt-clic.	Ci possono essere quattro campionatori colore: trascinarne uno altrove o rimuoverne uno con Alt-clic.
 The Custom Shape tool draws the active path as a shape: draw a path with the Pen tool, or choose one in the Paths panel, first.	Das Eigene-Form-Werkzeug zeichnet den aktiven Pfad als Form: Zeichnen Sie zuerst einen Pfad mit dem Zeichenstift oder wählen Sie einen im Pfade-Bedienfeld.	L'outil Forme personnalisée dessine le tracé actif comme une forme : dessinez d'abord un tracé avec la Plume ou choisissez-en un dans le panneau Tracés.	La herramienta Forma personalizada dibuja el trazado activo como forma: primero dibuje un trazado con la Pluma o elija uno en el panel Trazados.	Lo strumento Forma personale disegna il tracciato attivo come forma: prima disegnare un tracciato con la Penna o sceglierne uno nel pannello Tracciati.
 Alt-click where the Healing Brush should take its texture from first.	Klicken Sie zuerst mit gedrückter Alt-Taste dorthin, woher der\nReparatur-Pinsel seine Struktur nehmen soll.	Faites d'abord un Alt-clic là où le Correcteur doit prendre sa\ntexture.	Primero haga Alt-clic donde el Pincel corrector debe tomar su\ntextura.	Fare prima Alt-clic dove il Pennello correttivo deve prendere la\ntrama.
 Alt-click where the Clone Stamp should copy from first.	Klicken Sie zuerst mit gedrückter Alt-Taste dorthin,\nwovon der Kopierstempel kopieren soll.	Faites d'abord un Alt-clic là où le Tampon de\nduplication doit copier.	Primero haga Alt-clic donde el Tampón de clonar debe\ncopiar.	Fare prima Alt-clic dove il Timbro clone deve copiare.
@@ -1738,7 +1737,6 @@ Rubs out the colour under the brush's centre, wherever it reaches, leaving the r
 Rubs out the area of similar colour where you click, at once.	Radiert den Bereich ähnlicher Farbe, wo Sie klicken, auf einmal aus.	Efface d'un coup la zone de couleur semblable où vous cliquez.	Borra de una vez el área de color parecido donde haga clic.	Cancella in una volta l'area di colore simile dove si fa clic.
 Selects along edges as you go: click to start, move round the edge (clicking to pin it down), then double-click or press Return. Backspace takes the last point back.	Wählt entlang von Kanten aus: zum Beginnen klicken, die Kante entlangfahren (mit Klicks festlegen), dann doppelklicken oder Return drücken. Rückschritt nimmt den letzten Punkt zurück.	Sélectionne le long des contours : cliquez pour commencer, longez le contour (en cliquant pour le fixer), puis double-cliquez ou appuyez sur Entrée. Retour arrière reprend le dernier point.	Selecciona a lo largo de los bordes: haga clic para empezar, recorra el borde (haciendo clic para fijarlo) y luego doble clic o pulse Intro. Retroceso quita el último punto.	Seleziona lungo i bordi: fare clic per iniziare, seguire il bordo (facendo clic per fissarlo), poi doppio clic o premere Invio. Backspace toglie l'ultimo punto.
 Measures a distance and an angle: drag between two points. Straighten Layer then turns the layer so the line is level.	Misst eine Distanz und einen Winkel: zwischen zwei Punkten ziehen. Ebene gerade ausrichten dreht dann die Ebene, bis die Linie waagerecht ist.	Mesure une distance et un angle : faites glisser entre deux points. Redresser le calque fait ensuite tourner le calque pour mettre la ligne à l'horizontale.	Mide una distancia y un ángulo: arrastre entre dos puntos. Enderezar capa gira luego la capa para nivelar la línea.	Misura una distanza e un angolo: trascinare tra due punti. Raddrizza livello poi ruota il livello in modo che la linea sia orizzontale.
-Marks up to four points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.	Markiert bis zu vier Punkte, deren Farben das Info-Bedienfeld zeigt: klicken zum Setzen, ziehen zum Verschieben, Alt-Klick zum Entfernen.	Marque jusqu'à quatre points dont le panneau Infos montre les couleurs : cliquez pour en placer un, faites-le glisser pour le déplacer, Alt-clic pour le supprimer.	Marca hasta cuatro puntos cuyos colores muestra el panel Info: haga clic para poner uno, arrástrelo para moverlo, Alt-clic para quitarlo.	Segna fino a quattro punti i cui colori mostra il pannello Info: fare clic per metterne uno, trascinarlo per spostarlo, Alt-clic per toglierlo.
 Paints out spots and blemishes: brush over them, and when you let go they are filled from the picture round them.	Übermalt Flecken und Makel: darüberstreichen, und beim Loslassen werden sie aus dem umgebenden Bild gefüllt.	Fait disparaître taches et imperfections : passez dessus, et au relâchement elles sont remplies à partir de l'image qui les entoure.	Elimina manchas e imperfecciones: pinte sobre ellas y al soltar se rellenan con la imagen de alrededor.	Elimina macchie e imperfezioni: passarci sopra, e al rilascio vengono riempite dall'immagine attorno.
 Paints with texture from another part of the picture (Alt-click the source first), blended into the colour and light of where you paint when you let go.	Malt mit Struktur aus einem anderen Bildteil (zuerst Alt-Klick auf die Quelle), beim Loslassen in Farbe und Licht der bemalten Stelle eingeblendet.	Peint avec la texture d'une autre partie de l'image (Alt-clic d'abord sur la source), fondue dans la couleur et la lumière de l'endroit peint au relâchement.	Pinta con textura de otra parte de la imagen (primero Alt-clic en el origen), fundida con el color y la luz de donde pinta al soltar.	Dipinge con la trama di un'altra parte dell'immagine (prima Alt-clic sull'origine), fusa nel colore e nella luce del punto dipinto al rilascio.
 Mends an area from another: draw round it, then drag the selection to the part that should replace it.	Repariert einen Bereich aus einem anderen: darum herumzeichnen, dann die Auswahl auf den Teil ziehen, der ihn ersetzen soll.	Répare une zone à partir d'une autre : tracez son contour, puis faites glisser la sélection sur la partie qui doit la remplacer.	Repara un área con otra: dibuje alrededor y arrastre la selección a la parte que debe reemplazarla.	Ripara un'area da un'altra: disegnarle attorno, poi trascinare la selezione sulla parte che deve sostituirla.
@@ -1804,7 +1802,6 @@ Drag to measure	Zum Messen ziehen	Faites glisser pour mesurer	Arrastre para medi
 Straighten Layer	Ebene gerade ausrichten	Redresser le calque	Enderezar capa	Raddrizza livello
 Whole Picture	Ganzes Bild	Image entière	Imagen completa	Immagine intera
 Sample Size:	Aufnahmebereich:	Taille :	Tamaño de muestra:	Dimensione campione:
-Click to place up to four; drag one to move it; Alt-click removes it	Klicken setzt bis zu vier; ziehen verschiebt; Alt-Klick entfernt	Cliquez pour en placer quatre au plus ; faites glisser pour déplacer ; Alt-clic supprime	Haga clic para poner hasta cuatro; arrastre para mover; Alt-clic quita	Fare clic per metterne fino a quattro; trascinare per spostare; Alt-clic toglie
 Alt-click picks the background colour	Alt-Klick nimmt die Hintergrundfarbe auf	Alt-clic prélève la couleur d'arrière-plan	Alt-clic toma el color de fondo	Alt-clic preleva il colore di sfondo
 Hardness:	Härte:	Dureté :	Dureza:	Durezza:
 Aligned	Ausgerichtet	Aligné	Alineado	Allineato
@@ -2733,3 +2730,163 @@ Transform Smart Object	Smartobjekt transformieren	Transformer l'objet dynamique	
 Rasterize Smart Object	Smartobjekt rastern	Pixelliser l'objet dynamique	Rasterizar objeto inteligente	Rasterizza oggetto avanzato
 Artboard	Zeichenfläche	Plan de travail	Mesa de trabajo	Tavola da disegno
 AnimBrush	AnimBrush	AnimBrush	AnimBrush	AnimBrush
+
+## r3-menus
+The slices are locked (View > Lock Slices).	Die Slices sind fixiert (Ansicht > Slices fixieren).	Les tranches sont verrouillées (Affichage > Verrouiller les tranches).	Los sectores están bloqueados (Vista > Bloquear sectores).	Le sezioni sono bloccate (Visualizza > Blocca sezioni).
+There can be ten colour samplers: drag one somewhere else, or Alt-click one to remove it.	Es gibt höchstens zehn Farbaufnehmer: ziehen Sie einen an eine andere Stelle oder entfernen Sie ihn mit Alt-Klick.	Il peut y avoir dix échantillonneurs de couleur : faites-en glisser un ailleurs, ou supprimez-le d'un Alt-clic.	Puede haber diez muestras de color: arrastre una a otro lugar o elimínela con Alt-clic.	Possono esserci dieci campionatori colore: trascinane uno altrove o rimuovilo con Alt-clic.
+Copy Color as HTML	Farbe als HTML kopieren	Copier la couleur au format HTML	Copiar color como HTML	Copia colore come HTML
+Copy Color's Hex Code	Hexcode der Farbe kopieren	Copier le code hexadécimal de la couleur	Copiar código hexadecimal del color	Copia codice esadecimale del colore
+Preserve Transparency	Transparenz erhalten	Préserver la transparence	Conservar transparencia	Mantieni trasparenza
+There is no snapshot of this size to fill from: take one first (Edit > Take Snapshot).	Es gibt keinen Schnappschuss dieser Größe zum Füllen: erstellen Sie zuerst einen (Bearbeiten > Schnappschuss).	Il n'y a pas d'instantané de cette taille pour remplir : prenez-en un d'abord (Edition > Instantané).	No hay ninguna instantánea de este tamaño para rellenar: tome una antes (Edición > Instantánea).	Non c'è un'istantanea di queste dimensioni da cui riempire: creane prima una (Modifica > Istantanea).
+Open As...	Öffnen als...	Ouvrir sous...	Abrir como...	Apri come...
+Save for Web (Legacy)...	Für Web speichern (Legacy)...	Pour le Web (hérité)...	Guardar para Web (heredado)...	Salva per Web (versione precedente)...
+Picked Layers to Files...	Gewählte Ebenen in Dateien...	Calques choisis vers fichiers...	Capas elegidas a archivos...	Livelli scelti in file...
+Color Lookup Tables...	Farbsuchtabellen...	Tables de couleurs (LUT)...	Tablas de consulta de colores...	Tabelle di consultazione colore...
+Export Preferences...	Exportvoreinstellungen...	Préférences d'exportation...	Preferencias de exportación...	Preferenze di esportazione...
+Generate	Generieren	Générer	Generar	Genera
+Image Assets	Bild-Assets	Eléments d'image	Recursos de imagen	Risorse immagine
+Import	Importieren	Importation	Importar	Importa
+Grab Screen...	Bildschirm aufnehmen...	Capturer l'écran...	Capturar pantalla...	Cattura schermo...
+Image Processor...	Bildprozessor...	Processeur d'images...	Procesador de imágenes...	Processore immagini...
+Statistics...	Statistik...	Statistiques...	Estadísticas...	Statistiche...
+Contact Sheet II...	Kontaktabzug II...	Planche contact II...	Hoja de contactos II...	Provino II...
+Find and Replace Text...	Text suchen und ersetzen...	Rechercher et remplacer le texte...	Buscar y reemplazar texto...	Trova e sostituisci testo...
+Reset Tool	Werkzeug zurücksetzen	Réinitialiser l'outil	Restaurar herramienta	Ripristina strumento
+Reset All Tools	Alle Werkzeuge zurücksetzen	Réinitialiser tous les outils	Restaurar todas las herramientas	Ripristina tutti gli strumenti
+Apply Image...	Bildberechnungen...	Appliquer une image...	Aplicar imagen...	Applica immagine...
+Calculations...	Kanalberechnungen...	Opérations...	Cálculos...	Calcoli...
+Analysis	Analyse	Analyse	Análisis	Analisi
+Set Measurement Scale...	Messskala einstellen...	Définir l'échelle de mesure...	Definir escala de medida...	Imposta scala di misura...
+Export Measurements...	Messungen exportieren...	Exporter les mesures...	Exportar medidas...	Esporta misurazioni...
+Place Scale Marker...	Skalenmarkierung platzieren...	Placer un repère d'échelle...	Colocar marcador de escala...	Inserisci indicatore di scala...
+Artboard from Layers	Zeichenfläche aus Ebenen	Plan de travail d'après les calques	Mesa de trabajo a partir de capas	Tavola da disegno da livelli
+Frame from Layers	Rahmen aus Ebenen	Cadre d'après les calques	Marco a partir de capas	Cornice da livelli
+New Layer Based Slice	Neues ebenenbasiertes Slice	Nouvelle tranche d'après un calque	Nuevo sector basado en capas	Nuova sezione basata su livello
+Fit Artboard on Screen	Zeichenfläche einpassen	Plan de travail à l'écran	Encajar mesa de trabajo en pantalla	Adatta tavola da disegno allo schermo
+Pixel Art Preview	Pixel-Art-Vorschau	Aperçu Pixel Art	Previsualización de pixel art	Anteprima pixel art
+Lock Slices	Slices fixieren	Verrouiller les tranches	Bloquear sectores	Blocca sezioni
+Open a picture as a format of your choice	Ein Bild in einem Format Ihrer Wahl öffnen	Ouvrir une image dans le format de votre choix	Abrir una imagen en el formato que elija	Apri un'immagine nel formato scelto
+PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop Raw...|Cancel	PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop Raw...|Abbrechen	PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop brut...|Annuler	PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop Raw...|Cancelar	PNG|JPEG|BMP|IFF ILBM|GIF|Photoshop Raw...|Annulla
+Open the file as which format?	In welchem Format soll die Datei geöffnet werden?	Ouvrir le fichier dans quel format ?	¿Abrir el archivo en qué formato?	Aprire il file in quale formato?
+Photoshop Raw Options	Photoshop Raw-Optionen	Options Photoshop brut	Opciones de Photoshop Raw	Opzioni Photoshop Raw
+Channels:	Kanäle:	Couches :	Canales:	Canali:
+Header (bytes):	Header (Byte):	En-tête (octets) :	Encabezado (bytes):	Intestazione (byte):
+Interleaved	Interleaved	Entrelacé	Entrelazado	Interlacciato
+16 bits a channel (Mac byte order)	16 Bit pro Kanal (Mac-Bytereihenfolge)	16 bits par couche (ordre Mac)	16 bits por canal (orden Mac)	16 bit per canale (ordine Mac)
+Median Cut	Median Cut	Coupe médiane	Corte medio	Taglio mediano
+Octree	Octree	Octree	Octree	Octree
+Wu	Wu	Wu	Wu	Wu
+No Dither	Kein Dithering	Pas de tramage	Sin tramado	Nessuna dithering
+Diffusion	Diffusion	Diffusion	Difusión	Diffusione
+Save for Web (Legacy)	Für Web speichern (Legacy)	Enregistrer pour le Web (hérité)	Guardar para Web (heredado)	Salva per Web (versione precedente)
+Original	Original	Original	Original	Originale
+Optimized	Optimiert	Optimisée	Optimizada	Ottimizzata
+Format:	Format:	Format :	Formato:	Formato:
+Progressive / Interlaced	Progressiv / Interlaced	Progressif / Entrelacé	Progresivo / Entrelazado	Progressivo / Interlacciato
+Matte...	Hintergrund...	Cache...	Mate...	Opaco...
+Not enough memory	Nicht genug Speicher	Mémoire insuffisante	No hay memoria suficiente	Memoria insufficiente
+Save the optimized picture as	Optimiertes Bild speichern unter	Enregistrer l'image optimisée sous	Guardar la imagen optimizada como	Salva l'immagine ottimizzata come
+%s couldn't be written (the disk is full or write-protected?).	%s konnte nicht geschrieben werden (Datenträger voll oder schreibgeschützt?).	%s n'a pas pu être écrit (disque plein ou protégé en écriture ?).	No se ha podido escribir %s (¿disco lleno o protegido contra escritura?).	Impossibile scrivere %s (disco pieno o protetto da scrittura?).
+Choose the drawer for the layers (type any name)	Schublade für die Ebenen wählen (beliebiger Name)	Choisissez le tiroir des calques (nom au choix)	Elija el cajón para las capas (cualquier nombre)	Scegli il cassetto per i livelli (nome a piacere)
+%ld layers were written.	%ld Ebenen wurden geschrieben.	%ld calques ont été écrits.	Se han escrito %ld capas.	Sono stati scritti %ld livelli.
+CUBE|3DL|Cancel	CUBE|3DL|Abbrechen	CUBE|3DL|Annuler	CUBE|3DL|Cancelar	CUBE|3DL|Annulla
+Export the adjustment layers as\nwhich kind of colour lookup table?	Als welche Art Farbsuchtabelle sollen\ndie Einstellungsebenen exportiert werden?	Exporter les calques de réglage sous\nquel type de table de correspondance ?	¿Exportar las capas de ajuste como\nqué tipo de tabla de consulta?	Esportare i livelli di regolazione come\nquale tipo di tabella colore?
+Color Lookup Tables	Farbsuchtabellen	Tables de correspondance des couleurs	Tablas de consulta de colores	Tabelle di consultazione colore
+Grid points (2-64):	Rasterpunkte (2-64):	Points de grille (2-64) :	Puntos de cuadrícula (2-64):	Punti griglia (2-64):
+There are no visible adjustment layers to export.	Es gibt keine sichtbaren Einstellungsebenen zum Exportieren.	Il n'y a aucun calque de réglage visible à exporter.	No hay capas de ajuste visibles para exportar.	Non ci sono livelli di regolazione visibili da esportare.
+Save the colour lookup table as	Farbsuchtabelle speichern unter	Enregistrer la table de correspondance sous	Guardar la tabla de consulta como	Salva la tabella colore come
+Next to the picture	Neben dem Bild	A côté de l'image	Junto a la imagen	Accanto all'immagine
+Ask each time	Jedes Mal fragen	Demander chaque fois	Preguntar cada vez	Chiedi ogni volta
+Export Preferences	Exportvoreinstellungen	Préférences d'exportation	Preferencias de exportación	Preferenze di esportazione
+Quick Export Format:	Schnell-Export-Format:	Format d'exportation rapide :	Formato de exportación rápida:	Formato esportazione rapida:
+Quick Export Location:	Schnell-Export-Ort:	Emplacement d'exportation rapide :	Ubicación de exportación rápida:	Posizione esportazione rapida:
+Quick Export as	Schnell exportieren als	Exportation rapide sous	Exportación rápida como	Esportazione rapida come
+The drawer %s couldn't be made.	Die Schublade %s konnte nicht angelegt werden.	Le tiroir %s n'a pas pu être créé.	No se ha podido crear el cajón %s.	Impossibile creare il cassetto %s.
+No layer asks for assets: name a layer like "logo.png" or "50% icon.jpg8, icon.gif".	Keine Ebene verlangt Assets: nennen Sie eine Ebene z. B. "logo.png" oder "50% icon.jpg8, icon.gif".	Aucun calque ne demande d'éléments : nommez un calque par ex. "logo.png" ou "50% icon.jpg8, icon.gif".	Ninguna capa pide recursos: llame a una capa p. ej. "logo.png" o "50% icon.jpg8, icon.gif".	Nessun livello richiede risorse: chiama un livello ad es. "logo.png" o "50% icon.jpg8, icon.gif".
+%ld files were written into %s:\n%s	%ld Dateien wurden in %s geschrieben:\n%s	%ld fichiers ont été écrits dans %s :\n%s	Se han escrito %ld archivos en %s:\n%s	Sono stati scritti %ld file in %s:\n%s
+Open Pictures|Choose Files...|Cancel	Geöffnete Bilder|Dateien wählen...|Abbrechen	Images ouvertes|Choisir des fichiers...|Annuler	Imágenes abiertas|Elegir archivos...|Cancelar	Immagini aperte|Scegli file...|Annulla
+Which pictures?	Welche Bilder?	Quelles images ?	¿Qué imágenes?	Quali immagini?
+Image Processor: the pictures to process	Bildprozessor: die zu bearbeitenden Bilder	Processeur d'images : les images à traiter	Procesador de imágenes: las imágenes que procesar	Processore immagini: le immagini da elaborare
+Image Processor	Bildprozessor	Processeur d'images	Procesador de imágenes	Processore immagini
+Save in drawer:	In Schublade speichern:	Enregistrer dans le tiroir :	Guardar en el cajón:	Salva nel cassetto:
+File Type	Dateityp	Type de fichier	Tipo de archivo	Tipo di file
+JPEG, quality	JPEG, Qualität	JPEG, qualité	JPEG, calidad	JPEG, qualità
+Fit in:	Einpassen in:	Adapter à :	Encajar en:	Adatta a:
+IFF ILBM, colours	IFF ILBM, Farben	IFF ILBM, couleurs	IFF ILBM, colores	IFF ILBM, colori
+Convert Profile to sRGB	Profil in sRGB konvertieren	Convertir le profil en sRVB	Convertir perfil a sRGB	Converti profilo in sRGB
+Icons	Piktogramme	Icônes	Iconos	Icone
+Copyright Info:	Copyright-Info:	Infos de copyright :	Información de copyright:	Info copyright:
+Something couldn't be done:\n%s	Etwas konnte nicht ausgeführt werden:\n%s	Une opération n'a pas pu être faite :\n%s	Algo no se ha podido hacer:\n%s	Qualcosa non è stato possibile:\n%s
+%ld files were written.	%ld Dateien wurden geschrieben.	%ld fichiers ont été écrits.	Se han escrito %ld archivos.	Sono stati scritti %ld file.
+Image Statistics	Bildstatistik	Statistiques d'image	Estadísticas de imagen	Statistiche immagine
+Stack Mode:	Stapelmodus:	Mode de pile :	Modo de pila:	Metodo di serie:
+Statistics	Statistik	Statistiques	Estadísticas	Statistiche
+Statistics: the pictures to stack	Statistik: die zu stapelnden Bilder	Statistiques : les images à empiler	Estadísticas: las imágenes que apilar	Statistiche: le immagini da sovrapporre
+Choose two pictures or more.	Wählen Sie zwei oder mehr Bilder.	Choisissez au moins deux images.	Elija dos imágenes o más.	Scegli due o più immagini.
+across first	zuerst quer	d'abord en largeur	primero horizontal	prima in orizzontale
+down first	zuerst nach unten	d'abord en hauteur	primero vertical	prima in verticale
+Contact Sheet II	Kontaktabzug II	Planche contact II	Hoja de contactos II	Provino II
+Spacing (px):	Abstand (px):	Espacement (px) :	Espaciado (px):	Spaziatura (px):
+Place:	Platzieren:	Placer :	Colocar:	Posiziona:
+Rotate for Best Fit	Drehen für beste Anpassung	Faire pivoter pour un meilleur ajustement	Rotar para mejor ajuste	Ruota per adattamento ottimale
+Flatten All Layers	Alle Ebenen reduzieren	Aplatir tous les calques	Acoplar todas las capas	Unisci tutti i livelli
+The sheet needs about %ld KB of memory.	Der Abzug braucht etwa %ld KB Speicher.	La planche demande environ %ld Ko de mémoire.	La hoja necesita unos %ld KB de memoria.	Il provino richiede circa %ld KB di memoria.
+Contact Sheet II: the pictures	Kontaktabzug II: die Bilder	Planche contact II : les images	Hoja de contactos II: las imágenes	Provino II: le immagini
+Now|In 5 Seconds|Cancel	Jetzt|In 5 Sekunden|Abbrechen	Maintenant|Dans 5 secondes|Annuler	Ahora|En 5 segundos|Cancelar	Ora|Tra 5 secondi|Annulla
+Grab the frontmost screen as a new picture? (Bring the screen to the front in the time given.)	Den vordersten Bildschirm als neues Bild aufnehmen? (Holen Sie ihn in der Zeit nach vorn.)	Capturer l'écran au premier plan comme nouvelle image ? (Amenez l'écran devant dans le délai.)	¿Capturar la pantalla delantera como imagen nueva? (Traiga la pantalla al frente en ese tiempo.)	Catturare lo schermo in primo piano come nuova immagine? (Porta lo schermo davanti nel tempo dato.)
+The screen couldn't be read (not enough memory?).	Der Bildschirm konnte nicht gelesen werden (nicht genug Speicher?).	L'écran n'a pas pu être lu (mémoire insuffisante ?).	No se ha podido leer la pantalla (¿falta memoria?).	Impossibile leggere lo schermo (memoria insufficiente?).
+Find and Replace Text	Text suchen und ersetzen	Rechercher et remplacer le texte	Buscar y reemplazar texto	Trova e sostituisci testo
+Find What:	Suchen nach:	Rechercher :	Buscar:	Trova:
+Change To:	Ändern in:	Remplacer par :	Cambiar por:	Cambia in:
+Search All Layers	Alle Ebenen durchsuchen	Rechercher dans tous les calques	Buscar en todas las capas	Cerca in tutti i livelli
+Case Sensitive	Groß-/Kleinschreibung	Respecter la casse	Mayúsculas y minúsculas	Maiuscole/minuscole
+Whole Word Only	Nur ganzes Wort	Mot entier uniquement	Sólo palabra completa	Solo parole intere
+Find Next	Weitersuchen	Suivant	Buscar siguiente	Trova successivo
+Change	Ändern	Remplacer	Cambiar	Cambia
+Change All	Alle ändern	Tout remplacer	Cambiar todo	Cambia tutto
+Not found.	Nicht gefunden.	Introuvable.	No encontrado.	Non trovato.
+%ld changed.	%ld geändert.	%ld remplacé(s).	%ld cambiados.	%ld modificati.
+Merged	Zusammengefügt	Fusionnés	Combinadas	Uniti
+New Channel	Neuer Kanal	Nouvelle couche	Canal nuevo	Nuovo canale
+Calculations	Kanalberechnungen	Opérations	Cálculos	Calcoli
+Apply Image	Bildberechnungen	Appliquer une image	Aplicar imagen	Applica immagine
+Source 1	Quelle 1	Source 1	Origen 1	Origine 1
+Layer:	Ebene:	Calque :	Capa:	Livello:
+Source 2	Quelle 2	Source 2	Origen 2	Origine 2
+Blending	Füllmethode	Fusion	Fusión	Fusione
+Blending:	Füllmethode:	Fusion :	Fusión:	Fusione:
+Result:	Ergebnis:	Résultat :	Resultado:	Risultato:
+Choose a pixel layer first.	Wählen Sie zuerst eine Pixelebene.	Choisissez d'abord un calque de pixels.	Elija antes una capa de píxeles.	Scegli prima un livello di pixel.
+Measurement Scale	Messskala	Echelle de mesure	Escala de medida	Scala di misura
+Pixel Length:	Pixellänge:	Longueur en pixels :	Longitud en píxeles:	Lunghezza in pixel:
+Logical Length:	Logische Länge:	Longueur logique :	Longitud lógica:	Lunghezza logica:
+Logical Units:	Logische Einheiten:	Unités logiques :	Unidades lógicas:	Unità logiche:
+(The Ruler's line gives the pixel length.)	(Die Linie des Linealwerkzeugs gibt die Pixellänge an.)	(La ligne de l'outil Règle donne la longueur en pixels.)	(La línea de la herramienta Regla da la longitud en píxeles.)	(La linea del Righello dà la lunghezza in pixel.)
+pixels	Pixel	pixels	píxeles	pixel
+Nothing has been recorded yet\n(Image > Analysis > Record Measurements).	Noch nichts aufgezeichnet\n(Bild > Analyse > Messungen aufzeichnen).	Rien n'a encore été enregistré\n(Image > Analyse > Enregistrer les mesures).	Aún no se ha registrado nada\n(Imagen > Análisis > Registrar medidas).	Non è ancora stato registrato nulla\n(Immagine > Analisi > Registra misurazioni).
+Export the measurements as	Messungen exportieren als	Exporter les mesures sous	Exportar las medidas como	Esporta le misurazioni come
+Length	Länge	Longueur	Longitud	Lunghezza
+Measurement Scale Marker	Messskalen-Markierung	Repère d'échelle de mesure	Marcador de escala de medida	Indicatore scala di misura
+Black|White|Cancel	Schwarz|Weiß|Abbrechen	Noir|Blanc|Annuler	Negro|Blanco|Cancelar	Nero|Bianco|Annulla
+The marker's colour?	Farbe der Markierung?	Couleur du repère ?	¿Color del marcador?	Colore dell'indicatore?
+The marker would be longer than the picture\nis wide: set the scale first.	Die Markierung wäre länger als das Bild breit\nist: stellen Sie zuerst die Skala ein.	Le repère serait plus long que l'image n'est\nlarge : définissez d'abord l'échelle.	El marcador sería más largo que el ancho de\nla imagen: defina antes la escala.	L'indicatore sarebbe più lungo della larghezza\ndell'immagine: imposta prima la scala.
+Color Mode:	Farbmodus:	Mode colorimétrique :	Modo de color:	Metodo colore:
+Background Contents:	Hintergrundinhalt:	Contenu de l'arrière-plan :	Contenido de fondo:	Contenuto sfondo:
+Pixel Aspect Ratio:	Pixel-Seitenverhältnis:	Format des pixels :	Proporción de píxeles:	Proporzioni pixel:
+Save Preset...	Vorgabe speichern...	Enregistrer le paramètre prédéfini...	Guardar ajuste preestablecido...	Salva predefinito...
+Delete Preset	Vorgabe löschen	Supprimer le paramètre prédéfini	Eliminar ajuste preestablecido	Elimina predefinito
+There can be 32 saved presets: delete one first.	Es gibt höchstens 32 gespeicherte Vorgaben: löschen Sie zuerst eine.	Il peut y avoir 32 paramètres enregistrés : supprimez-en un d'abord.	Puede haber 32 ajustes guardados: elimine uno antes.	Possono esserci 32 predefiniti salvati: eliminane prima uno.
+Save Document Preset	Dokumentvorgabe speichern	Enregistrer le paramètre de document	Guardar ajuste de documento	Salva predefinito documento
+Preset Name:	Name der Vorgabe:	Nom du paramètre :	Nombre del ajuste:	Nome predefinito:
+Only presets you saved can be deleted.	Nur selbst gespeicherte Vorgaben können gelöscht werden.	Seuls les paramètres que vous avez enregistrés peuvent être supprimés.	Sólo se pueden eliminar los ajustes que haya guardado.	Si possono eliminare solo i predefiniti salvati da te.
+A picture that size needs about %ld KB of memory.	Ein Bild dieser Größe braucht etwa %ld KB Speicher.	Une image de cette taille demande environ %ld Ko de mémoire.	Una imagen de ese tamaño necesita unos %ld KB de memoria.	Un'immagine di queste dimensioni richiede circa %ld KB di memoria.
+OK|Cancel	OK|Abbrechen	OK|Annuler	OK|Cancelar	OK|Annulla
+Reset the settings of every tool?	Die Einstellungen aller Werkzeuge zurücksetzen?	Réinitialiser les paramètres de tous les outils ?	¿Restaurar los ajustes de todas las herramientas?	Ripristinare le impostazioni di tutti gli strumenti?
+The active layer is empty (or there are 64 slices already).	Die aktive Ebene ist leer (oder es gibt schon 64 Slices).	Le calque actif est vide (ou il y a déjà 64 tranches).	La capa activa está vacía (o ya hay 64 sectores).	Il livello attivo è vuoto (o ci sono già 64 sezioni).
+Choose the layers first.	Wählen Sie zuerst die Ebenen.	Choisissez d'abord les calques.	Elija antes las capas.	Scegli prima i livelli.
+Choose a pixel layer with something on it first.	Wählen Sie zuerst eine Pixelebene mit Inhalt.	Choisissez d'abord un calque de pixels non vide.	Elija antes una capa de píxeles con contenido.	Scegli prima un livello di pixel non vuoto.
+There is no artboard here.	Hier ist keine Zeichenfläche.	Il n'y a pas de plan de travail ici.	Aquí no hay ninguna mesa de trabajo.	Qui non c'è nessuna tavola da disegno.
+Delete every slice?	Alle Slices löschen?	Supprimer toutes les tranches ?	¿Eliminar todos los sectores?	Eliminare tutte le sezioni?
+Marks up to ten points whose colours the Info panel shows: click to place one, drag to move it, Alt-click to remove it.	Markiert bis zu zehn Punkte, deren Farben das Info-Bedienfeld zeigt: klicken setzt, ziehen verschiebt, Alt-Klick entfernt einen.	Marque jusqu'à dix points dont le panneau Informations montre les couleurs : cliquez pour en placer, faites glisser pour déplacer, Alt-clic pour supprimer.	Marca hasta diez puntos cuyos colores muestra el panel Información: haga clic para colocar, arrastre para mover, Alt-clic para eliminar.	Segna fino a dieci punti i cui colori mostra il pannello Info: clic per inserirne uno, trascina per spostarlo, Alt-clic per rimuoverlo.
+Click to place up to ten; drag one to move it; Alt-click removes it	Klicken setzt bis zu zehn; ziehen verschiebt; Alt-Klick entfernt	Cliquez pour en placer dix au plus ; glissez pour déplacer ; Alt-clic supprime	Clic para colocar hasta diez; arrastre para mover; Alt-clic elimina	Clic per inserirne fino a dieci; trascina per spostare; Alt-clic rimuove
+Replace Text	Text ersetzen	Remplacer le texte	Reemplazar texto	Sostituisci testo

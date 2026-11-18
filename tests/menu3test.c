@@ -331,6 +331,11 @@ static void test_assets(void)
   path_join(path, sizeof path, drawer, "box2x.png");
   { size_t len; u8 *data = file_read(path, &len); char err[80]; Doc *b = data ? codec_load_doc(data, len, err, sizeof err) : NULL;
     CHECK(b && b->w == 20 && px(b, 0, 10, 10)[0] == 255 && px(b, 0, 10, 10)[1] == 0, "the layer alone, red"); doc_free(b); free(data); }
+  path_join(path, sizeof path, drawer, "Layer 1.png");
+  CHECK(layer_to_file(d, 1, path), "a layer exported");
+  { size_t len; u8 *data = file_read(path, &len); char err[80]; Doc *b = data ? codec_load_doc(data, len, err, sizeof err) : NULL;
+    CHECK(b && b->w == 10 && b->h == 10 && px(b, 0, 0, 0)[0] == 255, "trimmed to its content"); doc_free(b); free(data); }
+  CHECK(!layer_to_file(d, 5, path), "no such layer");
   doc_free(d);
 }
 

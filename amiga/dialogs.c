@@ -16,6 +16,7 @@
 #include <proto/utility.h>
 #include <clib/alib_protos.h>
 #include "easel.h"
+#include "../core/menu3.h"
 #include "../core/filters2.h"
 #include "../core/layers.h"
 #include "theme.h"
@@ -1341,25 +1342,36 @@ int dlg_fill_layer(int make_kind)
 void dlg_fill(void)
 {
   Doc *d = cur_doc();
-  static const char *const what[] = { "Foreground Colour", "Background Colour", "Black", "50% Grey", "White", "Colour...", NULL };
+  DocView *v = cur_view();
+  static const char *const what[] = { "Foreground Colour", "Background Colour", "Black", "50% Grey", "White", "Colour...", "History", NULL };
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *wc, *os, *bc;
-  int ok, k, op, mode;
+  static int keep_last;
+  Object *w, *wc, *os, *bc, *kc;
+  int ok, k, op, mode, keep;
   u32 c;
   if (!d) return;
   w = dialog_window("Fill", ColGroup(2),
         Child, QLabel(tr("Contents:"), MUIO_Label_Centered), Child, wc = cycle(what, 0),
         Child, QLabel(tr("Mode:"), MUIO_Label_Centered), Child, bc = cycle(blends, 0),
         Child, QLabel(tr("Opacity (%):"), MUIO_Label_Centered), Child, os = slider(1, 100, 100),
+        Child, kc = check(keep_last), Child, QLabel(tr("Preserve Transparency"), 0),          /* 1.3 */
       End, NULL);
   if (!w) return;
   ok = run_modal(w, ends, NULL) == ID_DLGOK;
   k = (int)xget(wc, MUIA_Cycle_Active); op = (int)xget(os, MUIA_Numeric_Value); mode = (int)xget(bc, MUIA_Cycle_Active);
+  keep = (int)xget(kc, MUIA_Selected);
   MUI_DisposeObject(w);
   if (!ok) return;
+  keep_last = keep;
+  if (k == 6) {
+    /* 1.3: the History Brush's snapshot (taken when the picture was opened, or with Take Snapshot) */
+    if (!v || !v->snap || v->snap->w != d->w || v->snap->h != d->h) { ask("OK", "%s", tr("There is no snapshot of this size to fill from: take one first (Edit > Take Snapshot).")); return; }
+    fill_from_pixels(d, v->snap->px, op, mode, keep);
+    return;
+  }
   c = k == 0 ? d->fg : k == 1 ? d->bg : k == 2 ? 0 : k == 3 ? 0x808080 : 0xFFFFFF;
   if (k == 5) { LONG p = pick_color("Fill Colour", d->fg); if (p < 0) return; c = (u32)p; }
-  fill_selection(d, c, op, mode);
+  fill_keep(d, c, op, mode, keep);
 }
 /* a Latin-1 string (from a gadget) as UTF-8 */
 static void latin1_utf8(const char *s, char *out, size_t cap)
@@ -1436,22 +1448,25 @@ void dlg_stroke(void)
   Doc *d = cur_doc();
   static const char *const where[] = { "Inside", "Centre", "Outside", NULL };
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *ws, *lc, *os;
-  int ok, width, loc, op;
+  Object *w, *ws, *lc, *os, *bc, *kc;
+  int ok, width, loc, op, mode, keep;
   if (!d) return;
   if (!d->sel) { ask("OK", "%s", tr("Make a selection first: Stroke draws round its edge.")); return; }
   w = dialog_window("Stroke", ColGroup(2),
         Child, QLabel(tr("Width (px):"), MUIO_Label_SingleFrame), Child, ws = string_num(3),
         Child, QLabel(tr("Location:"), MUIO_Label_Centered), Child, lc = cycle(where, 1),
+        Child, QLabel(tr("Mode:"), MUIO_Label_Centered), Child, bc = cycle(blends, 0),                  /* 1.3 */
         Child, QLabel(tr("Opacity (%):"), MUIO_Label_Centered), Child, os = slider(1, 100, 100),
+        Child, kc = check(0), Child, QLabel(tr("Preserve Transparency"), 0),
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("In the foreground colour"), End,
       End, NULL);
   if (!w) return;
   ok = run_modal(w, ends, NULL) == ID_DLGOK;
   width = (int)str_val(ws); loc = (int)xget(lc, MUIA_Cycle_Active); op = (int)xget(os, MUIA_Numeric_Value);
+  mode = (int)xget(bc, MUIA_Cycle_Active); keep = (int)xget(kc, MUIA_Selected);
   MUI_DisposeObject(w);
   if (!ok || width < 1) return;
-  stroke_selection(d, width > 250 ? 250 : width, loc, d->fg, op);
+  stroke_keep(d, width > 250 ? 250 : width, loc, d->fg, op, mode, keep);
 }
 void dlg_select(ULONG id)
 {

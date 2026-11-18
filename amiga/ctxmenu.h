@@ -33,7 +33,8 @@ enum {
   ID_CTX_SAMPLE0 = 6130,              /* .. + 6: the Eyedropper's and Color Sampler's sample size */
   ID_CTX_PICKFROM0 = 6140,            /* .. + 2: what the Eyedropper samples (current layer, and below, all) */
   ID_CTX_TABCLOSE = 6145, ID_CTX_TABOTHERS, ID_CTX_TABDUP, ID_CTX_TABINFO,   /* a tab's Close ... about that tab's picture */
-  ID_CTX_LAST = 6150
+  ID_CTX_COPYHTML = 6149, ID_CTX_COPYHEX,   /* 1.3: the Eyedropper's Copy Color as HTML, Copy Color's Hex Code */
+  ID_CTX_LAST = 6151
 };
 #define CTX_MAXUNDER 16
 #define CTX_NSAMPLE 7

@@ -134,3 +134,9 @@ copper
 #?.(cube|3dl)
 CMYK/8
 Lab/8
+Look.3dl
+Look.cube
+-assets
+Untitled-assets
+PROGDIR:Easel.newpresets
+PROGDIR:
