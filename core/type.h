@@ -28,7 +28,9 @@
 enum { TA_JUSTIFY = 3,                 /* justified, the last line of each paragraph left */
        TA_JUSTIFY_ALL = 4 };           /* every line justified */
 enum { TAA_NONE, TAA_SHARP, TAA_SMOOTH };   /* anti-aliasing: none, sharp (hinted), smooth */
-enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST, TW_N };
+enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST,
+       TW_ARCLOWER, TW_ARCUPPER, TW_SHELLLOWER, TW_SHELLUPPER, TW_FISHEYE, TW_INFLATE,   /* 1.1 */
+       TW_N };
 extern const char *const text_warp_names[TW_N];
 
 typedef struct {

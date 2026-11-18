@@ -17,7 +17,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-const char *const text_warp_names[TW_N] = { "None", "Arc", "Arch", "Bulge", "Flag", "Wave", "Fish", "Rise", "Squeeze", "Twist" };
+const char *const text_warp_names[TW_N] = { "None", "Arc", "Arch", "Bulge", "Flag", "Wave", "Fish", "Rise", "Squeeze", "Twist",
+  "Arc Lower", "Arc Upper", "Shell Lower", "Shell Upper", "Fisheye", "Inflate" };
 
 static u32 be16(const u8 *p) { return ((u32)p[0] << 8) | p[1]; }
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
@@ -795,6 +796,27 @@ static void map_pt(const Warp *w, double *px, double *py)
     case TW_TWIST: {
       double a = b * M_PI / 4 * u, dy = y - w->cy;
       x -= dy * sin(a); y = w->cy + dy * cos(a);
+      break;
+    }
+    /* 1.1: one edge bent (Arc, Shell: the bent edge also drawn in), the whole bulged from the middle */
+    case TW_ARCLOWER: y += b * H * 0.5 * (1 - u * u) * (v + 1) / 2; break;
+    case TW_ARCUPPER: y -= b * H * 0.5 * (1 - u * u) * (1 - v) / 2; break;
+    case TW_SHELLLOWER: case TW_SHELLUPPER: {
+      double t = w->warp == TW_SHELLLOWER ? (v + 1) / 2 : (1 - v) / 2, c = cos(u * M_PI / 2);
+      if (t < 0) t = 0;
+      if (t > 1) t = 1;
+      y += (w->warp == TW_SHELLLOWER ? 1 : -1) * b * H * 0.5 * c * t;
+      x = w->cx + (x - w->cx) * (1 - 0.3 * b * t);
+      break;
+    }
+    case TW_FISHEYE: {
+      double r2 = u * u + v * v, k = r2 < 1 ? 1 + b * 0.5 * (1 - r2) : 1;
+      x = w->cx + (x - w->cx) * k; y = w->cy + (y - w->cy) * k;
+      break;
+    }
+    case TW_INFLATE: {
+      double vv = v > 1 ? 1 : v < -1 ? -1 : v;
+      x += (x - w->cx) * b * 0.5 * (1 - vv * vv); y += (y - w->cy) * b * 0.5 * (1 - u * u);
       break;
     }
     }

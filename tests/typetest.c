@@ -406,6 +406,8 @@ static void test_warp(void)
       CHECK(top_mid < top_end - 10, "arc bends up");
     }
     if (labs(ink_count(px, b) - ink_count(p0, b0)) > ink_count(p0, b0) / 2) { ok = 0; printf("  warp %s lost its ink\n", text_warp_names[w]); }
+    /* 1.1's: each changes the shape (its ink's box is not the flat text's) */
+    if (w >= TW_ARCLOWER && in.y1 - in.y0 == in0.y1 - in0.y0 && in.x1 - in.x0 == in0.x1 - in0.x0) { ok = 0; printf("  warp %s left the text flat\n", text_warp_names[w]); }
     free(px);
   }
   CHECK(ok, "every warp draws inside its bounds");
