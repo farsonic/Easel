@@ -2855,3 +2855,4 @@
   { { "Add to Sample", "Zur Aufnahme hinzuf\374gen", "Ajouter \340 l'\351chantillon", "A\361adir a la muestra", "Aggiungi al campione" } },
   { { "Subtract from Sample", "Von Aufnahme subtrahieren", "Soustraire de l'\351chantillon", "Restar de la muestra", "Sottrai dal campione" } },
   { { "Foreground Color:", "Vordergrundfarbe:", "Couleur de premier plan :", "Color frontal:", "Colore di primo piano:" } },
+  { { "Only Web Colors", "Nur Webfarben", "Couleurs Web uniquement", "S\363lo colores web", "Solo colori Web" } },

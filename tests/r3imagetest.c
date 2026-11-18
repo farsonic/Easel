@@ -33,6 +33,7 @@
 #include "core/hyphen.h"
 #include "core/adjust.h"
 #include "core/adjust10.h"
+#include "core/colr3.h"
 #include "core/gsub.h"
 #include "core/ttraster.h"
 
@@ -886,6 +887,29 @@ static void test_acv(void)
   }
 }
 
+static void test_picker_colours(void)
+{
+  int c, m, y, k;
+  rgb_to_cmyk100(0xFF0000, &c, &m, &y, &k);
+  CHECK(c == 0 && m == 100 && y == 100 && k == 0, "red: M100 Y100");
+  rgb_to_cmyk100(0x000000, &c, &m, &y, &k);
+  CHECK(c == 0 && m == 0 && y == 0 && k == 100, "black: K100");
+  rgb_to_cmyk100(0x808080, &c, &m, &y, &k);
+  CHECK(c == 0 && m == 0 && y == 0 && k == 50, "grey: K50");
+  CHECK(cmyk100_to_rgb(0, 100, 100, 0) == 0xFF0000 && cmyk100_to_rgb(0, 0, 0, 100) == 0 && cmyk100_to_rgb(100, 0, 0, 0) == 0x00FFFF, "CMYK to RGB");
+  {
+    u32 col;
+    int bad = 0;
+    for (col = 0; col < 0x1000000; col += 0x10307) {
+      rgb_to_cmyk100(col, &c, &m, &y, &k);
+      { u32 back = cmyk100_to_rgb(c, m, y, k); int s; for (s = 0; s < 24; s += 8) if (abs((int)((back >> s) & 255) - (int)((col >> s) & 255)) > 4) bad++; }
+    }
+    CHECK(!bad, "CMYK there and back within rounding");
+  }
+  CHECK(web_safe(0x123456) == 0x003366 && web_safe(0xFFFFFF) == 0xFFFFFF && web_safe(0x1A1A1A) == 0x333333, "nearest web-safe colours");
+  CHECK(is_web_safe(0x33CC99) && !is_web_safe(0x34CC99), "web-safe or not");
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -906,6 +930,7 @@ int main(int argc, char **argv)
   test_type();
   test_replace_color();
   test_acv();
+  test_picker_colours();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

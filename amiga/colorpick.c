@@ -1,7 +1,7 @@
 /*
  * colorpick.c - Easel 0.5's colour picker (see colorpick.h): the square and hue strip drawn as
- * the Color panel draws them, the new and old swatches, and the HSB, RGB, Lab and hex fields kept
- * in step with each other.
+ * the Color panel draws them, the new and old swatches, and the HSB, RGB, Lab, CMYK (round 3) and
+ * hex fields kept in step with each other; Only Web Colors keeps the colour to the 216 web-safe ones.
  */
 #include <string.h>
 #include <stdio.h>
@@ -19,6 +19,7 @@
 #include "lang.h"
 #include "ids.h"
 #include "colorpick.h"
+#include "../core/colr3.h"            /* r3: CMYK fields, Only Web Colors */
 
 #define SQ 200                        /* the square's side */
 #define STRIP 16
@@ -200,10 +201,11 @@ static ULONG kdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
 }
 
 /* ------------------------------------------------------------------ the dialog */
-#define NF 10
-static Object *picker, *field[NF];
-static const char *const flabel[NF] = { "H", "S", "B", "R", "G", "B", "L", "a", "b", "#" };
-static const char *const fsuffix[NF] = { "\xb0", "%", "%", "", "", "", "", "", "", "" };
+#define NF 14
+#define FHEX 13                       /* (the hex field: the last) */
+static Object *picker, *field[NF], *webonly;
+static const char *const flabel[NF] = { "H", "S", "B", "R", "G", "B", "L", "a", "b", "C", "M", "Y", "K", "#" };
+static const char *const fsuffix[NF] = { "\xb0", "%", "%", "", "", "", "", "", "", "%", "%", "%", "%", "" };
 static int updating;
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 /* every field shown for colour c (except the one being typed in, skip) */
@@ -211,14 +213,17 @@ static void fill_fields(ULONG c, int skip)
 {
   char buf[16];
   int r = (int)(c >> 16) & 255, g = (int)(c >> 8) & 255, b = (int)c & 255, i;
-  double h, s, v, L, A, B, vals[9];
+  double h, s, v, L, A, B, vals[13];
+  int cc, cm, cy, ck;
   rgb_to_hsv(r, g, b, &h, &s, &v);
   rgb_to_lab(r, g, b, &L, &A, &B);
+  rgb_to_cmyk100(c, &cc, &cm, &cy, &ck);
   vals[0] = h; vals[1] = s * 100; vals[2] = v * 100; vals[3] = r; vals[4] = g; vals[5] = b; vals[6] = L; vals[7] = A; vals[8] = B;
+  vals[9] = cc; vals[10] = cm; vals[11] = cy; vals[12] = ck;
   updating = 1;
   for (i = 0; i < NF; i++) {
     if (i == skip) continue;
-    if (i == 9) sprintf(buf, "%06lX", (unsigned long)(c & 0xFFFFFF));
+    if (i == FHEX) sprintf(buf, "%06lX", (unsigned long)(c & 0xFFFFFF));
     else sprintf(buf, "%ld", (long)floor(vals[i] + 0.5));
     set(field[i], MUIA_String_Contents, (ULONG)buf);
   }
@@ -230,7 +235,13 @@ static void each_id(ULONG id)
 {
   ULONG c = xget(picker, MUIA_CPick_Color);
   int r, g, b;
-  if (id == CP_PICKER) { if (!updating) fill_fields(c, -1); return; }
+  if (id == CP_PICKER || id == CP_FIELD + NF) {
+    /* (r3: Only Web Colors: the colour moved to the nearest web-safe one) */
+    if (updating) return;
+    if (webonly && xget(webonly, MUIA_Selected) && !is_web_safe(c)) { c = web_safe(c); updating = 1; set(picker, MUIA_CPick_Color, c); updating = 0; }
+    fill_fields(c, -1);
+    return;
+  }
   if (id < CP_FIELD || id >= CP_FIELD + NF) return;
   switch ((int)(id - CP_FIELD)) {
   case 0: case 1: case 2:
@@ -242,17 +253,22 @@ static void each_id(ULONG id)
   case 6: case 7: case 8:
     lab_to_rgb(fval(6), fval(7), fval(8), &r, &g, &b);
     break;
+  case 9: case 10: case 11: case 12:
+    c = cmyk100_to_rgb(clampi(fval(9), 0, 100), clampi(fval(10), 0, 100), clampi(fval(11), 0, 100), clampi(fval(12), 0, 100));
+    r = (int)(c >> 16) & 255; g = (int)(c >> 8) & 255; b = (int)c & 255;
+    break;
   default: {
-    const char *s = (const char *)xget(field[9], MUIA_String_Contents);
+    const char *s = (const char *)xget(field[FHEX], MUIA_String_Contents);
     c = strtoul(s[0] == '#' ? s + 1 : s, NULL, 16) & 0xFFFFFF;
     r = (int)(c >> 16) & 255; g = (int)(c >> 8) & 255; b = (int)c & 255;
   }
   }
   c = ((ULONG)r << 16) | ((ULONG)g << 8) | (ULONG)b;
+  if (webonly && xget(webonly, MUIA_Selected)) c = web_safe(c);
   updating = 1;
   set(picker, MUIA_CPick_Color, c);
   updating = 0;
-  fill_fields(c, (int)(id - CP_FIELD) <= 2 || (int)(id - CP_FIELD) >= 6 ? (int)(id - CP_FIELD) : -1);
+  fill_fields(c, (webonly && xget(webonly, MUIA_Selected)) || (int)(id - CP_FIELD) == FHEX || ((int)(id - CP_FIELD) >= 3 && (int)(id - CP_FIELD) <= 5) ? -1 : (int)(id - CP_FIELD));
 }
 LONG colorpick_run(const char *title, ULONG start)
 {
@@ -266,13 +282,17 @@ LONG colorpick_run(const char *title, ULONG start)
   if (!picker || !cols) { if (picker) MUI_DisposeObject(picker); if (cols) MUI_DisposeObject(cols); return -1; }
   for (i = 0; i < NF; i++) {
     field[i] = StringObject, StringFrame, MUIA_String_MaxLen, 8, MUIA_CycleChain, 1,
-      MUIA_String_Accept, (ULONG)(i == 9 ? "0123456789abcdefABCDEF#" : "0123456789-."), MUIA_FixWidthTxt, (ULONG)"MMMMMM", End;
+      MUIA_String_Accept, (ULONG)(i == FHEX ? "0123456789abcdefABCDEF#" : "0123456789-."), MUIA_FixWidthTxt, (ULONG)"MMMMMM", End;
     DoMethod(cols, OM_ADDMEMBER, (ULONG)QLabel((char *)flabel[i], MUIO_Label_SingleFrame));
     DoMethod(cols, OM_ADDMEMBER, (ULONG)field[i]);
     DoMethod(cols, OM_ADDMEMBER, (ULONG)QLabel((char *)fsuffix[i], MUIO_Label_SingleFrame));
   }
-  w = dialog_window(title, HGroup, Child, picker, Child, VGroup, Child, cols, Child, VSpace(0), End, End, NULL);
-  if (!w) return -1;
+  webonly = ImageObject, ImageButtonFrame, MUIA_InputMode, MUIV_InputMode_Toggle, MUIA_Image_Spec, MUII_CheckMark,
+    MUIA_Background, MUII_ButtonBack, MUIA_ShowSelState, FALSE, MUIA_Selected, FALSE, MUIA_CycleChain, 1, End;
+  w = dialog_window(title, HGroup, Child, picker, Child, VGroup, Child, cols,
+                    Child, HGroup, Child, webonly, Child, QLabel(tr("Only Web Colors"), 0), Child, HSpace(0), End, Child, VSpace(0), End, End, NULL);
+  if (!w) { webonly = NULL; return -1; }
+  DoMethod(webonly, MUIM_Notify, MUIA_Selected, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, (ULONG)(CP_FIELD + NF));
   for (i = 0; i < NF; i++)
     DoMethod(field[i], MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, (ULONG)(CP_FIELD + i));
   DoMethod(picker, MUIM_Notify, MUIA_CPick_Color, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, (ULONG)CP_PICKER);
@@ -282,7 +302,7 @@ LONG colorpick_run(const char *title, ULONG start)
     res = (LONG)(xget(picker, MUIA_CPick_Color) & 0xFFFFFF);
   }
   MUI_DisposeObject(w);
-  picker = NULL;
+  picker = NULL; webonly = NULL;
   return res;
 }
 void colorpick_free(void) { if (kcls) { MUI_DeleteCustomClass(kcls); kcls = NULL; } }

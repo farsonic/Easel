@@ -12,7 +12,7 @@ CORE="$CORE core/toolopts.c"     # 1.1: tool options
 CORE="$CORE core/layerx.c core/brushx.c core/cafill.c core/selsmart.c core/toolsx.c core/legacy.c"   # 1.2: the tools, brushes and layers extras
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
-CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c"   # r3-image: vector, filter, selection and type extras
+CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"   # r3-image: vector, filter, selection and type extras
 if [ "$1" != "fast" ]; then
   # 1.1: the interface languages (lang/strings.txt, amiga/lang_table.h, every string translated)
   python3 tools/mklang.py --check && python3 tools/langcheck.py | tail -1
