@@ -1,25 +1,25 @@
 /*
  * r3ids.h - the menu IDs of round 3's picture work (r3image.c): Combine Shapes, the new filters
  * (Field Blur, Flame, Picture Frame, Tree, HDR Toning, Liquify...), Select Sky and Subject, and the
- * type additions. Kept apart from ids.h, in a range of their own (7700-7899).
+ * type additions. Kept apart from ids.h, in a range of their own (7900-7999).
  */
 #ifndef EASEL_R3IDS_H
 #define EASEL_R3IDS_H
-#define ID_R3_FIRST     7700
-#define ID_COMBINE0     7700           /* + CS_ (core/vecx.h): Unite ... Merge Shape Components */
-#define ID_FIELDBLUR    7710
-#define ID_FLAME        7711
-#define ID_PICFRAME     7712
-#define ID_TREE         7713
-#define ID_HDRTONING    7714
-#define ID_LIQUIFY      7715
-#define ID_PATHBLUR     7716
-#define ID_SELSUBJECT   7720
-#define ID_SELSKY       7721
-#define ID_TYPEONPATH   7740
-#define ID_TYPEOFFPATH  7741
-#define ID_TYPEAREA     7742
-#define ID_R3_LAST      7899
+#define ID_R3_FIRST     7900
+#define ID_COMBINE0     7900           /* + CS_ (core/vecx.h): Unite ... Merge Shape Components */
+#define ID_FIELDBLUR    7910
+#define ID_FLAME        7911
+#define ID_PICFRAME     7912
+#define ID_TREE         7913
+#define ID_HDRTONING    7914
+#define ID_LIQUIFY      7915
+#define ID_PATHBLUR     7916
+#define ID_SELSUBJECT   7920
+#define ID_SELSKY       7921
+#define ID_TYPEONPATH   7940
+#define ID_TYPEOFFPATH  7941
+#define ID_TYPEAREA     7942
+#define ID_R3_LAST      7999
 
 #include "../core/doc.h"
 #include "../core/path.h"
