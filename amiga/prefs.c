@@ -16,6 +16,7 @@
 #include "tools2.h"                     /* 1.2 */
 #include "../core/layerx.h"
 #include "theme.h"
+#include "colorui.h"
 #include "lang.h"
 #include "ids.h"
 #include "../core/viewx.h"                 /* 1.2 */
@@ -70,6 +71,7 @@ int prefs_line(const char *l)
   if (!strncmp(l, "checkerc2=", 10)) { prefs.checker_c2 = strtoul(l + 10, NULL, 16) & 0xFFFFFF; return 1; }
   if (!strncmp(l, "screenid=", 9)) { prefs.screen_id = strtoul(l + 9, NULL, 16); return 1; }
   if (!strncmp(l, "recovery=", 9)) { strncpy(prefs.recovery, l + 9, sizeof prefs.recovery - 1); return 1; }
+  if (!strncmp(l, "monitoricc=", 11)) { strncpy(prefs.monitor_icc, l + 11, sizeof prefs.monitor_icc - 1); return 1; }
   if (!strncmp(l, "qxdir=", 6)) { strncpy(prefs.qx_dir, l + 6, sizeof prefs.qx_dir - 1); return 1; }   /* round 3 */
   if (!strncmp(l, "scratch=", 8)) { strncpy(prefs.scratch, l + 8, sizeof prefs.scratch - 1); return 1; }
   if (!strncmp(l, "language=", 9)) { prefs.language = lang_by_code(l + 9); return 1; }    /* (1.1: "auto" or a code) */
@@ -94,6 +96,7 @@ void prefs_write(FILE *f)
           prefs.point_kind);
   fprintf(f, "qxfmt=%d\nqxwhere=%d\nqxmeta=%d\nqxsrgb=%d\nqxdir=%s\nwebpq=%d\nplacesmart=%d\nbeepdone=%d\n", prefs.qx_fmt, prefs.qx_where,
           prefs.qx_meta, prefs.qx_srgb, prefs.qx_dir, prefs.webp_quality, prefs.place_smart, prefs.beep_done);   /* round 3 */
+  fprintf(f, "monitoricc=%s\n", prefs.monitor_icc);
 }
 /* the settings kept in range and handed to the parts that use them (the core's undo, the bubbles) */
 void prefs_apply(void)
@@ -132,6 +135,7 @@ void prefs_apply(void)
   else undo_scratch[0] = 0;
   undo_scratch_max = (long)prefs.scratch_mb * 1024 * 1024;
   theme_tips = prefs.tips;
+  colorui_set_monitor(prefs.monitor_icc);                  /* round 3 */
   /* 1.2: smart objects keep their sources in the scratch drawer (T: when none is set) */
   strncpy(smart_drawer, prefs.scratch[0] ? prefs.scratch : "T:", sizeof smart_drawer - 1); smart_drawer[sizeof smart_drawer - 1] = 0;
 }

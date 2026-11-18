@@ -24,6 +24,7 @@
 ViewSpec view_spec = { PRF_CMYK, 0, 0, CI_RELATIVE, 1, 0, NULL };
 int view_spec_gen;
 static IccProfile *work_cmyk;          /* the working CMYK profile loaded, or NULL */
+static IccProfile *monitor_prof;       /* round 3: the monitor's profile (Preferences keep its file), or NULL */
 static char work_cmyk_name[64];
 static char prof_path[512];            /* where the last profile was chosen */
 static CmsXform *vx;                   /* the canvas's view transform, and what it was made for */
@@ -40,6 +41,7 @@ const CmsXform *colorui_view(Doc *doc)
   {
     IccProfile *p = colorx_doc_profile(doc);
     view_spec.cmyk = work_cmyk;
+    view_spec.monitor = monitor_prof;                    /* (round 3) */
     vx = cms_view_new(p && icc_space(p) == ICC_RGB ? p : NULL, &view_spec);
     icc_free(p);
   }
@@ -47,7 +49,25 @@ const CmsXform *colorui_view(Doc *doc)
   return vx;
 }
 void colorui_view_free(void) { cms_xform_free(vx); vx = NULL; vx_doc = NULL; vx_gen = -1; }
-void colorui_free(void) { colorui_view_free(); icc_free(work_cmyk); work_cmyk = NULL; }
+void colorui_free(void) { colorui_view_free(); icc_free(work_cmyk); work_cmyk = NULL; icc_free(monitor_prof); monitor_prof = NULL; }
+/* round 3: the monitor's profile from a file (prefs.monitor_icc; "" for none: sRGB); 1 if it is in use */
+int colorui_set_monitor(const char *path)
+{
+  static char loaded[256];
+  size_t n;
+  u8 *b;
+  IccProfile *p;
+  if (!strcmp(loaded, path) && (monitor_prof != NULL) == (path[0] != 0)) return monitor_prof != NULL;
+  icc_free(monitor_prof); monitor_prof = NULL;
+  strncpy(loaded, path, sizeof loaded - 1); loaded[sizeof loaded - 1] = 0;
+  if (path[0] && (b = file_read(path, &n)) != NULL) {
+    p = icc_parse(b, n, NULL, 0);
+    free(b);
+    if (p && icc_space(p) == ICC_RGB) monitor_prof = p; else icc_free(p);
+  }
+  view_spec_gen++;
+  return monitor_prof != NULL;
+}
 
 /* a profile file read (malloc'd bytes, *len); NULL if none was chosen or it isn't a profile */
 static u8 *choose_profile(u32 *len, const char *title)
@@ -100,6 +120,24 @@ int colorui_command(Doc *d, ULONG id)
   case ID_COLORSET: {
     static const DlgParam p[1] = { { "Display gamma (tenths; under 1.0: sRGB):", 0, 30, 0 } };
     LONG init[1];
+    /* round 3: first the monitor's profile, kept in the preferences */
+    {
+      char msg[200];
+      int r;
+      snprintf(msg, sizeof msg, tr("The monitor's profile: %s"), monitor_prof ? icc_desc(monitor_prof) : tr("none (sRGB, or the display gamma)"));
+      r = ask("Settings...|Load Monitor Profile...|No Monitor Profile|Cancel", "%s", msg);
+      if (!r) break;
+      if (r == 2) {
+        char path[512];
+        strcpy(path, prefs.monitor_icc[0] ? prefs.monitor_icc : prof_path);
+        if (ui_file_request(0, "Load the monitor's profile", path, sizeof path, "#?.(icc|icm)")) {
+          if (colorui_set_monitor(path)) { strncpy(prefs.monitor_icc, path, sizeof prefs.monitor_icc - 1); changed(); }
+          else { ask("OK", "%s", tr("That isn't an RGB profile Easel can use for the monitor.")); colorui_set_monitor(prefs.monitor_icc); }
+        }
+        break;
+      }
+      if (r == 3) { prefs.monitor_icc[0] = 0; colorui_set_monitor(""); changed(); break; }
+    }
     init[0] = view_spec.gamma10;
     intents();
     dlg_sliders("Color Settings", p, 1, intent_list, "Proofing intent:", view_spec.intent, NULL, NULL, 0, "Black Point Compensation", view_spec.bpc, init, a_settings, NULL, 0);

@@ -321,6 +321,7 @@ typedef struct {
   int qx_fmt, qx_where, qx_meta, qx_srgb, webp_quality;
   char qx_dir[256];
   int place_smart, beep_done;
+  char monitor_icc[256];              /* round 3: the monitor's ICC profile file ("": none, sRGB) */
 } Prefs;
 enum { QX_PNG, QX_JPEG, QX_GIF, QX_WEBP, QX_TIFF, QX_N };
 enum { QW_BESIDE, QW_LAST, QW_DRAWER, QW_ASK };

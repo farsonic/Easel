@@ -22,4 +22,6 @@ void colorui_view_free(void);
 /* the working CMYK profile (NULL: Easel's press) */
 const IccProfile *colorui_cmyk(void);
 void colorui_free(void);
+/* round 3: the monitor's profile from a file ("" for none); 1 if one is in use */
+int  colorui_set_monitor(const char *path);
 #endif

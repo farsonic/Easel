@@ -973,6 +973,7 @@ typedef struct { const IccProfile *doc, *cmyk; ViewSpec v; double gamma; } ViewC
 static void to_monitor(const ViewCtx *c, const double xyz[3], double *out)
 {
   int k;
+  if (c->v.monitor && icc_from_xyz(c->v.monitor, CI_RELATIVE, xyz, out)) return;   /* round 3: through the monitor's profile */
   if (c->gamma <= 0) { icc_from_xyz(icc_srgb(), CI_RELATIVE, xyz, out); return; }
   {
     double lin[3];
@@ -1036,15 +1037,16 @@ CmsXform *cms_view_new(const IccProfile *doc, const ViewSpec *v)
   ViewCtx c;
   CmsXform *x;
   int proofing = v->on && v->proof != PRF_NONE;
-  if (!proofing && !v->gamut && v->gamma10 == 0 && (!doc || icc_same(doc, icc_srgb()))) return NULL;
+  const IccProfile *mon = v->monitor && v->monitor->space == ICC_RGB && !icc_same(v->monitor, icc_srgb()) ? v->monitor : NULL;
+  if (!proofing && !v->gamut && v->gamma10 == 0 && !mon && (!doc || icc_same(doc, icc_srgb()))) return NULL;
   if (doc && doc->space != ICC_RGB) doc = NULL;
-  if (!proofing && !v->gamut && v->gamma10 == 0 && doc && doc->kind == PK_MATRIX) {
+  if (!proofing && !v->gamut && (v->gamma10 == 0 || mon) && (!doc || doc->kind == PK_MATRIX) && (!mon || mon->kind == PK_MATRIX)) {
     if (!(x = xf_alloc())) return NULL;
     x->nout = 3;
-    fast_make(x, doc, icc_srgb(), 0);
+    fast_make(x, doc ? doc : icc_srgb(), mon ? mon : icc_srgb(), 0);
     return x;
   }
-  c.doc = doc; c.v = *v; c.cmyk = v->cmyk && v->cmyk->space == ICC_CMYK ? v->cmyk : NULL; c.gamma = v->gamma10 / 10.0;
+  c.doc = doc; c.v = *v; c.v.monitor = mon; c.cmyk = v->cmyk && v->cmyk->space == ICC_CMYK ? v->cmyk : NULL; c.gamma = v->gamma10 / 10.0;
   if (!(x = xf_alloc())) return NULL;
   if (!grid_alloc(x, proofing || v->gamut ? 17 : 33, 3, v->gamut)) { cms_xform_free(x); return NULL; }
   grid_fill(x, view_fn, &c);

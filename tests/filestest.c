@@ -16,6 +16,7 @@
 #include "core/filesx.h"
 #include "core/xread2.h"
 #include "core/modex.h"
+#include "core/cms.h"
 #include "core/palette.h"
 #include <math.h>
 
@@ -604,6 +605,34 @@ static void test_matte(void)
   doc_free(d);
 }
 
+/* the monitor's profile: the canvas's view goes through it */
+static void test_monitor(void)
+{
+  ViewSpec v;
+  CmsXform *x;
+  u8 px[9] = { 255, 0, 0, 0, 128, 0, 200, 200, 200 };
+  memset(&v, 0, sizeof v);
+  v.proof = PRF_CMYK; v.intent = CI_RELATIVE; v.bpc = 1;
+  CHECK(cms_view_new(NULL, &v) == NULL, "an sRGB picture on an sRGB display: nothing to do");
+  v.monitor = icc_srgb();
+  CHECK(cms_view_new(NULL, &v) == NULL, "an sRGB monitor profile changes nothing");
+  v.monitor = icc_adobergb();
+  x = cms_view_new(NULL, &v);
+  CHECK(x != NULL, "an Adobe RGB monitor: a transform");
+  if (x) {
+    cms_xform_apply_rgb(x, px, 3);
+    CHECK(px[0] >= 215 && px[0] <= 223 && px[1] <= 2 && px[2] <= 2, "sRGB red as the wide monitor shows it");
+    CHECK(px[6] >= 198 && px[6] <= 202 && px[7] == px[6] && px[8] == px[6], "greys stay grey");
+    printf("  red on the Adobe RGB monitor: %d %d %d; green %d %d %d\n", px[0], px[1], px[2], px[3], px[4], px[5]);
+    cms_xform_free(x);
+  }
+  /* with proofing on too, the proof is shown through the monitor's profile */
+  v.on = 1; v.proof = PRF_CMYK;
+  x = cms_view_new(NULL, &v);
+  CHECK(x != NULL, "proofing on the wide monitor");
+  cms_xform_free(x);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -660,6 +689,7 @@ int main(int argc, char **argv)
   test_look();
   test_jpeg_size();
   test_matte();
+  test_monitor();
   test_exif();
   test_layered();
   test_exr2();
