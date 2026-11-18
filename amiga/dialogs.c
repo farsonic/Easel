@@ -255,6 +255,7 @@ static ApplyFn last_fn; static LONG last_v[SDMAX]; static int last_choice, last_
    calls when the first list, the second list or a button is chosen (to show other settings) */
 static const char *const *sd_cfg_cyc2; static const char *sd_cfg_cyc2label; static int sd_cfg_cyc2init;
 static int sd_cfg_tickview;          /* (round 4) the tick shows something on the preview only (Show Clipping) */
+static int sd_cfg_cyc2view;          /* (round 4) the second list only changes the preview's view (Select and Mask's View) */
 static const char *const *sd_cfg_btns; static void (*sd_cfg_cychook)(int), (*sd_cfg_cyc2hook)(int), (*sd_cfg_btnhook)(int);
 #define ID_DLGCYC (ID_DLGBTN0 + 7)
 #define ID_DLGCYC2 (ID_DLGBTN0 + 6)
@@ -362,6 +363,8 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   /* (round 4) a tick that only changes the view (Levels' Show Clipping): off for the result */
   if (ok && sd_cfg_tickview && sd.chk && xget(sd.chk, MUIA_Selected)) { nnset(sd.chk, MUIA_Selected, FALSE); sd.pending = 1; }
   sd_cfg_tickview = 0;
+  if (ok && sd_cfg_cyc2view && sd.cyc2 && xget(sd.cyc2, MUIA_Cycle_Active)) { nnset(sd.cyc2, MUIA_Cycle_Active, 0); sd.pending = 1; }
+  sd_cfg_cyc2view = 0;
   if (ok && (!sd.pv.shown || sd.pending)) sd_apply();
   if (ok && sd_remember) {
     sd_read();
@@ -1844,5 +1847,6 @@ int dlg_sliders(const char *title, const DlgParam *p, int n, const char *const *
 /* r3: the call when the first list's choice changes (for the next dlg_sliders), and the sliders
    shown with other values from it */
 void dlg_set_choice_hook(void (*hook)(int choice)) { sd_cfg_cychook = hook; }
+void dlg_set_view_choice(void) { sd_cfg_cyc2view = 1; }   /* (round 4) */
 void dlg_show_values(const LONG *v, int n) { sd_show(v, n); }
 void dlg_set_last(DlgApplyFn fn) { last_fn = fn; last_plain = 0; memset(last_v, 0, sizeof last_v); last_choice = last_tick = 0; }

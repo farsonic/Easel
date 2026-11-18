@@ -31,12 +31,19 @@ interface and icons. None of the icons are copied from any other program.
   Preferences' General page); check boxes in slider dialogs sit beside their labels.
 - Select > Find Layers (by a part of the name, or by kind) and Isolate Layers filter the Layers panel;
   Select > Float lifts the selected pixels onto a floating layer, Drop puts them back.
+- Window > Adjustments: every adjustment layer a double-click away.
+- Window > Character Styles and Paragraph Styles: named type styles made from a type layer and put on
+  others (kept in Easel.typestyles).
+- Edit > Presets > Preset Manager: brushes, swatches, gradients and patterns renamed, deleted,
+  reordered, loaded and saved as sets in one window.
 - Edit > Check Spelling checks the type layers with Quill's British English word list (the package
   has a Dict drawer now), with suggestions, Ignore, Ignore All, Add, Change and Change All.
+- Select and Mask: View shows the refined selection on black, on white, as an overlay, in black and
+  white or on layers.
 - Levels: Show Clipping shows where the black or white point clips the picture; Levels and Curves
   take Alt+2 (composite) to Alt+5 (blue) for the channel.
 - Color Range: click the preview to sample (Shift adds, Alt takes away), Localized Color Clusters,
-  and the preview as Selection, Image, Grayscale, Black or White Matte or Quick Mask.
+  Out of Gamut, and the preview as Selection, Image, Grayscale, Black or White Matte or Quick Mask.
 - The Measurement Log counts in the picture's measurement scale (Set Measurement Scale) and exports
   the scale's units and factor.
 - Preferences: Interface > Canvas colour, Transparency & Gamut > the gamut warning's colour and

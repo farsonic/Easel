@@ -13,6 +13,10 @@
 #include "core/r4.h"
 #include "core/spell.h"
 #include "core/cms.h"
+#include "core/preset.h"
+#include "core/swatch.h"
+#include "core/gradient.h"
+#include "core/pattern.h"
 
 static int tests, fails;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -170,6 +174,16 @@ static void test_color_range(void)
   CHECK(m && m[10 * 100 + 95] == 255, "a colour without a place counts everywhere");
   free(m);
   doc_free(d);
+  /* Out of Gamut: what Easel's press can't print */
+  CHECK(color_out_of_gamut(0, 255, 0) && color_out_of_gamut(0, 0, 255), "pure green and blue are past the press");
+  CHECK(!color_out_of_gamut(128, 128, 128) && !color_out_of_gamut(200, 150, 120) && !color_out_of_gamut(255, 255, 255), "greys, a skin tone and white print");
+  d = doc_new(20, 4, 0x808080, 0);
+  for (y = 0; y < 4; y++) for (x = 10; x < 20; x++) { u8 *q = d->lay[0]->px + (y * 20 + x) * 4; q[0] = 0; q[1] = 255; q[2] = 0; }
+  memset(&cr, 0, sizeof cr); cr.preset = CR_OUTGAMUT; cr.all_layers = 1;
+  m = color_range_mask(d, &cr);
+  CHECK(m && m[15] == 255 && m[5] == 0, "Color Range > Out of Gamut");
+  free(m);
+  doc_free(d);
   cr_view_pixel(CRV_SELECTION, 128, p, out); CHECK(out[0] == 128 && out[2] == 128, "Selection: the mask as grey");
   cr_view_pixel(CRV_IMAGE, 0, p, out); CHECK(out[0] == 200 && out[1] == 100, "Image: the picture");
   cr_view_pixel(CRV_BLACKMATTE, 0, p, out); CHECK(out[0] == 0 && out[1] == 0, "Black Matte: unselected black");
@@ -242,7 +256,103 @@ static void test_gamut(void)
   gamut_warn_color = GAMUT_GREY; gamut_warn_opacity = 100;
 }
 
-int main(void)
+/* Edit > Presets > Preset Manager: rename, delete, move, save and load each kind */
+static void test_presets(const char *tmp)
+{
+  static PresetList pl; static SwatchSet ss; static GradientList gl; static PatternList ptl;
+  void *lists[PM_N];
+  char path[600];
+  int k, n, j;
+  presets_init(&pl); presets_builtin(&pl);
+  swatches_init(&ss); swatches_defaults(&ss);
+  gradlist_init(&gl); gradlist_builtin(&gl);
+  patlist_init(&ptl); patlist_builtin(&ptl);
+  lists[PM_BRUSHES] = &pl; lists[PM_SWATCHES] = &ss; lists[PM_GRADIENTS] = &gl; lists[PM_PATTERNS] = &ptl;
+  for (k = 0; k < PM_N; k++) {
+    char first[80], second[80];
+    void *l = lists[k];
+    n = pm_count(k, l);
+    CHECK(n >= 2, pm_kind_names[k]);
+    if (n < 2) continue;
+    snprintf(first, sizeof first, "%s", pm_name(k, l, 0)); snprintf(second, sizeof second, "%s", pm_name(k, l, 1));
+    j = pm_move(k, l, 0, 1);
+    CHECK(j == 1 && !strcmp(pm_name(k, l, 0), second) && !strcmp(pm_name(k, l, 1), first), "moved down a place");
+    CHECK(pm_move(k, l, 0, -1) == -1 && pm_move(k, l, n - 1, 1) == -1, "not past the ends");
+    CHECK(pm_rename(k, l, 1, "Renamed") && !strcmp(pm_name(k, l, 1), "Renamed") && !pm_rename(k, l, n, "x"), "renamed");
+    CHECK(pm_delete(k, l, 0) && pm_count(k, l) == n - 1 && !strcmp(pm_name(k, l, 0), "Renamed"), "deleted");
+    snprintf(path, sizeof path, "%s/easel_pm_%d.%s", tmp, k, k == PM_BRUSHES ? "brushes" : k == PM_SWATCHES ? "swatches" : k == PM_GRADIENTS ? "gradients" : "patterns");
+    CHECK(pm_save(k, l, path), "saved");
+    j = pm_load(k, l, path);
+    CHECK(j == n - 1 && pm_count(k, l) == 2 * (n - 1) && !strcmp(pm_name(k, l, n - 1), "Renamed"), "loaded back, added after");
+    remove(path);
+  }
+  CHECK(!strcmp(pm_name(PM_PATTERNS, &ptl, 9999), "") && pm_count(PM_N, &pl) == 0, "out of range");
+  presets_free(&pl); swatches_free(&ss); gradlist_free(&gl); patlist_free(&ptl);
+}
+
+/* Window > Character Styles and Paragraph Styles */
+static void test_type_styles(void)
+{
+  static TypeStyles st, back;
+  Doc *d = doc_new(80, 40, 0xFFFFFF, 0);
+  TextParams *tp = (TextParams *)calloc(1, sizeof *tp);
+  const TextParams *got;
+  char *t;
+  TextRun r;
+  text_params_init(tp, "Sans", 20, 0x112233, 2, 20);
+  text_set_string(tp, "Heading");
+  memset(&r, 0, sizeof r); strcpy(r.family, "Serif"); r.bold = 1; r.size = 31.5; r.color = 0xAA0000; r.tracking = -20;
+  text_style(tp, 0, 7, &r, TS_FAMILY | TS_BOLD | TS_SIZE | TS_COLOR | TS_TRACKING);
+  tp->align = TA_CENTER; tp->leading = 36; tp->space_after = 4.25;
+  CHECK(tstyle_char_new(&st, tp, "Title") == 0 && tstyle_para_new(&st, tp, "Centred") == 0, "styles made from a layer");
+  text_params_init(tp, "Sans", 12, 0, 2, 30);
+  text_set_string(tp, "Body text");
+  doc_new_text(d, tp, "Body");
+  CHECK(doc_char_style(d, 1, &st.c[0]), "the character style put on");
+  got = layer_text(d->lay[1]);
+  CHECK(got && !strcmp(got->run[0].family, "Serif") && got->run[0].bold && got->run[0].size > 31.4 && got->run[0].size < 31.6 && got->run[0].color == 0xAA0000 && got->run[0].tracking < -19, "its attributes");
+  CHECK(doc_para_style(d, 1, &st.p[0]), "the paragraph style put on");
+  got = layer_text(d->lay[1]);
+  CHECK(got && got->align == TA_CENTER && got->leading > 35.9 && got->space_after > 4.2 && got->space_after < 4.3, "its settings");
+  doc_undo(d);
+  CHECK(layer_text(d->lay[1])->align != TA_CENTER, "one undo step");
+  CHECK(!doc_char_style(d, 0, &st.c[0]), "not on a pixel layer");
+  t = tstyles_save(&st);
+  CHECK(t && tstyles_load(&back, t) == 2 && back.nc == 1 && back.np == 1 && !strcmp(back.c[0].name, "Title") && back.c[0].size == 31500 && back.c[0].color == 0xAA0000 && back.p[0].space_after == 4250, "saved and read back");
+  free(t);
+  CHECK(tstyles_load(&back, "nothing") == 0, "not a styles file");
+  tstyle_delete(&back, 0, 0);
+  CHECK(back.nc == 0 && back.np == 1, "deleted");
+  free(tp);
+  doc_free(d);
+}
+
+/* Select and Mask's views */
+static void test_sm_views(void)
+{
+  Doc *d = doc_new(16, 8, 0xFF0000, 0);
+  int k, n = d->nlay;
+  sel_rect(d, 0, 0, 8, 8, SEL_REPLACE, 0);
+  CHECK(doc_sel_view_layer(d, SMV_ANTS) == -1 && d->nlay == n, "Marching Ants: nothing added");
+  k = doc_sel_view_layer(d, SMV_ONBLACK);
+  CHECK(k == n && d->lay[k]->px[0] == 255 && d->lay[k]->px[(12) * 4] == 0 && d->lay[k]->px[12 * 4 + 3] == 255, "On Black: kept red, the rest black");
+  doc_undo(d);
+  CHECK(d->nlay == n, "taken back as one step");
+  k = doc_sel_view_layer(d, SMV_ONWHITE);
+  CHECK(d->lay[k]->px[12 * 4 + 1] == 255 && d->lay[k]->px[1] == 0, "On White");
+  doc_undo(d);
+  k = doc_sel_view_layer(d, SMV_BW);
+  CHECK(d->lay[k]->px[0] == 255 && d->lay[k]->px[1] == 255 && d->lay[k]->px[12 * 4] == 0, "Black & White: the mask");
+  doc_undo(d);
+  k = doc_sel_view_layer(d, SMV_ONLAYERS);
+  CHECK(d->lay[k]->px[0] == 255 && d->lay[k]->px[1] == 0 && d->lay[k]->px[12 * 4] == d->lay[k]->px[12 * 4 + 1], "On Layers: the rest checkerboard");
+  doc_undo(d);
+  k = doc_sel_view_layer(d, SMV_OVERLAY);
+  CHECK(d->lay[k]->px[12 * 4] > 200 && d->lay[k]->px[0] == 255, "Overlay: red over the unselected");
+  doc_free(d);
+}
+
+int main(int argc, char **argv)
 {
   test_filter();
   test_float();
@@ -252,6 +362,9 @@ int main(void)
   test_quotes();
   test_spelling();
   test_gamut();
+  test_type_styles();
+  test_sm_views();
+  test_presets(argc > 1 ? argv[1] : "/tmp");
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

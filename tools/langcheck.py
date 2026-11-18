@@ -141,7 +141,7 @@ CORE_LISTS = [('core/adjust10.c', 'photo_filter_names', 'all'), ('core/adjust10.
              [('core/vecx.c', 'shape_lib', 'first')] + \
              [('core/filtr3.c', n, 'all') for n in ('tree_names', 'frame_names', 'liquify_tool_names')] + \
              [('core/modex.c', 'matte_names', 'all'), ('core/filesx.c', 'open_as_names', 'all'), ('core/measure.c', 'measure_sources', 'all')]   # (r2-colour: Color Settings' and Convert to Profile's intents; round 3: Indexed Color's Matte)
-CORE_LISTS += [('core/r4.c', 'layer_filter_kinds', 'all'), ('core/r4.c', 'cr_view_names', 'all')]   # round 4: Find Layers' kinds, Color Range's preview modes
+CORE_LISTS += [('core/r4.c', 'layer_filter_kinds', 'all'), ('core/r4.c', 'cr_view_names', 'all'), ('core/selx.c', 'color_range_names', 'all'), ('core/r4.c', 'pm_kind_names', 'all'), ('core/r4.c', 'sm_view_names', 'all')]   # round 4: Find Layers' kinds, Color Range's preview modes
 def core_list_names():
     """the names in CORE_LISTS: (file, line, text)"""
     out = []

@@ -7,9 +7,10 @@
 #include "selx.h"
 #include "paint.h"
 #include "channels.h"
+#include "cms.h"                      /* round 4: Out of Gamut */
 
 const char *const color_range_names[CR_N] = { "Sampled Colors", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas",
-  "Highlights", "Midtones", "Shadows", "Skin Tones" };
+  "Highlights", "Midtones", "Shadows", "Skin Tones", "Out of Gamut" };
 
 /* ------------------------------------------------------------------ marquee */
 static i32 rnd(double v) { return (i32)floor(v + 0.5); }
@@ -72,6 +73,23 @@ static double hue_in(const u8 *p, double centre)
   return (1 - ramp(dh, 30, 60)) * ramp(s * v * 255, 8, 48);
 }
 static double luma(const u8 *p) { return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]; }
+/* round 4: Out of Gamut - whether an sRGB colour is past what Easel's press prints (delta E over 6, as
+   View > Gamut Warning marks it), worked out once for a 32-level cube and looked up */
+static u8 og_cube[32 * 32 * 32];
+static int og_ready;
+int color_out_of_gamut(int r, int g, int b)
+{
+  if (!og_ready) {
+    int i, j, k;
+    for (i = 0; i < 32; i++) for (j = 0; j < 32; j++) for (k = 0; k < 32; k++) {
+      double in[3], xyz[3], cmyk[4];
+      in[0] = (i * 255.0 / 31) / 255; in[1] = (j * 255.0 / 31) / 255; in[2] = (k * 255.0 / 31) / 255;
+      og_cube[(i * 32 + j) * 32 + k] = icc_to_xyz(icc_srgb(), 1, in, xyz) && press_from_xyz(xyz, cmyk) > 6 ? 255 : 0;
+    }
+    og_ready = 1;
+  }
+  return og_cube[(((r * 31 + 127) / 255) * 32 + (g * 31 + 127) / 255) * 32 + (b * 31 + 127) / 255] != 0;
+}
 static double preset_value(const ColorRange *cr, const u8 *p)
 {
   double r = (cr->range > 0 ? cr->range : 50) / 50.0, l = luma(p), h, s, v;
@@ -90,6 +108,7 @@ static double preset_value(const ColorRange *cr, const u8 *p)
     rgb_to_hsv(p[0], p[1], p[2], &h, &s, &v);
     if (h > 180) h -= 360;
     return (1 - ramp(fabs(h - 22), 20, 35)) * ramp(s, 0.08, 0.18) * (1 - ramp(s, 0.65, 0.8)) * ramp(v, 0.2, 0.35);
+  case CR_OUTGAMUT: return color_out_of_gamut(p[0], p[1], p[2]);
   }
   return 0;
 }

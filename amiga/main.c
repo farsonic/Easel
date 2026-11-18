@@ -200,7 +200,7 @@ static struct NewMenu menus[] = {
   I("Search...", 0, ID_SEARCH), I("Find and Replace Text...", 0, ID_FINDREPLACE), I("Check Spelling...", 0, ID_CHECKSPELL), BAR,      /* (1.3; r4) */
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Content-Aware Fill...", 0, ID_CAFILL), I("Stroke...", 0, ID_STROKE), BAR,
   I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN),
-  H("Presets"), S("Load Patterns (.pat)...", 0, ID_LOADPAT), S("Load Gradients (.grd)...", 0, ID_LOADGRD), SBAR,      /* 1.2 */
+  H("Presets"), S("Preset Manager...", 0, ID_PRESETMGR), SBAR, S("Load Patterns (.pat)...", 0, ID_LOADPAT), S("Load Gradients (.grd)...", 0, ID_LOADGRD), SBAR,      /* 1.2 */
   S("Save Brushes as .abr...", 0, ID_SAVEABR), S("Save Patterns as .pat...", 0, ID_SAVEPAT), BAR,
   I("Free Transform", "T", ID_FREETRANSFORM), I("Numeric Transform...", 0, ID_NUMTRANSFORM),
   H("Transform"), S("Again", 0, ID_XF_AGAIN), SBAR, S("Scale", 0, ID_XF_SCALE), S("Rotate", 0, ID_XF_ROTATE), S("Skew", 0, ID_XF_SKEW),
@@ -380,7 +380,7 @@ static struct NewMenu menus[] = {
   H("Arrange"), S("Match Zoom", 0, ID_MATCHZOOM), S("Match Location", 0, ID_MATCHLOC), S("Match All", 0, ID_MATCHALL), BAR,
   I("Palette", 0, ID_WIN_PALETTE), I("Brush Settings", 0, ID_WIN_BRUSHSET), I("DPaint Brush", 0, ID_WIN_DPAINT), BAR,
   /* 1.2 */
-  I("Actions...", 0, ID_WIN_ACTIONS), I("Stop Recording", 0, ID_ACTSTOP), I("Play Action Again", 0, ID_ACTPLAY), I("Styles...", 0, ID_WIN_STYLES), I("Layer Comps...", 0, ID_WIN_COMPS),
+  I("Actions...", 0, ID_WIN_ACTIONS), I("Stop Recording", 0, ID_ACTSTOP), I("Play Action Again", 0, ID_ACTPLAY), I("Styles...", 0, ID_WIN_STYLES), I("Adjustments...", 0, ID_ADJPANEL), I("Character Styles...", 0, ID_CHARSTYLES), I("Paragraph Styles...", 0, ID_PARASTYLES), I("Layer Comps...", 0, ID_WIN_COMPS),   /* (r4: the type styles) */
   H("Histogram"), ST("Luminosity", ID_HISTCH0), ST("Red", ID_HISTCH0 + 1), ST("Green", ID_HISTCH0 + 2), ST("Blue", ID_HISTCH0 + 3), BAR,
   I("Timeline", 0, ID_WIN_TIMELINE), I("Notes", 0, ID_WIN_NOTES), I("Measurement Log", 0, ID_WIN_MLOG), I("Modifier Keys", 0, ID_WIN_MODKEYS),   /* round 3 */
   H("Animation"), S("Previous Frame", 0, ID_FRAMEPREV), S("Next Frame", 0, ID_FRAMENEXT), S("Play Frames", 0, ID_FRAMEPLAY), SBAR,
@@ -2848,6 +2848,12 @@ static void command(ULONG id)
 /* ------------------------------------------------------------------ the window */
 static const char *const head_color[] = { "Color", "Swatches", "Brushes", "History", NULL };
 static Object *toppages, *tophead, *swatchpanel, *brushpanel;
+/* round 4 (r4ui.c's Preset Manager): the Swatches and Brushes panels shown again after their lists changed */
+void refresh_preset_panels(void)
+{
+  if (swatchpanel) DoMethod(swatchpanel, MUIM_Swatches_Refresh);
+  brushwin_refresh();
+}
 /* 0.4/0.5: what the Palette window, the Swatches and the Brushes panel tell the rest */
 /* ------------------------------------------------------------------ 1.2: services for menux.c and panelsx.c */
 void do_command(ULONG id) { command(id); }

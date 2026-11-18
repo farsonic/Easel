@@ -22,6 +22,8 @@ int  dlg_sliders(const char *title, const DlgParam *p, int n, const char *const 
    values in its sliders (as Selective Color shows each colour range's) */
 void dlg_set_choice_hook(void (*hook)(int choice));
 void dlg_show_values(const LONG *v, int n);
+/* round 4: the next dialog's second list only changes how the preview is seen (OK applies its first entry) */
+void dlg_set_view_choice(void);
 /* Filter > Last Filter will call fn (with nothing in the values) */
 void dlg_set_last(DlgApplyFn fn);
 

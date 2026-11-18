@@ -449,7 +449,7 @@ static void test_color_range(void)
   u8 *m;
   for (i = 0; i < 11; i++) fill_box(d, 0, box_make(i * 10, 0, i * 10 + 10, 4), cols[i], 255);
   memset(&cr, 0, sizeof cr);
-  for (p = CR_REDS; p < CR_N; p++) {
+  for (p = CR_REDS; p <= CR_SKIN; p++) {          /* (round 4's Out of Gamut is checked in r4test) */
     cr.preset = p;
     m = color_range_mask(d, &cr);
     for (ok = 1, i = 0; i < 11; i++) {

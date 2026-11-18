@@ -11,6 +11,9 @@
 #define ID_DROPSEL      8003           /* Select > Drop */
 #define ID_CHECKSPELL   8004           /* Edit > Check Spelling... */
 #define ID_PRESETMGR    8005           /* Edit > Presets > Preset Manager... */
+#define ID_CHARSTYLES   8006           /* Window > Character Styles... */
+#define ID_PARASTYLES   8007           /* Window > Paragraph Styles... */
+#define ID_ADJPANEL     8008           /* Window > Adjustments... */
 #define ID_R4_LAST      8099
 
 #ifdef EASEL_AMIGA_H

@@ -106,4 +106,4 @@ CORE="$CORE core/r4.c core/spell.c"   # round 4: Find and Isolate Layers, Float 
   r 1 python3 tests/check_files.py $T/easel_foreign
   # round 4: Find and Isolate Layers, Float and Drop, Levels' Show Clipping, the channel keys, Color
   # Range's localized clusters and preview modes, smart quotes, Check Spelling
-  t r4test;       r 1 $T/easel_r4test
+  t r4test;       r 1 $T/easel_r4test $T

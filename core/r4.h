@@ -83,4 +83,45 @@ int  smart_quotes(const char *in, char *out, int cap);
    the UTF-8 of the typographer's quote into out (4 bytes), its length */
 int  smart_quote_for(int c, int prev, char *out);
 
+/* ------------------------------------------------------------------ Edit > Presets > Preset Manager */
+/* one place to rename, delete, reorder, load and save each kind of preset: the lists are Easel's own
+   (preset.h's PresetList, swatch.h's SwatchSet, gradient.h's GradientList, pattern.h's PatternList) */
+enum { PM_BRUSHES, PM_SWATCHES, PM_GRADIENTS, PM_PATTERNS, PM_N };
+extern const char *const pm_kind_names[PM_N + 1];        /* "Brushes", "Swatches", "Gradients", "Patterns" */
+int  pm_count(int kind, const void *list);
+const char *pm_name(int kind, const void *list, int i);  /* UTF-8, "" if out of range */
+int  pm_rename(int kind, void *list, int i, const char *name);
+int  pm_delete(int kind, void *list, int i);
+int  pm_move(int kind, void *list, int i, int dir);      /* one place up (-1) or down (1); the new index, -1 */
+int  pm_load(int kind, void *list, const char *path);    /* how many added */
+int  pm_save(int kind, const void *list, const char *path);
+/* the file pattern for loading and saving that kind (Amiga ASL pattern) */
+const char *pm_pattern(int kind);
+
+/* ------------------------------------------------------------------ Character and Paragraph Styles */
+/* named sets of type attributes (Window > Character Styles, Paragraph Styles), applied to a whole
+   type layer; kept by the UI in PROGDIR:Easel.typestyles as text */
+struct TextParams;
+#define TSTYLE_MAX 64
+typedef struct { char name[48]; char family[48]; u8 bold, italic, faux_bold, faux_italic, underline, strike; u16 ot; u32 color;
+                 long size, tracking, baseline, hscale, vscale; } CharStyle;       /* (thousandths) */
+typedef struct { char name[48]; u8 align, hyphenate; long leading, indent, space_before, space_after, indent_left, indent_right; } ParaStyle;
+typedef struct { CharStyle c[TSTYLE_MAX]; int nc; ParaStyle p[TSTYLE_MAX]; int np; } TypeStyles;
+/* a style made from a type layer's text (its first run, or its paragraph settings); its index or -1 */
+int  tstyle_char_new(TypeStyles *s, const struct TextParams *tp, const char *name);
+int  tstyle_para_new(TypeStyles *s, const struct TextParams *tp, const char *name);
+void tstyle_delete(TypeStyles *s, int para, int i);
+/* style i put on all of type layer li's text (one undo step); 0 if li isn't a type layer */
+int  doc_char_style(Doc *d, int li, const CharStyle *c);
+int  doc_para_style(Doc *d, int li, const ParaStyle *p);
+char *tstyles_save(const TypeStyles *s);                  /* malloc'd text */
+int  tstyles_load(TypeStyles *s, const char *text);       /* styles added; how many */
+
+/* ------------------------------------------------------------------ Select and Mask's views */
+enum { SMV_ANTS, SMV_OVERLAY, SMV_ONBLACK, SMV_ONWHITE, SMV_BW, SMV_ONLAYERS, SMV_N };
+extern const char *const sm_view_names[SMV_N + 1];      /* "Marching Ants", "Overlay", ... */
+/* the picture as it shows now seen through the selection in view mode (not SMV_ANTS) on a new top
+   layer "Select and Mask View" (one undo step, for the dialog's preview to take back); its index, -1 */
+int  doc_sel_view_layer(Doc *d, int mode);
+
 #endif

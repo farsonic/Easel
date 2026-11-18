@@ -28,6 +28,7 @@
 #include "../core/layers.h"
 #include "../core/filters2.h"
 #include "../core/selr3.h"
+#include "../core/r4.h"                 /* round 4: Select and Mask's views */
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
@@ -266,7 +267,12 @@ static void f_refine(Doc *d, const LONG *v, int c, int t)
   (void)c;
   memcpy(sm_now, v, sizeof sm_now); sm_decon = t;          /* (r3: Decontaminate Colors and its amount, v[5]) */
   r.radius = (int)v[0]; r.smooth = (int)v[1]; r.feather10 = (int)v[2]; r.contrast = (int)v[3]; r.shift = (int)v[4];
+  /* round 4: the View list (v[7]): the refined selection seen on black, white, as an overlay ... on a
+     layer the preview takes back with the refinement (OK applies Marching Ants: no layer) */
+  doc_begin(d, "Select and Mask");
   if (!sel_refine(d, &r)) out_of_memory();
+  else if (v[7] > 0) doc_sel_view_layer(d, (int)v[7]);
+  doc_end(d);
 }
 static void select_and_mask(void)
 {
@@ -282,8 +288,9 @@ static void select_and_mask(void)
   if (!d->sel) { ask("OK", "%s", tr("Select something first: Select and Mask refines the selection.")); return; }
   if (!mem_ok((long)d->w * d->h * 9)) return;
   outc = CycleObject, MUIA_Cycle_Entries, (ULONG)tr_list(outs), MUIA_Cycle_Active, last_out, MUIA_CycleChain, 1, End;
-  if (!dlg_sliders("Select and Mask", p, 6, NULL, NULL, 0, NULL, NULL, 0, "Decontaminate Colors (to a new layer)", 0, have ? last : NULL, f_refine,
-                   VGroup, Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Edge Radius: pixels this near the edge are decided again by their colour.\nThe preview shows the selection's edge."), MUIA_Font, MUIV_Font_Tiny, End,
+  dlg_set_view_choice();
+  if (!dlg_sliders("Select and Mask", p, 6, NULL, NULL, 0, sm_view_names, "View:", 0, "Decontaminate Colors (to a new layer)", 0, have ? last : NULL, f_refine,
+                   VGroup, Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Edge Radius: pixels this near the edge are decided again by their colour.\nView shows the refined selection on black, white, as an overlay ..."), MUIA_Font, MUIV_Font_Tiny, End,
                      Child, HGroup, Child, QLabel(tr("Output To:"), MUIO_Label_Centered), Child, outc, End, End, 0)) return;
   out = (int)xget(outc, MUIA_Cycle_Active);
   last_out = out;

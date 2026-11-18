@@ -25,7 +25,9 @@ void sel_single_col(Doc *d, i32 x, int op);
 
 /* ------------------------------------------------------------------ Color Range */
 enum { CR_SAMPLED, CR_REDS, CR_YELLOWS, CR_GREENS, CR_CYANS, CR_BLUES, CR_MAGENTAS,
-       CR_HIGHLIGHTS, CR_MIDTONES, CR_SHADOWS, CR_SKIN, CR_N };
+       CR_HIGHLIGHTS, CR_MIDTONES, CR_SHADOWS, CR_SKIN,
+       CR_OUTGAMUT,                   /* round 4: the colours Easel's press (cms.h) can't print */
+       CR_N };
 extern const char *const color_range_names[CR_N];
 #define CR_MAXCOLORS 16
 typedef struct {
@@ -46,4 +48,6 @@ typedef struct {
 u8  *color_range_mask(Doc *d, const ColorRange *cr);
 /* and it made the selection by SEL_ op (one undo step) */
 void sel_color_range_ex(Doc *d, const ColorRange *cr, int op);
+/* round 4: 1 if Easel's press (cms.h) can't print the sRGB colour (Color Range's Out of Gamut) */
+int  color_out_of_gamut(int r, int g, int b);
 #endif
