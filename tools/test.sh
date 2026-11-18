@@ -13,6 +13,7 @@ CORE="$CORE core/cafill.c core/selsmart.c"   # 1.2: content-aware fill, Quick an
 CORE="$CORE core/toolsx.c core/legacy.c"     # 1.2: tool extras, history log, Amiga-era extras
 CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
 CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
+CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation additions
   # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
   # interface translated and every row used (langcheck lists what is missing), then tr() and the table
   python3 tools/mklang.py --check
@@ -81,6 +82,9 @@ CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c cor
   t toolsxtest;   $T/easel_toolsxtest $T | tail -1
   # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
   t menutest;     $T/easel_menutest | tail -1
+  # 1.3: Save for Web, Image Processor, New presets, Contact Sheet, Statistics, Image Assets, Find and
+  # Replace Text, Apply Image, Calculations, Analysis, Open As, snapping to layers ...
+  t menu3test;    $T/easel_menu3test $T | tail -1
   # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
   # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
   # LittleCMS and ImageMagick check the files and colours

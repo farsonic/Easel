@@ -37,6 +37,8 @@ double snap_tolerance(const Doc *d);
 int  snap_point(Doc *d, double *x, double *y, int flags);
 /* a single coordinate snapped along one axis (vertical 1 for x, against vertical guides) */
 int  snap_coord(Doc *d, double *v, int vertical, int flags);
+/* r3: more places to snap to with SNAP_LAYERS (64) and SNAP_SLICES (128): menu3.c's, set by menu3_init */
+extern int (*snap_extra)(Doc *d, int vertical, int flags, double *out, int max);
 /* the rulers: at zoom (screen pixels per image pixel), the image-pixel spacing of labelled ticks
    so labels are at least minpx screen pixels apart (1, 2, 5, 10, 20, 50 ...), and how many minor
    ticks divide it */

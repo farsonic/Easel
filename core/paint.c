@@ -104,6 +104,7 @@ Box clear_selection(Doc *d)
 /* ------------------------------------------------------------------ flood fills (bucket, wand) */
 /* the pixels like the one at x, y (within tolerance, every channel) marked 255 in a new mask; from
    the active layer or the composite */
+int similar_sample = 1;                  /* r3: the Magic Wand's and Paint Bucket's Sample Size (a side, pixels) */
 static u8 *similar(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers)
 {
   if (!d->lay[d->active]->px) all_layers = 1;            /* a group, adjustment or fill layer: what shows */
@@ -114,6 +115,18 @@ static u8 *similar(Doc *d, i32 x, i32 y, int tol, int contiguous, int all_layers
   else src = d->lay[d->active]->px;
   if (!(m = (u8 *)calloc((size_t)n, 1))) { free(img); return NULL; }
   memcpy(seed, src + ((long)y * d->w + x) * 4, 4);
+  if (similar_sample > 1) {
+    /* r3: Sample Size - the seed is the average of the square round x, y (as the Eyedropper's) */
+    long acc[4] = { 0, 0, 0, 0 }, cnt = 0;
+    i32 r = similar_sample / 2, sx, sy;
+    int c;
+    for (sy = y - r; sy <= y + r; sy++) for (sx = x - r; sx <= x + r; sx++) {
+      if (sx < 0 || sy < 0 || sx >= d->w || sy >= d->h) continue;
+      for (c = 0; c < 4; c++) acc[c] += src[((long)sy * d->w + sx) * 4 + c];
+      cnt++;
+    }
+    if (cnt) for (c = 0; c < 4; c++) seed[c] = (u8)((acc[c] + cnt / 2) / cnt);
+  }
 #define LIKE(q) (abs((q)[0] - seed[0]) <= tol && abs((q)[1] - seed[1]) <= tol && abs((q)[2] - seed[2]) <= tol && abs((q)[3] - seed[3]) <= tol)
   if (!contiguous) {
     for (k = 0; k < n; k++) if (LIKE(src + k * 4)) m[k] = 255;
@@ -179,13 +192,17 @@ static Box mask_bounds(const u8 *m, i32 w, i32 h)
 }
 Box fill_bucket(Doc *d, i32 x, i32 y, u32 color, int tol, int contiguous, int all_layers, int opacity, int antialias)
 {
+  return fill_bucket_mode(d, x, y, color, tol, contiguous, all_layers, opacity, antialias, BM_NORMAL);
+}
+Box fill_bucket_mode(Doc *d, i32 x, i32 y, u32 color, int tol, int contiguous, int all_layers, int opacity, int antialias, int blend)
+{
   u8 *m;
   Box b;
   if (x < 0 || y < 0 || x >= d->w || y >= d->h || !paintable(d)) return box_make(0, 0, 0, 0);
   if (!(m = similar(d, x, y, tol, contiguous, all_layers))) return box_make(0, 0, 0, 0);
   if (antialias) soften(m, d->w, d->h);
   b = mask_bounds(m, d->w, d->h);
-  b = apply_mask(d, m, b, color, opacity, BM_NORMAL, "Paint Bucket");
+  b = apply_mask(d, m, b, color, opacity, blend, "Paint Bucket");
   free(m);
   return b;
 }
@@ -702,6 +719,10 @@ done:
 }
 Box stroke_selection(Doc *d, int width, int where, u32 color, int opacity)
 {
+  return stroke_selection_mode(d, width, where, color, opacity, BM_NORMAL);
+}
+Box stroke_selection_mode(Doc *d, int width, int where, u32 color, int opacity, int blend)
+{
   u8 *outer, *inner;
   long k, n = (long)d->w * d->h;
   Box b;
@@ -718,7 +739,7 @@ Box stroke_selection(Doc *d, int width, int where, u32 color, int opacity)
     Box sb = d->selbox;
     d->sel = NULL; d->selbox = doc_box(d);
     b = mask_bounds(outer, d->w, d->h);
-    b = apply_mask(d, outer, b, color, opacity, BM_NORMAL, "Stroke");
+    b = apply_mask(d, outer, b, color, opacity, blend, "Stroke");
     d->sel = s; d->selbox = sb;
   }
   free(outer);
