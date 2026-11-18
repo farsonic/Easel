@@ -29,6 +29,9 @@
 #include "../core/channels.h"
 #include "../core/util.h"
 #include "../core/paint.h"
+#include "../core/viewx.h"                 /* 1.2 */
+#include "../core/actions.h"
+#include "mxids.h"
 
 static int fh(void) { return theme_font()->tf_YSize; }
 static struct MUI_CustomClass *navcls, *infcls, *chancls;
@@ -82,8 +85,7 @@ static void nav_draw(struct NData *d, Object *obj)
   theme_rect(rp, d->x0 - 1, d->y0 - 1, d->x0 + d->tw, d->y0 + d->th, tpen(T_BORDER2));
   /* what the canvas shows */
   if (canvas && v->zoom > 0) {
-    double s = (double)d->tw / doc->w;
-    double zy = view_zoom_y(v);          /* (1.2: rows drawn taller or shorter for the pixel aspect) */
+    double s = (double)d->tw / doc->w, zy = v->zoom * par_view_ratio(doc, vx_par_correct);   /* (1.2: the pixel aspect) */
     LONG rx0 = d->x0 + (LONG)(v->sx / v->zoom * s), ry0 = d->y0 + (LONG)(v->sy / zy * s);
     LONG rx1 = rx0 + (LONG)(_mwidth(canvas) / v->zoom * s), ry1 = ry0 + (LONG)(_mheight(canvas) / zy * s);
     if (rx0 < d->x0) rx0 = d->x0;
@@ -180,7 +182,7 @@ struct MUI_CustomClass *navigator_class(void)
 }
 
 /* ================================================================== the Info panel */
-struct IData { int shown; ULONG hist[64]; ULONG hmax; Doc *hdoc; int hok; };
+struct IData { int shown; u32 hist[256]; ULONG hmax; Doc *hdoc; int hok, hch, hsampled; HistoStats hs; };
 static void rgb_hsb(int r, int g, int b, int *h, int *s, int *v)
 {
   int mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dd = mx - mn;
@@ -195,25 +197,28 @@ static void rgb_hsb(int r, int g, int b, int *h, int *s, int *v)
   }
   *h = (int)(hh + 0.5) % 360;
 }
-/* the brightness histogram of the picture, from up to 96 of its rows */
+/* the histogram of the picture (1.2: of the channel View chose, within the selection, with its
+   statistics), from up to 96 of its rows */
 static void info_hist(struct IData *d, Doc *doc)
 {
+  Box b = doc->sel && !box_empty(doc->selbox) ? doc->selbox : doc_box(doc);
   u8 *row = (u8 *)malloc((size_t)doc->w * 4);
-  i32 y, x, step = doc->h > 96 ? doc->h / 96 : 1;
-  int k;
+  i32 y, x, step = b.y1 - b.y0 > 96 ? (b.y1 - b.y0) / 96 : 1;
+  int k, ch = vx_hist_channel;
   memset(d->hist, 0, sizeof d->hist); d->hmax = 1; d->hok = 0;
   if (!row) return;
-  for (y = 0; y < doc->h; y += step) {
-    doc_composite(doc, box_make(0, y, doc->w, y + 1), row, (long)doc->w * 4);
-    for (x = 0; x < doc->w; x++) {
+  for (y = b.y0; y < b.y1; y += step) {
+    doc_composite(doc, box_make(b.x0, y, b.x1, y + 1), row + b.x0 * 4, (long)doc->w * 4);
+    for (x = b.x0; x < b.x1; x++) {
       const u8 *p = row + x * 4;
-      if (p[3] < 8) continue;
-      d->hist[(p[0] * 77 + p[1] * 150 + p[2] * 29) >> 10]++;
+      if (sel_at(doc, x, y) < 128 || (ch != HC_ALPHA && p[3] < 8)) continue;
+      d->hist[ch == HC_RED ? p[0] : ch == HC_GREEN ? p[1] : ch == HC_BLUE ? p[2] : ch == HC_ALPHA ? p[3] : (p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8]++;
     }
   }
-  for (k = 0; k < 64; k++) if (d->hist[k] > d->hmax) d->hmax = d->hist[k];
+  for (k = 0; k < 256; k++) if (d->hist[k] > d->hmax) d->hmax = d->hist[k];
+  histo_stats(d->hist, &d->hs);
   free(row);
-  d->hok = 1; d->hdoc = doc;
+  d->hok = 1; d->hdoc = doc; d->hch = ch; d->hsampled = step > 1;
 }
 static void info_draw(struct IData *d, Object *obj)
 {
@@ -270,13 +275,23 @@ static void info_draw(struct IData *d, Object *obj)
     if (v && v->nsamp) y += 4;
   }
   /* the histogram */
-  if (!d->hok || d->hdoc != doc) info_hist(d, doc);
-  hx0 = x; hw = _mwidth(obj) - 16; hy1 = _mbottom(obj) - 6;
+  if (!d->hok || d->hdoc != doc || d->hch != vx_hist_channel) info_hist(d, doc);
+  /* 1.2: the statistics under it */
+  {
+    char m[16], sd[16];
+    long t = (long)(d->hs.mean * 100 + 0.5), u = (long)(d->hs.stddev * 100 + 0.5);
+    sprintf(m, "%ld.%02ld", t / 100, t % 100); sprintf(sd, "%ld.%02ld", u / 100, u % 100);
+    sprintf(buf, "%s  %s %s  %s %s  %s %d  %s %ld%s", tr(histo_channel_names[d->hch]), tr("Mean"), m, tr("Std Dev"), sd, tr("Median"), d->hs.median,
+            tr("Pixels"), d->hs.pixels, d->hsampled ? "*" : "");
+    hy1 = _mbottom(obj) - 6 - lh;
+    if (hy1 - y >= 20) theme_text(rp, theme_font(), x, hy1 + 3, buf, tpen(T_DIM));
+  }
+  hx0 = x; hw = _mwidth(obj) - 16;
   if (hy1 - y < 20 || hw < 64) return;
   theme_fill(rp, hx0, y, hx0 + hw - 1, hy1, tpen(T_CANVAS));
   SetAPen(rp, tpen(T_TEXT));
   for (k = 0; k < hw; k++) {
-    int bin = (int)(k * 64 / hw);
+    int bin = (int)(k * 256 / hw);
     LONG hgt = (LONG)((double)d->hist[bin] * (hy1 - y - 2) / d->hmax);
     if (hgt > 0) { Move(rp, hx0 + k, hy1 - 1); Draw(rp, hx0 + k, hy1 - 1 - hgt); }
   }

@@ -1,6 +1,6 @@
 /*
- * colorui.c - Easel 1.2: colour management and pixel aspect in the interface (see colorui.h). The
- * work is done in the core (core/cms.c, core/colorx.c, core/aspect.c); this file asks what is
+ * colorui.c - Easel 1.2: colour management (and two type commands) in the interface (see colorui.h). The
+ * work is done in the core (core/cms.c, core/colorx.c, core/typex.c); this file asks what is
  * wanted, through requesters and dlgx.h's slider dialog, and keeps the view settings.
  */
 #include <string.h>
@@ -17,7 +17,6 @@
 #include "lang.h"
 #include "brushwin.h"
 #include "colorui.h"
-#include "../core/aspect.h"
 #include "../core/colorx.h"
 #include "../core/type.h"
 #include "../core/typex.h"
@@ -65,24 +64,6 @@ static u8 *choose_profile(u32 *len, const char *title)
   return b;
 }
 
-/* ------------------------------------------------------------------ the pixel aspect */
-static void a_aspect(Doc *d, const LONG *v, int c, int t)
-{
-  (void)c; (void)t;
-  doc_begin(d, "Pixel Aspect Ratio");
-  doc_note_pal(d);
-  d->aspect_x = (u8)v[0]; d->aspect_y = (u8)v[1];
-  doc_end(d);
-}
-static void set_aspect(Doc *d, int ax, int ay)
-{
-  if (d->aspect_x == ax && d->aspect_y == ay) return;
-  doc_begin(d, "Pixel Aspect Ratio");
-  doc_note_pal(d);
-  d->aspect_x = (u8)ax; d->aspect_y = (u8)ay;
-  doc_end(d);
-}
-
 /* ------------------------------------------------------------------ settings */
 static const char *intent_list[5];
 static void intents(void) { int k; for (k = 0; k < 4; k++) intent_list[k] = tr(cms_intent_names[k]); intent_list[4] = NULL; }
@@ -104,21 +85,7 @@ static void a_convert(Doc *d, const LONG *v, int c, int t)
 int colorui_command(Doc *d, ULONG id)
 {
   if (id < ID_CU_FIRST || id > ID_CU_LAST) return 0;
-  if (id >= ID_PAR0 && id < ID_PAR0 + (ULONG)aspect_count()) {
-    const AspectPreset *a = aspect_get((int)(id - ID_PAR0));
-    if (d && a) set_aspect(d, a->ax, a->ay);
-    refresh_all();
-    return 1;
-  }
   switch (id) {
-  case ID_PARCUSTOM: {
-    static const DlgParam p[2] = { { "Pixel width:", 1, 255, 1 }, { "Pixel height:", 1, 255, 1 } };
-    LONG init[2];
-    if (!d) return 1;
-    init[0] = d->aspect_x ? d->aspect_x : 1; init[1] = d->aspect_y ? d->aspect_y : 1;
-    dlg_sliders("Custom Pixel Aspect Ratio", p, 2, NULL, NULL, 0, NULL, NULL, 0, NULL, 0, init, a_aspect, NULL, 0);
-    break; }
-  case ID_PARFIX: aspect_correct = !aspect_correct; DoMethod(canvas, MUIM_Canvas_Refresh); break;
   case ID_PROOF: view_spec.on = !view_spec.on; changed(); break;
   case ID_GAMUT: view_spec.gamut = !view_spec.gamut; changed(); break;
   case ID_LOADCMYK: {
@@ -196,10 +163,7 @@ int colorui_command(Doc *d, ULONG id)
 
 void colorui_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
 {
-  int i, k = d ? aspect_find(d->aspect_x, d->aspect_y) : -1;
-  for (i = 0; i < aspect_count(); i++) { menu_set(ID_PAR0 + i, MUIA_Menuitem_Checked, k == i); menu_set(ID_PAR0 + i, MUIA_Menuitem_Enabled, d != NULL); }
-  menu_set(ID_PARCUSTOM, MUIA_Menuitem_Checked, d && k < 0);
-  menu_set(ID_PARFIX, MUIA_Menuitem_Checked, aspect_correct);
+  int i;
   menu_set(ID_PROOF, MUIA_Menuitem_Checked, view_spec.on);
   menu_set(ID_GAMUT, MUIA_Menuitem_Checked, view_spec.gamut);
   for (i = PRF_CMYK; i <= PRF_DEUTAN; i++) menu_set(ID_PROOFSET0 + i, MUIA_Menuitem_Checked, view_spec.proof == i);

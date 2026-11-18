@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "layers.h"
 #include "paint.h"
 #include "live.h"                     /* 0.9 */
@@ -549,27 +550,40 @@ int doc_align(Doc *d, int how)
   ref = d->sel ? d->selbox : doc_box(d);
   for (i = 0; i < d->nlay; i++)
     if ((d->lay[i]->picked || (i == d->active && !doc_npicked(d))) && layer_content_box(d, i, &bb[n])) idx[n++] = i;
-  if (!n || ((how == AL_DIST_H || how == AL_DIST_V) && n < 3)) return 0;
+  if (!n || (how >= AL_DIST_H && n < 3)) return 0;
   doc_begin(d, how >= AL_DIST_H ? "Distribute" : "Align");
   doc_note_all(d);
-  if (how == AL_DIST_H || how == AL_DIST_V) {
-    /* centres spread evenly between the outermost two */
-    int order[MAXLAYERS];
-    double c0, c1;
-    for (k = 0; k < n; k++) order[k] = k;
+  if (how >= AL_DIST_H) {
+    /* the edges (or centres) chosen spread evenly between the outermost two; 1.2: or the gaps
+       between the layers made equal */
+    int order[MAXLAYERS], horiz = how == AL_DIST_H || how == AL_DIST_LEFT || how == AL_DIST_RIGHT || how == AL_SPACE_H;
+    double key[MAXLAYERS], c0, c1, gap = 0, at;
+    for (k = 0; k < n; k++) {
+      Box b = bb[k];
+      double lo = horiz ? b.x0 : b.y0, hi = horiz ? b.x1 : b.y1;
+      key[k] = how == AL_DIST_LEFT || how == AL_DIST_TOP || how == AL_SPACE_H || how == AL_SPACE_V ? lo
+             : how == AL_DIST_RIGHT || how == AL_DIST_BOTTOM ? hi : (lo + hi) / 2.0;
+      order[k] = k;
+    }
     for (k = 1; k < n; k++) {
       int t = order[k], j = k;
-      double ct = how == AL_DIST_H ? bb[t].x0 + bb[t].x1 : bb[t].y0 + bb[t].y1;
-      while (j > 0 && (how == AL_DIST_H ? bb[order[j - 1]].x0 + bb[order[j - 1]].x1 : bb[order[j - 1]].y0 + bb[order[j - 1]].y1) > ct) { order[j] = order[j - 1]; j--; }
+      while (j > 0 && key[order[j - 1]] > key[t]) { order[j] = order[j - 1]; j--; }
       order[j] = t;
     }
-    c0 = how == AL_DIST_H ? (bb[order[0]].x0 + bb[order[0]].x1) / 2.0 : (bb[order[0]].y0 + bb[order[0]].y1) / 2.0;
-    c1 = how == AL_DIST_H ? (bb[order[n - 1]].x0 + bb[order[n - 1]].x1) / 2.0 : (bb[order[n - 1]].y0 + bb[order[n - 1]].y1) / 2.0;
+    c0 = key[order[0]]; c1 = key[order[n - 1]];
+    if (how == AL_SPACE_H || how == AL_SPACE_V) {
+      /* the room left between the first's start and the last's end, shared out */
+      double used = 0, end = horiz ? bb[order[n - 1]].x1 : bb[order[n - 1]].y1;
+      for (k = 0; k < n; k++) used += horiz ? bb[k].x1 - bb[k].x0 : bb[k].y1 - bb[k].y0;
+      gap = (end - c0 - used) / (n - 1);
+    }
+    at = c0 + (horiz ? bb[order[0]].x1 - bb[order[0]].x0 : bb[order[0]].y1 - bb[order[0]].y0) + gap;
     for (k = 1; k < n - 1; k++) {
       int t = order[k];
-      double want = c0 + (c1 - c0) * k / (n - 1), have = how == AL_DIST_H ? (bb[t].x0 + bb[t].x1) / 2.0 : (bb[t].y0 + bb[t].y1) / 2.0;
-      i32 dlt = (i32)(want - have + (want >= have ? 0.5 : -0.5));
-      shift_layer(d, idx[t], how == AL_DIST_H ? dlt : 0, how == AL_DIST_V ? dlt : 0);
+      double want = how == AL_SPACE_H || how == AL_SPACE_V ? at : c0 + (c1 - c0) * k / (n - 1), have = key[t];
+      i32 dlt = (i32)floor(want - have + 0.5);
+      shift_layer(d, idx[t], horiz ? dlt : 0, horiz ? 0 : dlt);
+      at += (horiz ? bb[t].x1 - bb[t].x0 : bb[t].y1 - bb[t].y0) + gap;
     }
   } else {
     for (k = 0; k < n; k++) {

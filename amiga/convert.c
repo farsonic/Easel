@@ -8,7 +8,7 @@
  *
  * Template:
  *   FROM/M/A,TO/K,FORMAT/K,WIDTH/N,HEIGHT/N,SCALE/N,QUALITY/N,COLORS/N,DITHER/S,ICON/S,ICONTYPE/K,
- *   DEFTOOL/K,QUIET/S
+ *   DEFTOOL/K,QUIET/S,INFO/S
  * FROM   the pictures (wildcards allowed; .info files are skipped when matching a pattern)
  * TO     a drawer for the results, or (one picture in) the file to write; without it each
  *        result goes beside its picture with the new extension
@@ -18,7 +18,8 @@
  * QUALITY  JPEG quality 1-100 (85); COLORS  ILBM and GIF colours 2-256 (ILBM default 24-bit);
  * DITHER  Floyd-Steinberg when reducing colours; ICON  write a .info beside each result;
  * ICONTYPE  CLASSIC, NEWICONS, GLOW (default) or PNG; DEFTOOL  the icon's default tool
- * (default SYS:Utilities/MultiView); QUIET  say nothing but errors
+ * (default SYS:Utilities/MultiView); QUIET  say nothing but errors; INFO (1.2) describe each
+ * picture (format, size, layers, mode, resolution, aspect, screen mode, File Info) instead
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +37,8 @@
 #include "../core/iconwrite.h"
 #include "../core/xwrite.h"
 #include "../core/adjust.h"
+#include "../core/picinfo.h"
+#include "../core/util.h"
 #include "dtload.h"
 
 const char verstag[] = "$VER: EaselConvert 1.0 (28.10.2026) converts pictures (Easel's codecs)";
@@ -43,8 +46,8 @@ const char verstag[] = "$VER: EaselConvert 1.0 (28.10.2026) converts pictures (E
 struct GfxBase *GfxBase;                 /* for dtload.c's older-datatype path */
 size_t __stack = 16384;                  /* vbcc's startup gives main this much when the Shell gives less */
 
-#define TEMPLATE "FROM/M/A,TO/K,FORMAT/K,WIDTH/N,HEIGHT/N,SCALE/N,QUALITY/N,COLORS/N,DITHER/S,ICON/S,ICONTYPE/K,DEFTOOL/K,QUIET/S"
-enum { A_FROM, A_TO, A_FORMAT, A_WIDTH, A_HEIGHT, A_SCALE, A_QUALITY, A_COLORS, A_DITHER, A_ICON, A_ICONTYPE, A_DEFTOOL, A_QUIET, A_N };
+#define TEMPLATE "FROM/M/A,TO/K,FORMAT/K,WIDTH/N,HEIGHT/N,SCALE/N,QUALITY/N,COLORS/N,DITHER/S,ICON/S,ICONTYPE/K,DEFTOOL/K,QUIET/S,INFO/S"
+enum { A_FROM, A_TO, A_FORMAT, A_WIDTH, A_HEIGHT, A_SCALE, A_QUALITY, A_COLORS, A_DITHER, A_ICON, A_ICONTYPE, A_DEFTOOL, A_QUIET, A_INFO, A_N };
 
 /* the conversion runs on a stack of its own: the AVIF decoder (dav1d) wants far more than a
    Shell command gets (see amiga/bigstack.s and main.c's load_doc_big_stack) */
@@ -58,6 +61,18 @@ static long job_run(void *arg)
   return 0;
 }
 static u8 *stack;
+/* 1.2: INFO: a picture described, on the big stack too */
+typedef struct { const char *in; char *text; char err[200]; } InfoJob;
+static long info_run(void *arg)
+{
+  InfoJob *j = (InfoJob *)arg;
+  size_t n;
+  u8 *data = file_read(j->in, &n);
+  if (!data) { strcpy(j->err, "can't be read"); return 0; }
+  j->text = picture_info(data, n, j->err, sizeof j->err);
+  free(data);
+  return 0;
+}
 static int convert_one(const char *in, const char *out, const BatchOpts *o, char *err, size_t errcap)
 {
   struct StackSwapStruct ss;
@@ -179,13 +194,24 @@ int main(void)
       size_t l = strlen(name);
       if (ap->ap_Info.fib_DirEntryType > 0) continue;
       if (wild && l > 5 && str_ieq(name + l - 5, ".info")) continue;
+      if (args[A_INFO]) {
+        struct StackSwapStruct ss;
+        InfoJob j;
+        memset(&j, 0, sizeof j);
+        j.in = name;
+        ss.stk_Lower = stack; ss.stk_Upper = (ULONG)(stack + DECODE_STACK); ss.stk_Pointer = (APTR)(stack + DECODE_STACK);
+        run_on_stack(&ss, info_run, &j);
+        if (j.text) { printf("%s\n%s\n", name, j.text); free(j.text); nok++; }
+        else { printf("%s: %s\n", name, j.err); nfail++; }
+        continue;
+      }
       convert_file(name, to, todir, &o);
     }
     MatchEnd(ap);
     if (e == ERROR_BREAK) { PrintFault(e, (STRPTR)"EaselConvert"); break; }
     if (e != ERROR_NO_MORE_ENTRIES) { printf("%s: ", from[i]); fflush(stdout); PrintFault(e, NULL); nfail++; }
   }
-  if (!quiet && nok + nfail > 1) printf("%d converted, %d failed\n", nok, nfail);
+  if (!quiet && !args[A_INFO] && nok + nfail > 1) printf("%d converted, %d failed\n", nok, nfail);
   rc = nfail ? (nok ? RETURN_WARN : RETURN_ERROR) : nok ? RETURN_OK : RETURN_WARN;
 done:
   if (ap) FreeVec(ap);

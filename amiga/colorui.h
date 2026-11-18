@@ -1,5 +1,5 @@
 /*
- * colorui.h - Easel 1.2's colour management and pixel aspect in the interface (colorui.c): the
+ * colorui.h - Easel 1.2's colour management in the interface (colorui.c): the
  * menu commands of colorids.h, their ticks, the view settings the canvas draws through, and what a
  * save needs (the working CMYK profile).
  */

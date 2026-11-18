@@ -1,6 +1,5 @@
 /*
- * colourtest.c - Easel 1.2's colour, file format and type work (round 2): pixel aspect presets and
- * the canvas's vertical scale; the CMS (built-in profiles written and parsed back, matrix and LUT
+ * colourtest.c - Easel 1.2's colour, file format and type work (round 2): the CMS (built-in profiles written and parsed back, matrix and LUT
  * transforms, intents and black point compensation, the press model and its gamut, proof views);
  * ICC profiles kept in PNG, JPEG, TIFF, PSD and WebP; CMYK and Lab documents saved in their model;
  * palette PNG/BMP opening Indexed and 1-bit TIFF/PBM opening as Bitmap. Files for the Python
@@ -12,7 +11,6 @@
 #include <math.h>
 #include "core/doc.h"
 #include "core/codec.h"
-#include "core/aspect.h"
 #include "core/cms.h"
 #include "core/palette.h"
 #include "core/xwrite.h"
@@ -52,26 +50,6 @@ static Doc *ramp_doc(i32 w, i32 h, int alpha)
       if (alpha && x < 4 && y < 4) p[3] = 0;
     }
   return d;
-}
-
-/* ------------------------------------------------------------------ aspect */
-static void test_aspect(void)
-{
-  u8 ax, ay;
-  int i;
-  CHECK(aspect_count() >= 12, "aspect presets");
-  CHECK(aspect_find(1, 1) == 0 && aspect_find(0, 0) == 0, "square found");
-  CHECK(aspect_find(10, 22) == 3, "a multiple of 5:11 is PAL hires");
-  CHECK(aspect_find(7, 13) == -1, "a custom ratio isn't a preset");
-  CHECK(fabs(aspect_yscale(5, 11, 1) - 2.2) < 1e-9, "hires drawn 2.2 times as tall");
-  CHECK(aspect_yscale(5, 11, 0) == 1.0, "correction off: square");
-  CHECK(aspect_yscale(1, 255, 1) == 4.0 && aspect_yscale(255, 1, 1) == 0.25, "the scale is kept within 1/4..4");
-  aspect_from_ratio(0.91, &ax, &ay);
-  CHECK(fabs((double)ax / ay - 0.91) < 0.002, "0.91 as a ratio");
-  aspect_from_ratio(1.0, &ax, &ay);
-  CHECK(ax == ay, "1.0 as a ratio");
-  for (i = 0; i < aspect_count(); i++) CHECK(aspect_get(i)->ax && aspect_get(i)->ay && aspect_get(i)->name[0], "each preset has a ratio and a name");
-  CHECK(aspect_get(aspect_count()) == NULL, "out of range");
 }
 
 /* ------------------------------------------------------------------ the CMS */
@@ -1139,7 +1117,6 @@ int main(int argc, char **argv)
 {
   if (argc > 1) outdir = argv[1];
   if (outdir) { char cmd[600]; snprintf(cmd, sizeof cmd, "mkdir -p '%s'", outdir); if (system(cmd)) printf("cannot make %s\n", outdir); }
-  test_aspect();
   test_builtin_profiles();
   test_transforms();
   test_press();

@@ -128,8 +128,6 @@ typedef struct {
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */
-extern int aspect_correct;             /* (1.2, canvas.c) View > Pixel Aspect Ratio Correction */
-double view_zoom_y(const DocView *v);  /* (1.2, canvas.c) the vertical zoom: the zoom scaled for the pixel aspect */
 #define RETOUCH_MODES 7               /* (1.1) Blur, Sharpen, Smudge: Normal, Darken, Lighten, Hue, Saturation, Color, Luminosity */
 extern const int retouch_bm[RETOUCH_MODES];   /* (main.c) those as BM_ */    /* (1.1) the options bar's Current Layer, Current & Below, All Layers as SAMPLE_ */
 /* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
@@ -295,6 +293,13 @@ typedef struct {
   int undo_mb, undo_levels;           /* undo's memory and states */
   int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
   int skip_place_xf;                  /* 1.1: Place as Layer doesn't go on into Free Transform */
+  /* 1.2: Transparency (core/viewx.h: the checkerboard's size 0-3 and CHK_ scheme, the custom colours);
+     grid and guide line styles (LS_); Units & Rulers' screen resolution, column and gutter widths
+     (pixels) and point size (0 PostScript, 72 a inch; 1 traditional, 72.27); the history log */
+  int checker_size, checker_scheme; ULONG checker_c1, checker_c2;
+  int grid_style, guide_style;
+  int screen_dpi, column_w, gutter_w, point_kind;
+  int history_log; char history_path[256];
 } Prefs;
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;

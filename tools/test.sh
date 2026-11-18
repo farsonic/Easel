@@ -7,7 +7,8 @@ cd "$(dirname "$0")/.."
 T=${TMP:-/tmp}
 CORE="core/util.c core/zip.c core/xml.c core/image.c core/doc.c core/paint.c core/stroke.c core/brush.c core/preset.c core/gradient.c core/pattern.c core/swatch.c core/adjust.c core/layers.c core/filters2.c core/selmore.c core/text.c core/fonts.c core/ttraster.c core/codec.c core/png.c core/jpegenc.c core/bmp.c core/ilbm.c core/gif.c core/ora.c core/avif.c core/tiff.c core/psd.c core/rasters.c core/webp.c core/amigafmt.c core/palette.c core/gifenc.c core/amigamodes.c core/guides.c core/swatchpal.c core/iconwrite.c core/batch.c core/docinfo.c core/tiffw.c core/tgaw.c core/channels.c core/xform.c core/selx.c core/maglasso.c core/crop.c core/matte.c core/path.c core/pathops.c core/shape.c core/type.c core/live.c core/amifont.c core/adjust10.c core/filters10.c core/retouch.c core/xwrite.c core/frames.c core/scripts.c core/svg.c core/gallery.c core/adjustx.c core/selmask.c core/resample.c core/fx.c core/layerops.c"
 CORE="$CORE core/toolopts.c"     # 1.1: tool options
-CORE="$CORE core/aspect.c core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: pixel aspect, colour management, colour models
+CORE="$CORE core/viewx.c core/actions.c core/picinfo.c"     # 1.2: menu and panel additions
+CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c core/gsub.c core/exportx.c core/psdfx.c core/lut3dl.c core/typex.c"   # 1.2: colour management, colour models, formats, type
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }
@@ -51,7 +52,9 @@ CORE="$CORE core/aspect.c core/cms.c core/iccio.c core/loadx.c core/colorx.c cor
   python3 tests/check_fx.py $T | tail -1
   # 1.1: layer styles, colour labels, more blend modes and layer commands
   t fxtest;       $T/easel_fxtest | tail -1
-  # 1.2: pixel aspect, colour management (profiles, transforms, the press, proofs), CMYK and Lab
+  # 1.2: menu and panel additions (pixel aspect, guide layouts, Trim, Distribute, actions, styles, comps, histogram)
+  t menutest;     $T/easel_menutest | tail -1
+  # 1.2: colour management (profiles, transforms, the press, proofs), CMYK and Lab
   # documents, profiles in files, palette and 1-bit files opening in their modes; then Pillow,
   # LittleCMS and ImageMagick check the files and colours
   t colourtest;   $T/easel_colourtest $T/easel_colour_out | tail -1

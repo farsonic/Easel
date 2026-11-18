@@ -8,9 +8,6 @@
 #ifndef EASEL_COLORIDS_H
 #define EASEL_COLORIDS_H
 #define ID_CU_FIRST     5000
-#define ID_PAR0         5000           /* + aspect_count() - 1: the presets (aspect.h) */
-#define ID_PARCUSTOM    5030
-#define ID_PARFIX       5031           /* View > Pixel Aspect Ratio Correction */
 #define ID_PROOF        5032           /* View > Proof Colors */
 #define ID_GAMUT        5033           /* View > Gamut Warning */
 #define ID_PROOFSET0    5040           /* + PRF_CMYK .. PRF_DEUTAN (cms.h) */
