@@ -31,6 +31,9 @@
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
+#include "fxids.h"                    /* 1.1 */
+#include "../core/fx.h"
+#include "../core/layerops.h"
 #include "splash.h"
 #include "sysfonts.h"
 #include "../core/codec.h"
@@ -130,6 +133,7 @@ char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 
 #define S(label, key, id) { NM_SUB, (STRPTR)label, (STRPTR)key, 0, 0, (APTR)(id) }
 #define T(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }
 #define BAR { NM_ITEM, NM_BARLABEL, 0, 0, 0, 0 }
+#define LC(label, k) { NM_SUB, (STRPTR)label, 0, CHECKIT, 0, (APTR)(ID_LABEL0 + (k)) }   /* 1.1: a colour label */
 #define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
 #define ST(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }   /* (1.1: a ticked subitem) */
 static struct NewMenu menus[] = {
@@ -180,7 +184,18 @@ static struct NewMenu menus[] = {
   I("Crop", 0, ID_CROP), I("Trim", 0, ID_TRIM), BAR, I("Duplicate", 0, ID_DUPIMAGE),
   M("Layer"),
   H("New"), S("Layer", 0, ID_NEWLAYER), S("Group", 0, ID_NEWGROUP), SBAR, S("Layer via Copy", 0, ID_LAYERFROMSEL), S("Layer via Cut", 0, ID_LAYERCUTSEL),
-  I("Duplicate Layer", "J", ID_DUPLAYER), I("Delete Layer", 0, ID_DELLAYER), I("Layer Properties...", 0, ID_LAYERPROPS), BAR,
+  SBAR, S("Background from Layer", 0, ID_BGFROMLAYER),
+  I("Duplicate Layer", "J", ID_DUPLAYER), I("Delete Layer", 0, ID_DELLAYER), I("Delete Hidden Layers", 0, ID_DELHIDDEN), I("Layer Properties...", 0, ID_LAYERPROPS),
+  /* 1.1: layer styles, colour labels */
+  H("Layer Style"), S("Blending Options...", 0, ID_FXBLENDOPT), SBAR, S("Drop Shadow...", 0, ID_FX0 + FX_DROPSHADOW), S("Inner Shadow...", 0, ID_FX0 + FX_INNERSHADOW),
+  S("Outer Glow...", 0, ID_FX0 + FX_OUTERGLOW), S("Inner Glow...", 0, ID_FX0 + FX_INNERGLOW), S("Bevel & Emboss...", 0, ID_FX0 + FX_BEVEL),
+  S("Satin...", 0, ID_FX0 + FX_SATIN), S("Color Overlay...", 0, ID_FX0 + FX_COLOR), S("Gradient Overlay...", 0, ID_FX0 + FX_GRADIENT),
+  S("Stroke...", 0, ID_FX0 + FX_STROKE), SBAR, S("Copy Layer Style", 0, ID_FXCOPY), S("Paste Layer Style", 0, ID_FXPASTE), S("Clear Layer Style", 0, ID_FXCLEAR), SBAR,
+  S("Global Light...", 0, ID_FXLIGHT), S("Create Layers", 0, ID_FXLAYERS), { NM_SUB, (STRPTR)"Hide All Effects", 0, CHECKIT | MENUTOGGLE, 0, (APTR)ID_FXHIDEALL },
+  S("Scale Effects...", 0, ID_FXSCALE),
+  H("Layer Color"), LC("None", 0), LC("Red", 1), LC("Orange", 2), LC("Yellow", 3), LC("Green", 4), LC("Blue", 5), LC("Violet", 6), LC("Gray", 7),
+  LC("Seafoam", 8), LC("Indigo", 9), LC("Magenta", 10), LC("Fuchsia", 11),
+  I("Copy CSS", 0, ID_COPYCSS), BAR,
   H("New Adjustment Layer"),
   S("Brightness/Contrast...", 0, ID_NEWADJ0 + AK_BRIGHTNESS), S("Levels...", 0, ID_NEWADJ0 + AK_LEVELS), S("Curves...", 0, ID_NEWADJ0 + AK_CURVES),
   S("Exposure...", 0, ID_NEWADJ0 + AK_EXPOSURE), SBAR, S("Vibrance...", 0, ID_NEWADJ0 + AK_VIBRANCE), S("Hue/Saturation...", 0, ID_NEWADJ0 + AK_HUESAT),
@@ -198,9 +213,13 @@ static struct NewMenu menus[] = {
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
   I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
   I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP),
-  H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE),
+  H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE), S("Layer Style", 0, ID_FXRASTER),
+  H("Stack Mode"), S("Mean", 0, ID_STACKMODE0 + STK_MEAN), S("Median", 0, ID_STACKMODE0 + STK_MEDIAN), S("Minimum", 0, ID_STACKMODE0 + STK_MIN),
+  S("Maximum", 0, ID_STACKMODE0 + STK_MAX), S("Range", 0, ID_STACKMODE0 + STK_RANGE), S("Summation", 0, ID_STACKMODE0 + STK_SUM),
+  S("Variance", 0, ID_STACKMODE0 + STK_VARIANCE), S("Standard Deviation", 0, ID_STACKMODE0 + STK_STDDEV), S("Entropy", 0, ID_STACKMODE0 + STK_ENTROPY),
+  S("Skewness", 0, ID_STACKMODE0 + STK_SKEWNESS), S("Kurtosis", 0, ID_STACKMODE0 + STK_KURTOSIS),
   H("Matting"), S("Defringe...", 0, ID_DEFRINGE), S("Remove Black Matte", 0, ID_BLACKMATTE), S("Remove White Matte", 0, ID_WHITEMATTE), BAR,
-  H("Arrange"), S("Bring to Front", "}", ID_TOFRONT), S("Bring Forward", "]", ID_RAISE), S("Send Backward", "[", ID_LOWER), S("Send to Back", "{", ID_TOBACK),
+  H("Arrange"), S("Bring to Front", "}", ID_TOFRONT), S("Bring Forward", "]", ID_RAISE), S("Send Backward", "[", ID_LOWER), S("Send to Back", "{", ID_TOBACK), SBAR, S("Reverse", 0, ID_REVERSE),
   H("Align"), S("Left Edges", 0, ID_AL_LEFT), S("Horizontal Centers", 0, ID_AL_HCENTER), S("Right Edges", 0, ID_AL_RIGHT), SBAR,
   S("Top Edges", 0, ID_AL_TOP), S("Vertical Centers", 0, ID_AL_VCENTER), S("Bottom Edges", 0, ID_AL_BOTTOM), SBAR,
   S("Distribute Horizontally", 0, ID_DIST_H), S("Distribute Vertically", 0, ID_DIST_V),
@@ -685,6 +704,7 @@ static void update_menus(void)
   menu_set(ID_MERGEGROUP, MUIA_Menuitem_Enabled, al && al->kind == LK_GROUP);
   menu_set(ID_FILLSETTINGS, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_ADJUST));
   menu_set(ID_RASTERIZE, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_TEXT || al->kind == LK_SHAPE));
+  layerstyle_menus(d, menu_set);                         /* 1.1 */
   /* 0.9: type and shape layers' items */
   {
     static const ULONG needtype[] = { ID_EDITTYPE, ID_TYPECHAR, ID_TYPEPARA, ID_TYPEWORKPATH, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_RASTERTYPE, ID_RASTERTYPE2, 0 };
@@ -1618,8 +1638,8 @@ static void place_file(void)
     doc_set_layer_props(d, d->active, name, -1, -1, -1);
   }
   refresh_all();
-  /* 0.6: then its size and angle, as Place goes into Free Transform */
-  transform_dialog();
+  /* 0.6: then its size and angle, as Place goes into Free Transform (1.1: unless the preferences skip it) */
+  if (!prefs.skip_place_xf) transform_dialog();
 }
 
 /* ------------------------------------------------------------------ 0.8: History snapshots */
@@ -1877,6 +1897,7 @@ static void command(ULONG id)
   if (id >= ID_F_GAUSS && id < ID_F_LAST) { if (d) dlg_filter(id); refresh_all(); return; }
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
+  if (id >= ID_LS_FIRST && id <= ID_LS_LAST) { if (d) layerstyle_command(d, id); refresh_all(); return; }   /* 1.1 (fxdlg.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);

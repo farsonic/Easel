@@ -1225,10 +1225,12 @@ void dlg_rotate(void)
 /* ------------------------------------------------------------------ layer, fill, stroke, select */
 static const char *const blends[] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
-  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", NULL };
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
+  "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)", NULL };
 static const char *const gblends[] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
-  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", "Pass Through", NULL };
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
+  "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)", "Pass Through", NULL };
 /* Layer Properties: name, opacity and fill, blend mode (Pass Through for a group), visibility,
    clipping, Blend If, and the mask's density and feather. One undo step */
 void dlg_layer_props(void)

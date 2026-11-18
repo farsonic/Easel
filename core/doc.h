@@ -11,6 +11,7 @@
 #define EASEL_DOC_H
 
 #include "util.h"
+#include "fxdef.h"                   /* 1.1: layer styles */
 
 #define MAXLAYERS 100
 #define MAXDIM 16384                  /* the largest width or height */
@@ -23,6 +24,8 @@ enum { BM_NORMAL, BM_MULTIPLY, BM_SCREEN, BM_OVERLAY, BM_DARKEN, BM_LIGHTEN, BM_
        /* 0.2.1: the rest of PhotoCraft's modes */
        BM_DISSOLVE, BM_LINEARBURN, BM_DARKERCOLOR, BM_LIGHTERCOLOR, BM_VIVIDLIGHT,
        BM_LINEARLIGHT, BM_PINLIGHT, BM_HARDMIX, BM_DIVIDE,
+       /* 1.1: Paint.NET's own modes */
+       BM_REFLECT, BM_GLOW, BM_NEGATION, BM_XOR, BM_PDNBURN, BM_PDNDODGE,
        BM_N,
        BM_PASS = 255 };                   /* a group's Pass Through (not a pixel blend) */
 extern const char *const blend_names[BM_N];
@@ -85,6 +88,12 @@ typedef struct {
   u8 *livepx; Box livebox;            /* the rendering (RGBA, livebox's size, in canvas pixels), worked out */
   u8 live_ok;                         /*   when needed: live_ok is cleared when the settings change */
   /* ---- end of 0.9 ---- */
+  /* ---- 1.1: the layer's style (fx.h) and colour label ---- */
+  LayerFx fx;
+  u8 label;                           /* 0 none, 1-11 red, orange, yellow, green, blue, violet, grey, seafoam, indigo, magenta, fuchsia */
+  u8 fx_ok;                           /* fxc matches the layer (cleared when its pixels or mask change) */
+  void *fxc;                          /* the effects drawn (fx.c), worked out when needed, never saved */
+  /* ---- end of 1.1 ---- */
 } Layer;
 
 typedef struct UndoStep UndoStep;
@@ -165,6 +174,8 @@ typedef struct {
   struct Path *workpath;              /* NULL when there is none */
   int path_active;                    /* the path the Paths panel has chosen: k + 1 for path[k], -1 the work path, 0 none */
   /* ---- end of 0.9 ---- */
+  /* 1.1: Layer Style > Global Light (degrees; light_set 0 means the default 120, 30) */
+  i16 light_angle; u8 light_alt, light_set;
 } Doc;
 
 #define UNDO_BUDGET (40L * 1024 * 1024)       /* the default for undo_budget */

@@ -342,7 +342,8 @@ done:
 /* Photoshop's blend-mode keys by BM_ value */
 static const char psd_keys[BM_N][5] = { "norm", "mul ", "scrn", "over", "dark", "lite", "diff", "lddg", "fsub", "div ",
   "idiv", "sLit", "hLit", "smud", "hue ", "sat ", "colr", "lum ", "diss", "lbrn", "dkCl", "lgCl", "vLit", "lLit",
-  "pLit", "hMix", "fdiv" };
+  "pLit", "hMix", "fdiv",
+  "norm", "norm", "norm", "norm", "idiv", "div " };     /* 1.1: Paint.NET's have none (the burn and dodge are near enough) */
 static int psd_mode(const u8 *k)
 {
   int i;

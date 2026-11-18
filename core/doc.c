@@ -17,10 +17,12 @@
 #include "palette.h"
 #include "path.h"                     /* 0.9 */
 #include "live.h"
+#include "fx.h"                       /* 1.1 */
 
 const char *const blend_names[BM_N] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Linear Dodge (Add)",
   "Subtract", "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
-  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide" };
+  "Dissolve", "Linear Burn", "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
+  "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)" };
 
 /* ------------------------------------------------------------------ boxes */
 Box box_make(i32 x0, i32 y0, i32 x1, i32 y1) { Box b; b.x0 = x0; b.y0 = y0; b.x1 = x1; b.y1 = y1; return b; }
@@ -63,6 +65,7 @@ void layer_free(Layer *l)
   free(l->maskfx);
   if (l->adjprog) { if (adjlayer_free) adjlayer_free(l->adjprog); else free(l->adjprog); }
   free(l->live); free(l->livepx);                          /* 0.9 */
+  fx_free(l);                                              /* 1.1 */
   free(l);
 }
 Layer *layer_copy(const Layer *l, i32 w, i32 h)
@@ -73,6 +76,7 @@ Layer *layer_copy(const Layer *l, i32 w, i32 h)
   c->px = c->mask = c->idx = c->maskfx = NULL; c->maskfx_ok = 0;
   c->adjprog = NULL; c->adjprog_ok = 0;
   c->live = NULL; c->livepx = NULL;                        /* 0.9: the settings and their rendering copied too */
+  c->fxc = NULL; c->fx_ok = 0;                             /* 1.1: the effects drawn again when wanted */
   if (l->live && (c->live = malloc(l->livelen)) != NULL) memcpy(c->live, l->live, l->livelen);
   if (l->live && !c->live) { free(c); return NULL; }
   if (l->livepx && l->live_ok && (c->livepx = (u8 *)malloc((size_t)(l->livebox.x1 - l->livebox.x0) * (l->livebox.y1 - l->livebox.y0) * 4)) != NULL)
@@ -227,6 +231,13 @@ static int blend_ch2(int mode, int cb, int cs)
     if (cs == 0) return cb == 0 ? 0 : 255;
     v = (cb * 255 + cs / 2) / cs;
     return v > 255 ? 255 : v;
+  /* 1.1: Paint.NET's (UserBlendOps), cb the layer below, cs this one */
+  case BM_REFLECT: if (cs >= 255) return 255; v = cb * cb / (255 - cs); return v > 255 ? 255 : v;
+  case BM_GLOW: if (cb >= 255) return 255; v = cs * cs / (255 - cb); return v > 255 ? 255 : v;
+  case BM_NEGATION: v = 255 - cb - cs; return 255 - (v < 0 ? -v : v);
+  case BM_XOR: return cb ^ cs;
+  case BM_PDNBURN: if (cs == 0) return 0; v = 255 - (255 - cb) * 255 / cs; return v < 0 ? 0 : v;
+  case BM_PDNDODGE: if (cs >= 255) return 255; v = cb * 255 / (255 - cs); return v > 255 ? 255 : v;
   default: return cs;
   }
 }
@@ -437,12 +448,13 @@ static void adj_mix(Comp *c, Layer *l, u8 *acc, int keep_alpha_only);
 /* layer l (pixel or fill) blended onto acc; keep: the clipped case, acc's alpha kept */
 static void put_layer(Comp *c, Layer *l, u8 *acc, int keep)
 {
-  int base = mul255(l->opacity, 255 - l->fill_cut);
+  int base = mul255(l->opacity, 255 - l->fill_cut), fx = fx_any(l);
   const u8 *mask, *s;
   u8 *tmp;
   i32 x;
-  if (!l->visible || (!base && !keep)) return;
+  if (!l->visible || (!base && !keep && !(fx && l->opacity))) return;
   if (l->kind == LK_ADJUST) { adj_mix(c, l, acc, keep); return; }
+  if (fx) fx_under(c->d, l, c->y, c->x0, c->n, acc, keep);     /* 1.1: Drop Shadow and Outer Glow below it */
   mask = layer_mask_used(c->d, l);
   tmp = l->kind == LK_FILL || l->kind == LK_TEXT || l->kind == LK_SHAPE ? row_get(c) : NULL;   /* (0.9: type and shape too) */
   if (!tmp && l->kind != LK_PIXEL) return;
@@ -459,6 +471,7 @@ static void put_layer(Comp *c, Layer *l, u8 *acc, int keep)
     }
   }
   if (tmp) c->used--;
+  if (fx) fx_over(c->d, l, c->y, c->x0, c->n, acc, keep);      /* 1.1: the effects on it */
 }
 /* an adjustment layer: acc adjusted, mixed back by the layer's opacity and mask, alpha untouched */
 static void adj_mix(Comp *c, Layer *l, u8 *acc, int keep)
@@ -572,7 +585,7 @@ static int doc_plain(const Doc *d)
   int i;
   for (i = 0; i < d->nlay; i++) {
     const Layer *l = d->lay[i];
-    if (l->kind != LK_PIXEL || l->depth || l->clip || (l->mask && l->mask_on) || l->fill_cut ||
+    if (l->kind != LK_PIXEL || l->depth || l->clip || (l->mask && l->mask_on) || l->fill_cut || fx_any(l) ||
         l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3] || !l->px) return 0;
   }
   return 1;
@@ -710,6 +723,7 @@ static void props_of(const Layer *l, Props *p)
   p->px = p->mask = p->idx = p->maskfx = NULL; p->adjprog = NULL;
   p->maskfx_ok = p->adjprog_ok = 0; p->picked = 0; p->edit_mask = 0;
   p->live = NULL; p->livelen = 0; p->livepx = NULL; p->livebox = box_make(0, 0, 0, 0); p->live_ok = 0;   /* 0.9 (doc_note_live keeps those) */
+  p->fxc = NULL; p->fx_ok = 0;                             /* 1.1 */
 }
 /* settings p put back on layer l (its buffers, caches and panel state kept) */
 static void props_set(Layer *l, const Props *p)
@@ -719,6 +733,7 @@ static void props_set(Layer *l, const Props *p)
   l->px = keep.px; l->mask = keep.mask; l->idx = keep.idx; l->maskfx = keep.maskfx; l->adjprog = keep.adjprog;
   l->live = keep.live; l->livelen = keep.livelen; l->livepx = keep.livepx; l->livebox = keep.livebox; l->live_ok = keep.live_ok;   /* 0.9 */
   l->picked = keep.picked; l->edit_mask = keep.edit_mask;
+  l->fxc = keep.fxc; l->fx_ok = 0;                         /* 1.1: the effects drawn again */
   l->maskfx_ok = keep.maskfx_ok && p->mask_feather == keep.mask_feather;
   l->adjprog_ok = 0;
 }
@@ -1054,6 +1069,9 @@ void doc_end(Doc *d)
         if (!t->plane) doc_index_sync(d, t->layer, box_make(t->tx * TS, t->ty * TS, t->tx * TS + TS, t->ty * TS + TS));
       }
   }
+  /* 1.1: layers whose pixels or mask changed have their effects drawn again */
+  if (u->whole) for (k = 0; k < d->nlay; k++) d->lay[k]->fx_ok = 0;
+  for (k = 0; k < u->ntiles; k++) if (u->tiles[k].plane < 2 && u->tiles[k].layer < d->nlay) d->lay[u->tiles[k].layer]->fx_ok = 0;
   list_free(d->redo); d->redo = NULL;
   d->dirty = 1;
   d->undo_depth++;
@@ -1074,6 +1092,7 @@ void doc_end(Doc *d)
 static void swap_step(Doc *d, UndoStep *u)
 {
   int i;
+  for (i = 0; i < d->nlay; i++) d->lay[i]->fx_ok = 0;      /* 1.1: effects drawn again */
   if (u->whole) {
     Layer *tl[MAXLAYERS];
     int tn = d->nlay, ta = d->active;

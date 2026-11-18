@@ -25,13 +25,15 @@
 #include "xml.h"
 #include "live.h"                     /* 0.9 */
 #include "path.h"
+#include "fx.h"                       /* 1.1 */
 
 /* the blend modes by BM_ value; svg:subtract doesn't exist, Krita calls it krita:subtract */
 static const char *const op_names[BM_N] = { "svg:src-over", "svg:multiply", "svg:screen", "svg:overlay", "svg:darken", "svg:lighten",
   "svg:difference", "svg:plus", "krita:subtract", "svg:color-dodge", "svg:color-burn", "svg:soft-light", "svg:hard-light",
   "svg:exclusion", "svg:hue", "svg:saturation", "svg:color", "svg:luminosity",
   "krita:dissolve", "krita:linear_burn", "krita:darker color", "krita:lighter color", "krita:vivid_light",
-  "krita:linear light", "krita:pin_light", "krita:hard mix", "krita:divide" };
+  "krita:linear light", "krita:pin_light", "krita:hard mix", "krita:divide",
+  "krita:reflect", "krita:glow", "krita:negation", "krita:xor", "easel:pdn-color-burn", "easel:pdn-color-dodge" };
 const char *ora_op_name(int mode) { return mode >= 0 && mode < BM_N ? op_names[mode] : op_names[0]; }
 int ora_op_mode(const char *name)
 {
@@ -55,6 +57,7 @@ typedef struct {
   int blendif[4];
   AdjParams adj; FillParams fillp;
   char *live;                         /* 0.9: a type or shape layer's settings (easel:text, easel:shape), malloc'd */
+  LayerFx fx; int label;              /* 1.1: the layer style (easel:effects) and colour label (easel:label) */
 } OraLayer;
 
 /* a 0-1 attribute as 0-255 (absent: 255) */
@@ -126,6 +129,8 @@ static void common_attrs(Xml *x, OraLayer *l)
   l->fill = (a = xml_attr(x, "fill")) ? unit255(a) : 255;
   l->lock_pos = is_true(xml_attr(x, "lock-position"));
   l->lock_all = is_true(xml_attr(x, "lock-all"));
+  if ((a = xml_attr(x, "effects"))) fx_load(&l->fx, a);                       /* 1.1 */
+  if ((a = xml_attr(x, "label"))) { l->label = atoi(a); if (l->label < 0 || l->label > 11) l->label = 0; }
   if ((a = xml_attr(x, "blend-if")) && read_ints(a, v, 4) == 4)
     for (k = 0; k < 4; k++) l->blendif[k] = v[k] < 0 ? 0 : v[k] > 255 ? 255 : v[k];
   if ((a = xml_attr(x, "mask"))) {
@@ -300,6 +305,7 @@ Doc *ora_read(const u8 *d, size_t n, char *err, size_t errcap)
       l->clip = (u8)(o->clip && o->kind != LK_GROUP); l->fill_cut = (u8)(255 - o->fill);
       l->lock_pos = (u8)o->lock_pos; l->lock_all = (u8)o->lock_all; l->collapsed = (u8)o->collapsed;
       for (i = 0; i < 4; i++) l->blendif[i] = (u8)o->blendif[i];
+      l->fx = o->fx; l->label = (u8)o->label;                /* 1.1 */
       if (o->kind == LK_GROUP && !o->isolate) l->blend = BM_PASS;
       if (o->kind == LK_ADJUST) l->adj = o->adj;
       if (o->kind == LK_FILL) { l->fillp = o->fillp; free(l->px); l->px = NULL; }
@@ -431,6 +437,11 @@ static void put_common(Buf *xml, ZipWriter *zw, Doc *doc, int i, int *ok)
   if (l->fill_cut) { buf_adds(xml, " easel:fill=\""); put_unit(xml, 255 - l->fill_cut); buf_adds(xml, "\""); }
   if (l->lock_pos) buf_adds(xml, " easel:lock-position=\"true\"");
   if (l->lock_all) buf_adds(xml, " easel:lock-all=\"true\"");
+  if (l->label) buf_printf(xml, " easel:label=\"%d\"", l->label);                 /* 1.1 */
+  if (fx_has(l)) {
+    char *t = fx_save(&l->fx);
+    if (t) { buf_adds(xml, " easel:effects=\""); xml_escape(xml, t, strlen(t)); buf_adds(xml, "\""); free(t); }
+  }
   if (l->blendif[0] || l->blendif[1] || l->blendif[2] || l->blendif[3])
     buf_printf(xml, " easel:blend-if=\"%d %d %d %d\"", l->blendif[0], l->blendif[1], l->blendif[2], l->blendif[3]);
   if (l->mask) {

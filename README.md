@@ -93,6 +93,26 @@ interface and icons. None of the icons are copied from any other program.
   feather, contrast, shift edge; out to the selection, a layer mask or a new layer with a mask), and
   All Layers / Deselect Layers.
 - Filters and adjustments are greyed out in a Bitmap picture, all but Invert.
+## New in 1.1: layer styles and more layer commands
+
+- Layer > Layer Style: Drop Shadow, Inner Shadow, Outer Glow, Inner Glow, Bevel & Emboss (inner,
+  outer, emboss, pillow), Satin, Color Overlay, Gradient Overlay and Stroke (outside, inside or
+  centre), set in the Layer Style window with a live preview: tick an effect on the left, change it
+  on the right. They follow the layer as it is painted, moved or masked, show at any fill opacity,
+  and work on pixel, type, shape and fill layers. Also Copy, Paste and Clear Layer Style, Global
+  Light, Create Layers (each effect a layer of its own), Hide All Effects, Scale Effects and
+  Layer > Rasterize > Layer Style. A layer with a style shows "fx" in the Layers panel. Effects are
+  worked out once and kept (a byte a pixel for each effect, over the area they reach), so a large
+  layer with many effects needs memory to match. OpenRaster files keep them; PSD files get how they
+  look, not the settings.
+- Paint.NET's six blend modes: Reflect, Glow, Negation, Xor and its own Color Burn and Color Dodge.
+- Layer > Layer Color: twelve colour labels, shown down the edge of the Layers panel.
+- Layer > Stack Mode: Mean, Median, Minimum, Maximum, Range, Summation, Variance, Standard
+  Deviation, Entropy, Skewness and Kurtosis of the picked layers (or all visible ones) as a new
+  layer, for removing noise or passers-by from a series of shots.
+- Delete Hidden Layers, Arrange > Reverse, New > Background from Layer, and Copy CSS (the layer's
+  size, place, opacity, mode, fill, shadows and stroke as CSS, on the clipboard as text).
+- Edit > Preferences > General: Skip Transform when Placing.
 
 ## New in 1.0: filters, adjustments and retouching
 
