@@ -728,6 +728,7 @@ static int apply_palette(Doc *d, const char *action, const u8 *pal, int n, const
   memcpy(d->pal, pcopy, 768);
   memcpy(d->pal_lock, lcopy, 256);
   d->npal = n; d->mode = (u8)mode;
+  d->cmode = 0;                          /* (1.2: no longer a CMYK or Lab document) */
   doc_end(d);
   free(c); free(pcopy); free(lcopy);
   return 1;
@@ -791,6 +792,7 @@ int doc_to_gray(Doc *d)
   for (i = 0; i < 256; i++) d->pal[i * 3] = d->pal[i * 3 + 1] = d->pal[i * 3 + 2] = (u8)i;
   memset(d->pal_lock, 0, sizeof d->pal_lock);
   d->npal = 256; d->mode = MODE_GRAY;
+  d->cmode = 0;                          /* (1.2) */
   doc_end(d);
   return 1;
 }

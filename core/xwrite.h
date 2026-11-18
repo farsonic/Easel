@@ -42,8 +42,8 @@ u8 *ico_encode(const Rgba *im, int maxsize, size_t *len);
 enum { DDS_RGBA, DDS_BC1, DDS_BC3 };
 u8 *dds_encode(const Rgba *im, int kind, int mipmaps, size_t *len);
 
-/* DPX (SMPTE 268M): RGB, or RGBA when anything isn't opaque, at 8 bits or (bits10) 10 bits packed
-   as Method A; big-endian */
+/* DPX (SMPTE 268M): RGB, or RGBA when anything isn't opaque, at 8 bits or (bits10 1) 10 bits packed
+   as Method A; 1.2: bits10 12 for 12 bits (Method A, one to a 16-bit word) or 16 for 16 bits; big-endian */
 u8 *dpx_encode(const Rgba *im, int bits10, size_t *len);
 
 /* FITS: 8-bit (BITPIX 8), one plane when every pixel is grey, else three (NAXIS3 = 3); the bottom

@@ -83,8 +83,9 @@ static void nav_draw(struct NData *d, Object *obj)
   /* what the canvas shows */
   if (canvas && v->zoom > 0) {
     double s = (double)d->tw / doc->w;
-    LONG rx0 = d->x0 + (LONG)(v->sx / v->zoom * s), ry0 = d->y0 + (LONG)(v->sy / v->zoom * s);
-    LONG rx1 = rx0 + (LONG)(_mwidth(canvas) / v->zoom * s), ry1 = ry0 + (LONG)(_mheight(canvas) / v->zoom * s);
+    double zy = view_zoom_y(v);          /* (1.2: rows drawn taller or shorter for the pixel aspect) */
+    LONG rx0 = d->x0 + (LONG)(v->sx / v->zoom * s), ry0 = d->y0 + (LONG)(v->sy / zy * s);
+    LONG rx1 = rx0 + (LONG)(_mwidth(canvas) / v->zoom * s), ry1 = ry0 + (LONG)(_mheight(canvas) / zy * s);
     if (rx0 < d->x0) rx0 = d->x0;
     if (ry0 < d->y0) ry0 = d->y0;
     if (rx1 > d->x0 + d->tw - 1) rx1 = d->x0 + d->tw - 1;

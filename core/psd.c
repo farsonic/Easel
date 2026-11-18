@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rasters.h"
+#include "cms.h"                       /* 1.2: cmyk_hook */
 
 static u32 be16(const u8 *p) { return ((u32)p[0] << 8) | p[1]; }
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
@@ -311,6 +312,12 @@ int psd_read(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap)
         break;
       case 4: {                                          /* stored inverted: r = c' * k' / 255 */
         int k = sample8(r[3], (int)depth, (i32)x);
+        if (cmyk_hook) {                                 /* (1.2) */
+          u8 ink[4];
+          for (c = 0; c < 4; c++) ink[c] = (u8)(255 - sample8(r[c], (int)depth, (i32)x));
+          cmyk_hook(ink, o);
+          break;
+        }
         for (c = 0; c < 3; c++) o[c] = (u8)((sample8(r[c], (int)depth, (i32)x) * k + 127) / 255);
         break;
       }

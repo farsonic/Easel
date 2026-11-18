@@ -1,0 +1,583 @@
+/*
+ * colourtest.c - Easel 1.2's colour, file format and type work (round 2): pixel aspect presets and
+ * the canvas's vertical scale; the CMS (built-in profiles written and parsed back, matrix and LUT
+ * transforms, intents and black point compensation, the press model and its gamut, proof views);
+ * ICC profiles kept in PNG, JPEG, TIFF, PSD and WebP; CMYK and Lab documents saved in their model;
+ * palette PNG/BMP opening Indexed and 1-bit TIFF/PBM opening as Bitmap. Files for the Python
+ * cross-checks (tests/check_colour.py) are written to the directory given. Run under ASan/UBSan.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include "core/doc.h"
+#include "core/codec.h"
+#include "core/aspect.h"
+#include "core/cms.h"
+#include "core/palette.h"
+#include "core/xwrite.h"
+#include "core/colorx.h"
+#include "core/xread2.h"
+
+static int fails, tests;
+#define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
+static const char *outdir = NULL;
+
+static void save(const char *name, const u8 *d, size_t n)
+{
+  char p[512];
+  if (!outdir || !d) return;
+  snprintf(p, sizeof p, "%s/%s", outdir, name);
+  file_write(p, d, n);
+}
+/* a test picture: a colour ramp across, a grey ramp down, a transparent corner */
+static Doc *ramp_doc(i32 w, i32 h, int alpha)
+{
+  Doc *d = doc_new(w, h, 0xFFFFFF, 0);
+  i32 x, y;
+  for (y = 0; y < h; y++)
+    for (x = 0; x < w; x++) {
+      u8 *p = d->lay[0]->px + ((long)y * w + x) * 4;
+      p[0] = (u8)(x * 255 / (w - 1)); p[1] = (u8)(y * 255 / (h - 1)); p[2] = (u8)((x + y) * 255 / (w + h - 2)); p[3] = 255;
+      if (alpha && x < 4 && y < 4) p[3] = 0;
+    }
+  return d;
+}
+
+/* ------------------------------------------------------------------ aspect */
+static void test_aspect(void)
+{
+  u8 ax, ay;
+  int i;
+  CHECK(aspect_count() >= 12, "aspect presets");
+  CHECK(aspect_find(1, 1) == 0 && aspect_find(0, 0) == 0, "square found");
+  CHECK(aspect_find(10, 22) == 3, "a multiple of 5:11 is PAL hires");
+  CHECK(aspect_find(7, 13) == -1, "a custom ratio isn't a preset");
+  CHECK(fabs(aspect_yscale(5, 11, 1) - 2.2) < 1e-9, "hires drawn 2.2 times as tall");
+  CHECK(aspect_yscale(5, 11, 0) == 1.0, "correction off: square");
+  CHECK(aspect_yscale(1, 255, 1) == 4.0 && aspect_yscale(255, 1, 1) == 0.25, "the scale is kept within 1/4..4");
+  aspect_from_ratio(0.91, &ax, &ay);
+  CHECK(fabs((double)ax / ay - 0.91) < 0.002, "0.91 as a ratio");
+  aspect_from_ratio(1.0, &ax, &ay);
+  CHECK(ax == ay, "1.0 as a ratio");
+  for (i = 0; i < aspect_count(); i++) CHECK(aspect_get(i)->ax && aspect_get(i)->ay && aspect_get(i)->name[0], "each preset has a ratio and a name");
+  CHECK(aspect_get(aspect_count()) == NULL, "out of range");
+}
+
+/* ------------------------------------------------------------------ the CMS */
+static double maxdiff_rgb(const u8 *a, const u8 *b, long n)
+{
+  long k;
+  double m = 0;
+  for (k = 0; k < n; k++) { int c; for (c = 0; c < 3; c++) { double v = fabs((double)a[k * 4 + c] - b[k * 4 + c]); if (v > m) m = v; } }
+  return m;
+}
+static double meandiff_rgb(const u8 *a, const u8 *b, long n)
+{
+  long k;
+  double t = 0;
+  for (k = 0; k < n; k++) { int c; for (c = 0; c < 3; c++) t += fabs((double)a[k * 4 + c] - b[k * 4 + c]); }
+  return t / (n * 3);
+}
+static void test_builtin_profiles(void)
+{
+  u32 len;
+  u8 *b = icc_builtin_bytes(CMS_SRGB, &len), *a;
+  IccProfile *p, *q;
+  char err[80], desc[64];
+  double in[3] = { 1, 1, 1 }, xyz[3], out[3];
+  CHECK(b && len > 132 && !memcmp(b + 36, "acsp", 4), "sRGB bytes made");
+  p = b ? icc_parse(b, len, err, sizeof err) : NULL;
+  CHECK(p != NULL, "sRGB bytes parsed back");
+  CHECK(p && icc_is_matrix(p) && icc_space(p) == ICC_RGB, "a matrix RGB profile");
+  CHECK(p && icc_same(p, icc_srgb()), "the same as the built-in sRGB");
+  CHECK(p && !icc_same(p, icc_adobergb()), "not Adobe RGB");
+  icc_desc_of(b, len, desc, sizeof desc);
+  CHECK(!strcmp(desc, "sRGB IEC61966-2.1"), "its description");
+  icc_to_xyz(p, CI_RELATIVE, in, xyz);
+  CHECK(fabs(xyz[0] - 0.9642) < 2e-3 && fabs(xyz[1] - 1) < 2e-3 && fabs(xyz[2] - 0.8249) < 2e-3, "white is D50");
+  in[0] = 0.5; in[1] = 0.2; in[2] = 0.9;
+  icc_to_xyz(p, CI_RELATIVE, in, xyz); icc_from_xyz(p, CI_RELATIVE, xyz, out);
+  CHECK(fabs(out[0] - 0.5) < 1e-3 && fabs(out[1] - 0.2) < 1e-3 && fabs(out[2] - 0.9) < 1e-3, "sRGB there and back");
+  save("srgb.icc", b, len);
+  a = icc_builtin_bytes(CMS_ADOBERGB, &len);
+  q = a ? icc_parse(a, len, err, sizeof err) : NULL;
+  CHECK(q && icc_same(q, icc_adobergb()), "Adobe RGB bytes parsed back");
+  save("adobergb.icc", a, len);
+  CHECK(icc_parse((const u8 *)"not a profile at all", 20, err, sizeof err) == NULL, "junk refused");
+  icc_free(p); icc_free(q); free(a); free(b);
+}
+/* a LUT profile (lut16, RGB in, XYZ PCS) made to match sRGB: the same transform as the matrix one */
+static u8 *make_lut_profile(u32 *len, int lab)
+{
+  int g = 17, ie = 256, oe = 2, r, gg, bb, k;
+  u32 lutsz = 52 + ie * 3 * 2 + g * g * g * 3 * 2 + oe * 3 * 2, total = 128 + 4 + 2 * 12 + 32 + ((lutsz + 3) & ~3u);
+  u8 *b = (u8 *)calloc(1, total), *t;
+  u32 at = 128 + 4 + 24;
+  #define P32(p, v) do { (p)[0] = (u8)((v) >> 24); (p)[1] = (u8)((v) >> 16); (p)[2] = (u8)((v) >> 8); (p)[3] = (u8)(v); } while (0)
+  #define P16(p, v) do { (p)[0] = (u8)((v) >> 8); (p)[1] = (u8)(v); } while (0)
+  P32(b, total); P32(b + 8, 0x02100000); memcpy(b + 12, "mntr", 4); memcpy(b + 16, "RGB ", 4); memcpy(b + 20, lab ? "Lab " : "XYZ ", 4);
+  memcpy(b + 36, "acsp", 4);
+  P32(b + 128, 2);
+  memcpy(b + 132, "wtpt", 4); P32(b + 136, at); P32(b + 140, 20);
+  t = b + at; memcpy(t, "XYZ ", 4); P32(t + 8, 63190); P32(t + 12, 65536); P32(t + 16, 54061);
+  at += 32;
+  memcpy(b + 144, "A2B0", 4); P32(b + 148, at); P32(b + 152, lutsz);
+  t = b + at; memcpy(t, "mft2", 4); t[8] = 3; t[9] = 3; t[10] = (u8)g;
+  P32(t + 12, 65536); P32(t + 28, 65536); P32(t + 44, 65536);
+  P16(t + 48, ie); P16(t + 50, oe);
+  t += 52;
+  for (k = 0; k < 3; k++) { int i; for (i = 0; i < ie; i++) { double v = i / 255.0; v = v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4); P16(t, (u32)floor(v * 65535 + 0.5)); t += 2; } }
+  for (r = 0; r < g; r++) for (gg = 0; gg < g; gg++) for (bb = 0; bb < g; bb++) {
+    double lin[3], xyz[3];
+    static const double m[9] = { 0.4360747, 0.3850649, 0.1430804, 0.2225045, 0.7168786, 0.0606169, 0.0139322, 0.0971045, 0.7141733 };
+    lin[0] = r / (g - 1.0); lin[1] = gg / (g - 1.0); lin[2] = bb / (g - 1.0);
+    for (k = 0; k < 3; k++) xyz[k] = m[3 * k] * lin[0] + m[3 * k + 1] * lin[1] + m[3 * k + 2] * lin[2];
+    if (lab) {
+      double l[3];
+      xyz_to_lab(xyz, l);
+      P16(t, (u32)floor(l[0] / 100 * 65280 + 0.5)); P16(t + 2, (u32)floor((l[1] + 128) / 255 * 65280 + 0.5)); P16(t + 4, (u32)floor((l[2] + 128) / 255 * 65280 + 0.5));
+    } else for (k = 0; k < 3; k++) P16(t + 2 * k, (u32)floor(xyz[k] * 32768 + 0.5));
+    t += 6;
+  }
+  for (k = 0; k < 3; k++) { P16(t, 0); P16(t + 2, 65535); t += 4; }
+  *len = total;
+  return b;
+}
+static void test_transforms(void)
+{
+  Doc *d = ramp_doc(64, 48, 0);
+  long n = 64L * 48;
+  u8 *a = (u8 *)malloc((size_t)n * 4), *b = (u8 *)malloc((size_t)n * 4);
+  CmsXform *x, *y;
+  u32 len;
+  u8 *lp;
+  IccProfile *lut;
+  char err[80];
+  memcpy(a, d->lay[0]->px, (size_t)n * 4);
+  /* sRGB to sRGB: nothing */
+  x = cms_xform_new(NULL, icc_srgb(), CI_PERCEPTUAL, 1);
+  CHECK(x && cms_xform_identity(x), "sRGB to sRGB is identity");
+  cms_xform_free(x);
+  /* sRGB to Adobe RGB and back: within a level or two; Adobe's numbers are less saturated */
+  x = cms_xform_new(icc_srgb(), icc_adobergb(), CI_RELATIVE, 0);
+  y = cms_xform_new(icc_adobergb(), icc_srgb(), CI_RELATIVE, 0);
+  CHECK(x && y && !cms_xform_identity(x), "the matrix transforms made");
+  memcpy(b, a, (size_t)n * 4);
+  cms_xform_apply(x, b, n);
+  { u8 red[4] = { 255, 0, 0, 255 }; cms_xform_apply(x, red, 1); CHECK(red[0] > 210 && red[0] < 225 && red[1] < 5 && red[2] < 5, "sRGB red in Adobe RGB (219, 0, 0)"); }
+  { u8 green[4] = { 0, 255, 0, 255 }; cms_xform_apply(x, green, 1); CHECK(green[0] > 130 && green[0] < 150 && green[1] > 250, "sRGB green in Adobe RGB (144, 255, 60)"); }
+  save("ramp.rgba", a, (size_t)n * 4);
+  save("ramp_adobe.rgba", b, (size_t)n * 4);
+  cms_xform_apply(y, b, n);
+  /* (8-bit Adobe numbers rounded put a few levels into dark sRGB: the toe of sRGB's curve is steep) */
+  CHECK(maxdiff_rgb(a, b, n) <= 10, "Adobe RGB and back");
+  cms_xform_free(x); cms_xform_free(y);
+  /* a LUT profile that is sRGB: a grid transform, the same colours */
+  lp = make_lut_profile(&len, 0);
+  lut = icc_parse(lp, len, err, sizeof err);
+  CHECK(lut && !icc_is_matrix(lut), "a lut16 profile parsed");
+  save("lutxyz.icc", lp, len);
+  x = lut ? cms_xform_new(lut, icc_srgb(), CI_PERCEPTUAL, 0) : NULL;
+  CHECK(x && !cms_xform_identity(x), "a LUT transform");
+  memcpy(b, a, (size_t)n * 4);
+  if (x) cms_xform_apply(x, b, n);
+  CHECK(maxdiff_rgb(a, b, n) <= 3, "the sRGB LUT profile gives sRGB's colours");
+  cms_xform_free(x); icc_free(lut); free(lp);
+  lp = make_lut_profile(&len, 1);
+  lut = icc_parse(lp, len, err, sizeof err);
+  x = lut ? cms_xform_new(lut, icc_adobergb(), CI_RELATIVE, 1) : NULL;
+  y = cms_xform_new(icc_srgb(), icc_adobergb(), CI_RELATIVE, 1);
+  CHECK(x && y, "a Lab-PCS LUT transform");
+  memcpy(b, a, (size_t)n * 4);
+  if (x) cms_xform_apply(x, b, n);
+  save("ramp_lutlab_adobe.rgba", b, (size_t)n * 4);
+  { u8 *c = (u8 *)malloc((size_t)n * 4); memcpy(c, a, (size_t)n * 4); cms_xform_apply(y, c, n);
+    CHECK(meandiff_rgb(c, b, n) <= 1.0 && maxdiff_rgb(c, b, n) <= 24, "Lab PCS (legacy lut16 encoding) agrees with the matrices"); free(c); }
+  save("lutlab.icc", lp, len);
+  cms_xform_free(x); cms_xform_free(y); icc_free(lut); free(lp);
+  free(a); free(b);
+  doc_free(d);
+}
+static void test_press(void)
+{
+  double xyz[3], ck[4], de, lab[3], x2[3];
+  double white[3] = { 1, 1, 1 }, in[3];
+  int k;
+  icc_to_xyz(NULL, CI_RELATIVE, white, xyz);
+  de = press_from_xyz(xyz, ck);
+  CHECK(de < 1 && ck[0] < 0.01 && ck[1] < 0.01 && ck[2] < 0.01 && ck[3] < 0.01, "white is no ink");
+  in[0] = in[1] = in[2] = 0;
+  icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  de = press_from_xyz(xyz, ck);
+  CHECK(ck[3] > 0.95 && ck[0] + ck[1] + ck[2] + ck[3] <= 3.0001, "black is mostly K, within 300%");
+  in[0] = in[1] = in[2] = 0.5;
+  icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  de = press_from_xyz(xyz, ck);
+  CHECK(de < 2, "mid grey prints");
+  press_to_xyz(ck, x2); xyz_to_lab(x2, lab);
+  CHECK(fabs(lab[1]) < 2 && fabs(lab[2]) < 2, "and prints neutral");
+  /* a skin tone and a muted blue print; pure sRGB green and blue don't */
+  in[0] = 0.85; in[1] = 0.65; in[2] = 0.55; icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  CHECK(press_from_xyz(xyz, ck) < 3, "a skin tone is in gamut");
+  in[0] = 0.3; in[1] = 0.4; in[2] = 0.6; icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  CHECK(press_from_xyz(xyz, ck) < 3, "a muted blue is in gamut");
+  in[0] = 0; in[1] = 1; in[2] = 0; icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  CHECK(press_from_xyz(xyz, ck) > 10, "sRGB green is out of gamut");
+  in[0] = 0; in[1] = 0; in[2] = 1; icc_to_xyz(NULL, CI_RELATIVE, in, xyz);
+  CHECK(press_from_xyz(xyz, ck) > 10, "sRGB blue is out of gamut");
+  for (k = 0; k < 4; k++) CHECK(ck[k] >= 0 && ck[k] <= 1, "inks within 0..1");
+}
+static void test_views(void)
+{
+  ViewSpec v;
+  CmsXform *x;
+  u8 px[4 * 4] = { 0, 255, 0, 255,  200, 160, 140, 255,  255, 0, 0, 255,  128, 128, 128, 255 };
+  u8 t[16];
+  memset(&v, 0, sizeof v);
+  v.intent = CI_RELATIVE; v.bpc = 1;
+  CHECK(cms_view_new(NULL, &v) == NULL, "no proof, sRGB, sRGB display: nothing to do");
+  v.on = 1; v.proof = PRF_MONITOR;
+  x = cms_view_new(icc_adobergb(), &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && !memcmp(t, px, 16), "Monitor RGB shows the numbers as they are");
+  cms_xform_free(x);
+  v.proof = PRF_NONE; v.on = 0;
+  x = cms_view_new(icc_adobergb(), &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[0] < 60 && t[1] == 255, "an Adobe RGB picture is shown converted (its green beyond sRGB's)");
+  cms_xform_free(x);
+  v.on = 1; v.proof = PRF_CMYK;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[1] < 200 && abs(t[4] - 200) < 12 && abs(t[12] - 128) < 8, "CMYK proof: green dulled, skin and grey kept");
+  cms_xform_free(x);
+  v.proof = PRF_BLACK;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[0] == t[1] && t[1] == t[2] && t[4] > 230, "the black plate: grey, little black in a skin tone");
+  cms_xform_free(x);
+  v.proof = PRF_PROTAN;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && abs(t[8] - t[9]) < 120 && abs(t[12] - 128) < 4, "protanopia: red and green close, grey kept");
+  cms_xform_free(x);
+  v.proof = PRF_MAC;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[12] > 140, "legacy Macintosh RGB: lighter");
+  cms_xform_free(x);
+  v.on = 0; v.gamut = 1;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[0] == 0x80 && t[1] == 0x80 && t[2] == 0x80, "gamut warning: sRGB green painted grey");
+  CHECK(x && t[4] == 200 && t[5] == 160 && t[12] == 128, "gamut warning: printable colours shown as they are");
+  cms_xform_free(x);
+  v.gamut = 0; v.gamma10 = 18;
+  x = cms_view_new(NULL, &v);
+  memcpy(t, px, 16); if (x) cms_xform_apply(x, t, 4);
+  CHECK(x && t[12] < 128, "a 1.8 display gets darker numbers");
+  cms_xform_free(x);
+}
+
+/* ------------------------------------------------------------------ profiles in files */
+static void test_files(void)
+{
+  Doc *d = ramp_doc(40, 30, 1), *e;
+  u32 len, l2;
+  u8 *icc = icc_builtin_bytes(CMS_ADOBERGB, &len), *got, *f;
+  size_t fl;
+  char err[120];
+  int fmts[5] = { FMT_PNG, FMT_JPEG, FMT_TIFF, FMT_PSD, FMT_WEBP }, k;
+  static const char *names[5] = { "icc.png", "icc.jpg", "icc.tif", "icc.psd", "icc.webp" };
+  d->icc = icc; d->icclen = len;
+  for (k = 0; k < 5; k++) {
+    f = colorx_write_doc(d, fmts[k], &fl);
+    CHECK(f != NULL, names[k]);
+    if (!f) continue;
+    got = icc_from_file(f, fl, &l2);
+    CHECK(got && l2 == len && !memcmp(got, icc, len), "the profile read back");
+    free(got);
+    e = codec_load_doc(f, fl, err, sizeof err);
+    CHECK(e && e->icc && e->icclen == len, "the opened document has it");
+    CHECK(e && e->w == 40 && e->h == 30, "and its size");
+    save(names[k], f, fl);
+    doc_free(e);
+    free(f);
+  }
+  doc_free(d);
+}
+static void test_models(void)
+{
+  Doc *d = ramp_doc(32, 24, 0), *e;
+  u8 *f;
+  size_t fl;
+  char err[120];
+  long n = 32L * 24;
+  u8 *before = (u8 *)malloc((size_t)n * 4);
+  /* CMYK: colours brought into gamut, saved as a CMYK TIFF, opened again as a CMYK document */
+  CHECK(colorx_convert_model(d, CM_CMYK, NULL), "to CMYK");
+  CHECK(d->cmode == CM_CMYK && d->mode == MODE_RGB, "a CMYK document");
+  memcpy(before, d->lay[0]->px, (size_t)n * 4);
+  f = colorx_write_doc(d, FMT_TIFF, &fl);
+  CHECK(f && cms_file_model(f, fl) == CM_CMYK, "saved as a CMYK TIFF");
+  save("cmyk.tif", f, fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->cmode == CM_CMYK, "opened as CMYK");
+  CHECK(e && meandiff_rgb(before, e->lay[0]->px, n) <= 1.5 && maxdiff_rgb(before, e->lay[0]->px, n) <= 20, "the colours survive the separation");
+  doc_free(e); free(f);
+  /* undo of the conversion */
+  doc_undo(d);
+  CHECK(d->cmode == CM_RGB, "undone: RGB again");
+  /* Lab */
+  CHECK(colorx_convert_model(d, CM_LAB, NULL), "to Lab");
+  f = colorx_write_doc(d, FMT_TIFF, &fl);
+  CHECK(f && cms_file_model(f, fl) == CM_LAB, "saved as a CIELab TIFF");
+  save("lab.tif", f, fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->cmode == CM_LAB, "opened as Lab");
+  /* (8-bit Lab's whole a* and b* steps show as a few levels in sRGB's darks) */
+  CHECK(e && meandiff_rgb(d->lay[0]->px, e->lay[0]->px, n) <= 1.0 && maxdiff_rgb(d->lay[0]->px, e->lay[0]->px, n) <= 20, "Lab keeps the colours");
+  doc_free(e); free(f);
+  /* CMYK JPEG */
+  colorx_convert_model(d, CM_CMYK, NULL);
+  memcpy(before, d->lay[0]->px, (size_t)n * 4);
+  f = colorx_write_doc(d, FMT_JPEG, &fl);
+  CHECK(f && cms_file_model(f, fl) == CM_CMYK, "saved as a CMYK JPEG");
+  save("cmyk.jpg", f, fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->cmode == CM_CMYK, "the JPEG opened as CMYK");
+  CHECK(e && meandiff_rgb(before, e->lay[0]->px, n) <= 3, "its colours near");
+  doc_free(e); free(f);
+  free(before);
+  doc_free(d);
+}
+static void test_assign_convert(void)
+{
+  Doc *d = ramp_doc(20, 10, 0);
+  u8 g[4];
+  memcpy(g, d->lay[0]->px + (5L * 20 + 10) * 4, 4);
+  CHECK(colorx_assign(d, CMS_ADOBERGB, NULL, 0), "assign Adobe RGB");
+  CHECK(d->icc && !memcmp(d->lay[0]->px + (5L * 20 + 10) * 4, g, 4), "assigning keeps the numbers");
+  doc_undo(d);
+  CHECK(d->icc == NULL, "undone: untagged");
+  doc_redo(d);
+  CHECK(d->icc != NULL, "redone");
+  CHECK(colorx_convert(d, CMS_SRGB, NULL, 0, CI_RELATIVE, 1), "convert to sRGB");
+  CHECK(d->icc && icc_space(NULL) == ICC_RGB, "tagged sRGB");
+  { const u8 *p = d->lay[0]->px + (5L * 20 + 10) * 4;
+    int s0 = g[0] > g[1] ? g[0] - g[1] : g[1] - g[0], s1 = p[0] > p[1] ? p[0] - p[1] : p[1] - p[0];
+    CHECK(s1 > s0, "Adobe RGB numbers become more saturated sRGB ones"); }
+  doc_undo(d);
+  CHECK(!memcmp(d->lay[0]->px + (5L * 20 + 10) * 4, g, 4), "undone: the numbers back");
+  doc_free(d);
+}
+/* ------------------------------------------------------------------ indexed and bitmap opening */
+static void test_open_modes(void)
+{
+  Doc *d = ramp_doc(16, 16, 0), *e;
+  u8 *f;
+  size_t fl;
+  char err[120];
+  i32 x, y;
+  doc_to_indexed(d, 7, QM_MEDIAN, 0, NULL, 0);
+  f = png_write_doc(d, &fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->mode == MODE_INDEXED && e->npal == 7 && !memcmp(e->pal, d->pal, 21), "a palette PNG opens Indexed with its palette");
+  CHECK(e && e->lay[0]->idx && !memcmp(e->lay[0]->px, d->lay[0]->px, 16 * 16 * 4), "and the same pixels");
+  doc_free(e); free(f);
+  {
+    Rgba im;
+    im.w = 16; im.h = 16; im.px = d->lay[0]->px;
+    f = bmp_encode(&im, &fl);
+  }
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->mode == MODE_RGB, "a 24-bit BMP opens RGB");
+  doc_free(e); free(f);
+  f = colorx_bmp_indexed(d, &fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->mode == MODE_INDEXED && e->npal == 7 && !memcmp(e->lay[0]->px, d->lay[0]->px, 16 * 16 * 4), "a palette BMP opens Indexed");
+  save("pal.bmp", f, fl);
+  doc_free(e); free(f);
+  doc_free(d);
+  /* 1-bit TIFF and PBM: Bitmap */
+  d = doc_new(24, 8, 0xFFFFFF, 0);
+  for (y = 0; y < 8; y++) for (x = 0; x < 24; x++) if ((x + y) % 3 == 0) { u8 *p = d->lay[0]->px + (y * 24 + x) * 4; p[0] = p[1] = p[2] = 0; }
+  doc_to_bitmap(d, BMM_THRESHOLD);
+  f = tiff_encode_doc(d, TIFFC_NONE, &fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->mode == MODE_BITMAP && !memcmp(e->lay[0]->px, d->lay[0]->px, 24 * 8 * 4), "a 1-bit TIFF opens in Bitmap mode");
+  doc_free(e); free(f);
+  f = xwrite_doc(d, FMT_PNM, PNM_PBM, 0, &fl);
+  e = f ? codec_load_doc(f, fl, err, sizeof err) : NULL;
+  CHECK(e && e->mode == MODE_BITMAP, "a PBM opens in Bitmap mode");
+  doc_free(e); free(f);
+  doc_free(d);
+}
+
+/* ------------------------------------------------------------------ Cineon, DICOM, OpenEXR, HDR */
+static double exr_value(int c, int x, int y)
+{
+  switch (c) {
+  case 0: return x / 16.0;
+  case 1: return y / 8.0;
+  case 2: return ((x + y) % 7) / 4.0;
+  case 3: return 1.0 - (x % 4) / 8.0;
+  }
+  return (x + 2 * y) / 32.0;
+}
+static void test_exr(void)
+{
+  static const char *files[6] = { "none_half_rgba", "rle_half_y", "zips_half_rgb", "zip_float_rgb", "piz_half_rgba", "piz_float_y" };
+  static const int grey[6] = { 0, 1, 0, 0, 0, 1 }, alpha[6] = { 1, 0, 0, 0, 1, 0 };
+  int k;
+  for (k = 0; k < 6; k++) {
+    char path[128], err[120];
+    size_t n;
+    u8 *d;
+    float *f;
+    i32 w = 0, h = 0, x, y;
+    int bad = 0;
+    snprintf(path, sizeof path, "tests/data/exr/%s.exr", files[k]);
+    d = file_read(path, &n);
+    CHECK(d && xread2_detect(d, n) == XR_EXR, files[k]);
+    f = d ? exr_read_float(d, n, &w, &h, err, sizeof err) : NULL;
+    if (!f) printf("%s: %s\n", files[k], err);
+    CHECK(f && w == 37 && h == 41, "OpenEXR read: its size");
+    if (f)
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+        const float *p = f + ((long)y * w + x) * 4;
+        int c;
+        for (c = 0; c < 3; c++) if (fabs(p[c] - exr_value(grey[k] ? 4 : c, x, y)) > 1e-6) bad++;
+        if (fabs(p[3] - (alpha[k] ? exr_value(3, x, y) : 1.0)) > 1e-6) bad++;
+      }
+    CHECK(f && !bad, "OpenEXR: every sample as written");
+    if (bad) printf("%s: %d samples differ\n", files[k], bad);
+    free(f);
+    if (d) {
+      Doc *doc = codec_load_doc(d, n, err, sizeof err);
+      CHECK(doc && doc->w == 37 && doc->lay[0]->px[3] == 255, "an OpenEXR file opens (tone-mapped)");
+      doc_free(doc);
+      /* damaged copies fail cleanly: every byte of the header in turn, and the file cut short */
+      {
+        size_t i;
+        u8 *c = (u8 *)malloc(n);
+        for (i = 0; i < n; i += (i < 400 ? 1 : 97)) {
+          Rgba im;
+          memcpy(c, d, n); c[i] ^= 0x5A;
+          if (xread2_decode(c, n, &im, err, sizeof err)) rgba_free(&im);
+          if (xread2_decode(d, i, &im, err, sizeof err)) rgba_free(&im);
+        }
+        free(c);
+      }
+    }
+    free(d);
+  }
+}
+static void test_cineon_hdr_dicom(void)
+{
+  Doc *d = ramp_doc(50, 20, 0), *e;
+  Rgba im, back;
+  u8 *f;
+  size_t n;
+  char err[120];
+  im.w = 50; im.h = 20; im.px = d->lay[0]->px;
+  f = cineon_encode(&im, &n);
+  CHECK(f && xread2_detect(f, n) == XR_CINEON, "a Cineon file written");
+  CHECK(f && xread2_decode(f, n, &back, err, sizeof err) && back.w == 50 && back.h == 20, "and read back");
+  if (f && back.px) {
+    CHECK(meandiff_rgb(im.px, back.px, 1000) <= 1.0 && maxdiff_rgb(im.px, back.px, 1000) <= 6, "Cineon's 10-bit log keeps the colours");
+    save("cineon.cin", f, n);
+    { size_t pl; u8 *png = png_encode(&back, 0, &pl); save("cineon_easel.png", png, pl); free(png); }
+    rgba_free(&back);
+  }
+  free(f);
+  save("ramp50.png", NULL, 0);
+  { size_t pl; u8 *png = png_encode(&im, 0, &pl); save("ramp50.png", png, pl); free(png); }
+  f = hdr_encode(&im, &n);
+  CHECK(f != NULL, "a Radiance HDR file written");
+  e = f ? codec_load_doc(f, n, err, sizeof err) : NULL;
+  CHECK(e && e->w == 50 && e->h == 20, "Easel's HDR reader opens it");
+  save("ramp50.hdr", f, n);
+  doc_free(e); free(f);
+  doc_free(d);
+  /* DICOM: 16-bit monochrome with a rescale and a window, written here element by element */
+  {
+    Buf b;
+    i32 x, y;
+    u8 *px;
+    char ts[] = "1.2.840.10008.1.2.1";
+    #define EL(g, e, vr, data, len) do { u8 h[8]; h[0] = (u8)(g); h[1] = (u8)((g) >> 8); h[2] = (u8)(e); h[3] = (u8)((e) >> 8); h[4] = (vr)[0]; h[5] = (vr)[1]; \
+      buf_add(&b, h, 6); if (!strcmp(vr, "OW") || !strcmp(vr, "OB")) { u8 z[6] = { 0, 0, (u8)(len), (u8)((len) >> 8), (u8)((len) >> 16), (u8)((len) >> 24) }; buf_add(&b, z, 6); } \
+      else { u8 z[2] = { (u8)(len), (u8)((len) >> 8) }; buf_add(&b, z, 2); } buf_add(&b, data, len); } while (0)
+    u8 v16[2];
+    buf_init(&b);
+    for (x = 0; x < 128; x++) buf_addc(&b, 0);
+    buf_add(&b, "DICM", 4);
+    EL(0x0002, 0x0010, "UI", ts, 20);                  /* (the UID with its NUL pad) */
+    EL(0x0008, 0x0060, "CS", "OT", 2);
+    { const u8 sq[12] = { 0x08, 0x00, 0x15, 0x11, 'S', 'Q', 0, 0, 0xFF, 0xFF, 0xFF, 0xFF }; const u8 end[8] = { 0xFE, 0xFF, 0xDD, 0xE0, 0, 0, 0, 0 };
+      const u8 item[8] = { 0xFE, 0xFF, 0x00, 0xE0, 0xFF, 0xFF, 0xFF, 0xFF }; const u8 iend[8] = { 0xFE, 0xFF, 0x0D, 0xE0, 0, 0, 0, 0 };
+      buf_add(&b, sq, 12); buf_add(&b, item, 8); EL(0x0008, 0x1150, "UI", "1.2.3.4", 8); buf_add(&b, iend, 8); buf_add(&b, end, 8); }   /* (a sequence to skip) */
+    v16[0] = 1; v16[1] = 0; EL(0x0028, 0x0002, "US", v16, 2);
+    EL(0x0028, 0x0004, "CS", "MONOCHROME2 ", 12);
+    v16[0] = 24; v16[1] = 0; EL(0x0028, 0x0010, "US", v16, 2);
+    v16[0] = 40; v16[1] = 0; EL(0x0028, 0x0011, "US", v16, 2);
+    v16[0] = 16; v16[1] = 0; EL(0x0028, 0x0100, "US", v16, 2); EL(0x0028, 0x0101, "US", v16, 2);
+    v16[0] = 0; EL(0x0028, 0x0103, "US", v16, 2);
+    EL(0x0028, 0x1050, "DS", "1000", 4);
+    EL(0x0028, 0x1051, "DS", "2000", 4);
+    EL(0x0028, 0x1052, "DS", "-1024 ", 6);
+    EL(0x0028, 0x1053, "DS", "1 ", 2);
+    px = (u8 *)malloc(40 * 24 * 2);
+    for (y = 0; y < 24; y++) for (x = 0; x < 40; x++) { u32 v = (u32)(x * 100 + y * 10); px[(y * 40 + x) * 2] = (u8)v; px[(y * 40 + x) * 2 + 1] = (u8)(v >> 8); }
+    EL(0x7FE0, 0x0010, "OW", px, 40 * 24 * 2);
+    free(px);
+    CHECK(!b.oom && xread2_detect((u8 *)b.data, b.len) == XR_DICOM, "a DICOM file made");
+    CHECK(xread2_decode((u8 *)b.data, b.len, &back, err, sizeof err) && back.w == 40 && back.h == 24, "DICOM read");
+    if (back.px) {
+      /* the value at x, y is x*100 + y*10 - 1024; the window 0..2000 (centre 1000, width 2000) */
+      int bad = 0;
+      for (y = 0; y < 24; y++) for (x = 0; x < 40; x++) {
+        double t = (x * 100 + y * 10 - 1024 - (1000 - 0.5 - 1999 / 2.0)) / 1999.0;
+        int want = (int)((t < 0 ? 0 : t > 1 ? 1 : t) * 255 + 0.5), got = back.px[(y * 40 + x) * 4];
+        if (abs(want - got) > 1) bad++;
+      }
+      CHECK(!bad, "DICOM: the rescale and the window");
+      { size_t pl; u8 *png = png_encode(&back, 0, &pl); save("dicom_easel.png", png, pl); free(png); }
+      rgba_free(&back);
+    }
+    save("test.dcm", (u8 *)b.data, b.len);
+    {
+      size_t i;
+      u8 *c = (u8 *)malloc(b.len);
+      for (i = 0; i < b.len; i++) {
+        Rgba t;
+        memcpy(c, b.data, b.len); c[i] ^= 0xA5;
+        if (xread2_decode(c, b.len, &t, err, sizeof err)) rgba_free(&t);
+        if (xread2_decode((u8 *)b.data, i, &t, err, sizeof err)) rgba_free(&t);
+      }
+      free(c);
+    }
+    buf_free(&b);
+  }
+}
+
+int main(int argc, char **argv)
+{
+  if (argc > 1) outdir = argv[1];
+  if (outdir) { char cmd[600]; snprintf(cmd, sizeof cmd, "mkdir -p '%s'", outdir); if (system(cmd)) printf("cannot make %s\n", outdir); }
+  test_aspect();
+  test_builtin_profiles();
+  test_transforms();
+  test_press();
+  test_views();
+  test_files();
+  test_models();
+  test_assign_convert();
+  test_open_modes();
+  test_exr();
+  test_cineon_hdr_dicom();
+  printf("%d tests, %d failed\n", tests, fails);
+  return fails != 0;
+}

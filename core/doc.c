@@ -129,6 +129,7 @@ void doc_free(Doc *d)
   free(d->qmask);
   for (i = 0; i < d->npaths; i++) path_free(d->path[i]);  /* 0.9 */
   path_free(d->workpath);
+  free(d->icc);                                          /* 1.2 */
   free(d);
 }
 
@@ -670,6 +671,7 @@ typedef struct { int layer; i32 tx, ty; u8 plane; u8 *px; u8 *ix; u16 tw, th; } 
 typedef struct {
   u8 mode; int npal; u8 pal[256 * 3]; u8 lock[256];
   CycleRange cycle[MAXCYCLES]; int ncycle; u32 modeid; u8 ax, ay;
+  u8 cmode; u8 *icc; u32 icclen;      /* 1.2: the colour model and profile (the step's own copy) */
 } PalState;
 typedef Layer Props;                  /* a layer's settings: everything but its buffers (see props_of) */
 /* 0.7: the alpha channels and Quick Mask plane as they were (doc_note_channels; copies, w x h) */
@@ -705,6 +707,7 @@ static void step_free(UndoStep *u)
   for (i = 0; i < u->ntiles; i++) { free(u->tiles[i].px); free(u->tiles[i].ix); }
   free(u->tiles);
   free(u->sel);
+  if (u->pal) free(u->pal->icc);                           /* 1.2 */
   free(u->pal);                                            /* 0.4 */
   if (u->chan) { for (i = 0; i < u->chan->n; i++) free(u->chan->chan[i]); free(u->chan->qmask); free(u->chan); }   /* 0.7 */
   if (u->whole) for (i = 0; i < u->nlay; i++) layer_free(u->lay[i]);
@@ -883,11 +886,13 @@ static void pal_get(const Doc *d, PalState *p)
 {
   p->mode = d->mode; p->npal = d->npal; memcpy(p->pal, d->pal, sizeof p->pal); memcpy(p->lock, d->pal_lock, sizeof p->lock);
   memcpy(p->cycle, d->cycle, sizeof p->cycle); p->ncycle = d->ncycle; p->modeid = d->modeid; p->ax = d->aspect_x; p->ay = d->aspect_y;
+  p->cmode = d->cmode; p->icc = d->icc; p->icclen = d->icclen;
 }
 static void pal_put(Doc *d, const PalState *p)
 {
   d->mode = p->mode; d->npal = p->npal; memcpy(d->pal, p->pal, sizeof d->pal); memcpy(d->pal_lock, p->lock, sizeof d->pal_lock);
   memcpy(d->cycle, p->cycle, sizeof d->cycle); d->ncycle = p->ncycle; d->modeid = p->modeid; d->aspect_x = p->ax; d->aspect_y = p->ay;
+  d->cmode = p->cmode; d->icc = p->icc; d->icclen = p->icclen;
 }
 void doc_note_pal(Doc *d)
 {
@@ -895,6 +900,9 @@ void doc_note_pal(Doc *d)
   if (!u || u->has_pal) return;
   if (!(u->pal = (PalState *)malloc(sizeof *u->pal))) return;
   pal_get(d, u->pal);
+  /* 1.2: the step keeps a copy of the profile (the document's own may be replaced) */
+  if (d->icc && (u->pal->icc = (u8 *)malloc(d->icclen)) != NULL) memcpy(u->pal->icc, d->icc, d->icclen);
+  else { u->pal->icc = NULL; u->pal->icclen = 0; }
   u->has_pal = 1;
   u->bytes += (long)sizeof *u->pal;
 }

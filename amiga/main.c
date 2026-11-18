@@ -46,6 +46,7 @@
 #include "../core/guides.h"
 #include "../core/swatch.h"
 #include "../core/xwrite.h"
+#include "../core/xread2.h"                  /* 1.2: Cineon, HDR */
 #include "../core/frames.h"
 #include "../core/scripts.h"
 #include "../core/svg.h"
@@ -73,6 +74,8 @@
 #include "../core/live.h"
 #include "../core/gallery.h"
 #include "dlgx.h"
+#include "colorui.h"                    /* 1.2 */
+#include "../core/colorx.h"
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -136,6 +139,7 @@ char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 
 #define LC(label, k) { NM_SUB, (STRPTR)label, 0, CHECKIT, 0, (APTR)(ID_LABEL0 + (k)) }   /* 1.1: a colour label */
 #define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
 #define ST(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }   /* (1.1: a ticked subitem) */
+#define RC(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT, 0, (APTR)(id) }                /* (1.2: one of a set, ticked) */
 static struct NewMenu menus[] = {
   M("File"),
   I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN),
@@ -147,7 +151,8 @@ static struct NewMenu menus[] = {
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
   H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
   S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
-  S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7), SBAR,
+  S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7),
+  S("Cineon...", 0, ID_EXPXW0 + 8), S("Radiance HDR...", 0, ID_EXPXW0 + 9), SBAR,                 /* 1.2 */
   S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), S("Paths to SVG...", 0, ID_EXPSVG), SBAR,
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
   H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE),
@@ -166,9 +171,11 @@ static struct NewMenu menus[] = {
   S("Flip Horizontal", 0, ID_FLIPLH), S("Flip Vertical", 0, ID_FLIPLV), BAR,
   I("Take Snapshot (History Brush)", 0, ID_SNAPSHOT), H("Purge"), S("Undo History", 0, ID_PURGE), S("Clipboard", 0, ID_PURGECLIP), S("All", 0, ID_PURGEALL), BAR,
   I("Autosave...", 0, ID_AUTOSAVESET), T("Save Icons with Pictures", 0, ID_ICONPREF), BAR,
+  I("Color Settings...", 0, ID_COLORSET), I("Assign Profile...", 0, ID_ASSIGNPROF), I("Convert to Profile...", 0, ID_CONVERTPROF), BAR,   /* 1.2 */
   I("Keyboard Shortcuts...", 0, ID_KEYS), I("Preferences...", "K", ID_PREFS),
   M("Image"),
   H("Mode"), S("RGB Color", 0, ID_MODE_RGB), S("Grayscale", 0, ID_MODE_GRAY), S("Indexed Color...", 0, ID_MODE_INDEXED), S("Bitmap...", 0, ID_MODE_BITMAP), SBAR,
+  S("CMYK Color", 0, ID_MODE_CMYK), S("Lab Color", 0, ID_MODE_LAB), SBAR,       /* 1.2 */
   S("Color Table...", 0, ID_COLORTABLE), S("Amiga Screen Mode...", 0, ID_SCREENMODE),
   H("Adjustments"),
   S("Brightness/Contrast...", 0, ID_ADJ_BC), S("Levels...", "L", ID_ADJ_LEVELS), S("Curves...", "M", ID_ADJ_CURVES), S("Exposure...", 0, ID_ADJ_EXPOSURE), SBAR,
@@ -276,6 +283,18 @@ static struct NewMenu menus[] = {
   T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
   H("Snap To"), ST("Guides", ID_SNAPTO0), ST("Grid", ID_SNAPTO0 + 1), ST("Document Bounds", ID_SNAPTO0 + 2), ST("Centre Lines", ID_SNAPTO0 + 3), ST("Pixels", ID_SNAPTO0 + 4),
   I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), T("Lock Guides", 0, ID_LOCKGUIDES), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
+  /* 1.2: proofing and the pixel aspect */
+  T("Proof Colors", 0, ID_PROOF), T("Gamut Warning", 0, ID_GAMUT),
+  H("Proof Setup"), RC("Working CMYK", ID_PROOFSET0 + PRF_CMYK), RC("Working Cyan Plate", ID_PROOFSET0 + PRF_CYAN), RC("Working Magenta Plate", ID_PROOFSET0 + PRF_MAGENTA),
+  RC("Working Yellow Plate", ID_PROOFSET0 + PRF_YELLOW), RC("Working Black Plate", ID_PROOFSET0 + PRF_BLACK), RC("Working CMY Plates", ID_PROOFSET0 + PRF_CMY), SBAR,
+  RC("Legacy Macintosh RGB (Gamma 1.8)", ID_PROOFSET0 + PRF_MAC), RC("Internet Standard RGB (sRGB)", ID_PROOFSET0 + PRF_INTERNET), RC("Monitor RGB", ID_PROOFSET0 + PRF_MONITOR), SBAR,
+  RC("Color Blindness - Protanopia", ID_PROOFSET0 + PRF_PROTAN), RC("Color Blindness - Deuteranopia", ID_PROOFSET0 + PRF_DEUTAN), SBAR,
+  S("Load Working CMYK Profile...", 0, ID_LOADCMYK), RC("Easel's Press (Built-in CMYK)", ID_PRESSCMYK),
+  H("Pixel Aspect Ratio"), RC("Square", ID_PAR0), RC("Amiga PAL Low Res", ID_PAR0 + 1), RC("Amiga PAL Low Res Laced", ID_PAR0 + 2), RC("Amiga PAL High Res", ID_PAR0 + 3),
+  RC("Amiga PAL Super-High Res", ID_PAR0 + 4), RC("Amiga NTSC Low Res", ID_PAR0 + 5), RC("Amiga NTSC Low Res Laced", ID_PAR0 + 6), RC("Amiga NTSC High Res", ID_PAR0 + 7), SBAR,
+  RC("D1/DV NTSC (0.91)", ID_PAR0 + 8), RC("D1/DV PAL (1.09)", ID_PAR0 + 9), RC("D1/DV NTSC Widescreen (1.21)", ID_PAR0 + 10), RC("D1/DV PAL Widescreen (1.46)", ID_PAR0 + 11),
+  RC("HDV 1080/DVCPRO HD 720 (1.33)", ID_PAR0 + 12), RC("DVCPRO HD 1080 (1.5)", ID_PAR0 + 13), RC("Anamorphic 2:1 (2)", ID_PAR0 + 14), SBAR, RC("Custom...", ID_PARCUSTOM),
+  T("Pixel Aspect Ratio Correction", 0, ID_PARFIX), BAR,
   I("Hide/Show Panels (Tab)", 0, ID_TOGGLEPANELS), I("Hide/Show Right Panels (Shift-Tab)", 0, ID_TOGGLERIGHT), BAR,
   T("Dark Interface", 0, ID_DARKUI),
   H("Screen Mode"), S("Window", 0, ID_SCR_WINDOW), S("Easel's Own Screen", 0, ID_SCR_OWN), S("Full Screen", 0, ID_SCR_FULL), SBAR, S("Choose Screen Mode...", 0, ID_SCR_CHOOSE),
@@ -664,7 +683,7 @@ static void update_menus(void)
     ID_NUMTRANSFORM, ID_XF_SCALE, ID_XF_ROTATE, ID_XF_SKEW, ID_XF_DISTORT, ID_XF_PERSPECTIVE, ID_XF_AGAIN, ID_ROTATE180, ID_ROTATE90R,
     ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK,
     /* 1.1 (files) */
-    ID_EXPXW0, ID_EXPXW0 + 1, ID_EXPXW0 + 2, ID_EXPXW0 + 3, ID_EXPXW0 + 4, ID_EXPXW0 + 5, ID_EXPXW0 + 6, ID_EXPXW0 + 7, ID_EXPANIMGIF, ID_EXPANIM,
+    ID_EXPXW0, ID_EXPXW0 + 1, ID_EXPXW0 + 2, ID_EXPXW0 + 3, ID_EXPXW0 + 4, ID_EXPXW0 + 5, ID_EXPXW0 + 6, ID_EXPXW0 + 7, ID_EXPXW0 + 8, ID_EXPXW0 + 9, ID_EXPANIMGIF, ID_EXPANIM,
     ID_CLOSEOTHERS, ID_QUICKPNG, ID_DELEMPTY, ID_FLATMASKS, ID_FITIMAGE, ID_LOREM, ID_EXPSVG, ID_LOCKGUIDES,
     ID_SNAPTO0, ID_SNAPTO0 + 1, ID_SNAPTO0 + 2, ID_SNAPTO0 + 3, ID_SNAPTO0 + 4, ID_TOPARA, ID_TOPOINT,
     /* 1.0 */
@@ -705,6 +724,7 @@ static void update_menus(void)
   menu_set(ID_FILLSETTINGS, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_ADJUST));
   menu_set(ID_RASTERIZE, MUIA_Menuitem_Enabled, al && (al->kind == LK_FILL || al->kind == LK_TEXT || al->kind == LK_SHAPE));
   layerstyle_menus(d, menu_set);                         /* 1.1 */
+  colorui_menus(has ? d : NULL, menu_set);               /* 1.2 */
   /* 0.9: type and shape layers' items */
   {
     static const ULONG needtype[] = { ID_EDITTYPE, ID_TYPECHAR, ID_TYPEPARA, ID_TYPEWORKPATH, ID_WARPTEXT, ID_TYPEHORIZ, ID_TYPEVERT, ID_RASTERTYPE, ID_RASTERTYPE2, 0 };
@@ -951,7 +971,7 @@ static Doc *load(const char *path, int *fmt)
   return d;
 }
 /* the pictures Easel opens, for the file requester (any file can still be typed in) */
-#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
+#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
 static char lastdir[512];
 static void recent_add(const char *path)
 {
@@ -1003,22 +1023,25 @@ static int ext_fmt(const char *path)
 }
 /* 1.1: what xwrite_doc's sub and quality are for the next write (export_sub -1: from the extension) */
 static int export_sub = -1, export_pdf_quality;
-#define SAVE_PATTERN "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits)"
+#define SAVE_PATTERN "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)"
 int export_quality = 85, export_indexed;
+static int export_tiff_comp = TIFFC_LZW;             /* 1.2: File > Export > TIFF's choice (Save uses LZW) */
 /* the document written to path as fmt; 1 if it was */
 static int write_doc(Doc *d, const char *path, int fmt)
 {
   u8 *data = NULL;
   size_t len = 0;
   Rgba im;
-  int ok;
+  int ok, model = 0;
   static char msg[300];
   set(app, MUIA_Application_Sleep, TRUE);
-  if (fmt == FMT_ORA) data = ora_write(d, &len);
+  /* 1.2: a CMYK or Lab document in its model where the format can hold it */
+  if ((data = colorx_write_model(d, fmt, export_quality, colorui_cmyk(), &len)) != NULL) model = 1;
+  else if (fmt == FMT_ORA) data = ora_write(d, &len);
   /* 0.4: GIF; an indexed (or grey) picture's own palette kept in PNG and ILBM */
   else if (fmt == FMT_GIF) data = gif_write_doc(d, 256, QM_WU, DI_FS, 0, &len);
   /* 0.6: TIFF (LZW), Targa (run-length), Photoshop with its layers; PNG and JPEG with File Info */
-  else if (fmt == FMT_TIFF) data = tiff_encode_doc(d, TIFFC_LZW, &len);
+  else if (fmt == FMT_TIFF) data = tiff_encode_doc(d, export_tiff_comp, &len);
   else if (fmt == FMT_TGA) data = tga_write_doc(d, 1, &len);
   else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
   else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
@@ -1036,13 +1059,14 @@ static int write_doc(Doc *d, const char *path, int fmt)
   else if (flat_image(d, &im)) {
     switch (fmt) {
     case FMT_JPEG: data = jpeg_encode(&im, export_quality, d->dpi, &len); break;
-    case FMT_BMP: data = bmp_encode(&im, &len); break;
+    case FMT_BMP: data = d->mode == MODE_INDEXED || d->mode == MODE_BITMAP ? colorx_bmp_indexed(d, &len) : bmp_encode(&im, &len); break;   /* (1.2: palette BMPs) */
     case FMT_ILBM: data = ilbm_encode(&im, export_indexed, 1, &len); break;
     default: data = png_encode(&im, d->dpi, &len); break;
     }
     rgba_free(&im);
   }
   if (progress_aborted) { free(data); set(app, MUIA_Application_Sleep, FALSE); return 0; }   /* (0.8: Abort: nothing written) */
+  if (data && !model) data = colorx_embed(d, fmt, data, &len);   /* 1.2: the profile kept */
   ok = data && write_file(path, data, len);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
@@ -1228,8 +1252,8 @@ static void export_x(int fmt)
     if (!(r = ask("BC3 (DXT5)|BC1 (DXT1)|Uncompressed|Cancel", "%s", tr("How should the texture be stored? (Each comes with its mipmaps.)")))) return;
     export_sub = r == 1 ? DDS_BC3 : r == 2 ? DDS_BC1 : DDS_RGBA;
   } else if (fmt == FMT_DPX) {
-    if (!(r = ask("8 Bits|10 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
-    export_sub = r == 2;
+    if (!(r = ask("8 Bits|10 Bits|12 Bits|16 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
+    export_sub = r == 1 ? 0 : r == 2 ? 1 : r == 3 ? 12 : 16;      /* (1.2: 12 and 16 bits) */
   }
   export_as(fmt, 0);
   export_sub = -1; export_pdf_quality = 0;
@@ -1898,6 +1922,7 @@ static void command(ULONG id)
   if (id == ID_F_AGAIN) { if (d) dlg_filter_again(); refresh_all(); return; }
   if ((id >= ID_FX_GALLERY && id < ID_FX_LAST) || (id >= ID_GX0 && id <= ID_GX_LAST)) { if (d) dlgx_command(id); refresh_all(); return; }
   if (id >= ID_LS_FIRST && id <= ID_LS_LAST) { if (d) layerstyle_command(d, id); refresh_all(); return; }   /* 1.1 (fxdlg.c) */
+  if (id >= ID_CU_FIRST && id <= ID_CU_LAST) { colorui_command(d, id); return; }   /* 1.2 (colorui.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];
     strcpy(p, recent[id - ID_RECENT0]);
@@ -1932,11 +1957,20 @@ static void command(ULONG id)
   case ID_EXPILBM: export_as(FMT_ILBM, 0); return;
   case ID_EXPILBM8: export_as(FMT_ILBM, 1); return;
   case ID_EXPGIF: export_as(FMT_GIF, 0); return;
-  case ID_EXPTIFF: export_as(FMT_TIFF, 0); return;
+  case ID_EXPTIFF: {
+    /* 1.2: the compression asked */
+    static const int tc[4] = { TIFFC_LZW, TIFFC_DEFLATE, TIFFC_PACKBITS, TIFFC_NONE };
+    int r = ask("LZW|Deflate (ZIP)|PackBits|None|Cancel", "%s", tr("How should the TIFF file be compressed?"));
+    if (!r) return;
+    export_tiff_comp = tc[r - 1];
+    export_as(FMT_TIFF, 0);
+    export_tiff_comp = TIFFC_LZW;
+    return; }
   case ID_EXPTGA: export_as(FMT_TGA, 0); return;
   case ID_EXPPSD: export_as(FMT_PSD, 0); return;
-  case ID_EXPXW0: case ID_EXPXW0 + 1: case ID_EXPXW0 + 2: case ID_EXPXW0 + 3: case ID_EXPXW0 + 4: case ID_EXPXW0 + 5: case ID_EXPXW0 + 6: case ID_EXPXW0 + 7: {
-    static const int fm[8] = { FMT_WEBP, FMT_PDF_OUT, FMT_QOI, FMT_PNM, FMT_ICO, FMT_DDS, FMT_DPX, FMT_FITS };
+  case ID_EXPXW0: case ID_EXPXW0 + 1: case ID_EXPXW0 + 2: case ID_EXPXW0 + 3: case ID_EXPXW0 + 4: case ID_EXPXW0 + 5: case ID_EXPXW0 + 6: case ID_EXPXW0 + 7:
+  case ID_EXPXW0 + 8: case ID_EXPXW0 + 9: {
+    static const int fm[10] = { FMT_WEBP, FMT_PDF_OUT, FMT_QOI, FMT_PNM, FMT_ICO, FMT_DDS, FMT_DPX, FMT_FITS, FMT_CINEON_OUT, FMT_HDR_OUT };
     export_x(fm[id - ID_EXPXW0]);
     return;
   }
@@ -2055,7 +2089,7 @@ static void command(ULONG id)
     break;
   }
   /* 0.4: modes, the palette, the Amiga screen mode */
-  case ID_MODE_RGB: palwin_stop(); if (d->mode != MODE_RGB) doc_to_rgb(d); break;
+  case ID_MODE_RGB: palwin_stop(); if (d->mode != MODE_RGB) doc_to_rgb(d); else if (d->cmode != CM_RGB) colorx_convert_model(d, CM_RGB, NULL); break;
   case ID_MODE_GRAY: palwin_stop(); if (d->mode != MODE_GRAY && !doc_to_gray(d)) ask("OK", "%s", tr("There isn't enough memory for that.")); break;
   case ID_MODE_INDEXED: {
     IndexedOpts o;
@@ -2397,7 +2431,12 @@ static void command(ULONG id)
     if (!(data = ora_write(d, &len))) return;
     n = codec_load_doc(data, len, err, sizeof err);
     free(data);
-    if (n) { n->fg = d->fg; n->bg = d->bg; doc_show(n, "", FMT_ORA); }
+    if (n) {
+      n->fg = d->fg; n->bg = d->bg;
+      n->cmode = d->cmode;                               /* (1.2: the colour model and profile too) */
+      if (d->icc && (n->icc = (u8 *)malloc(d->icclen)) != NULL) { memcpy(n->icc, d->icc, d->icclen); n->icclen = d->icclen; }
+      doc_show(n, "", FMT_ORA);
+    }
     return; }
   case ID_NEWLAYER: layer_new_named(d); break;
   case ID_DUPLAYER: doc_duplicate_layer(d, d->active); break;
@@ -2883,6 +2922,7 @@ done:
   panels2_free();
   paths_free();
   jobs_free();
+  colorui_free();                                        /* 1.2 */
   popup_free();
   qbutton_class_free();
   text_cache_flush();                    /* 0.9: the type layers' open font files */

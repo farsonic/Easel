@@ -44,6 +44,8 @@
 #include "../core/shape.h"
 #include "../core/live.h"
 #include "../core/toolopts.h"
+#include "../core/aspect.h"          /* 1.2: pixel aspect ratio correction */
+#include "colorui.h"                  /* 1.2: proof colours, the gamut warning, the display profile */
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -80,6 +82,7 @@ struct Data {
   UBYTE *view; LONG vw, vh; LONG *xmap; LONG xmapcap;
   /* the view: zoom, the image's top left within the area (ox, oy, may be negative when scrolled) */
   double z; LONG ox, oy;
+  double zy;                             /* 1.2: the vertical zoom (z, or z scaled for the pixel aspect) */
   /* the mouse */
   int drag; Stroke *stroke; int changed;
   double ax, ay, bx, by;                 /* where the drag began and where it is (image) */
@@ -131,6 +134,11 @@ struct Data {
 };
 
 static struct MUI_CustomClass *ccls;
+int aspect_correct;                      /* 1.2: View > Pixel Aspect Ratio Correction */
+double view_zoom_y(const DocView *v)
+{
+  return v && v->doc ? v->zoom * aspect_yscale(v->doc->aspect_x, v->doc->aspect_y, aspect_correct) : v ? v->zoom : 1.0;
+}
 static const double zooms[] = { 1.0 / 32, 1.0 / 24, 1.0 / 16, 1.0 / 12, 1.0 / 8, 1.0 / 6, 1.0 / 4, 1.0 / 3, 1.0 / 2, 2.0 / 3, 1, 1.5, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32 };
 #define NZOOMS (int)(sizeof zooms / sizeof zooms[0])
 
@@ -163,14 +171,15 @@ static void place(struct Data *d, Object *obj)
   if (!v->placed && W > 20 && H > 20) {
     /* first shown: the largest zoom step up to 100% that fits the image */
     int i;
-    double fit = (double)(W - 8) / v->doc->w, fy = (double)(H - 8) / v->doc->h;
+    double fit = (double)(W - 8) / v->doc->w, fy = (double)(H - 8) / (v->doc->h * aspect_yscale(v->doc->aspect_x, v->doc->aspect_y, aspect_correct));
     if (fy < fit) fit = fy;
     v->zoom = zooms[0];
     for (i = 0; i < NZOOMS && zooms[i] <= 1.0; i++) if (zooms[i] <= fit) v->zoom = zooms[i];
     v->placed = 1;
   }
   d->z = v->zoom;
-  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->z);
+  d->zy = d->z * aspect_yscale(v->doc->aspect_x, v->doc->aspect_y, aspect_correct);
+  iw = (LONG)ceil(v->doc->w * d->z); ih = (LONG)ceil(v->doc->h * d->zy);
   if (iw <= W) { v->sx = 0; d->ox = (W - iw) / 2; }
   else { if (v->sx > iw - W) v->sx = iw - W; if (v->sx < 0) v->sx = 0; d->ox = -v->sx; }
   if (ih <= H) { v->sy = 0; d->oy = (H - ih) / 2; }
@@ -178,14 +187,14 @@ static void place(struct Data *d, Object *obj)
 }
 /* window pixel to image (fractional) and back */
 static double to_ix(struct Data *d, Object *obj, LONG mx) { return (mx - _mleft(obj) - d->ox) / d->z; }
-static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->z; }
+static double to_iy(struct Data *d, Object *obj, LONG my) { return (my - _mtop(obj) - d->oy) / d->zy; }
 static LONG to_sx(struct Data *d, Object *obj, double ix) { return _mleft(obj) + d->ox + (LONG)floor(ix * d->z + 0.5); }
-static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->z + 0.5); }
+static LONG to_sy(struct Data *d, Object *obj, double iy) { return _mtop(obj) + d->oy + (LONG)floor(iy * d->zy + 0.5); }
 static void update_props(struct Data *d, Object *obj)
 {
   DocView *v = cur_view();
   if (!v || !v->doc) return;
-  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->z), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
+  if (d->vprop) SetAttrs(d->vprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->h * d->zy), MUIA_Prop_Visible, _mheight(obj), MUIA_Prop_First, v->sy, TAG_DONE);
   if (d->hprop) SetAttrs(d->hprop, MUIA_NoNotify, TRUE, MUIA_Prop_Entries, (LONG)ceil(v->doc->w * d->z), MUIA_Prop_Visible, _mwidth(obj), MUIA_Prop_First, v->sx, TAG_DONE);
 }
 
@@ -252,17 +261,18 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
 {
   GuideSet *g = &doc->guides;
   LONG ix0 = d->ox > x0 ? d->ox : x0, iy0 = d->oy > y0 ? d->oy : y0;                   /* the image's part of the box */
-  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->z), x, y;
+  LONG ix1 = d->ox + (LONG)(doc->w * d->z), iy1 = d->oy + (LONG)(doc->h * d->zy), x, y;
   int i, k;
   if (extras_hidden) return;                             /* (1.1: View > Extras off) */
   if (ix1 > x1) ix1 = x1;
   if (iy1 > y1) iy1 = y1;
   if (g->show_grid && ix0 < ix1 && iy0 < iy1) {
     for (k = 0; k < 2; k++) {
-      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->z, 1, &step);
-      if (step * d->z < 4) continue;                     /* (too close together to see) */
+      double zk = k == 0 ? d->z : d->zy;
+      double step, p = grid_first(doc, k == 0, k == 0 ? (ix0 - d->ox) / d->z : (iy0 - d->oy) / d->zy, 1, &step);
+      if (step * zk < 4) continue;                     /* (too close together to see) */
       for (; ; p += step) {
-        LONG s = (LONG)floor(p * d->z) + (k == 0 ? d->ox : d->oy);
+        LONG s = (LONG)floor(p * zk) + (k == 0 ? d->ox : d->oy);
         if (s >= (k == 0 ? ix1 : iy1)) break;
         if (k == 0) { if (s >= ix0) for (y = iy0; y < iy1; y++) vpix(d, s, y, prefs.grid_color, 1); }
         else if (s >= iy0) for (x = ix0; x < ix1; x++) vpix(d, x, s, prefs.grid_color, 1);
@@ -271,19 +281,19 @@ static void guides_render(struct Data *d, Doc *doc, LONG x0, LONG y0, LONG x1, L
   }
   if (g->show_guides) {
     for (i = 0; i < g->nv; i++) { LONG s = (LONG)floor(g->v[i] * d->z) + d->ox; if (s >= x0 && s < x1) for (y = y0; y < y1; y++) vpix(d, s, y, prefs.guide_color, 0); }
-    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->z) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
+    for (i = 0; i < g->nh; i++) { LONG s = (LONG)floor(g->h[i] * d->zy) + d->oy; if (s >= y0 && s < y1) for (x = x0; x < x1; x++) vpix(d, x, s, prefs.guide_color, 0); }
   }
   if (g->show_rulers) {
     int minor, major = ruler_step(d->z, 50, &minor);
     double mstep = (double)major / (minor > 0 ? minor : 1);
     for (k = 0; k < 2; k++) {
       LONG a0 = k == 0 ? x0 : y0, a1 = k == 0 ? x1 : y1, b0 = k == 0 ? y0 : x0, b1 = k == 0 ? y1 : x1, off = k == 0 ? d->ox : d->oy, s, b;
-      double p;
+      double p, zk = k == 0 ? d->z : d->zy;
       if (b0 >= RULER) continue;
       for (s = a0; s < a1; s++) for (b = b0; b < b1 && b < RULER; b++) { if (k == 0) vpix(d, s, b, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); else vpix(d, b, s, b == RULER - 1 ? 0x606060 : 0xE8E8E8, 0); }
-      for (p = floor((a0 - off) / d->z / mstep) * mstep; ; p += mstep) {
+      for (p = floor((a0 - off) / zk / mstep) * mstep; ; p += mstep) {
         LONG len;
-        s = (LONG)floor(p * d->z) + off;
+        s = (LONG)floor(p * zk) + off;
         if (s >= a1) break;
         if (s < a0) continue;
         len = fmod(fabs(p) + 0.001, major) < 0.01 ? RULER : RULER / 3;
@@ -313,8 +323,8 @@ static void ruler_labels(struct Data *d, Object *obj)
     unit_text(buf, p, doc->w, doc->dpi, 0);             /* (0.8: in the preferences' units) */
     Move(rp, _mleft(obj) + s + 2, _mtop(obj) + rp->TxBaseline + 1); Text(rp, (STRPTR)buf, strlen(buf));
   }
-  for (p = floor(-d->oy / d->z / major) * major; (LONG)(p * d->z) + d->oy < d->vh; p += major) {
-    LONG s = (LONG)floor(p * d->z) + d->oy;
+  for (p = floor(-d->oy / d->zy / major) * major; (LONG)(p * d->zy) + d->oy < d->vh; p += major) {
+    LONG s = (LONG)floor(p * d->zy) + d->oy;
     int c, n;
     if (s < RULER) continue;
     unit_text(buf, p, doc->h, doc->dpi, 0);
@@ -327,7 +337,8 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
 {
   Doc *doc = d->comp ? d->doc : cur_doc();
   LONG cx0 = -1, cx1 = -1;
-  LONG x, y;
+  LONG x, y, sx0, sx1;
+  const CmsXform *vxf;
   ULONG bc = board();
   UBYTE br = (UBYTE)(bc >> 16), bg = (UBYTE)(bc >> 8), bb = (UBYTE)bc;
   if (x0 < 0) x0 = 0;
@@ -335,6 +346,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
   if (x1 > d->vw) x1 = d->vw;
   if (y1 > d->vh) y1 = d->vh;
   if (x1 <= x0 || y1 <= y0) return;
+  vxf = doc ? colorui_view(doc) : NULL;          /* (1.2) */
   for (x = x0; x < x1; x++) {
     double ix = floor((x - d->ox) / d->z);
     d->xmap[x] = doc && ix >= 0 && ix < doc->w ? (LONG)ix : -1;
@@ -343,7 +355,7 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
   d->rowdoc = NULL;                    /* (the row cache is for this pass's columns only) */
   for (y = y0; y < y1; y++) {
     UBYTE *o = d->view + (y * d->vw + x0) * 3;
-    double iyf = floor((y - d->oy) / d->z);
+    double iyf = floor((y - d->oy) / d->zy);
     LONG iy = doc && iyf >= 0 && iyf < doc->h ? (LONG)iyf : -1;
     const u8 *row = iy < 0 ? NULL : d->comp ? d->comp + (long)iy * doc->w * 4 : comp_row(d, doc, iy, cx0, cx1);
     for (x = x0; x < x1; x++, o += 3) {
@@ -366,6 +378,12 @@ static void render(struct Data *d, LONG x0, LONG y0, LONG x1, LONG y1)
           if (t) { o[0] = (UBYTE)(o[0] + ((255 - o[0]) * t + 127) / 255); o[1] = (UBYTE)((o[1] * (255 - t) + 127) / 255); o[2] = (UBYTE)((o[2] * (255 - t) + 127) / 255); }
         }
       }
+    }
+    /* 1.2: the picture's part of the row through the view transform (proofing, gamut warning, its profile) */
+    if (vxf && row) {
+      for (sx0 = x0; sx0 < x1 && d->xmap[sx0] < 0; sx0++) ;
+      for (sx1 = x1; sx1 > sx0 && d->xmap[sx1 - 1] < 0; sx1--) ;
+      if (sx1 > sx0) cms_xform_apply_rgb(vxf, d->view + (y * d->vw + sx0) * 3, sx1 - sx0);
     }
   }
   if (doc) guides_render(d, doc, x0, y0, x1, y1);
@@ -641,7 +659,7 @@ static void ov_draw(struct Data *d, Object *obj)
   if (d->cur_in && brushlike(t) && d->drag != DR_LINE) {
     LONG r = brush_r(d);
     int cross = d->ov_cursor != 0;
-    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, r);
+    if (r >= 3 && d->ov_cursor != 1) DrawEllipse(rp, d->cur_x, d->cur_y, r, (LONG)(r * d->zy / d->z));
     if (cross && (r >= 3 || d->ov_cursor == 1)) { xline(rp, d->cur_x - 6, d->cur_y, d->cur_x + 6, d->cur_y); xline(rp, d->cur_x, d->cur_y - 6, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 6); }
     else if (r < 3) { xline(rp, d->cur_x - 4, d->cur_y, d->cur_x + 4, d->cur_y); xline(rp, d->cur_x, d->cur_y - 4, d->cur_x, d->cur_y - 1); xline(rp, d->cur_x, d->cur_y + 1, d->cur_x, d->cur_y + 4); }
   }
@@ -816,8 +834,8 @@ static void update_box(struct Data *d, Object *obj, Box b)
   if (box_empty(b)) return;
   /* (without comp, render composites the rows itself) */
   if (comp_ready(d)) doc_composite(doc, b, d->comp + ((long)b.y0 * doc->w + b.x0) * 4, (long)doc->w * 4);
-  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->z) + d->oy - 1;
-  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->z) + d->oy + 1;
+  x0 = (LONG)floor(b.x0 * d->z) + d->ox - 1; y0 = (LONG)floor(b.y0 * d->zy) + d->oy - 1;
+  x1 = (LONG)ceil(b.x1 * d->z) + d->ox + 1; y1 = (LONG)ceil(b.y1 * d->zy) + d->oy + 1;
   render(d, x0, y0, x1, y1);
   ov_hide(d, obj);
   blit(d, obj, x0, y0, x1, y1);
@@ -846,7 +864,7 @@ static void zoom_to(struct Data *d, Object *obj, double z, LONG mx, LONG my)
   ix = to_ix(d, obj, mx); iy = to_iy(d, obj, my);
   v->zoom = z;
   v->sx = (LONG)(ix * z) - (mx - _mleft(obj));
-  v->sy = (LONG)(iy * z) - (my - _mtop(obj));
+  v->sy = (LONG)(iy * z * (d->zy / d->z)) - (my - _mtop(obj));
   draw_all(d, obj);
   set(obj, MUIA_Canvas_Zoomed, TRUE);
 }
@@ -1674,7 +1692,7 @@ static void path_motion(struct Data *d, Object *obj, double x, double y)
   int s, k;
   d->bx = x; d->by = y;
   if (!p || d->pe_what == PE_NONE) return;
-  if (!d->pe_moved && fabs((x - d->ax) * d->z) + fabs((y - d->ay) * d->z) < 3) return;
+  if (!d->pe_moved && fabs((x - d->ax) * d->z) + fabs((y - d->ay) * d->zy) < 3) return;
   d->pe_moved = 1;
   if (d->pe_what != PE_BOX && (d->pe_s >= p->ns || d->pe_k >= p->s[d->pe_s].n)) return;
   switch (d->pe_what) {
@@ -2346,7 +2364,7 @@ static void release(struct Data *d, Object *obj)
   case DR_TYPEBOX:
     /* a click: point text there; a drag: a paragraph in the box */
     d->drag = DR_TYPEBOX; ov_hide(d, obj); d->drag = DR_NONE;
-    if (fabs(d->bx - d->ax) * d->z >= 6 && fabs(d->by - d->ay) * d->z >= 6)
+    if (fabs(d->bx - d->ax) * d->z >= 6 && fabs(d->by - d->ay) * d->zy >= 6)
       ty_new(doc, d->ax < d->bx ? d->ax : d->bx, d->ay < d->by ? d->ay : d->by, 1, fabs(d->bx - d->ax), fabs(d->by - d->ay));
     else ty_new(doc, d->ax, d->ay, 0, 0, 0);
     changed(d, obj);
@@ -2683,7 +2701,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
     d = INST_DATA(cl, obj);
     memset(d, 0, sizeof *d);
-    d->obj = obj; d->z = 1;
+    d->obj = obj; d->z = 1; d->zy = 1;
     poly_init(&d->prev); poly_init(&d->pp); d->path_dirty = 1;
     d->ehn.ehn_Object = obj; d->ehn.ehn_Class = cl; d->ehn.ehn_Events = EV;
     d->ihn.ihn_Object = obj; d->ihn.ihn_Flags = MUIIHNF_TIMER; d->ihn.ihn_Method = MUIM_Canvas_Tick;
@@ -2766,7 +2784,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     d = INST_DATA(cl, obj);
     if (!v || !d->shown) return 0;
     v->sx = (LONG)(m->x * v->zoom) - _mwidth(obj) / 2;
-    v->sy = (LONG)(m->y * v->zoom) - _mheight(obj) / 2;
+    v->sy = (LONG)(m->y * d->zy) - _mheight(obj) / 2;
     draw_all(d, obj);
     return 0; }
   case MUIM_Canvas_StrokeTick: {
@@ -2806,7 +2824,7 @@ static ULONG dispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __
     if (!doc || !d->shown) return 0;
     if (m->how == 1 || m->how == -1) zoom_to(d, obj, zoom_step(d->z, (int)m->how), -1, -1);
     else if (m->how == 2 || m->how == 3) {
-      double fx = (double)(_mwidth(obj) - 8) / doc->w, fy = (double)(_mheight(obj) - 8) / doc->h;
+      double fx = (double)(_mwidth(obj) - 8) / doc->w, fy = (double)(_mheight(obj) - 8) / (doc->h * (d->zy / d->z));
       zoom_to(d, obj, m->how == 2 ? (fx < fy ? fx : fy) : (fx > fy ? fx : fy), -1, -1);
     } else zoom_to(d, obj, m->permille / 1000.0, -1, -1);
     return 0;

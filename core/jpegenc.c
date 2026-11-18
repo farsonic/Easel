@@ -150,7 +150,7 @@ typedef struct {
   u32 bits; int nbits;                /* bits waiting to make a byte, most significant first */
   HuffEnc dc[2], ac[2];
   float div[2][64];                   /* 1 / (quantizer * AAN scale * 8), natural order */
-  int pred[3];                        /* the last DC of each component */
+  int pred[4];                        /* the last DC of each component (1.2: four for CMYK) */
 } Enc;
 
 /* append the low n bits of v; every 0xFF byte in the entropy data is followed by a stuffed 0 */
@@ -318,6 +318,65 @@ u8 *jpeg_encode(const Rgba *im, int quality, int dpi, size_t *len)
   if (e->nbits) putbits(e, 0x7F, 8 - e->nbits);       /* pad the last byte with 1 bits */
   buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xD9);
   free(Y);
+  if (e->o.oom) { buf_free(&e->o); free(e); return NULL; }
+  *len = e->o.len;
+  res = (u8 *)buf_take(&e->o);
+  free(e);
+  return res;
+}
+
+/* 1.2: a CMYK JPEG as Photoshop writes it: four components at full resolution, no colour
+   transform (an Adobe APP14 marker with transform 0), the samples stored inverted (255 no ink);
+   every component uses the luminance tables. cmyk: w * h * 4 bytes of ink (0 none, 255 full) */
+u8 *jpeg_encode_cmyk(const u8 *cmyk, i32 w, i32 h, int quality, int dpi, size_t *len)
+{
+  static const double aan[8] = { 1.0, 1.387039845, 1.306562965, 1.175875602, 1.0, 0.785694958, 0.541196100, 0.275899379 };
+  static const u8 adobe[16] = { 0xFF, 0xEE, 0, 14, 'A', 'd', 'o', 'b', 'e', 0, 100, 0, 0, 0, 0, 0 };
+  Enc *e;
+  u8 qt[64], *res;
+  int i, scale, c;
+  i32 mx, my;
+  float blk[64];
+  if (!cmyk || w < 1 || h < 1 || w > 65535 || h > 65535) return NULL;
+  if (!(e = (Enc *)calloc(1, sizeof *e))) return NULL;
+  if (quality < 1) quality = 1;
+  if (quality > 100) quality = 100;
+  scale = quality < 50 ? 5000 / quality : 200 - quality * 2;
+  for (i = 0; i < 64; i++) {
+    long v = ((long)std_lum_q[i] * scale + 50) / 100;
+    qt[i] = (u8)(v < 1 ? 1 : v > 255 ? 255 : v);
+    e->div[0][i] = (float)(1.0 / (qt[i] * aan[i >> 3] * aan[i & 7] * 8.0));
+  }
+  huff_build(&e->dc[0], dc_lum_bits, dc_vals); huff_build(&e->ac[0], ac_lum_bits, ac_lum_vals);
+  buf_init(&e->o);
+  buf_add(&e->o, "\377\330\377\340\000\020JFIF\000\001\001", 13);
+  buf_addc(&e->o, dpi > 0 ? 1 : 0);
+  put16(&e->o, (u32)(dpi > 0 && dpi < 65536 ? dpi : 1)); put16(&e->o, (u32)(dpi > 0 && dpi < 65536 ? dpi : 1));
+  buf_addc(&e->o, 0); buf_addc(&e->o, 0);
+  buf_add(&e->o, adobe, 16);
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xDB); put16(&e->o, 2 + 65);
+  buf_addc(&e->o, 0); for (i = 0; i < 64; i++) buf_addc(&e->o, qt[zigzag[i]]);
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xC0); put16(&e->o, 8 + 3 * 4); buf_addc(&e->o, 8);
+  put16(&e->o, (u32)h); put16(&e->o, (u32)w); buf_addc(&e->o, 4);
+  for (c = 0; c < 4; c++) { buf_addc(&e->o, c + 1); buf_addc(&e->o, 0x11); buf_addc(&e->o, 0); }
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xC4); put16(&e->o, 2 + 2 * 17 + 12 + 162);
+  dht(&e->o, 0x00, dc_lum_bits, dc_vals); dht(&e->o, 0x10, ac_lum_bits, ac_lum_vals);
+  buf_add(&e->o, "\377\332\000\016\004\001\000\002\000\003\000\004\000\000\077\000", 16);
+  for (my = 0; my < h && !progress(my, h); my += 8)
+    for (mx = 0; mx < w; mx += 8)
+      for (c = 0; c < 4; c++) {
+        int x, y;
+        for (y = 0; y < 8; y++) {
+          i32 sy = my + y < h ? my + y : h - 1;
+          for (x = 0; x < 8; x++) {
+            i32 sx = mx + x < w ? mx + x : w - 1;
+            blk[y * 8 + x] = (float)(255 - cmyk[((long)sy * w + sx) * 4 + c]) - 128;
+          }
+        }
+        block(e, blk, c, 0);
+      }
+  if (e->nbits) putbits(e, 0x7F, 8 - e->nbits);
+  buf_addc(&e->o, 0xFF); buf_addc(&e->o, 0xD9);
   if (e->o.oom) { buf_free(&e->o); free(e); return NULL; }
   *len = e->o.len;
   res = (u8 *)buf_take(&e->o);

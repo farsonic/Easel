@@ -10,6 +10,8 @@
 #include "paint.h"
 #include "iconwrite.h"
 #include "xwrite.h"
+#include "colorx.h"
+#include "xread2.h"
 
 void batch_opts_default(BatchOpts *o)
 {
@@ -94,6 +96,7 @@ u8 *batch_encode(Doc *d, const BatchOpts *o, size_t *len, char *err, size_t errc
   case FMT_TGA: data = tga_write_doc(d, 1, len); break;
   case FMT_PSD: data = psd_write_doc(d, len); break;
   case FMT_WEBP: case FMT_PNM: case FMT_QOI: case FMT_ICO: case FMT_DDS: case FMT_DPX: case FMT_FITS: case FMT_PDF_OUT:
+  case FMT_CINEON_OUT: case FMT_HDR_OUT:                     /* 1.2 */
     data = xwrite_doc(d, o->format, o->variant, 0, len); break;
   case FMT_GIF: data = gif_write_doc(d, o->colors >= 2 && o->colors <= 256 ? o->colors : 256, QM_WU, dither, 0, len); break;
   case FMT_PNG: if (d->mode != MODE_RGB) { data = doc_png_encode(d, d->dpi, len); break; } /* fall through */
@@ -108,7 +111,7 @@ u8 *batch_encode(Doc *d, const BatchOpts *o, size_t *len, char *err, size_t errc
     im.w = d->w; im.h = d->h; im.px = px;
     switch (o->format) {
     case FMT_JPEG: data = jpeg_encode(&im, o->quality >= 1 && o->quality <= 100 ? o->quality : 85, d->dpi, len); break;
-    case FMT_BMP: data = bmp_encode(&im, len); break;
+    case FMT_BMP: data = d->mode == MODE_INDEXED || d->mode == MODE_BITMAP ? colorx_bmp_indexed(d, len) : bmp_encode(&im, len); break;   /* (1.2: palette BMPs) */
     case FMT_ILBM:
       if (o->colors >= 2 && o->colors <= 256) {
         IlbmOpts io;
@@ -139,6 +142,7 @@ u8 *batch_encode(Doc *d, const BatchOpts *o, size_t *len, char *err, size_t errc
     rgba_free(&im);
     break;
   }
+  if (data) data = colorx_embed(d, o->format, data, len);    /* 1.2: the picture's profile kept */
   if (!data) codec_err(err, errcap, "Out of memory");
   return data;
 }
