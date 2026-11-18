@@ -14,6 +14,8 @@
 #include "core/foreign.h"
 #include "core/adjustx.h"
 #include "core/filesx.h"
+#include "core/xread2.h"
+#include <math.h>
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -480,6 +482,39 @@ static void test_layered(void)
   doc_free(d);
 }
 
+/* round 3's OpenEXR: tiles, PXR24, B44 and B44A against make_foreign.py's values */
+static void test_exr2(void)
+{
+  static const char *const files[] = { "tiled_none.exr", "tiled_zip.exr", "pxr24.exr", "pxr24_tiled.exr", "b44.exr", "b44a.exr", NULL };
+  int i;
+  for (i = 0; files[i]; i++) {
+    size_t len;
+    u8 *d = slurp(files[i], &len);
+    i32 w, h;
+    char err[200] = "", msg[300], p[700], line[200];
+    float *f = d ? exr_read_float(d, len, &w, &h, err, sizeof err) : NULL;
+    FILE *fp;
+    snprintf(msg, sizeof msg, "%s reads (%s)", files[i], err);
+    CHECK(f && w == 45 && h == 38, msg);
+    snprintf(p, sizeof p, "%s/%s.txt", dir, files[i]);
+    if (f && (fp = fopen(p, "r")) != NULL) {
+      while (fgets(line, sizeof line, fp)) {
+        int x, y, c, bad = 0;
+        double v[4], tol;
+        if (sscanf(line, "E %d %d %lf %lf %lf %lf %lf", &x, &y, &v[0], &v[1], &v[2], &v[3], &tol) != 7) continue;
+        for (c = 0; c < 4; c++) if (fabs(f[((long)y * w + x) * 4 + c] - v[c]) > tol + 1e-6 * (1 + fabs(v[c]))) bad = 1;
+        snprintf(msg, sizeof msg, "%s at %d,%d is %g %g %g %g", files[i], x, y, v[0], v[1], v[2], v[3]);
+        CHECK(!bad, msg);
+        if (bad) printf("  found %g %g %g %g\n", f[((long)y * w + x) * 4], f[((long)y * w + x) * 4 + 1], f[((long)y * w + x) * 4 + 2], f[((long)y * w + x) * 4 + 3]);
+      }
+      fclose(fp);
+    }
+    free(f);
+    free(d);
+    fuzz(files[i], 200);
+  }
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -536,6 +571,7 @@ int main(int argc, char **argv)
   test_look();
   test_exif();
   test_layered();
+  test_exr2();
   test_xcf();
   test_kra();
   test_pdn();

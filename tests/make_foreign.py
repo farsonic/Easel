@@ -421,4 +421,143 @@ def make_pdn(name):
 
 make_pdn("layers.pdn")
 
+# ---------------------------------------------------------------- OpenEXR: tiles, PXR24, B44
+import numpy as np
+EW, EH = 45, 38
+def evalue(c, x, y):
+    return [x / 16.0, y / 8.0, ((x + y) % 7) / 4.0, 1.0 - (x % 4) / 8.0, (x * y % 9) * 3.0][c]
+
+def exr_attr(name, typ, data): return name.encode() + b"\0" + typ.encode() + b"\0" + struct.pack("<i", len(data)) + data
+def exr_chlist(chans):
+    out = b""
+    for name, t in chans: out += name.encode() + b"\0" + struct.pack("<iB3xii", t, 0, 1, 1)
+    return out + b"\0"
+def samples(name, t, xs, y):
+    c = "RGBAU".index(name)
+    v = [evalue(c, x, y) for x in xs]
+    if t == 1: return np.array(v, dtype="<f2").tobytes()
+    if t == 2: return np.array(v, dtype="<f4").tobytes()
+    return np.array([int(round(a)) for a in v], dtype="<u4").tobytes()
+
+def pxr24(chans, xs, ys):
+    raw = bytearray()
+    for y in ys:
+        for name, t in chans:
+            vals = samples(name, t, xs, y)
+            if t == 1: ints = list(np.frombuffer(vals, dtype="<u2")); nb = 2
+            else: ints = list(np.frombuffer(vals, dtype="<u4")); nb = 4 if t == 0 else 3
+            prev = 0; planes = [bytearray() for _ in range(nb)]
+            for v in ints:
+                v = int(v)
+                if t == 2: v &= 0xFFFFFF00         # (FLOAT keeps its top 24 bits; rounding left out: exact values here)
+                dlt = (v - prev) & (0xFFFF if t == 1 else 0xFFFFFFFF); prev = v
+                full = 4 if t != 1 else 2
+                bs = dlt.to_bytes(full, "big")
+                for i in range(nb): planes[i].append(bs[i])
+            for pl in planes: raw += pl
+    return zlib.compress(bytes(raw))
+
+def shift_round(x, shift):
+    x <<= 1; a = (1 << shift) - 1; shift += 1; b = (x >> shift) & 1
+    return (x + a + b) >> shift
+def b44_pack(s, flat):
+    t = []
+    for v in s:
+        if (v & 0x7c00) == 0x7c00: t.append(0x8000)
+        elif v & 0x8000: t.append((~v) & 0xffff)
+        else: t.append(v | 0x8000)
+    tmax = max(t); shift = -1
+    while True:
+        shift += 1
+        d = [shift_round(tmax - x, shift) for x in t]
+        bias = 0x20
+        r = [d[0] - d[4], d[4] - d[8], d[8] - d[12], d[0] - d[1], d[4] - d[5], d[8] - d[9], d[12] - d[13],
+             d[1] - d[2], d[5] - d[6], d[9] - d[10], d[13] - d[14], d[2] - d[3], d[6] - d[7], d[10] - d[11], d[14] - d[15]]
+        r = [x + bias for x in r]
+        if min(r) >= 0 and max(r) <= 0x3f: break
+    if flat and min(r) == bias and max(r) == bias:
+        return bytes([t[0] >> 8, t[0] & 255, 0xfc])
+    t0 = tmax - (d[0] << shift)
+    b = [t0 >> 8, t0 & 255, (shift << 2) | (r[0] >> 4), ((r[0] << 4) | (r[1] >> 2)) & 255, ((r[1] << 6) | r[2]) & 255,
+         ((r[3] << 2) | (r[4] >> 4)) & 255, ((r[4] << 4) | (r[5] >> 2)) & 255, ((r[5] << 6) | r[6]) & 255,
+         ((r[7] << 2) | (r[8] >> 4)) & 255, ((r[8] << 4) | (r[9] >> 2)) & 255, ((r[9] << 6) | r[10]) & 255,
+         ((r[11] << 2) | (r[12] >> 4)) & 255, ((r[12] << 4) | (r[13] >> 2)) & 255, ((r[13] << 6) | r[14]) & 255]
+    return bytes(b)
+def b44(chans, xs, ys, flat):
+    out = bytearray()
+    for name, t in chans:
+        if t != 1:
+            for y in ys: out += samples(name, t, xs, y)
+            continue
+        rows = [np.frombuffer(samples(name, t, xs, y), dtype="<u2") for y in ys]
+        for by in range(0, len(ys), 4):
+            for bx in range(0, len(xs), 4):
+                s = []
+                for i in range(4):
+                    for j in range(4):
+                        yy = min(by + i, len(ys) - 1); xx = min(bx + j, len(xs) - 1)
+                        s.append(int(rows[yy][xx]))
+                out += b44_pack(s, flat)
+    return bytes(out)
+
+def raw_block(chans, xs, ys):
+    return b"".join(samples(n, t, xs, y) for y in ys for (n, t) in chans)
+
+def make_exr2(name, comp, chans, tiled=None, tol=0.0):
+    hdr = b"\x76\x2f\x31\x01" + struct.pack("<I", 2 | (0x200 if tiled else 0))
+    hdr += exr_attr("channels", "chlist", exr_chlist(chans))
+    hdr += exr_attr("compression", "compression", bytes([comp]))
+    hdr += exr_attr("dataWindow", "box2i", struct.pack("<iiii", 0, 0, EW - 1, EH - 1))
+    hdr += exr_attr("displayWindow", "box2i", struct.pack("<iiii", 0, 0, EW - 1, EH - 1))
+    hdr += exr_attr("lineOrder", "lineOrder", b"\0")
+    hdr += exr_attr("pixelAspectRatio", "float", struct.pack("<f", 1))
+    hdr += exr_attr("screenWindowCenter", "v2f", struct.pack("<ff", 0, 0))
+    hdr += exr_attr("screenWindowWidth", "float", struct.pack("<f", 1))
+    if tiled: hdr += exr_attr("tiles", "tiledesc", struct.pack("<IIB", tiled[0], tiled[1], 0))
+    hdr += b"\0"
+    chunks = []
+    def enc(xs, ys):
+        if comp == 0: return raw_block(chans, xs, ys)
+        if comp == 3: 
+            from_raw = raw_block(chans, xs, ys)
+            n = len(from_raw); tt = bytearray(n); tt[0:(n + 1) // 2] = from_raw[0::2]; tt[(n + 1) // 2:] = from_raw[1::2]
+            o = bytearray(tt); pv = tt[0]
+            for i in range(1, n): o[i] = (tt[i] - pv + 128 + 256) & 255; pv = tt[i]
+            return zlib.compress(bytes(o))
+        if comp == 5: return pxr24(chans, xs, ys)
+        if comp in (6, 7): return b44(chans, xs, ys, comp == 7)
+    if tiled:
+        tw, th = tiled
+        for ty in range(0, EH, th):
+            for tx in range(0, EW, tw):
+                xs = range(tx, min(EW, tx + tw)); ys = range(ty, min(EH, ty + th))
+                chunks.append(struct.pack("<iiii", tx // tw, ty // th, 0, 0) + (lambda b: struct.pack("<i", len(b)) + b)(enc(xs, ys)))
+    else:
+        lpb = {0: 1, 3: 16, 5: 16, 6: 32, 7: 32}[comp]
+        for y in range(0, EH, lpb):
+            ys = range(y, min(EH, y + lpb))
+            b = enc(range(EW), ys)
+            chunks.append(struct.pack("<ii", y, len(b)) + b)
+    table = len(hdr) + 8 * len(chunks)
+    offs = []; body = b""
+    for c in chunks: offs.append(table + len(body)); body += c
+    data = hdr + b"".join(struct.pack("<Q", o) for o in offs) + body
+    with open(os.path.join(OUT, name), "wb") as f: f.write(data)
+    with open(os.path.join(OUT, name + ".txt"), "w") as f:
+        for (x, y) in [(0, 0), (3, 5), (EW - 1, EH - 1), (17, 33), (40, 2), (22, 21)]:
+            v = [0.0, 0.0, 0.0, 1.0]
+            for nm, t in chans:
+                c = "RGBAU".index(nm); val = evalue(c, x, y)
+                if t == 0: val = float(int(round(val)))
+                if nm == "U": continue
+                v[c] = val
+            f.write("E %d %d %g %g %g %g %g\n" % (x, y, v[0], v[1], v[2], v[3], tol))
+
+make_exr2("tiled_none.exr", 0, [("A", 1), ("B", 1), ("G", 1), ("R", 1)], tiled=(16, 16))
+make_exr2("tiled_zip.exr", 3, [("B", 2), ("G", 2), ("R", 2)], tiled=(32, 8))
+make_exr2("pxr24.exr", 5, [("A", 1), ("B", 2), ("G", 1), ("R", 2), ("U", 0)])
+make_exr2("pxr24_tiled.exr", 5, [("B", 1), ("G", 1), ("R", 1)], tiled=(20, 20))
+make_exr2("b44.exr", 6, [("A", 1), ("B", 1), ("G", 1), ("R", 2)], tol=0.02)
+make_exr2("b44a.exr", 7, [("B", 1), ("G", 1), ("R", 1)], tol=0.02)
+
 print("made", len([f for f in os.listdir(OUT) if not f.endswith((".json", ".txt", ".png"))]), "files in", OUT)

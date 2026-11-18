@@ -1068,7 +1068,7 @@ static Doc *load(const char *path, int *fmt)
   return d;
 }
 /* the pictures Easel opens, for the file requester (any file can still be typed in) */
-#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo)"
+#define OPEN_PATTERN "#?.(png|jpg|jpeg|bmp|iff|ilbm|lbm|pic|gif|ora|avif|tif|tiff|psd|psb|tga|pcx|pbm|pgm|ppm|pnm|pam|pfm|xpm|dds|qoi|ico|cur|hdr|fits|fit|dpx|webp|svg|cin|dcm|dicom|exr|acbm|deep|rgbn|rgb8|anim|anm|info|ras|sun|sgi|rgb|bw|pi1|pi2|pi3|pc1|pc2|pc3|neo|xcf|gz|kra|krz|pdn)"
 static char lastdir[512];
 static void recent_add(const char *path)
 {
@@ -1115,12 +1115,12 @@ static int ext_fmt(const char *path)
   if (!Stricmp((STRPTR)e, (STRPTR)".gif")) return FMT_GIF;
   if (!Stricmp((STRPTR)e, (STRPTR)".tif") || !Stricmp((STRPTR)e, (STRPTR)".tiff")) return FMT_TIFF;
   if (!Stricmp((STRPTR)e, (STRPTR)".tga")) return FMT_TGA;
-  if (!Stricmp((STRPTR)e, (STRPTR)".psd")) return FMT_PSD;
+  if (!Stricmp((STRPTR)e, (STRPTR)".psd") || !Stricmp((STRPTR)e, (STRPTR)".psb")) return FMT_PSD;   /* (round 3: PSB written) */
   return xwrite_format_of_ext(e);                      /* (1.1: WebP, PDF, Netpbm, QOI, ICO, DDS, DPX, FITS) */
 }
 /* 1.1: what xwrite_doc's sub and quality are for the next write (export_sub -1: from the extension) */
 static int export_sub = -1, export_pdf_quality;
-#define SAVE_PATTERN "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)"
+#define SAVE_PATTERN "#?.(ora|psd|psb|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits|cin|hdr)"
 int export_quality = 85, export_indexed;
 static int export_tiff_comp = TIFFC_LZW;             /* 1.2: File > Export > TIFF's choice (Save uses LZW) */
 /* the document written to path as fmt; 1 if it was */
@@ -1140,7 +1140,10 @@ static int write_doc(Doc *d, const char *path, int fmt)
   /* 0.6: TIFF (LZW), Targa (run-length), Photoshop with its layers; PNG and JPEG with File Info */
   else if (fmt == FMT_TIFF) data = tiff_encode_layered(d, export_tiff_comp, &len);   /* (round 3: with its layers) */
   else if (fmt == FMT_TGA) data = tga_write_doc(d, 1, &len);
-  else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
+  else if (fmt == FMT_PSD) {
+    const char *e = strrchr((const char *)FilePart((STRPTR)path), '.');
+    data = e && !Stricmp((STRPTR)e, (STRPTR)".psb") ? psb_write_doc(d, &len) : psd_write_doc(d, &len);   /* (round 3) */
+  }
   else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
   else if (fmt == FMT_JPEG) data = jpeg_write_doc(d, export_quality, &len);
   else if (xwrite_handles(fmt)) {
