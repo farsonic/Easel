@@ -128,6 +128,7 @@ char tool_keys[TL_N] = { 'V', 'M', 'M', 'L', 'L', 'W', 'C', 'I', 'S', 'B', 'B', 
 #define T(label, key, id) { NM_ITEM, (STRPTR)label, (STRPTR)key, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }
 #define BAR { NM_ITEM, NM_BARLABEL, 0, 0, 0, 0 }
 #define SBAR { NM_SUB, NM_BARLABEL, 0, 0, 0, 0 }
+#define ST(label, id) { NM_SUB, (STRPTR)label, 0, CHECKIT | MENUTOGGLE, 0, (APTR)(id) }   /* (1.1: a ticked subitem) */
 static struct NewMenu menus[] = {
   M("File"),
   I("New...", "N", ID_NEW), I("Open...", "O", ID_OPEN),
@@ -240,7 +241,8 @@ static struct NewMenu menus[] = {
   M("View"),
   I("Zoom In", "+", ID_ZOOMIN), I("Zoom Out", "-", ID_ZOOMOUT), I("Fit on Screen", "0", ID_FIT), I("100%", "1", ID_ACTUAL), I("200%", 0, ID_ZOOM200), I("50%", 0, ID_ZOOM50), BAR,
   T("Rulers", "R", ID_RULERS), T("Grid", "'", ID_SHOWGRID), T("Guides", ";", ID_SHOWGUIDES), T("Snap", 0, ID_SNAP),
-  I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
+  H("Snap To"), ST("Guides", ID_SNAPTO0), ST("Grid", ID_SNAPTO0 + 1), ST("Document Bounds", ID_SNAPTO0 + 2), ST("Centre Lines", ID_SNAPTO0 + 3), ST("Pixels", ID_SNAPTO0 + 4),
+  I("Grid Settings...", 0, ID_GRIDSET), I("New Guide...", 0, ID_NEWGUIDE), T("Lock Guides", 0, ID_LOCKGUIDES), I("Clear Guides", 0, ID_CLEARGUIDES), BAR,
   I("Hide/Show Panels (Tab)", 0, ID_TOGGLEPANELS), I("Hide/Show Right Panels (Shift-Tab)", 0, ID_TOGGLERIGHT), BAR,
   T("Dark Interface", 0, ID_DARKUI),
   H("Screen Mode"), S("Window", 0, ID_SCR_WINDOW), S("Easel's Own Screen", 0, ID_SCR_OWN), S("Full Screen", 0, ID_SCR_FULL), SBAR, S("Choose Screen Mode...", 0, ID_SCR_CHOOSE),
@@ -605,6 +607,10 @@ static void update_menus(void)
     ID_FILLPATTERN, ID_SNAPSHOT, ID_SAVECOPY, ID_EXPORTAS, ID_LAYERSTOFILES, ID_FADE, ID_TOGGLELAST,
     ID_NUMTRANSFORM, ID_XF_SCALE, ID_XF_ROTATE, ID_XF_SKEW, ID_XF_DISTORT, ID_XF_PERSPECTIVE, ID_XF_AGAIN, ID_ROTATE180, ID_ROTATE90R,
     ID_ROTATE90L, ID_FLIPLH, ID_FLIPLV, ID_DEFRINGE, ID_BLACKMATTE, ID_WHITEMATTE, ID_QUICKMASK,
+    /* 1.1 (files) */
+    ID_EXPXW0, ID_EXPXW0 + 1, ID_EXPXW0 + 2, ID_EXPXW0 + 3, ID_EXPXW0 + 4, ID_EXPXW0 + 5, ID_EXPXW0 + 6, ID_EXPXW0 + 7, ID_EXPANIMGIF, ID_EXPANIM,
+    ID_CLOSEOTHERS, ID_QUICKPNG, ID_DELEMPTY, ID_FLATMASKS, ID_FITIMAGE, ID_LOREM, ID_EXPSVG, ID_LOCKGUIDES,
+    ID_SNAPTO0, ID_SNAPTO0 + 1, ID_SNAPTO0 + 2, ID_SNAPTO0 + 3, ID_SNAPTO0 + 4,
     /* 1.0 */
     ID_ADJ_REPLACE, ID_ADJ_SHADOWHI, ID_ADJ_MATCH, ID_F_PAL, ID_F_AVERAGE, ID_F_BLURMORE, ID_F_TILTSHIFT, ID_F_IRIS, ID_F_SMARTSHARPEN,
     ID_F_SHARPENEDGES, ID_F_DISPLACE, ID_F_LENSCORR, ID_F_EXTRUDE, ID_F_GLOWEDGES, ID_F_PLASTIC, ID_F_EDGEDETECT, ID_F_COLORALPHA, ID_F_HSBHSL,
@@ -666,6 +672,13 @@ static void update_menus(void)
   menu_set(ID_SHOWGRID, MUIA_Menuitem_Checked, has && d->guides.show_grid);
   menu_set(ID_SHOWGUIDES, MUIA_Menuitem_Checked, has && d->guides.show_guides);
   menu_set(ID_SNAP, MUIA_Menuitem_Checked, has && d->guides.snap);
+  {
+    /* 1.1: View > Snap To and Lock Guides */
+    static const u8 bits[5] = { SNAP_GUIDES, SNAP_GRID, SNAP_EDGES, SNAP_CENTER, SNAP_PIXEL };
+    int k;
+    for (k = 0; k < 5; k++) menu_set(ID_SNAPTO0 + k, MUIA_Menuitem_Checked, has && (d->guides.snap & bits[k]));
+    menu_set(ID_LOCKGUIDES, MUIA_Menuitem_Checked, has && d->guides.lock_guides);
+  }
 }
 void refresh_panels(void)
 {
@@ -1982,6 +1995,12 @@ static void command(ULONG id)
   case ID_SHOWGRID: d->guides.show_grid = !d->guides.show_grid; break;
   case ID_SHOWGUIDES: d->guides.show_guides = !d->guides.show_guides; break;
   case ID_SNAP: d->guides.snap = d->guides.snap ? 0 : SNAP_GUIDES | SNAP_GRID | SNAP_EDGES | SNAP_CENTER; break;
+  case ID_SNAPTO0: case ID_SNAPTO0 + 1: case ID_SNAPTO0 + 2: case ID_SNAPTO0 + 3: case ID_SNAPTO0 + 4: {
+    static const u8 bits[5] = { SNAP_GUIDES, SNAP_GRID, SNAP_EDGES, SNAP_CENTER, SNAP_PIXEL };
+    d->guides.snap ^= bits[id - ID_SNAPTO0];
+    break;
+  }
+  case ID_LOCKGUIDES: d->guides.lock_guides = !d->guides.lock_guides; break;
   case ID_GRIDSET: {
     char buf[64];
     int sx, sy, sub = 1;
