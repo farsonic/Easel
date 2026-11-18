@@ -1280,3 +1280,5 @@
   { { "Bicubic Sharper (reduction)", "Bikubisch sch\344rfer (Verkleinerung)", "Bicubique plus net (r\351duction)", "Bic\372bica m\341s enfocada (reducci\363n)", "Bicubica pi\371 nitida (riduzione)" } },
   { { "Preserve Details (enlargement)", "Details erhalten (Vergr\366\337erung)", "Conserver les d\351tails (agrandissement)", "Conservar detalles (ampliaci\363n)", "Mantieni dettagli (ingrandimento)" } },
   { { "Resample (else only the resolution changes)", "Neu berechnen (sonst \344ndert sich nur die Aufl\366sung)", "R\351\351chantillonner (sinon seule la r\351solution change)", "Remuestrear (si no, solo cambia la resoluci\363n)", "Ricampiona (altrimenti cambia solo la risoluzione)" } },
+  { { "Custom (Edit Gradient)", "Eigener (Verlauf bearbeiten)", "Personnalis\351 (modifier le d\351grad\351)", "Personalizado (editar degradado)", "Personalizzata (modifica sfumatura)" } },
+  { { "Edit Gradient...", "Verlauf bearbeiten...", "Modifier le d\351grad\351...", "Editar degradado...", "Modifica sfumatura..." } },

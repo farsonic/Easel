@@ -29,6 +29,7 @@
 #include "../core/adjust10.h"
 #include "../core/filters10.h"
 #include "brushwin.h"
+#include "gradwin.h"
 #include "../core/adjustx.h"
 #include "dlgx.h"
 #include "../core/resample.h"
@@ -464,9 +465,20 @@ static void a_mixer(Doc *d, const LONG *v, int c, int t)
 }
 static void mixer_show(int c) { LONG v[4]; int k; for (k = 0; k < 4; k++) v[k] = adj_base.v[(c >= 0 && c < 3 ? c : 0) * 4 + k]; sd_show(v, 4); }
 /* Gradient Map: a preset gradient (the colours in use, black to white, and some classic ramps) */
+static Gradient gm_grad;              /* Custom: the gradient edited in the Gradient Editor (PhotoCraft #9319: its stops, midpoints and smoothness) */
+static int gm_inited;
 static void gradmap_preset(int k, AdjParams *p)
 {
   Doc *d = cur_doc();
+  if (k == 6 && gm_inited) {
+    /* sampled at 32 places, so the midpoints and the blending between the stops come through */
+    int i;
+    u8 c[4];
+    gm_grad.fg = d ? d->fg : 0; gm_grad.bg = d ? d->bg : 0xFFFFFF;
+    for (i = 0; i < 32; i++) { gradient_sample(&gm_grad, i / 31.0, c); p->pts[2 * i] = i * 255 / 31; p->pts[2 * i + 1] = (int)(((u32)c[0] << 16) | ((u32)c[1] << 8) | c[2]); }
+    p->npts = 32;
+    return;
+  }
   static const ULONG sets[][4] = { { 0x000000, 0xFFFFFF, 0, 0 }, { 0x000000, 0x800000, 0xFFA000, 0xFFFFE0 }, { 0x001040, 0x2080C0, 0xE0F0FF, 0 },
                                    { 0x200040, 0xC02060, 0xFFE080, 0 }, { 0x402000, 0xC08040, 0xFFF0D0, 0 } };
   int n, i;
@@ -477,6 +489,14 @@ static void gradmap_preset(int k, AdjParams *p)
   for (n = 0; n < 4 && (n < 2 || sets[k][n]); n++) continue;
   for (i = 0; i < n; i++) { p->pts[2 * i] = i * 255 / (n - 1); p->pts[2 * i + 1] = (int)sets[k][i]; }
   p->npts = n;
+}
+static void gm_btn(int k)
+{
+  Doc *d = cur_doc();
+  (void)k;
+  if (!d) return;
+  if (!gm_inited) { gradient_init(&gm_grad, "Custom", d->fg, d->bg); gm_inited = 1; }
+  if (gradwin_edit(&gm_grad, gradwin_presets(), d->fg, d->bg) && sd.cyc) nnset(sd.cyc, MUIA_Cycle_Active, 6);
 }
 static void a_gradmap(Doc *d, const LONG *v, int c, int t)
 {
@@ -675,7 +695,8 @@ void dlg_adjust(ULONG id)
   static const char *const ranges[] = { "Shadows", "Midtones", "Highlights", NULL };
   static const char *const channels[] = { "RGB", "Red", "Green", "Blue", NULL };
   static const char *const outs[] = { "Red", "Green", "Blue", NULL };
-  static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", NULL };
+  static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", "Custom (Edit Gradient)", NULL };
+  static const char *const gm_btns[] = { "Edit Gradient...", NULL };
   static const char *const scolors[] = { "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", "Whites", "Neutrals", "Blacks", NULL };
   static const char *const hsedit[] = { "Master", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", NULL };
   int kind = adj_kind_of(id);
@@ -745,7 +766,7 @@ void dlg_adjust(ULONG id)
   case ID_ADJ_MIXER: { static const Param p[] = { { "Red (%):", -200, 200, 100 }, { "Green (%):", -200, 200, 0 }, { "Blue (%):", -200, 200, 0 }, { "Constant (%):", -200, 200, 0 } };
     sd_cfg_cychook = mixer_show;
     slider_dialog("Channel Mixer", p, 4, outs, "Output Channel:", "Monochrome", 0, a_mixer, NULL); break; }
-  case ID_ADJ_GRADMAP: slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
+  case ID_ADJ_GRADMAP: sd_cfg_btns = gm_btns; sd_cfg_btnhook = gm_btn; slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
   case ID_ADJ_SELCOLOR: { static const Param p[] = { { "Cyan (%):", -100, 100, 0 }, { "Magenta (%):", -100, 100, 0 }, { "Yellow (%):", -100, 100, 0 }, { "Black (%):", -100, 100, 0 } };
     sd_cfg_cychook = selcolor_show;
     slider_dialog("Selective Color", p, 4, scolors, "Colors:", "Absolute", 0, a_selcolor, NULL); break; }

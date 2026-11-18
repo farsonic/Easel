@@ -23,6 +23,8 @@
 #include "../core/selmask.h"
 #include "../core/layers.h"
 #include "../core/resample.h"
+#include "../core/gradient.h"
+#include "../core/adjust.h"
 
 static int tests, failed;
 static void ok(const char *name, int cond) { tests++; if (!cond) { failed++; printf("FAIL %s\n", name); } }
@@ -384,6 +386,23 @@ static void resampling(const char *outdir)
   doc_free(a); doc_free(b); doc_free(c);
 }
 
+/* Gradient Map from an edited gradient: 32 samples carry its midpoint (as the dialog's Custom does) */
+static void gradient_map_custom(void)
+{
+  Gradient g;
+  int st[64], i;
+  u8 c[4];
+  Doc *d = doc_new(256, 1, 0, 0);
+  for (i = 0; i < 256; i++) { u8 *p = d->lay[0]->px + i * 4; p[0] = p[1] = p[2] = (u8)i; p[3] = 255; }
+  gradient_init(&g, "t", 0x000000, 0xFF0000);
+  g.color[0].mid = 0.25;
+  for (i = 0; i < 32; i++) { gradient_sample(&g, i / 31.0, c); st[2 * i] = i * 255 / 31; st[2 * i + 1] = (int)(((u32)c[0] << 16) | ((u32)c[1] << 8) | c[2]); }
+  ok("Gradient Map with 32 stops", adj_gradient_map(d, st, 32, 0));
+  ok("ends: black and red", d->lay[0]->px[0] < 3 && d->lay[0]->px[255 * 4] > 252 && d->lay[0]->px[255 * 4 + 1] < 3);
+  ok("the midpoint moved the half-way colour down", abs(d->lay[0]->px[64 * 4] - 128) < 24);
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   char outdir[260];
@@ -397,6 +416,7 @@ int main(int argc, char **argv)
   equalize_bw();
   focus_refine();
   resampling(outdir);
+  gradient_map_custom();
   printf("%d tests, %d failed\n", tests, failed);
   return failed != 0;
 }
