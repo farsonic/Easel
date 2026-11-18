@@ -21,6 +21,34 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.1: tool options
+
+- Dodge and Burn have a Range (Shadows, Midtones, Highlights) and Protect Tones; the Sponge
+  saturates or desaturates, with Vibrance. Blur, Sharpen and Smudge have a Mode; Sharpen has
+  Protect Detail and Smudge Finger Painting.
+- The Clone Stamp has a Mode, Aligned, and samples the current layer, the current layer and those
+  below, or all layers (the Healing Brush too). The Eyedropper and Color Sampler average up to
+  101 x 101 pixels, and the Eyedropper can sample Current & Below.
+- The Eraser's Brush, Pencil and Block modes and Erase to History, the Pencil's Auto Erase, and the
+  Brush's Smoothing and Airbrush are on the options bar. The History Brush has Flow and can paint
+  from a History panel snapshot (From History).
+- Move tool: Auto-Select a Layer or its Group, Show Transform Controls (drag a handle to scale or
+  turn the layer), and an Align list (edges, centres, distribute).
+- Crop tool: overlays (Rule of Thirds, Grid, Diagonal, Triangle, Golden Ratio) and Straighten (drag
+  along what should be level). Zoom tool: Zoom In or Out, drag left or right to zoom, Fill Screen.
+- Deluxe Paint: a stencil (Brush Settings: keep the background colour, or the palette colours locked
+  in the Color Table, from being painted), range fills (the Gradient tool's Palette Range on indexed
+  pictures, through the first cycling range), and grid snap for painting (View > Grid with Snap).
+- Shapes draw from their centre with Alt held while dragging.
+- The History panel's bin deletes the step in effect (and those after it) when no snapshot is picked.
+- Keys: Page Up/Down (Ctrl: left/right), Home and End scroll; Ctrl-Space and Alt-Space zoom while
+  held; Ctrl with a painting tool moves; hold ` to erase with the Brush; F steps through the screen
+  modes; Shift-F5 Fill, Shift-F6 Feather, F12 Revert; Ctrl-H hides the selection's outline, grid
+  and guides; Ctrl-Shift-D Reselect, Ctrl-Shift-F Fade, Ctrl-Alt-F Last Filter, Ctrl-Alt-G Clipping
+  Mask, Ctrl-Shift-B Auto Color, Ctrl-Alt-Shift-L Auto Contrast, Ctrl-Alt-Shift-B Black & White,
+  Ctrl-R rulers, Ctrl-' grid, Ctrl-; guides, Ctrl-Shift-; snap, Ctrl-Alt-S Save a Copy, Ctrl-Alt-W
+  Close All.
+
 ## New in 1.0: filters, adjustments and retouching
 
 - Retouching tools (J): the Spot Healing Brush (paint over a blemish; Easel finds a patch nearby
@@ -264,21 +292,21 @@ next to itself.
 | Lasso / Polygonal Lasso / Magnetic Lasso | L | freehand; or click the corners, then double-click or press Return to close (Esc drops it); the magnetic lasso follows edges |
 | Magic Wand | W | tolerance, contiguous, sample all layers |
 | Crop | C | drag a box and adjust its handles; Return or a double-click inside crops, Esc cancels |
-| Eyedropper / Color Sampler / Ruler | I | point, 3 × 3 or 5 × 5 sample, current or all layers; Alt-click sets the background colour; the sampler leaves up to four marks; the ruler measures and straightens |
+| Eyedropper / Color Sampler / Ruler | I | point or up to 101 × 101 average, current, current and below, or all layers; Alt-click sets the background colour; the sampler leaves up to four marks; the ruler measures and straightens |
 | Spot Healing Brush / Healing Brush / Patch / Red Eye | J | paint over a spot; Alt-click a source, then paint; draw round an area and drag it to the source; click a red eye |
 | Clone Stamp / Pattern Stamp | S | Alt-click sets the clone source, then paint; the pattern stamp paints the chosen pattern |
 | History Brush | Y | paints back the snapshot |
 | Brush / Pencil / Color Replacement | B | size, hardness, blend mode, opacity, flow; Shift-click paints a straight line from the last stroke; Alt picks a colour; Brush Settings for tips and dynamics |
 | Eraser / Background Eraser / Magic Eraser | E | erases to transparency; the background eraser takes away the colour under the brush's centre; the magic eraser the area of similar colour clicked |
 | Gradient / Paint Bucket | G | gradient presets and the Gradient Editor; linear, radial, angle, reflected, diamond; the bucket fills with the foreground or a pattern |
-| Blur / Sharpen / Smudge | R | strength |
-| Dodge / Burn / Sponge | O | exposure |
+| Blur / Sharpen / Smudge | R | mode and strength; protect detail, finger painting |
+| Dodge / Burn / Sponge | O | range, exposure, protect tones; the sponge saturates or desaturates, with vibrance |
 | Horizontal Type / Vertical Type / Type Mask | T | click and type, or drag a box for a paragraph; click a type layer's text to edit it; the type mask makes a selection |
 | Pen / Add Anchor / Delete Anchor / Convert Point | P | click for corners, drag for curves; click the first point to close the path |
 | Path Selection / Direct Selection | A | move a whole path, or its points and handles |
 | Rectangle / Rounded Rectangle / Ellipse / Polygon / Line / Custom Shape | U | a shape layer, a path or pixels; fill, stroke, sides (or a star), corner radius, arrowheads |
 | Hand | H | drag to scroll (or hold the space bar with any tool) |
-| Zoom | Z | click to zoom in, Alt-click to zoom out |
+| Zoom | Z | click to zoom in, Alt-click to zoom out (or the other way round); drag left or right to zoom |
 
 Pressing a tool's key again (or with Shift) moves on to the next tool sharing the key. Other keys:
 

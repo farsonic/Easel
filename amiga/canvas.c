@@ -2468,6 +2468,7 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
       return 1;
     }
     if (d->xf_on) return 1;
+    if (d->poly_on && d->npoly > 1) { ov_hide(d, obj); d->npoly--; ov_show(d, obj); return 1; }   /* 1.1: the Polygonal Lasso's last corner taken back */
     if (PATH_TOOL(tool) && path_delete_sel(d, obj)) return 1;          /* 0.9: the chosen anchors deleted */
     DoMethod(_app(obj), MUIM_Application_ReturnID, (q & IEQUALIFIER_CONTROL) ? ID_FILLBG : (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? ID_FILLFG : ID_CLEAR);
     return 1;
@@ -2566,9 +2567,13 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     DoMethod(optbar, MUIM_Opts_Refresh);
     return 1;
   }
+  if (shift && code >= 0x01 && code <= 0x0A && brushlike(tool)) c = code == 0x0A ? '0' : '0' + code;   /* (1.1: Shift and a digit key) */
   if (c >= '0' && c <= '9' && (brushlike(tool) || tool == TL_GRADIENT || tool == TL_BUCKET)) {
     int o = c == '0' ? 100 : (c - '0') * 10;
-    if (tool == TL_BUCKET) opt.fill_opacity = o; else opt.opacity[tool] = o;
+    /* 1.1: Alt and a digit sets the Smoothing, Shift and a digit the Flow (PhotoCraft's keys) */
+    if ((q & QALT) && brushlike(tool)) brushui.b.dyn.smoothing = c == '0' ? 100 : (c - '0') * 10;
+    else if (shift && brushlike(tool)) opt.flow[tool] = o;
+    else if (tool == TL_BUCKET) opt.fill_opacity = o; else opt.opacity[tool] = o;
     DoMethod(optbar, MUIM_Opts_Refresh);
     return 1;
   }
