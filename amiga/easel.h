@@ -316,7 +316,14 @@ typedef struct {
   int checker_size, checker_scheme; ULONG checker_c1, checker_c2;
   int grid_style, guide_style;
   int screen_dpi, column_w, gutter_w, point_kind;
+  /* round 3: the Export page (Quick Export's format QX_, where it writes QW_ and the drawer, its
+     metadata EXD_ and sRGB; lossy WebP's quality), Place's smart objects, a beep when a long job ends */
+  int qx_fmt, qx_where, qx_meta, qx_srgb, webp_quality;
+  char qx_dir[256];
+  int place_smart, beep_done;
 } Prefs;
+enum { QX_PNG, QX_JPEG, QX_GIF, QX_WEBP, QX_TIFF, QX_N };
+enum { QW_BESIDE, QW_LAST, QW_DRAWER, QW_ASK };
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;
 extern const char *const unit_names[UN_N + 1];

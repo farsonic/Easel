@@ -877,8 +877,10 @@ void refresh_panels(void)
   tools2_menus();                                          /* 1.2 */
   t2_log_steps();                                          /* 1.2: the History Log */
 }
+static void qx_menu_title(void);
 void refresh_all(void)
 {
+  qx_menu_title();                                       /* (round 3: Quick Export's format) */
   DoMethod(canvas, MUIM_Canvas_Refresh);
   refresh_panels();
 }
@@ -1329,6 +1331,8 @@ static int save_as(void)
   refresh_panels();
   return 1;
 }
+static void export_start(DocView *v, char *path, size_t cap);
+static void export_done(const char *path);
 /* File > Export: a flat copy in the format asked for, the document's own file left as it is */
 static void export_as(int fmt, int indexed)
 {
@@ -1336,13 +1340,12 @@ static void export_as(int fmt, int indexed)
   char path[512];
   static const char *const ext[] = { "", ".png", ".jpg", ".bmp", ".iff", ".gif", ".ora", ".avif", ".tif", ".psd", ".tga" };
   if (!v) return;
-  strcpy(path, v->path[0] ? v->path : lastdir);
-  if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
+  export_start(v, path, sizeof path);                    /* (round 3: in the last drawer exported to) */
   with_ext(path, sizeof path, fmt <= FMT_TGA ? ext[fmt] : xwrite_ext(fmt));
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   if (!file_request(1, "Export as", path, sizeof path, NULL)) return;
   export_indexed = indexed;
-  write_doc(v->doc, path, fmt);
+  if (write_doc(v->doc, path, fmt)) export_done(path);
   export_indexed = 0;
 }
 static void start_path(DocView *v, char *path, size_t cap);
@@ -1359,9 +1362,9 @@ static void export_x(int fmt)
     export_sub = r == 1 ? DDS_BC3 : r == 2 ? DDS_BC1 : DDS_RGBA;
   } else if (fmt == FMT_WEBP) {
     /* 1.2: lossless, or lossy at a quality */
-    static LONG wq = 80;
+    LONG wq = prefs.webp_quality;                        /* (round 3: Preferences > Export's, and remembered) */
     if (!(r = ask("Lossless|Lossy|Cancel", "%s", tr("Save the WebP picture without loss, or lossy (much smaller)?")))) return;
-    if (r == 2) { if (!ask_number("WebP Quality", "Quality (1-100):", &wq, 1, 100)) return; export_sub = (int)wq; }
+    if (r == 2) { if (!ask_number("WebP Quality", "Quality (1-100):", &wq, 1, 100)) return; export_sub = (int)wq; prefs.webp_quality = (int)wq; }
     else export_sub = 0;
   } else if (fmt == FMT_DPX) {
     if (!(r = ask("8 Bits|10 Bits|12 Bits|16 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
@@ -1381,9 +1384,10 @@ static void export_anim(int gif)
   static char msg[300];
   if (!v) return;
   anim_opts_default(&o);
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, gif ? ".gif" : ".anim");
   if (!file_request(1, gif ? "Export the layers as an animated GIF" : "Export the layers as an IFF ANIM", path, sizeof path, NULL)) return;
+  export_done(path);
   set(app, MUIA_Application_Sleep, TRUE);
   err[0] = 0;
   data = gif ? gif_write_anim(v->doc, &o, &len, err, sizeof err) : anim_write(v->doc, &o, &len, err, sizeof err);
@@ -1426,21 +1430,69 @@ static void import_frames(void)
   doc_show(d, "", FMT_ORA);
   base_name(path, docs[curdoc].name, sizeof docs[curdoc].name);
 }
-/* 1.1: File > Export > Quick Export as PNG: beside the picture's file (or in the last drawer), no questions */
+/* round 3: the drawer exports last went to, which the export requesters start in */
+static char lastexport[512];
+static void export_start(DocView *v, char *path, size_t cap)
+{
+  char name[128];
+  start_path(v, path, cap);
+  if (!lastexport[0]) return;
+  strncpy(name, (const char *)FilePart((STRPTR)path), sizeof name - 1); name[sizeof name - 1] = 0;
+  strncpy(path, lastexport, cap - 1); path[cap - 1] = 0;
+  AddPart((STRPTR)path, (STRPTR)name, cap);
+}
+static void export_done(const char *path)
+{
+  strncpy(lastexport, path, sizeof lastexport - 1); lastexport[sizeof lastexport - 1] = 0;
+  *PathPart((STRPTR)lastexport) = 0;
+}
+/* 1.1: File > Export > Quick Export: no questions. Round 3: in the format, place, metadata and colours
+   Preferences > Export chose (PNG beside the picture's file at first) */
+static const char *const qx_ext[QX_N] = { ".png", ".jpg", ".gif", ".webp", ".tif" };
+static const char *const qx_name[QX_N] = { "PNG", "JPEG", "GIF", "WebP", "TIFF" };
+static void qx_menu_title(void)
+{
+  static int shown = -1;
+  static char t[64];
+  if (shown == prefs.qx_fmt) return;
+  shown = prefs.qx_fmt;
+  snprintf(t, sizeof t, tr("Quick Export as %s"), qx_name[prefs.qx_fmt]);
+  menu_set(ID_QUICKPNG, MUIA_Menuitem_Title, (ULONG)t);
+}
 static void quick_png(void)
 {
   DocView *v = cur_view();
   char path[512];
   BPTR l;
+  int fmt;
+  ExportOpts o;
+  Doc *t;
   if (!v) return;
-  start_path(v, path, sizeof path);
-  with_ext(path, sizeof path, ".png");
-  if (v->fmt == FMT_PNG && v->path[0] && !Stricmp((STRPTR)path, (STRPTR)v->path)) with_ext(path, sizeof path, "-copy.png");
-  if ((l = Lock((STRPTR)path, ACCESS_READ))) {
+  if (prefs.qx_where == QW_BESIDE) start_path(v, path, sizeof path);
+  else if (prefs.qx_where == QW_DRAWER && prefs.qx_dir[0]) {
+    strncpy(path, prefs.qx_dir, sizeof path - 1); path[sizeof path - 1] = 0;
+    AddPart((STRPTR)path, (STRPTR)v->name, sizeof path);
+  } else export_start(v, path, sizeof path);
+  with_ext(path, sizeof path, qx_ext[prefs.qx_fmt]);
+  if (v->path[0] && !Stricmp((STRPTR)path, (STRPTR)v->path)) { char e[16]; snprintf(e, sizeof e, "-copy%s", qx_ext[prefs.qx_fmt]); with_ext(path, sizeof path, e); }
+  if (prefs.qx_where == QW_ASK) { if (!file_request(1, "Quick Export", path, sizeof path, NULL)) return; }
+  else if ((l = Lock((STRPTR)path, ACCESS_READ))) {
     UnLock(l);
     if (!ask("Replace|Cancel", tr("%s is there already. Replace it?"), (const char *)FilePart((STRPTR)path))) return;
   }
-  write_doc(v->doc, path, FMT_PNG);
+  fmt = ext_fmt(path);
+  if (fmt == FMT_UNKNOWN) fmt = FMT_PNG;
+  exportx_defaults(&o);
+  o.metadata = prefs.qx_meta; o.to_srgb = prefs.qx_srgb;
+  set(app, MUIA_Application_Sleep, TRUE);
+  t = exportx_prepare(v->doc, &o);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+  export_quality = prefs.jpeg_quality;
+  export_sub = fmt == FMT_WEBP ? prefs.webp_quality : -1;
+  if (write_doc(t, path, fmt)) export_done(path);
+  export_sub = -1;
+  doc_free(t);
 }
 /* 1.1: File > Export > Paths to SVG: the paths and shape layers, with the document's bounds */
 static void export_svg(void)
@@ -1450,9 +1502,10 @@ static void export_svg(void)
   u8 *data;
   size_t len = 0;
   if (!v) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, ".svg");
   if (!file_request(1, "Export the paths and shapes as SVG", path, sizeof path, "#?.svg")) return;
+  export_done(path);
   if (!(data = svg_write_paths(v->doc, 1, &len)) || !write_file(path, data, len)) ask("OK", "%s", tr("The SVG file couldn't be written (out of memory, or the disk is full or write-protected)."));
   free(data);
 }
@@ -1546,7 +1599,7 @@ static void export_scaled(void)
   { static const int methods[6] = { RS_NEAREST, RS_BILINEAR, RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS }; for (i = 0; i < 6; i++) if (methods[i] == xo_last.method) mi = i; }
   init[0] = xo_last.pct; init[1] = xo_last.canvas_w; init[2] = xo_last.canvas_h; init[3] = xo_last.metadata;
   if (!dlg_sliders("Export As", p, 4, rsl, "Resample:", mi, mtl, "Matte:", xo_last.matte, "Convert to sRGB", xo_last.to_srgb, init, xo_take, NULL, 0)) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);                    /* (round 3: in the last drawer exported to) */
   with_ext(path, sizeof path, ".png");
   if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, SAVE_PATTERN)) return;
   fmt = out_fmt(path, sizeof path);
@@ -1556,7 +1609,7 @@ static void export_scaled(void)
   t = exportx_prepare(v->doc, &xo_last);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
-  write_doc(t, path, fmt);
+  if (write_doc(t, path, fmt)) export_done(path);
   doc_free(t);
 }
 /* File > Export > Layers to Files: each layer with pixels as a file of its own, named after it */
@@ -1567,9 +1620,10 @@ static void layers_to_files(void)
   int fmt, i, n = 0;
   static char msg[200];
   if (!v) return;
-  start_path(v, path, sizeof path);
+  export_start(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
   if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, SAVE_PATTERN)) return;
+  export_done(path);
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1789,6 +1843,7 @@ static void place_file(void)
     base_name(path, name, sizeof name);
     doc_set_layer_props(d, d->active, name, -1, -1, -1);
   }
+  if (prefs.place_smart) doc_smart_convert(d, d->active);   /* round 3: Preferences > General's Always create Smart Objects */
   refresh_all();
   /* 0.6: then its size and angle, as Place goes into Free Transform (1.1: unless the preferences skip it) */
   if (!prefs.skip_place_xf) transform_dialog();
@@ -1806,6 +1861,7 @@ static Doc *state_copy(Doc *d)
   c->undo = c->redo = NULL; c->undo_depth = 0; c->undo_bytes = 0;
   c->sel = c->lastsel = c->qmask = NULL; c->nlay = 0; c->nchan = 0;
   c->npaths = 0; c->workpath = NULL; c->annot = NULL;     /* (1.2: the paths and notes stay the picture's: doc_free(c) mustn't free them) */
+  c->icc = NULL; c->icclen = 0; c->exif = NULL; c->exiflen = 0;   /* (round 3: nor its profile and EXIF) */
   for (i = 0; i < d->nlay && ok; i++) if ((c->lay[i] = layer_copy(d->lay[i], d->w, d->h)) != NULL) c->nlay++; else ok = 0;
   for (i = 0; i < d->nchan && ok; i++) if ((c->chan[i] = (u8 *)malloc(n)) != NULL) { memcpy(c->chan[i], d->chan[i], n); c->nchan++; } else ok = 0;
   if (ok && d->sel && (c->sel = (u8 *)malloc(n)) != NULL) memcpy(c->sel, d->sel, n);

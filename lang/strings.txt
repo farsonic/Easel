@@ -2733,3 +2733,23 @@ Transform Smart Object	Smartobjekt transformieren	Transformer l'objet dynamique	
 Rasterize Smart Object	Smartobjekt rastern	Pixelliser l'objet dynamique	Rasterizar objeto inteligente	Rasterizza oggetto avanzato
 Artboard	Zeichenfläche	Plan de travail	Mesa de trabajo	Tavola da disegno
 AnimBrush	AnimBrush	AnimBrush	AnimBrush	AnimBrush
+
+## r3-files
+File size: about %ld bytes	Dateigröße: etwa %ld Byte	Taille du fichier : environ %ld octets	Tamaño de archivo: unos %ld bytes	Dimensione file: circa %ld byte
+File size: about %ld KB	Dateigröße: etwa %ld KB	Taille du fichier : environ %ld Ko	Tamaño de archivo: unos %ld KB	Dimensione file: circa %ld KB
+Quick Export as %s	Schnell-Export als %s	Exportation rapide au format %s	Exportación rápida como %s	Esportazione rapida in %s
+Quick Export	Schnell-Export	Exportation rapide	Exportación rápida	Esportazione rapida
+Beside the picture's file	Neben der Bilddatei	À côté du fichier de l'image	Junto al archivo de la imagen	Accanto al file dell'immagine
+In the last drawer exported to	Im zuletzt verwendeten Exportordner	Dans le dernier dossier d'exportation	En la última carpeta de exportación	Nell'ultima cartella di esportazione
+In this drawer:	In diesem Ordner:	Dans ce dossier :	En esta carpeta:	In questa cartella:
+Ask each time	Jedes Mal fragen	Toujours demander	Preguntar cada vez	Chiedi ogni volta
+Copyright only	Nur Copyright	Copyright uniquement	Solo copyright	Solo copyright
+Always create Smart Objects when placing:	Beim Platzieren immer Smartobjekte erstellen:	Toujours créer des objets dynamiques lors du placement :	Crear siempre objetos inteligentes al colocar:	Crea sempre oggetti avanzati quando inserisci:
+Beep when long jobs are done:	Signalton nach langen Vorgängen:	Bip à la fin des opérations longues :	Pitido al terminar tareas largas:	Segnale acustico al termine dei lavori lunghi:
+Quick Export format:	Schnell-Export-Format:	Format d'exportation rapide :	Formato de exportación rápida:	Formato esportazione rapida:
+Quick Export writes:	Schnell-Export speichert:	L'exportation rapide enregistre :	La exportación rápida guarda:	L'esportazione rapida salva:
+Drawer:	Ordner:	Dossier :	Carpeta:	Cartella:
+Metadata kept:	Beibehaltene Metadaten:	Métadonnées conservées :	Metadatos conservados:	Metadati conservati:
+Convert to sRGB:	In sRGB konvertieren:	Convertir en sRVB :	Convertir en sRGB:	Converti in sRGB:
+Lossy WebP quality:	Qualität für verlustbehaftetes WebP:	Qualité WebP avec perte :	Calidad de WebP con pérdida:	Qualità WebP con perdita:
+(Quick Export's choices; Export As asks its own.\nJPEG's quality is on File Handling.)	(Für den Schnell-Export; Exportieren als fragt selbst.\nDie JPEG-Qualität steht unter Dateihandhabung.)	(Pour l'exportation rapide ; Exporter sous demande les siens.\nLa qualité JPEG est dans Gestion des fichiers.)	(Para la exportación rápida; Exportar como pregunta los suyos.\nLa calidad JPEG está en Gestión de archivos.)	(Per l'esportazione rapida; Esporta come chiede i suoi.\nLa qualità JPEG è in Gestione file.)

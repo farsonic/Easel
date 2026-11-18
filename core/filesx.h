@@ -36,6 +36,13 @@ u8  *tiff_add_tag(u8 *t, size_t *len, int tag, int type, const u8 *data, u32 cou
 int  camraw_detect(const u8 *d, size_t n);
 int  camraw_decode(const u8 *d, size_t n, Rgba *out, char *err, size_t errcap);
 
+/* JPEG Options' file size: the picture flattened over white, at most JSZ_MAX pixels (a mosaic of
+   blocks from all over it when it is bigger), made once for the dialog; then the size a JPEG of the whole picture will be at
+   quality q (progressive or not), worked out from that copy's (exact when it is the picture itself) */
+#define JSZ_MAX 160000L
+int  jpeg_size_thumb(Doc *d, Rgba *out);
+long jpeg_size_estimate(const Rgba *thumb, long w, long h, int quality, int progressive);
+
 /* what codec_load_doc adds from a file: its EXIF */
 void filesx_load_extras(Doc *doc, const u8 *d, size_t n);
 

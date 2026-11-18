@@ -7,8 +7,6 @@
 #include <string.h>
 #include <math.h>
 #include "foreign.h"
-#include "channels.h"
-#include "paint.h"
 
 #define XCF_TILE 64
 #define XCF_MAXITEMS 1024
@@ -364,7 +362,21 @@ static int read_channel(Xcf *x, Doc *doc, size_t ptr)
   x->base = 0;
   if (!read_hierarchy(x, hier, 1, 0, (i32)cw, (i32)chh, buf)) { x->base = saved; free(buf); return 0; }
   x->base = saved;
-  if (p.selection) { sel_apply_mask(doc, buf, SEL_REPLACE, "Selection"); return 1; }
+  if (p.selection) {
+    /* the selection, with its box (none when nothing is selected) */
+    Box b = box_make(doc->w, doc->h, 0, 0);
+    i32 x, y;
+    for (y = 0; y < doc->h; y++) for (x = 0; x < doc->w; x++) if (buf[(long)y * doc->w + x]) {
+      if (x < b.x0) b.x0 = x;
+      if (x >= b.x1) b.x1 = x + 1;
+      if (y < b.y0) b.y0 = y;
+      if (y >= b.y1) b.y1 = y + 1;
+    }
+    free(doc->sel);
+    if (box_empty(b)) { free(buf); doc->sel = NULL; doc->selbox = doc_box(doc); }
+    else { doc->sel = buf; doc->selbox = b; }
+    return 1;
+  }
   doc->chan[doc->nchan] = buf;
   strncpy(doc->chan_name[doc->nchan], name[0] ? name : "Alpha", sizeof doc->chan_name[0] - 1);
   doc->nchan++;

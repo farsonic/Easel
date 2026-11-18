@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "filesx.h"
 #include "zip.h"
 
@@ -379,4 +380,49 @@ Doc *tiff_read_layers(const u8 *d, size_t n, char *err, size_t errcap)
   if (doc && !doc->nlay) { doc_free(doc); doc = NULL; }
   if (doc) { doc->active = doc->nlay - 1; doc_forget_undo(doc); doc->dirty = 0; }
   return doc;
+}
+
+/* ------------------------------------------------------------------ JPEG Options' file size */
+int jpeg_size_thumb(Doc *d, Rgba *out)
+{
+  Rgba im;
+  long np = (long)d->w * d->h;
+  int tx, ty;
+  out->w = out->h = 0; out->px = NULL;
+  if (!rgba_alloc(&im, d->w, d->h)) return 0;
+  doc_composite(d, doc_box(d), im.px, (long)d->w * 4);
+  rgba_flatten_white(&im);
+  if (np <= JSZ_MAX) { *out = im; return 1; }
+  /* a mosaic of 6 x 6 blocks of 64 x 64 pixels from all over the picture: the same detail, so the
+     same bytes a pixel (scaling it down would smooth it and guess low) */
+  if (!rgba_alloc(out, 6 * 64, 6 * 64)) { rgba_free(&im); return 0; }
+  for (ty = 0; ty < 6; ty++)
+    for (tx = 0; tx < 6; tx++) {
+      i32 sx = d->w <= 64 ? 0 : (i32)((long)(d->w - 64) * tx / 5) & ~7, sy = d->h <= 64 ? 0 : (i32)((long)(d->h - 64) * ty / 5) & ~7, y, x;
+      for (y = 0; y < 64; y++)
+        for (x = 0; x < 64; x++) {
+          i32 cx = sx + x < d->w ? sx + x : d->w - 1, cy = sy + y < d->h ? sy + y : d->h - 1;
+          memcpy(out->px + (((long)ty * 64 + y) * out->w + tx * 64 + x) * 4, im.px + ((long)cy * d->w + cx) * 4, 4);
+        }
+    }
+  rgba_free(&im);
+  return 1;
+}
+long jpeg_size_estimate(const Rgba *thumb, long w, long h, int quality, int progressive)
+{
+  size_t len = 0;
+  u8 *j;
+  long head, body;
+  double k;
+  if (!thumb || !thumb->px) return 0;
+  j = progressive ? jpeg_encode_progressive(thumb, quality, 72, &len) : NULL;
+  if (!j) j = jpeg_encode(thumb, quality, 72, &len);
+  if (!j) return 0;
+  free(j);
+  if (thumb->w == w && thumb->h == h) return (long)len;
+  /* the headers and tables stay the same size; the coded data grows with the area */
+  head = 620;
+  body = (long)len > head ? (long)len - head : 1;
+  k = (double)w * h / ((double)thumb->w * thumb->h);
+  return head + (long)(body * k);
 }

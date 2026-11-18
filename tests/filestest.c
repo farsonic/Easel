@@ -540,6 +540,38 @@ static void test_camraw(void)
   }
 }
 
+/* JPEG Options' size readout: within a fifth of the real size, exact for small pictures */
+static void test_jpeg_size(void)
+{
+  static const int sizes[3][2] = { { 120, 90 }, { 800, 600 }, { 1500, 400 } };
+  int s, q;
+  for (s = 0; s < 3; s++) {
+    Doc *d = doc_new(sizes[s][0], sizes[s][1], 0xFFFFFF, 0);
+    Rgba th;
+    i32 x, y;
+    for (y = 0; y < d->h; y++) for (x = 0; x < d->w; x++) {
+      u8 *p = d->lay[0]->px + ((long)y * d->w + x) * 4;
+      u32 r = (u32)(x * 7 + y * 13) * 2654435761u;
+      p[0] = (u8)(128 + 100 * sin(x / 37.0) + (r >> 29)); p[1] = (u8)(128 + 90 * cos(y / 23.0) + (r >> 28 & 7)); p[2] = (u8)((x + y) / 9 + (r >> 26 & 15));
+    }
+    CHECK(jpeg_size_thumb(d, &th), "the size copy made");
+    CHECK(th.w * th.h <= JSZ_MAX, "within its limit");
+    for (q = 30; q <= 95; q += 65) {
+      size_t real;
+      u8 *j = jpeg_write_doc(d, q, &real);
+      long est = jpeg_size_estimate(&th, d->w, d->h, q, 0);
+      char msg[200];
+      snprintf(msg, sizeof msg, "%dx%d at %d: about %ld bytes, really %ld", d->w, d->h, q, est, (long)real);
+      if (s == 0) CHECK(labs(est - (long)real) < 64, msg);
+      else CHECK(est > (long)real * 0.8 && est < (long)real * 1.2, msg);
+      printf("  %s\n", msg);
+      free(j);
+    }
+    rgba_free(&th);
+    doc_free(d);
+  }
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -594,6 +626,7 @@ int main(int argc, char **argv)
     remove(p);
   }
   test_look();
+  test_jpeg_size();
   test_exif();
   test_layered();
   test_exr2();

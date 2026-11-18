@@ -170,6 +170,8 @@ int job_end(void)
     abort_flag = 0;
     progress_reset();
   }
+  /* round 3: Preferences > General's beep when a job of more than five seconds is over */
+  if (!njobs && !aborted && prefs.beep_done && now_ticks() - started > 5 * 50) DisplayBeep(NULL);
   progress_hook = jobs[njobs].hook;      /* (as it was: a dialog's previews run without it) */
   /* the window closes with the job that opened it: a dialog's preview (a job within the command's)
      doesn't leave it standing over the dialog */
