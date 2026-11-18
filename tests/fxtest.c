@@ -250,7 +250,7 @@ static void test_ops(void)
   free(t);
   CHECK(!fx_load(&g, "nonsense 1 2;stroke 1;;") && !g.e[FX_STROKE].on, "fx_load refuses rubbish");
   /* OpenRaster keeps the style and the label */
-  d->lay[1]->label = 3;
+  d->lay[1]->label = 11;
   c0 = comp(d);
   {
     size_t n;
@@ -261,7 +261,7 @@ static void test_ops(void)
     if (e) {
       c1 = comp(e);
       CHECK(!maxdiff(c0, c1, (long)W * H * 4), "ORA: the effects look the same");
-      CHECK(e->lay[1]->label == 3 && !memcmp(&e->lay[1]->fx.e[FX_STROKE], &d->lay[1]->fx.e[FX_STROKE], sizeof(FxOne)), "ORA: label and settings");
+      CHECK(e->lay[1]->label == 11 && !memcmp(&e->lay[1]->fx.e[FX_STROKE], &d->lay[1]->fx.e[FX_STROKE], sizeof(FxOne)), "ORA: label and settings");
       free(c1);
       doc_free(e);
     }

@@ -16,11 +16,11 @@
 #define ID_FXHIDEALL   3316
 #define ID_FXSCALE     3317
 #define ID_FXRASTER    3318           /* Rasterize > Layer Style */
-#define ID_LABEL0      3320           /* + 0..7: None, Red ... Gray */
-#define ID_DELHIDDEN   3330
-#define ID_REVERSE     3331
-#define ID_BGFROMLAYER 3332
-#define ID_COPYCSS     3333
+#define ID_LABEL0      3320           /* + 0..11: None, Red ... Fuchsia */
+#define ID_DELHIDDEN   3334
+#define ID_REVERSE     3335
+#define ID_BGFROMLAYER 3336
+#define ID_COPYCSS     3337
 #define ID_STACKMODE0  3340           /* + STK_ */
 #define ID_LS_LAST     3359
 /* (the Layer Style dialog's own buttons: its effect list and its colour buttons) */

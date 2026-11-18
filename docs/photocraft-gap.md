@@ -332,47 +332,51 @@ Items handled elsewhere in this document are listed in "How to read this".
 
 ### 2.4 Layer (masks, styles, fill, adjustment and smart objects are in section 3; Combine Shapes is in section 10)
 
+Rechecked 2026-11-18 against Easel 1.0 plus the 1.1 layer work (`E:amiga/main.c` `menus[]`, `E:core/layers.h`,
+`E:core/layerops.h`, `E:core/fx.h`).
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| New › Layer… `layer.new.layer` (name, mode, opacity, clip, colour) | **Partial**: New Layer has no dialog; the name and mode are set afterwards in Properties | Easy | P3 |
+| New › Layer… `layer.new.layer` (name, mode, opacity, clip, colour) | **Partial**: New › Layer makes "Layer N" at once (`layer_new_named` in `E:amiga/main.c`); the name, mode, opacity, clipping and colour label are set afterwards (Layer Properties, Layer Color) | Easy | P3 |
 | New › Layer from Background… | **Partial**: Easel has no locked Background, so every layer is already a normal layer | Easy | P3 |
-| New › Background from Layer | **Missing** | Easy | P3 |
-| New › Group… | **Missing**: there are no groups (`E:core/doc.h` `Layer` is flat; ORA groups are flattened in `E:core/ora.c`) | Moderate: a temporary buffer for each group while compositing a rectangle | P1 |
-| New › Group from Layers… | **Missing** | Moderate: needs multi-layer selection | P1 |
+| New › Background from Layer | **Have** (1.1): `doc_background_from_layer` in `E:core/layerops.c`: the active pixel layer laid over the background colour, moved to the bottom, named Background, position locked | Done | — |
+| New › Group… | **Have**: `doc_new_group` (`E:core/layers.c`); groups nest, collapse and pass through (0.3) | Done | — |
+| New › Group from Layers… | **Have**: Group Layers (`doc_group_layers`) groups the picked layers | Done | — |
 | New › Artboard… / Artboard from Group / Artboard from Layers (3 items) | **Missing** | Moderate | P3 |
 | New › Frame from Layers | **Missing** | Moderate | P3 |
 | New › Layer via Copy | **Have** | Done | — |
 | New › Layer via Cut | **Have** | Done | — |
 | Duplicate Layer… | **Have** | Done | — |
 | Delete › Layer | **Have** | Done | — |
-| Delete › Hidden Layers | **Missing** | Easy | P3 |
-| Quick Export as PNG (layer) | **Missing** | Easy | P3 |
-| Export As… (layer) | **Missing** | Easy | P3 |
+| Delete › Hidden Layers | **Have** (1.1): Delete Hidden Layers (`doc_delete_hidden`): hidden layers, and hidden groups with their members; at least one layer is kept | Done | — |
+| Quick Export as PNG (layer) | **Missing** (File › Export › Layers to Files writes every layer) | Easy | P3 |
+| Export As… (layer); upstream #15039 puts several layers into a folder as `<layer name>.<ext>` | **Partial**: File › Export › Layers to Files (`layers_to_files` in `E:amiga/main.c`) writes each layer to a drawer; exporting just the picked layers is missing | Easy | P3 |
 | Rename Layer | **Have**: through Layer Properties | Done | — |
-| Layer Content Options… | **Missing** | Easy, once adjustment and fill layers exist | P2 |
-| Mask All Objects | **Missing** | Not sensible: it relies on object recognition. Stand-in: none | P3 |
+| Layer Content Options… | **Have**: `ID_FILLSETTINGS` edits a fill or adjustment layer's settings | Done | — |
+| Mask All Objects | **Left out**: it needs object recognition (an ML model) | Not sensible | — |
 | New Layer Based Slice | **Missing** | Easy | P3 |
-| Group Layers / Ungroup Layers (2 items) | **Missing** | Moderate, with groups | P1 |
+| Group Layers / Ungroup Layers (2 items) | **Have**: `doc_group_layers`, `doc_ungroup` | Done | — |
 | Hide Layers | **Have**: Hide/Show Layer | Done | — |
 | Arrange › Bring to Front | **Have** | Done | — |
 | Arrange › Bring Forward | **Have** | Done | — |
 | Arrange › Send Backward | **Have** | Done | — |
 | Arrange › Send to Back | **Have** | Done | — |
-| Arrange › Reverse | **Missing** | Easy, with multi-select | P3 |
-| Align › Top/Vertical Centers/Bottom/Left/Horizontal Centers/Right (6 items) | **Missing** | Easy: align to the selection or to the other selected layers | P2 |
-| Distribute › 8 items | **Missing** | Easy | P3 |
-| Lock Layers… (transparency, pixels, position, artboard, all; DOC `Locks`) | **Partial**: locking pixels and transparency only | Easy | P2 |
+| Arrange › Reverse | **Have** (1.1): `doc_reverse_layers`, the picked layers at the active one's level | Done | — |
+| Align › Top/Vertical Centers/Bottom/Left/Horizontal Centers/Right (6 items) | **Have**: `doc_align` (0.3), to the selection or the canvas | Done | — |
+| Distribute › 8 items | **Partial**: Distribute Horizontally and Vertically (centres, `AL_DIST_H`, `AL_DIST_V`); by edges and the spacing kinds are missing | Easy | P3 |
+| Lock Layers… (transparency, pixels, position, artboard, all; DOC `Locks`) | **Have**: Layer › Lock: Pixels, Transparency, Position, All (artboards don't exist) | Done | — |
 | Link Layers | **Missing** | Easy | P3 |
 | Select Linked Layers | **Missing** | Easy | P3 |
-| Merge Layers `layer.mergeLayers` | **Have**: Merge Down; merging a multi-selection is missing | Done | — |
+| Merge Layers `layer.mergeLayers` | **Have**: Merge Down, Merge Group and Merge Layers (`doc_merge_picked`, the picked layers) | Done | — |
 | Merge Visible | **Have** | Done | — |
 | Flatten Image | **Have** | Done | — |
 | Matting › Color Decontaminate… | **Missing** | Moderate | P3 |
-| Matting › Defringe… | **Missing** | Easy | P2 |
-| Matting › Remove Black Matte | **Missing** | Easy | P3 |
-| Matting › Remove White Matte | **Missing** | Easy | P3 |
-| Rasterize › Type, Shape, Fill Content, Vector Mask, Smart Object, Video, Layer Style, Layer, All Layers (9 items) | **Missing**: everything in Easel is already pixels | Easy, once live layer kinds exist | P2 |
+| Matting › Defringe… | **Have**: `E:core/matte.c` (0.7) | Done | — |
+| Matting › Remove Black Matte | **Have** (0.7) | Done | — |
+| Matting › Remove White Matte | **Have** (0.7) | Done | — |
+| Rasterize › Type, Shape, Fill Content, Vector Mask, Smart Object, Video, Layer Style, Layer, All Layers (9 items) | **Partial**: Type, Shape, Layer (fill and live layers, `doc_rasterize`) and, in 1.1, Layer Style (`doc_rasterize_fx`: the effects, mask and fill opacity drawn into the layer's pixels); Vector Mask, Smart Object and Video have nothing to rasterize in Easel; All Layers is missing | Easy | P3 |
 | Video Layers › 12 items (new blank or from file, insert, duplicate or delete frame, replace or interpret footage, restore, reload, rasterize) | **Missing** | Not sensible for real video. Stand-in: IFF ANIM frames as a frame stack (section 21) | P3 |
+| Layer › Copy CSS (upstream #10569) | **Have** (1.1): `layer_css` (`E:core/layerops.c`): the layer's box, opacity, mode, solid or gradient fill, drop, inner and glow shadows and stroke as one CSS rule, put on the Amiga clipboard as text (FTXT) | Done | — |
 
 ### 2.5 View (Proof Setup, Proof Colors, Gamut Warning and 32-bit preview are in section 11)
 
@@ -419,112 +423,124 @@ Items handled elsewhere in this document are listed in "How to read this".
 ## 3. Layers: types, masks, groups, clipping, styles and effects, smart objects, adjustment layers
 
 PhotoCraft's model is `Layer` and `LayerContent` in DOC. Easel's is `Layer` and `Doc` in
-`E:core/doc.h`: up to 100 flat 8-bit RGBA layers, each canvas-sized, with a name, opacity, blend
-mode, visibility, a pixel lock and an alpha lock.
+`E:core/doc.h`: up to 100 8-bit RGBA layers, each canvas-sized, kept bottom first with a nesting depth
+(groups), each a pixel, group, adjustment, fill, type or shape layer (`LK_`), with a name, opacity,
+fill opacity, blend mode, visibility, four locks, a mask, clipping, Blend If, a colour label and (1.1)
+a layer style. Rechecked 2026-11-18: Easel 0.3 (live layers), 0.6 (PSD layers) and 0.9 (type and
+shape layers) made most of the old "Missing" rows stale.
 
 ### 3.1 Layer kinds and properties
 
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Pixel layer, `LayerContent::Raster` (sparse tiles, any size or offset) | **Partial**: full canvas-size buffers with no offset, so off-canvas pixels are lost | Moderate (tiles, section 19) | P2 |
-| Group, `LayerContent::Group` (nesting to 100 levels, expand and collapse) | **Missing** | Moderate | P1 |
-| Adjustment layer, `LayerContent::Adjustment` | **Missing**: the README says "may come later" | Moderate: Easel's per-rectangle composite can apply a LUT-type adjustment as it goes, at little cost | P1 |
-| Fill layer, `LayerContent::Fill` (Solid, Gradient, Pattern; DOC `Fill`) | **Missing** | Easy | P2 |
-| Type layer, `LayerContent::Text` | **Missing**: text is rasterised | Moderate | P1 |
-| Shape layer, `LayerContent::Shape` | **Missing** | Moderate | P2 |
-| Smart Object, `LayerContent::Smart` | **Missing** | Hard: keeps the full-size source as well as its render | P3 |
+| Pixel layer, `LayerContent::Raster` (sparse tiles, any size or offset) | **Partial**: full canvas-size buffers with no offset, so off-canvas pixels are lost | Moderate (tiles, section 20) | P2 |
+| Group, `LayerContent::Group` (nesting to 100 levels, expand and collapse) | **Have**: `LK_GROUP` with `depth` and `collapsed` (`E:core/layers.c`), pass-through or isolated, masks on groups; OpenRaster and PSD keep them | Done | — |
+| Adjustment layer, `LayerContent::Adjustment` | **Have**: `LK_ADJUST` for every adjustment (`AdjParams`, applied row by row in `doc_composite`) | Done | — |
+| Fill layer, `LayerContent::Fill` (Solid, Gradient, Pattern; DOC `Fill`) | **Partial**: solid colour and gradient (`FillParams`); pattern fill layers are missing | Easy | P3 |
+| Type layer, `LayerContent::Text` | **Have**: `LK_TEXT` (0.9, `E:core/type.h`) | Done | — |
+| Shape layer, `LayerContent::Shape` | **Have**: `LK_SHAPE` (0.9, `E:core/shape.h`) | Done | — |
+| Smart Object, `LayerContent::Smart` | **Missing** | Hard: keeps the full-size source as well as its render. Easel's type and shape layers already transform without loss | P3 |
 | Opacity | **Have** | Done | — |
-| Fill Opacity (content but not effects), `Layer::fill_opacity` | **Missing** | Easy, once effects exist | P2 |
-| Blend mode | **Have**: 18 of the 34 (section 4) | Done | — |
+| Fill Opacity (content but not effects), `Layer::fill_opacity` | **Have**: `fill_cut`; in 1.1 the layer style is drawn at the layer's opacity whatever the fill (`fx_under`/`fx_over` in `E:core/fx.c`) | Done | — |
+| Blend mode | **Have**: all 34 (section 4) | Done | — |
 | Visibility | **Have** | Done | — |
-| Colour labels (12, `LabelColor`) | **Missing** | Easy | P3 |
+| Colour labels (12, `LabelColor`) | **Have** (1.1): Layer › Layer Color with PhotoCraft's twelve (None, Red, Orange, Yellow, Green, Blue, Violet, Gray, Seafoam, Indigo, Magenta, Fuchsia; `doc_set_label` on the picked layers), shown down the Layers panel's eye column, kept in OpenRaster (`easel:label`) | Done | — |
 | Link groups, `Layer::link_group` | **Missing** | Easy | P3 |
-| Blending Options › Blend If (this layer and underlying ranges), `BlendIf` | **Missing** | Easy: a per-pixel test as it composites | P2 |
-| Advanced Blending: channels excluded, knockout, blend interior effects or clipped as a group, transparency shapes, mask hides effects (`AdvancedBlending`, `excluded_channels`) | **Missing** | Moderate | P3 |
-| Multi-layer selection (Ctrl or Shift-click in Layers) | **Missing** | Easy | P2 |
-| Background layer semantics (`has_background_traits`) | **Partial**: there's no locked Background; Clear on a layer that can't be transparent uses the background colour | Easy | P3 |
-| Layer XMP metadata, `Layer::xmp` | **Missing** | Not sensible: only for round trips with scripts | P3 |
+| Blending Options › Blend If (this layer and underlying ranges), `BlendIf` | **Partial**: Blend If on grey, this layer and underlying, black and white points (`blendif` in `E:core/doc.h`, Layer Properties); the per-channel ranges and split (feathered) points are missing | Easy | P3 |
+| Advanced Blending: channels excluded, knockout, blend interior effects or clipped as a group, transparency shapes, mask hides effects (`AdvancedBlending`, `excluded_channels`) | **Missing**: Easel blends interior effects on their own and clips as a group, as Photoshop's defaults do | Moderate | P3 |
+| Multi-layer selection (Ctrl or Shift-click in Layers) | **Have**: `picked`, `doc_pick_layer` (0.3) | Done | — |
+| Background layer semantics (`has_background_traits`) | **Partial**: there's no locked Background; Clear on a layer that can't be transparent uses the background colour; 1.1's Background from Layer makes an opaque, position-locked bottom layer | Easy | P3 |
+| Layer XMP metadata, `Layer::xmp` | **Left out**: only for round trips with scripts | Not sensible | — |
 
 ### 3.2 Masks and clipping (Layer › Layer Mask, Vector Mask, Create Clipping Mask)
 
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Layer Mask › Reveal All / Hide All | **Missing** | Easy: 1 byte a pixel, like the selection | P1 |
-| Layer Mask › Reveal Selection / Hide Selection | **Missing** | Easy | P1 |
-| Layer Mask › From Transparency | **Missing** | Easy | P2 |
-| Layer Mask › Delete | **Missing** | Easy | P1 |
-| Layer Mask › Apply | **Missing** | Easy | P1 |
-| Layer Mask › Enable Layer Mask (toggle) | **Missing** | Easy | P2 |
-| Layer Mask › Link Layer Mask (toggle) | **Missing** | Easy | P2 |
-| Painting on the mask, Alt-click to view it, mask thumbnail (`panels/mask_thumbs_ui.rs`) | **Missing** | Easy | P1 |
-| Mask properties: density and feather (`panels/mask_props_ui.rs`) | **Missing** | Easy | P2 |
-| Vector Mask › Reveal All, Hide All, Current Path, Delete, Enable, Link (6 items) | **Missing** | Moderate: needs paths | P3 |
-| Create Clipping Mask `layer.createClippingMask` (`Layer::clipped`) | **Missing** | Easy: composite with the base layer's alpha | P1 |
+| Layer Mask › Reveal All / Hide All | **Have**: `doc_mask_add(MK_REVEAL_ALL / MK_HIDE_ALL)` | Done | — |
+| Layer Mask › Reveal Selection / Hide Selection | **Have** | Done | — |
+| Layer Mask › From Transparency | **Have** (`MK_FROM_ALPHA`) | Done | — |
+| Layer Mask › Delete | **Have**: `doc_mask_delete` | Done | — |
+| Layer Mask › Apply | **Have**: `doc_mask_delete(..., 1)` | Done | — |
+| Layer Mask › Enable Layer Mask (toggle) | **Have** | Done | — |
+| Layer Mask › Link Layer Mask (toggle) | **Have** | Done | — |
+| Painting on the mask, Alt-click to view it, mask thumbnail (`panels/mask_thumbs_ui.rs`) | **Partial**: paint on the mask (click its thumbnail or Edit Mask/Layer), mask thumbnails with a red cross when off; viewing the mask alone (Alt-click) is missing | Easy | P3 |
+| Mask properties: density and feather (`panels/mask_props_ui.rs`) | **Have**: `mask_fade`, `mask_feather` (Layer Properties) | Done | — |
+| Vector Mask › Reveal All, Hide All, Current Path, Delete, Enable, Link (6 items) | **Missing** (paths exist since 0.9) | Moderate | P3 |
+| Create Clipping Mask `layer.createClippingMask` (`Layer::clipped`) | **Have**: `doc_set_clip`, arrows in the Layers panel | Done | — |
+| Drag a layer mask onto another layer or group to move it, Alt to copy it (upstream #10549) | **Missing** | Easy | P3 |
 
 ### 3.3 Layer styles and effects (Layer › Layer Style, 18 items; DOC `Effects`)
 
-Effects are drawn from the layer's alpha: a blur, an offset and a colour. A 68040 can't redraw them
-each time the canvas is drawn, so each layer's rendered effects must be cached. That costs RAM, so
-effects should be cached only for layers that have them.
+Easel 1.1 has them (`E:core/fx.c`, `E:core/fxdef.h`; the Layer Style window in `E:amiga/fxdlg.c`).
+Each effect is worked out from the layer's shape (its alpha times its mask) with exact Euclidean
+distance transforms (spread, choke, stroke) and three box blurs (softness), into one byte a pixel per
+effect over the box the effects reach, and kept with the layer until its pixels, mask or style change;
+`doc_composite` then only blends them in, row by row. They work on pixel, fill, type and shape layers
+(not on groups and adjustment layers, unlike PhotoCraft) and are kept in OpenRaster (`easel:effects`).
+PSD files get the merged look but not the effect settings (no `lfx2` writer or reader yet).
+`E:tests/fxtest.c` checks each one.
 
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Blending Options… | **Missing** | Easy (dialog) | P2 |
-| Bevel & Emboss… (style, technique, depth, size, soften, angle, gloss contour, texture) | **Missing** | Moderate | P2 |
-| Stroke… (size, position, fill type, overprint) | **Missing** | Easy | P1 |
-| Inner Shadow… | **Missing** | Easy | P2 |
-| Inner Glow… | **Missing** | Easy | P2 |
-| Satin… | **Missing** | Moderate | P3 |
-| Color Overlay… | **Missing** | Easy | P2 |
-| Gradient Overlay… | **Missing** | Easy | P2 |
-| Pattern Overlay… | **Missing** | Easy, once patterns exist | P3 |
-| Outer Glow… | **Missing** | Easy | P2 |
-| Drop Shadow… | **Missing** | Easy | P1 |
-| Copy Layer Style | **Missing** | Easy | P2 |
-| Paste Layer Style | **Missing** | Easy | P2 |
-| Clear Layer Style | **Missing** | Easy | P2 |
-| Global Light… | **Missing** | Easy | P3 |
-| Create Layer (effects to pixel layers) | **Missing** | Easy | P2 |
-| Hide All Effects | **Missing** | Easy | P2 |
-| Scale Effects… | **Missing** | Easy | P3 |
+| Blending Options… | **Have**: opens Layer Properties (opacity, fill, mode, Blend If) | Done | — |
+| Bevel & Emboss… (style, technique, depth, size, soften, angle, gloss contour, texture) | **Partial**: Inner Bevel, Outer Bevel, Emboss, Pillow Emboss; depth, direction, size, soften, angle, altitude, global light, highlight and shadow modes, colours and opacities; the techniques (Chisel), gloss contours, texture and Stroke Emboss (upstream #9337) are missing | Moderate | P3 |
+| Stroke… (size, position, fill type, overprint) | **Partial**: size, outside, inside or centre, mode, opacity, colour; gradient and pattern fills are missing | Easy | P3 |
+| Inner Shadow… | **Have**: mode, colour, opacity, angle, global light, distance, choke, size | Done | — |
+| Inner Glow… | **Partial**: mode, colour, opacity, edge or centre, choke, size; contours, gradient glows and noise are missing | Easy | P3 |
+| Satin… | **Have**: mode, colour, opacity, angle, distance, size, invert | Done | — |
+| Color Overlay… | **Have** | Done | — |
+| Gradient Overlay… | **Have**: two colours, mode, opacity, reverse, linear, radial, angle, reflected or diamond, angle, scale, offset (multi-stop gradients from the Gradient Editor are missing) | Done | — |
+| Gradient Overlay moved by a drag on the canvas (upstream #10840) | **Partial**: moved by the Offset sliders in the Layer Style window, not by dragging on the canvas | Easy | P3 |
+| Pattern Overlay… | **Missing** | Easy (patterns exist, 0.5) | P3 |
+| Outer Glow… | **Partial**: mode, colour, opacity, spread, size; contours (upstream #11410 fixes their flat case), gradient glows and noise are missing | Easy | P3 |
+| Drop Shadow… | **Have**: mode, colour, opacity, angle, global light, distance, spread, size, Layer Knocks Out Drop Shadow | Done | — |
+| Copy Layer Style | **Have** | Done | — |
+| Paste Layer Style | **Have**: onto the picked layers (`doc_paste_fx`) | Done | — |
+| Clear Layer Style | **Have** | Done | — |
+| Global Light… | **Have**: per document (`doc_global_light`; changing the angle in an effect that uses it moves it) | Done | — |
+| Create Layer (effects to pixel layers) | **Have**: Create Layers (`doc_fx_to_layers`): shadow and glow below, the rest above, each with its mode and opacity | Done | — |
+| Hide All Effects | **Have** (a ticked item; the Layers panel greys a hidden style's "fx") | Done | — |
+| Scale Effects… | **Have**: sizes, distances, soften and gradient offset by 1-1000 % | Done | — |
+| Effects on groups and adjustment layers (PhotoCraft's `lfxs`) | **Missing** | Moderate: a group's composite would need its own cache | P3 |
 
 ### 3.4 Fill layers (Layer › New Fill Layer)
 
 | PhotoCraft item | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Solid Color… | **Missing** | Easy | P2 |
-| Gradient… | **Missing** | Easy | P2 |
+| Solid Color… | **Have**: `doc_new_fill` (0.3) | Done | — |
+| Gradient… | **Have**: two colours, five styles, angle, scale, reverse (multi-stop gradients are missing) | Done | — |
 | Pattern… | **Missing** | Easy | P3 |
 
 ### 3.5 Adjustment layers (Layer › New Adjustment Layer, 16 items; ADJ)
 
-Easel already has a destructive version of most of these (section 5), so the work is mainly the
-layer kind, the Properties panel, and applying the adjustment in `doc_composite`.
+Easel 0.3 made every adjustment a layer too (`doc_new_adjust`, `AK_` kinds in `E:core/adjust.h`, the
+Layer › New Adjustment Layer submenu); 1.0 added Replace Color and the per-range Hue/Saturation,
+Black & White and per-channel Curves.
 
 | PhotoCraft item | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Brightness/Contrast… | **Missing** as a layer (destructive: Have) | Easy | P1 |
-| Levels… | **Missing** as a layer (destructive: Have) | Easy | P1 |
-| Curves… | **Missing** as a layer (destructive: Have) | Easy | P1 |
-| Exposure… | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Vibrance… | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Hue/Saturation… | **Missing** as a layer (destructive: Partial) | Easy | P1 |
-| Color Balance… | **Missing** as a layer (destructive: Have) | Easy | P1 |
-| Black & White… | **Missing** as a layer (destructive: Partial) | Easy | P2 |
-| Photo Filter… | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Channel Mixer… | **Missing** | Easy | P2 |
+| Brightness/Contrast… | **Have** (`AK_BRIGHTNESS`) | Done | — |
+| Levels… | **Have** (`AK_LEVELS`, per channel) | Done | — |
+| Curves… | **Have** (`AK_CURVES`, per channel) | Done | — |
+| Exposure… | **Have** | Done | — |
+| Vibrance… | **Have** | Done | — |
+| Hue/Saturation… | **Have** (with the six ranges, 1.0) | Done | — |
+| Color Balance… | **Have** | Done | — |
+| Black & White… | **Have** (six sliders and tint, 1.0) | Done | — |
+| Photo Filter… | **Have** | Done | — |
+| Channel Mixer… | **Have** | Done | — |
 | Color Lookup… (.cube/.3dl/.look) | **Missing** | Moderate: a 17³ u8 table with trilinear lookup | P3 |
-| Invert | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Posterize… | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Threshold… | **Missing** as a layer (destructive: Have) | Easy | P2 |
-| Gradient Map… | **Missing** | Easy | P2 |
-| Selective Color… | **Missing** | Easy | P3 |
+| Invert | **Have** | Done | — |
+| Posterize… | **Have** | Done | — |
+| Threshold… | **Have** | Done | — |
+| Gradient Map… | **Have** | Done | — |
+| Selective Color… | **Have** | Done | — |
 
 ### 3.6 Smart objects and smart filters (Layer › Smart Objects, 16 items plus Stack Mode; Layer › Smart Filter, 5 items)
 
 | PhotoCraft item | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Convert to Smart Object (lossless transforms) | **Missing** | Hard: keeps the source at full size, and 16 MB machines can't afford it. A stand-in would keep a transform matrix and resample from the original pixels, for one level only | P3 |
+| Convert to Smart Object (lossless transforms) | **Missing** | Hard: keeps the source at full size, and 16 MB machines can't afford it. Type and shape layers already transform without loss (0.9) | P3 |
 | New Smart Object via Copy | **Missing** | Hard | P3 |
 | Reveal in Finder (Easel would call it "Show in Drawer") | **Missing** | Easy, once linked smart objects exist | P3 |
 | Update Modified Content / Update All Modified Content (2 items) | **Missing** | Moderate | P3 |
@@ -534,54 +550,62 @@ layer kind, the Properties panel, and applying the adjustment in `doc_composite`
 | Export Contents… | **Missing** | Easy | P3 |
 | Convert to Linked… / Convert to Embedded (2 items) | **Missing** | Moderate | P3 |
 | Convert to Layers | **Missing** | Moderate | P3 |
-| Stack Mode › Entropy, Kurtosis, Maximum, Mean, Median, Minimum, Range, Skewness, Standard Deviation, Summation, Variance (11 items) | **Missing** | Moderate: per-pixel statistics over the layers, streamed a row at a time | P3 |
+| Reset Transform (upstream #11675) | **Missing** | Easy, once smart objects exist | P3 |
+| File › Open as Smart Object… (upstream #12212) | **Missing** | Easy, once smart objects exist | P3 |
+| Stack Mode › Entropy, Kurtosis, Maximum, Mean, Median, Minimum, Range, Skewness, Standard Deviation, Summation, Variance (11 items) | **Have** (1.1): Layer › Stack Mode (`doc_stack_mode` in `E:core/layerops.c`): a new layer of the statistic of the picked pixel layers (or every visible one), pixel by pixel, skipping transparent pixels, as a job with progress; Photoshop applies it to a smart object, Easel to the layers themselves | Done | — |
 | Rasterize (smart object) | **Missing** | Easy | P3 |
 | Warp / Perspective Warp / Puppet Warp on a smart object (3 items) | **Missing** | Hard | P3 |
-| Smart Filter › Disable Smart Filters, Delete Filter Mask, Disable Filter Mask, Blending Options…, Clear Smart Filters (5 items); `SmartFilter` in DOC | **Missing** | Hard: every edit re-runs each filter at 68040 speed. A stand-in is "Fade" plus the History Brush | P3 |
+| Smart Filter › Disable Smart Filters, Delete Filter Mask, Disable Filter Mask, Blending Options…, Clear Smart Filters (5 items); `SmartFilter` in DOC | **Missing** | Hard: every edit re-runs each filter at 68040 speed. Stand-ins: Edit › Fade and the History Brush | P3 |
 
 ## 4. Blend modes
 
 PhotoCraft has 34 modes in BLEND: `PassThrough`, the 27 Photoshop modes of `LAYER_MODES`, and the
-six `PAINT_NET_MODES`. Easel has 18 modes in `BM_` (`E:core/doc.h`) and `blend_pixel`. Each
-missing mode is a few lines of integer or FPU arithmetic per pixel.
+six `PAINT_NET_MODES`. Easel has all of them: the 27 in `BM_` (`E:core/doc.h`, 0.2.1), Pass Through
+for groups (`BM_PASS`, 0.3) and, in 1.1, Paint.NET's six (`BM_REFLECT` ... `BM_PDNDODGE`, with
+Paint.NET's UserBlendOps formulas, checked in `E:tests/fxtest.c`). Every mode list (Layers panel,
+Layer Properties, the painting tools, Fill, Fade, the layer styles) offers all of them. OpenRaster
+keeps them (Krita's names, `easel:pdn-color-*` for the two Krita lacks); PSD has no keys for the
+Paint.NET modes, so they are saved as Normal (Reflect, Glow, Negation, Xor) or as Photoshop's burn and
+dodge.
 
 | PhotoCraft mode (BLEND) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Pass Through (groups only) | **Missing** | Easy, once groups exist | P1 |
+| Pass Through (groups only) | **Have** (`BM_PASS`) | Done | — |
 | Normal | **Have** | Done | — |
-| Dissolve | **Missing** | Easy | P2 |
+| Dissolve | **Have** (`blend_pixel_at`, by position) | Done | — |
 | Darken | **Have** | Done | — |
 | Multiply | **Have** | Done | — |
 | Color Burn | **Have** | Done | — |
-| Linear Burn | **Missing** | Easy | P1 |
-| Darker Color | **Missing** | Easy | P2 |
+| Linear Burn | **Have** | Done | — |
+| Darker Color | **Have** | Done | — |
 | Lighten | **Have** | Done | — |
 | Screen | **Have** | Done | — |
 | Color Dodge | **Have** | Done | — |
-| Linear Dodge (Add) | **Have**: called "Add" | Done | — |
-| Lighter Color | **Missing** | Easy | P2 |
+| Linear Dodge (Add) | **Have** | Done | — |
+| Lighter Color | **Have** | Done | — |
 | Overlay | **Have** | Done | — |
 | Soft Light | **Have** | Done | — |
 | Hard Light | **Have** | Done | — |
-| Vivid Light | **Missing** | Easy | P1 |
-| Linear Light | **Missing** | Easy | P1 |
-| Pin Light | **Missing** | Easy | P1 |
-| Hard Mix | **Missing** | Easy | P2 |
+| Vivid Light | **Have** | Done | — |
+| Linear Light | **Have** | Done | — |
+| Pin Light | **Have** | Done | — |
+| Hard Mix | **Have** | Done | — |
 | Difference | **Have** | Done | — |
 | Exclusion | **Have** | Done | — |
 | Subtract | **Have** | Done | — |
-| Divide | **Missing** | Easy | P1 |
+| Divide | **Have** | Done | — |
 | Hue | **Have** | Done | — |
 | Saturation | **Have** | Done | — |
 | Color | **Have** | Done | — |
 | Luminosity | **Have** | Done | — |
-| Reflect (Paint.NET) | **Missing** | Easy | P3 |
-| Glow (Paint.NET) | **Missing** | Easy | P3 |
-| Negation (Paint.NET) | **Missing** | Easy | P3 |
-| Xor (Paint.NET) | **Missing** | Easy | P3 |
-| Paint.NET Color Burn | **Missing** | Easy | P3 |
-| Paint.NET Color Dodge | **Missing** | Easy | P3 |
-| Painting-only Clear and Behind (`input/blend_keys.rs`; PhotoCraft hasn't implemented Behind either) | **Partial**: the Eraser does what Clear does; the Brush's Mode list has neither | Easy | P3 |
+| Reflect (Paint.NET) | **Have** (1.1) | Done | — |
+| Glow (Paint.NET) | **Have** (1.1) | Done | — |
+| Negation (Paint.NET) | **Have** (1.1) | Done | — |
+| Xor (Paint.NET) | **Have** (1.1) | Done | — |
+| Paint.NET Color Burn | **Have** (1.1) | Done | — |
+| Paint.NET Color Dodge | **Have** (1.1) | Done | — |
+| Painting-only Clear and Behind (`input/blend_keys.rs`; upstream #13028 gives the Pattern Stamp Behind) | **Partial**: the Eraser does what Clear does; the Brush's Mode list has neither | Easy | P3 |
+| Separators between the mode groups in the lists (upstream #5532) | **Missing**: Easel's lists are plain (the Layers panel's pop-up list draws no separators) | Easy | P3 |
 
 ## 5. Adjustments (Image › Adjustments, 22 items)
 
@@ -1007,44 +1031,48 @@ PhotoCraft's options are in `crates/codecs` (`EncodeOptions`), `engine/src/cmd/f
 ## 15. Panels
 
 PhotoCraft's panels are the Window menu items in CAT (`window.panel.*`), with their UI in
-`crates/ui-egui/src/panels/`. Easel has the Color, History and Layers panels, the toolbox, the
-options bar, the document tabs and the status bar (`E:amiga/panels.c`, `E:amiga/toolbox.c`).
+`crates/ui-egui/src/panels/`. Rechecked 2026-11-18: Easel's right-hand column has two tabbed groups,
+Color, Swatches, Brushes and History above, Layers, Channels, Paths, Navigator and Info below
+(`head_color` and `head_layers` in `E:amiga/main.c`; `E:amiga/panels.c`, `E:amiga/panels2.c`,
+`E:amiga/swatchwin.c`, `E:amiga/brushwin.c`), besides the toolbox, the options bar, the document tabs,
+the status bar and the Palette, Brush Settings and DPaint Brush windows.
 
 | PhotoCraft panel (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Tools `window.panel.tools` | **Have**: flyouts, two columns on short screens | Done | — |
 | Options | **Have** | Done | — |
-| Color (F6): RGB/HSB/CMYK/Lab/Gray sliders, ramp, gamut alarm | **Partial**: saturation and brightness square, hue strip, RGB bars, hex and swatches; the HSB/Lab/CMYK sliders and a choice of ramp are missing | Easy | P3 |
-| Swatches: add, delete, groups, import and export | **Partial**: fixed swatches in the Color panel | Easy | P2 |
-| Layers (F7): fill, mask thumbnails, effect rows, group tree, filter by kind (`layer_filter_ui.rs`), colour labels, multi-select, clipping indicators, smart filter rows | **Partial**: mode, opacity, locks, eye, thumbnail, name, drag to reorder, buttons; everything else listed is missing | Easy to Moderate, growing with section 3 | P1 |
-| History | **Have** (snapshots are rated in section 12) | Done | — |
-| Channels: composite and colour channels, alpha and spot channels | **Missing** | Easy (view R/G/B and alpha channels) | P2 |
-| Paths | **Missing** | Easy, once paths exist | P2 |
-| Actions (⌥F9) | **Missing** | Moderate | P2 |
-| Adjustments: one-click adjustment layers and presets | **Missing** | Easy, once adjustment layers exist | P2 |
-| Properties: adjustment settings, mask density and feather, live shape, type | **Missing** | Easy to Moderate | P2 |
-| Brush Settings (F5): the dynamics sections | **Missing** | Easy | P2 |
-| Brushes (presets) | **Missing** | Easy | P1 |
-| Character | **Missing** | Easy, once type layers exist | P1 |
-| Paragraph | **Missing** | Easy | P2 |
+| Color (F6): RGB/HSB/CMYK/Lab/Gray sliders, ramp, gamut alarm | **Partial**: saturation and brightness square, hue strip, RGB bars, hex and swatches (the colour picker has HSB, RGB, Lab and hex); HSB/Lab/CMYK sliders in the panel and a choice of ramp are missing | Easy | P3 |
+| Swatches: add, delete, groups, import and export | **Have**: the Swatches tab (0.5): click, Alt-click, add, delete; .gpl, .aco, .act, .ase, IFF CMAP and Easel's own files (groups are missing) | Done | — |
+| Layers (F7): fill, mask thumbnails, effect rows, group tree, filter by kind (`layer_filter_ui.rs`), colour labels, multi-select, clipping indicators, smart filter rows | **Partial**: mode, opacity, fill, the four locks, eye, thumbnail, mask thumbnail, group tree with collapse, clipping arrows, multi-select, drag to reorder and into groups, and (1.1) colour labels and an "fx" mark for a layer with a style; per-effect rows, filtering by kind and smart filter rows are missing | Easy | P3 |
+| Select Pixels on a layer thumbnail's right-click menu (upstream #12450) | **Partial**: Select › Layer Transparency does it; Easel has no context menus (section 20) | Easy | P3 |
+| History | **Have** (with snapshots, 0.8) | Done | — |
+| Channels: composite and colour channels, alpha and spot channels | **Partial**: the Channels tab lists the alpha channels (saved selections) and the Quick Mask (0.7); the composite and red, green and blue channels and spot channels are missing | Easy | P3 |
+| Paths | **Have**: the Paths tab (0.9) | Done | — |
+| Actions (⌥F9) | **Missing** (section 18) | Moderate | P2 |
+| Adjustments: one-click adjustment layers and presets | **Missing** as a panel; Layer › New Adjustment Layer makes them | Easy | P3 |
+| Properties: adjustment settings, mask density and feather, live shape, type | **Partial**: as dialogs (double-click an adjustment, fill or shape layer; Layer Properties for mask density and feather); no panel | Easy to Moderate | P3 |
+| Brush Settings (F5): the dynamics sections | **Have**: Window › Brush Settings (0.5) | Done | — |
+| Brushes (presets) | **Have**: the Brushes tab (0.5) | Done | — |
+| Character | **Partial**: Layer › Type › Character… is a dialog (0.9), not a panel | Easy | P3 |
+| Paragraph | **Partial**: Layer › Type › Paragraph… (a dialog) | Easy | P3 |
 | Character Styles | **Missing** | Easy | P3 |
 | Paragraph Styles | **Missing** | Easy | P3 |
 | Glyphs | **Missing** | Easy | P3 |
 | Clone Source: five sources, offset, scale, rotation, overlay | **Missing** | Easy | P3 |
-| Gradients | **Missing** | Easy | P2 |
-| Patterns | **Missing** | Easy | P3 |
-| Histogram: live, with mean, standard deviation and median | **Missing**: a histogram exists only inside Levels (`histogram` in `E:core/adjust.h`) | Easy | P2 |
-| Info (F8): readouts, colour samplers, selection size, document info | **Partial**: the status bar shows the position, the colour there and the size of a selection being drawn | Easy | P2 |
-| Navigator: a thumbnail with the view box | **Missing** | Easy: very useful on 640 × 480 and 640 × 256 screens | P2 |
+| Gradients | **Partial**: the Gradient tool's preset list and the Gradient Editor (0.5), not a panel | Easy | P3 |
+| Patterns | **Partial**: Edit › Define Pattern and the pattern chosen in the options bar; no panel | Easy | P3 |
+| Histogram: live, with mean, standard deviation and median | **Partial**: the Info tab draws a live brightness histogram (`info_hist` in `E:amiga/panels2.c`); channels and the statistics are missing | Easy | P3 |
+| Info (F8): readouts, colour samplers, selection size, document info | **Have**: the Info tab (0.6): position, colour in RGB, HSB and hex, picture size and mode, selection size, the Color Sampler marks (0.8) | Done | — |
+| Navigator: a thumbnail with the view box | **Have**: the Navigator tab (0.6) | Done | — |
 | Layer Comps | **Missing** | Easy | P3 |
 | Measurement Log | **Missing** | Easy | P3 |
 | Modifier Keys (on-screen Shift, Alt and Ctrl for pens) | **Missing** | Easy | P3 |
 | Notes | **Missing** | Easy | P3 |
-| Shapes | **Missing** | Easy, once shapes exist | P3 |
-| Styles | **Missing** | Easy, once effects exist | P3 |
+| Shapes | **Partial**: the Custom Shape tool's list (0.9), not a panel | Easy | P3 |
+| Styles | **Missing**: layer styles exist (1.1) but there is no panel of saved styles; Copy and Paste Layer Style move one between layers | Easy | P2 |
 | Timeline (video and frame animation) | **Missing** | Moderate. Amiga stand-in: an IFF ANIM frame strip (section 21) | P2 |
 | Tool Presets | **Missing** | Easy | P3 |
-| Docking, floating, collapsing to icons, tabbed groups (`panel_docking.rs`) | **Partial**: a fixed right-hand column; Color and History share a tabbed panel on short screens | Moderate: MUI can't dock windows, but panels can be shown, hidden and grouped | P3 |
+| Docking, floating, collapsing to icons, tabbed groups (`panel_docking.rs`) | **Partial**: a fixed right-hand column of two tabbed groups; Tab and Shift-Tab hide them | Moderate: MUI can't dock windows, but panels can be shown, hidden and grouped | P3 |
 | Status bar: zoom, size, profile, timing | **Have** | Done | — |
 | Document tabs | **Have** | Done | — |
 
@@ -1082,30 +1110,33 @@ are in `crates/ui-egui/src/input/` (`hold_keys.rs`, `spring_tools.rs`, `blend_ke
 
 ## 17. Preferences (Edit › Preferences, 18 items; PREFS)
 
-Easel keeps the dark interface, the public screen and the last drawer in `PROGDIR:Easel.prefs`
-(`E:amiga/main.c` `load_prefs` and `save_prefs`). It also takes `PUBSCREEN=` and `DEBUG=` as
-arguments or tool types.
+Rechecked 2026-11-18. Edit › Preferences (0.8, `E:amiga/prefs.c`) has the pages General, Interface,
+Tools, File Handling, Units & Rulers, Guides & Grid and Scratch Drawer, kept in `PROGDIR:Easel.prefs`
+with the dark interface, the public screen, the screen mode and the last drawer. Easel also takes
+`PUBSCREEN=` and `DEBUG=` as arguments or tool types.
 
 | PhotoCraft preference page (CAT id; key fields) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Settings/General: colour picker, image interpolation, beep when done, export clipboard, resize during place, zoom with the scroll wheel, animated zoom | **Missing** | Easy | P2 |
+| Settings/General: colour picker, image interpolation, beep when done, export clipboard, resize during place, zoom with the scroll wheel, animated zoom | **Partial**: autosave interval, icons with pictures, help bubbles (and the history and undo memory below); the picker, interpolation, beep, clipboard export and wheel settings are missing | Easy | P3 |
+| Skip Transform when Placing (upstream #9075) | **Have** (1.1): General page; Place as Layer then doesn't go on into Free Transform (`prefs.skip_place_xf`) | Done | — |
 | AI Integrations: agent control and the control port (`Integrations`) | **Excluded** by request: this is the external-control role ARexx would fill | — | — |
-| Interface: theme dark or light (and Pro, Studio, Classic), canvas colour, UI scale, language, font size, tooltips, animations | **Partial**: Dark Interface on or off (View menu), help bubbles always on, five languages (English, German, French, Spanish, Italian) from Locale (`E:amiga/lang.c`); canvas colour, scale and font size are missing | Easy | P2 |
+| Interface: theme dark or light (and Pro, Studio, Classic), canvas colour, UI scale, language, font size, tooltips, animations (upstream #9480 removed the animations setting) | **Partial**: Dark interface, Large interface text and help bubbles; the language is English only (`lang_set(LANG_EN)` in `E:amiga/main.c`: `E:amiga/lang_table.h` holds none of Easel's own words yet); canvas colour and scale are missing | Easy | P3 |
 | Workspace: auto-collapse panels, open as tabs, narrow options bar | **Missing** | Easy | P3 |
-| Tools: Shift for tool switching, zoom to the clicked point, flick panning, snap to the pixel grid, show transform values, overscroll, right-click with painting tools, tablet pressure and curve, nudge bundling | **Missing** | Easy | P2 |
+| Tools: Shift for tool switching, zoom to the clicked point, flick panning, snap to the pixel grid, show transform values, overscroll, right-click with painting tools, tablet pressure and curve, nudge bundling | **Partial**: painting cursor, Caps Lock precise cross, show transform values | Easy | P3 |
 | History Log | **Missing** | Easy | P3 |
-| File Handling: previews, lowercase extensions, autosave interval, recovery, ignore the EXIF profile, layered TIFF and PSD compatibility prompts, number of recent files, LUT folder | **Partial**: remembers the last drawer | Easy | P2 |
-| Export: Quick Export format and location, JPEG and WebP defaults, metadata, convert to sRGB | **Missing** | Easy | P3 |
-| Performance: memory use, history states, cache levels and tile size, GPU options | **Partial**: undo is fixed at 40 MB; there's no memory setting. GPU: Not sensible | Easy | P1 |
-| Scratch Disks | **Missing** | Moderate: swap undo steps and hidden layers to a chosen drawer (T:, Work:). Valuable on 16 MB machines | P2 |
-| Cursors: painting cursor standard/precise/tip/full size, crosshair, other cursors | **Partial**: an outline of the brush only | Easy | P3 |
+| File Handling: previews, lowercase extensions, autosave interval, recovery, ignore the EXIF profile, layered TIFF and PSD compatibility prompts, number of recent files, LUT folder | **Partial**: default save format, JPEG quality, ask before flattening, recent files listed, recovery drawer (autosave on General) | Easy | P3 |
+| Export: Quick Export format and location, JPEG and WebP defaults, metadata, convert to sRGB | **Partial**: the JPEG quality on File Handling only | Easy | P3 |
+| Performance: memory use, history states, cache levels and tile size, GPU options | **Have**: history states and undo memory (General); cache levels, tiles and GPU options don't apply to Easel | Done | — |
+| Effect Cache (upstream #10921) | **Left out**: Easel always keeps each styled layer's drawn effects (core/fx.c); there is nothing to set | Not needed | — |
+| Scratch Disks | **Have**: the Scratch Drawer page (0.8): old undo steps go to a drawer, up to a size | Done | — |
+| Cursors: painting cursor standard/precise/tip/full size, crosshair, other cursors | **Partial**: brush outline, crosshair or both, Caps Lock precise | Easy | P3 |
 | Transparency & Gamut: checker size and colours, gamut warning colour | **Partial**: a fixed checkerboard | Easy | P3 |
-| Units & Rulers: units, column size, new-document resolution, point size | **Missing** | Easy | P2 |
-| Guides, Grid & Slices: colours and styles, gridline every N, subdivisions | **Missing** | Easy | P2 |
+| Units & Rulers: units, column size, new-document resolution, point size | **Partial**: units (pixels, inches, cm, mm, per cent) and new picture resolution; column and point size are missing | Easy | P3 |
+| Guides, Grid & Slices: colours and styles, gridline every N, subdivisions | **Partial**: guide and grid colours, gridline every, subdivisions; line styles and slices are missing | Easy | P3 |
 | Plug-ins: additional plug-ins folder | **Missing** | Easy, once plug-ins exist | P3 |
 | Type: smart quotes, font preview, missing-glyph protection | **Missing** | Easy | P3 |
 | Enhanced Controls | **Missing** | Easy | P3 |
-| Raw Defaults | **Missing** | Not sensible without raw support | P3 |
+| Raw Defaults | **Left out**: Easel reads no camera raw files | Not sensible | — |
 
 ## 18. Automation and actions
 
@@ -1136,25 +1167,26 @@ PhotoCraft's plug-ins are WebAssembly modules run in the wasmi interpreter, with
 
 ## 20. Anything else
 
+Rechecked 2026-11-18.
+
 | PhotoCraft feature (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Copy-on-write sparse tiles (256²): huge canvases and cheap undo (`crates/raster`, `paint/src/tile.rs`) | **Partial**: undo saves only changed boxes, but layers are full buffers in one piece (a 2000 × 1500 layer needs 12 MB of contiguous memory) | Moderate: tiles would also end the need for one big block of memory, which matters on fragmented Amiga RAM | P2 |
-| GPU compositor on wgpu (Metal, Vulkan, DX12, WebGPU) | **Partial**: compositing by rectangle on the CPU is the equivalent | Not sensible on a GPU. Stand-in: Easel's composite of the visible rows, written with `WritePixelArray` on RTG screens | P3 |
-| Multithreaded filters | **Missing** | Not sensible: one CPU. Stand-in: run long jobs as a subtask, with progress and an Abort button | P2 |
-| Background jobs with progress and cancel (`ui-egui/src/jobs_ui.rs`) | **Missing**: a busy pointer only (AVIF takes about 50 s) | Moderate: a MUI progress gauge, with the input checked between rows | P2 |
-| Recent files and the Home screen (`PREFS` `recent_files`, `show_home_recent_files`) | **Missing** (the last drawer only) | Easy: a File › Open Recent submenu | P2 |
-| Context menus (`docs/context-menu-inventory.md`) | **Missing** | Easy: `MUIA_ContextMenu` on the canvas and the layer rows | P2 |
-| Localization: en, zh-Hans, es, it, ko, ru… (`docs/localization*.md`) | **Partial**: English, German, French, Spanish, Italian (`E:amiga/lang_table.h`) | Easy for other Latin-1 languages; Hard for CJK and RTL | P3 |
+| Copy-on-write sparse tiles (256²): huge canvases and cheap undo (`crates/raster`, `paint/src/tile.rs`) | **Partial**: undo saves only changed 64 × 64 tiles (and can spill to the scratch drawer), but layers are full buffers in one piece (a 2000 × 1500 layer needs 12 MB of contiguous memory) | Moderate: tiles would also end the need for one big block of memory, which matters on fragmented Amiga RAM | P2 |
+| GPU compositor on wgpu (Metal, Vulkan, DX12, WebGPU) | **Left out**: no GPU. Easel composites only the rectangle shown, on the CPU, and keeps layer effects drawn (1.1) | Not sensible | — |
+| Multithreaded filters | **Left out**: one CPU. The stand-in is there: long jobs show progress and can be aborted (`E:amiga/jobs.c`) | Not sensible | — |
+| Background jobs with progress and cancel (`ui-egui/src/jobs_ui.rs`) | **Have**: `E:amiga/jobs.c` (0.8): a Working window after half a second, with progress and Abort; an aborted job leaves the picture as it was | Done | — |
+| Recent files and the Home screen (`PREFS` `recent_files`, `show_home_recent_files`) | **Partial**: File › Open Recent (ten, 0.6); there's no Home screen | Easy | P3 |
+| Context menus (`docs/context-menu-inventory.md`; upstream adds many, e.g. #12450, #13278) | **Missing** | Easy: `MUIA_ContextMenu` on the canvas and the layer rows | P2 |
+| Localization: en, zh-Hans, es, it, ko, ru… (`docs/localization*.md`) | **Missing**: the interface is in English only (`lang_set(LANG_EN)`; `E:amiga/lang.c` can hold the five languages Quill and Ledger have, but `E:amiga/lang_table.h` has none of Easel's strings) | Easy for Latin-1 languages; Hard for CJK and RTL | P2 |
 | Help bubbles on every control | **Have** | Done | — |
-| AI and generative features: Generative Fill and Expand, Neural Filters, Sky Replacement, Super Zoom (PhotoCraft lacks them too, `docs/gaps.md` G15) | **Missing** | Not sensible (an ML runtime or online service). Stand-in: the classical methods (PatchMatch, GrabCut) | P3 |
-| Software update checks (`updates_cmds.rs`) | **Missing** | Not sensible: a network service | P3 |
-| Web/WebAssembly build | **Missing** | Not sensible | P3 |
+| AI and generative features: Generative Fill and Expand, Neural Filters, Sky Replacement, Super Zoom (PhotoCraft lacks them too, `docs/gaps.md` G15) | **Left out**: they need an ML runtime or an online service. Stand-ins: the classical methods (Easel 1.0's healing tools) | Not sensible | — |
+| Software update checks (`updates_cmds.rs`) | **Left out**: a network service | Not sensible | — |
+| Web/WebAssembly build | **Left out** | Not sensible | — |
 | Colour picker sampling outside the canvas (anywhere on the screen) | **Missing** | Easy: `ReadPixel` or `ReadPixelArray` on the screen | P3 |
 
 Easel already has a few things PhotoCraft lacks: Filter › Render › Vignette, AVIF reading, the
-Amiga and Atari formats it reads, 8-plane ILBM writing, and opening a JPEG at a reduced size when
-memory is short.
-
+Amiga and Atari formats it reads, 8-plane ILBM writing, opening a JPEG at a reduced size when
+memory is short, and the Amiga-era features of section 21.
 
 ## 21. Legacy extras: Amiga-era features PhotoCraft lacks
 

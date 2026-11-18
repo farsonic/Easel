@@ -90,7 +90,7 @@ typedef struct {
   /* ---- end of 0.9 ---- */
   /* ---- 1.1: the layer's style (fx.h) and colour label ---- */
   LayerFx fx;
-  u8 label;                           /* 0 none, 1-7 red, orange, yellow, green, blue, violet, grey */
+  u8 label;                           /* 0 none, 1-11 red, orange, yellow, green, blue, violet, grey, seafoam, indigo, magenta, fuchsia */
   u8 fx_ok;                           /* fxc matches the layer (cleared when its pixels or mask change) */
   void *fxc;                          /* the effects drawn (fx.c), worked out when needed, never saved */
   /* ---- end of 1.1 ---- */

@@ -7,8 +7,8 @@
 #define EASEL_LAYEROPS_H
 #include "doc.h"
 
-#define NLABELS 8
-extern const char *const label_names[NLABELS];       /* "None", "Red", ... "Gray" */
+#define NLABELS 12
+extern const char *const label_names[NLABELS];       /* "None", "Red", ... "Gray", "Seafoam", "Indigo", "Magenta", "Fuchsia" */
 extern const u32 label_colors[NLABELS];              /* what the Layers panel shows them with */
 int  doc_set_label(Doc *d, int label);               /* the picked layers (and the active one) */
 int  doc_delete_hidden(Doc *d);                      /* every hidden layer and group; how many went (0: none, or all were) */

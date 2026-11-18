@@ -10,8 +10,8 @@
 #include "fx.h"
 #include "live.h"
 
-const char *const label_names[NLABELS] = { "None", "Red", "Orange", "Yellow", "Green", "Blue", "Violet", "Gray" };
-const u32 label_colors[NLABELS] = { 0, 0xC84646, 0xD8892B, 0xD7C43C, 0x4BA34B, 0x4878C8, 0x9466C3, 0x8C8C8C };
+const char *const label_names[NLABELS] = { "None", "Red", "Orange", "Yellow", "Green", "Blue", "Violet", "Gray", "Seafoam", "Indigo", "Magenta", "Fuchsia" };
+const u32 label_colors[NLABELS] = { 0, 0xC84646, 0xD8892B, 0xD7C43C, 0x4BA34B, 0x4878C8, 0x9466C3, 0x8C8C8C, 0x5EC4A8, 0x4B4FA6, 0xC2408F, 0xE05BD0 };
 const char *const stack_names[STK_N] = { "Mean", "Median", "Minimum", "Maximum", "Range", "Summation", "Variance",
   "Standard Deviation", "Entropy", "Skewness", "Kurtosis" };
 

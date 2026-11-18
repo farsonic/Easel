@@ -130,7 +130,7 @@ static void common_attrs(Xml *x, OraLayer *l)
   l->lock_pos = is_true(xml_attr(x, "lock-position"));
   l->lock_all = is_true(xml_attr(x, "lock-all"));
   if ((a = xml_attr(x, "effects"))) fx_load(&l->fx, a);                       /* 1.1 */
-  if ((a = xml_attr(x, "label"))) { l->label = atoi(a); if (l->label < 0 || l->label > 7) l->label = 0; }
+  if ((a = xml_attr(x, "label"))) { l->label = atoi(a); if (l->label < 0 || l->label > 11) l->label = 0; }
   if ((a = xml_attr(x, "blend-if")) && read_ints(a, v, 4) == 4)
     for (k = 0; k < 4; k++) l->blendif[k] = v[k] < 0 ? 0 : v[k] > 255 ? 255 : v[k];
   if ((a = xml_attr(x, "mask"))) {

@@ -181,6 +181,7 @@ static struct NewMenu menus[] = {
   S("Global Light...", 0, ID_FXLIGHT), S("Create Layers", 0, ID_FXLAYERS), { NM_SUB, (STRPTR)"Hide All Effects", 0, CHECKIT | MENUTOGGLE, 0, (APTR)ID_FXHIDEALL },
   S("Scale Effects...", 0, ID_FXSCALE),
   H("Layer Color"), LC("None", 0), LC("Red", 1), LC("Orange", 2), LC("Yellow", 3), LC("Green", 4), LC("Blue", 5), LC("Violet", 6), LC("Gray", 7),
+  LC("Seafoam", 8), LC("Indigo", 9), LC("Magenta", 10), LC("Fuchsia", 11),
   I("Copy CSS", 0, ID_COPYCSS), BAR,
   H("New Adjustment Layer"),
   S("Brightness/Contrast...", 0, ID_NEWADJ0 + AK_BRIGHTNESS), S("Levels...", 0, ID_NEWADJ0 + AK_LEVELS), S("Curves...", 0, ID_NEWADJ0 + AK_CURVES),
