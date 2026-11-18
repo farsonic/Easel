@@ -65,6 +65,10 @@ int  levels_clip_end(const long *before, const long *after);
 /* the channel a digit key picks in a dialog with nchan channels in its list (Alt+2 the composite,
    Alt+3 red, Alt+4 green, Alt+5 blue, as Photoshop's Levels and Curves): its index, or -1 */
 int  channel_for_key(int digit, int nchan);
+/* Image Size: the resampling a digit picks with Alt, as Photoshop's (1 Automatic - here Bicubic -, 2 and 8
+   Preserve Details, 3 Bicubic Smoother, 4 Bicubic Sharper, 5 Bicubic, 6 Nearest Neighbour, 7 Bilinear),
+   as an index into Easel's list (Bicubic, Smoother, Sharper, Preserve Details, Bilinear, Nearest); -1 */
+int  resample_for_key(int digit);
 /* the digit of an Amiga raw key code for the main keyboard's top row (0x01 '1' ... 0x0A '0'), -1 */
 int  rawkey_digit(int code);
 

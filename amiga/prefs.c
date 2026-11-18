@@ -64,7 +64,7 @@ int prefs_line(const char *l)
     { "gutterw=", &prefs.gutter_w }, { "pointkind=", &prefs.point_kind },
     { "qxfmt=", &prefs.qx_fmt }, { "qxwhere=", &prefs.qx_where }, { "qxmeta=", &prefs.qx_meta }, { "qxsrgb=", &prefs.qx_srgb },   /* round 3 */
     { "webpq=", &prefs.webp_quality }, { "placesmart=", &prefs.place_smart }, { "beepdone=", &prefs.beep_done },
-    { "smartquotes=", &prefs.smart_quotes }, { "canvascolor=", &prefs.canvas_color }, { "gamutopacity=", &prefs.gamut_opacity }   /* round 4 */
+    { "smartquotes=", &prefs.smart_quotes }, { "canvascolor=", &prefs.canvas_color }, { "gamutopacity=", &prefs.gamut_opacity }, { "wheelzoom=", &prefs.wheel_zoom }   /* round 4 */
   };
   int i;
   for (i = 0; i < (int)(sizeof ints / sizeof ints[0]); i++) {
@@ -107,8 +107,8 @@ void prefs_write(FILE *f)
   fprintf(f, "qxfmt=%d\nqxwhere=%d\nqxmeta=%d\nqxsrgb=%d\nqxdir=%s\nwebpq=%d\nplacesmart=%d\nbeepdone=%d\n", prefs.qx_fmt, prefs.qx_where,
           prefs.qx_meta, prefs.qx_srgb, prefs.qx_dir, prefs.webp_quality, prefs.place_smart, prefs.beep_done);   /* round 3 */
   fprintf(f, "monitoricc=%s\n", prefs.monitor_icc);
-  fprintf(f, "smartquotes=%d\ncanvascolor=%d\ngamutcol=%06lX\ngamutopacity=%d\n", prefs.smart_quotes, prefs.canvas_color,
-          (unsigned long)prefs.gamut_color, prefs.gamut_opacity);                    /* round 4 */
+  fprintf(f, "smartquotes=%d\ncanvascolor=%d\ngamutcol=%06lX\ngamutopacity=%d\nwheelzoom=%d\n", prefs.smart_quotes, prefs.canvas_color,
+          (unsigned long)prefs.gamut_color, prefs.gamut_opacity, prefs.wheel_zoom);                    /* round 4 */
 }
 /* the settings kept in range and handed to the parts that use them (the core's undo, the bubbles) */
 void prefs_apply(void)
@@ -223,7 +223,7 @@ int dlg_preferences(int *reopen)
   Object *ck, *cks, *c1p, *c2p, *grs, *gus, *sdp, *cw, *gw, *pk, *hl, *hp;
   char sdb[8], cwb[8], gwb[8];
   Object *qf, *qw, *qd, *qm, *qs, *wq, *psm, *bd;   /* round 3 */
-  Object *smq, *cvc, *gmp, *gmo;                     /* round 4 */
+  Object *smq, *cvc, *gmp, *gmo, *wz;                /* round 4 */
   Object *spx, *lgc, *as, *ic, *lv, *mb, *tp, *dk, *lg, *cu, *cp, *xn, *sf, *jq, *af, *nr, *rc, *un, *dp, *gs, *gsub, *so, *sp, *smb;
   char asb[8], dpb[8], usage[120];
   int i, ok;
@@ -252,6 +252,7 @@ int dlg_preferences(int *reopen)
             Child, label("Skip Transform when Placing:"), Child, HGroup, Child, spx = check(prefs.skip_place_xf), Child, HSpace(0), End,
             Child, label("Always create Smart Objects when placing:"), Child, HGroup, Child, psm = check(prefs.place_smart), Child, HSpace(0), End,
             Child, label("Beep when long jobs are done:"), Child, HGroup, Child, bd = check(prefs.beep_done), Child, HSpace(0), End,
+            Child, label("Zoom with Scroll Wheel:"), Child, HGroup, Child, wz = check(prefs.wheel_zoom), Child, HSpace(0), End,   /* round 4 */
             Child, label("History log (each step to a file):"), Child, HGroup, Child, hl = check(hist_opts.log_on), Child, HSpace(0), End,
             Child, label("Log file:"), Child, hp = string(hist_opts.log_file, 250),
             End, Child, HVSpace, End,
@@ -365,6 +366,7 @@ int dlg_preferences(int *reopen)
     prefs.checker_size = (int)xget(cks, MUIA_Cycle_Active); prefs.checker_scheme = (int)xget(ck, MUIA_Cycle_Active);
     prefs.checker_c1 = pick_c1; prefs.checker_c2 = pick_c2;
     prefs.smart_quotes = xget(smq, MUIA_Selected) != 0; prefs.canvas_color = (int)xget(cvc, MUIA_Cycle_Active);   /* round 4 */
+    prefs.wheel_zoom = xget(wz, MUIA_Selected) != 0;
     prefs.gamut_color = pick_gam; prefs.gamut_opacity = (int)xget(gmo, MUIA_Numeric_Value);
     prefs.grid_style = (int)xget(grs, MUIA_Cycle_Active); prefs.guide_style = (int)xget(gus, MUIA_Cycle_Active);
     prefs.screen_dpi = atoi((const char *)xget(sdp, MUIA_String_Contents)); prefs.column_w = atoi((const char *)xget(cw, MUIA_String_Contents));

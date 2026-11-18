@@ -75,8 +75,20 @@ released yet: 1.1 and 1.2 (tool options, layers, brushes, colour management, for
 (1.3: file formats, menus, tools and shortcuts, filters, selection, type and vectors; README "New in
 1.3"). All branches are merged into `main`. `docs/photocraft-gap.md` lists what is still missing area
 by area; its summary (section 23, counted with `python3 tools/gapcount.py docs/photocraft-gap.md`)
-stands at 661 Have, 78 Partial, 69 Missing, 34 Excluded of PhotoCraft `c337d6e` (about 87%). None of
-round 3's interface has been run in an emulator or on an Amiga yet; that check comes before 1.3 ships.
+stands at 661 Have, 78 Partial, 69 Missing, 34 Excluded of PhotoCraft `c337d6e` (about 87%). Round 3's
+interface was first run in an emulator in round 4 (below); a real Amiga check comes before 1.3 ships.
+
+Round 4 (branch `r4`): round 3 was run in FS-UAE (A4000/68040 without JIT, AROS ROM with Zune,
+uaegfx 640x480) in English and German and what it showed was fixed (Liquify's brush, the Measurement
+Log's overflow, long requesters, the Edit menu's height; see README "New in 1.3: checked in an
+emulator"); then Find and Isolate Layers, Float and Drop, Check Spelling (the package carries a Dict
+drawer), Levels' Show Clipping and channel keys, Color Range's clusters, views and Out of Gamut, Select
+and Mask's views, the Preset Manager, Character and Paragraph Styles, the Adjustments window and four
+preferences (`core/r4.c`, `core/spell.c`, `amiga/r4ui.c`, `tests/r4test.c`). Driving the emulator:
+start arguments `CMD=<id>`, `CMDFILE=<file>` (a menu command number written to the file is run once a
+second, then the file is deleted) and `LANG=en|de|fr|es|it`, with `DEBUG=<log>`. Alt doesn't reach the
+emulated Amiga through FS-UAE here, so Shift-Alt-click samplers and the Alt+digit channel keys still
+want a real Amiga; so do MUI 3.8's own look of the new windows.
 
 The interface is in English, German, French, Spanish and Italian (`lang/strings.txt`, Photoshop's terms
 in each language). The translations have been checked for fit with `tools/langfit.py`, not yet read on

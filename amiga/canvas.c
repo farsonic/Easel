@@ -2969,6 +2969,18 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
   int c, i, shift = (q & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
   if (type_editing && doc && ty.doc == doc && ty_index() >= 0 && ty_key(d, obj, im)) return 1;    /* 0.9: typing */
   if (q & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) return 0;      /* the menus' shortcuts */
+  if ((code == 0x7A || code == 0x7B) && v) {
+    /* round 4: a mouse wheel (NewMouse's raw keys): scrolls (Shift across), or zooms with Alt - the other
+       way round with Preferences > General > Zoom with Scroll Wheel */
+    int up = code == 0x7A, alt = (q & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) != 0;
+    if (prefs.wheel_zoom ? !alt : alt) DoMethod(_app(obj), MUIM_Application_ReturnID, up ? ID_ZOOMIN : ID_ZOOMOUT);
+    else {
+      if (shift) v->sx += (up ? -1 : 1) * (_mwidth(obj) / 8);
+      else v->sy += (up ? -1 : 1) * (_mheight(obj) / 8);
+      draw_all(d, obj);
+    }
+    return 1;
+  }
   if (code == 0x40 || code == (0x40 | IECODE_UP_PREFIX)) {
     /* space: the hand while it is held */
     int down = !(code & IECODE_UP_PREFIX);

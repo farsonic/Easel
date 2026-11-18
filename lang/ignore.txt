@@ -160,3 +160,4 @@ smartquotes=
 canvascolor=
 gamutopacity=
 gamutcol=
+wheelzoom=

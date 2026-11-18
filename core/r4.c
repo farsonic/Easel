@@ -167,6 +167,11 @@ int channel_for_key(int digit, int nchan)
   int c = digit - 2;
   return c >= 0 && c < nchan ? c : -1;
 }
+int resample_for_key(int digit)
+{
+  static const int map[9] = { -1, 0, 3, 1, 2, 0, 5, 4, 3 };
+  return digit >= 1 && digit <= 8 ? map[digit] : -1;
+}
 int rawkey_digit(int code) { return code >= 0x01 && code <= 0x0A ? code % 10 : -1; }
 
 /* ================================================================== Color Range's preview */

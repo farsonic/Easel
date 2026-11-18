@@ -146,6 +146,7 @@ static void test_keys(void)
 {
   CHECK(channel_for_key(2, 4) == 0 && channel_for_key(3, 4) == 1 && channel_for_key(5, 4) == 3, "Alt+2 composite, Alt+3 red, Alt+5 blue");
   CHECK(channel_for_key(6, 4) == -1 && channel_for_key(1, 4) == -1, "Alt+6 and Alt+1 pick nothing with four channels");
+  CHECK(resample_for_key(1) == 0 && resample_for_key(2) == 3 && resample_for_key(3) == 1 && resample_for_key(4) == 2 && resample_for_key(6) == 5 && resample_for_key(7) == 4 && resample_for_key(9) == -1, "Image Size's Alt+1 ... Alt+8");
   CHECK(rawkey_digit(0x02) == 2 && rawkey_digit(0x0A) == 0 && rawkey_digit(0x10) == -1, "the top row's raw keys");
 }
 

@@ -3187,3 +3187,4 @@
   { { "On Black", "Auf Schwarz", "Sur noir", "Sobre negro", "Su nero" } },
   { { "On White", "Auf Wei\337", "Sur blanc", "Sobre blanco", "Su bianco" } },
   { { "On Layers", "Auf Ebenen", "Sur les calques", "Sobre capas", "Su livelli" } },
+  { { "Zoom with Scroll Wheel:", "Mit Scrollrad zoomen:", "Zoom avec la molette :", "Zoom con rueda de desplazamiento:", "Zoom con rotellina:" } },

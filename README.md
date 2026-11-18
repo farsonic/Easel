@@ -41,11 +41,14 @@ interface and icons. None of the icons are copied from any other program.
 - Select and Mask: View shows the refined selection on black, on white, as an overlay, in black and
   white or on layers.
 - Levels: Show Clipping shows where the black or white point clips the picture; Levels and Curves
-  take Alt+2 (composite) to Alt+5 (blue) for the channel.
+  take Alt+2 (composite) to Alt+5 (blue) for the channel; Image Size takes Alt+1 to Alt+8 for the
+  resampling.
 - Color Range: click the preview to sample (Shift adds, Alt takes away), Localized Color Clusters,
   Out of Gamut, and the preview as Selection, Image, Grayscale, Black or White Matte or Quick Mask.
 - The Measurement Log counts in the picture's measurement scale (Set Measurement Scale) and exports
   the scale's units and factor.
+- A mouse wheel (NewMouse) scrolls the picture (Shift: across) and zooms with Alt; Preferences >
+  General > Zoom with Scroll Wheel swaps them.
 - Preferences: Interface > Canvas colour, Transparency & Gamut > the gamut warning's colour and
   opacity, and a Type page with Use Smart Quotes.
 

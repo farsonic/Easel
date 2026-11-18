@@ -1205,6 +1205,52 @@ int dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg)
   (void)ends;
   return 1;
 }
+/* round 4: an invisible object that hears Alt and a digit in its window and sets a cycle gadget to what
+   map makes of the digit (Image Size's Alt+1 ... Alt+8) */
+struct KcData { struct MUI_EventHandlerNode ehn; Object *cyc; int (*map)(int); };
+static struct MUI_CustomClass *kccls;
+static ULONG kcdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
+{
+  struct KcData *k;
+  switch (msg->MethodID) {
+  case OM_NEW:
+    if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
+    k = INST_DATA(cl, obj);
+    memset(k, 0, sizeof *k);
+    k->ehn.ehn_Object = obj; k->ehn.ehn_Class = cl; k->ehn.ehn_Events = IDCMP_RAWKEY;
+    return (ULONG)obj;
+  case MUIM_AskMinMax: {
+    struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
+    DoSuperMethodA(cl, obj, msg);
+    m->MinMaxInfo->MaxWidth = MUI_MAXMAX;
+    return 0; }
+  case MUIM_Setup:
+    if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
+    theme_setup(obj);
+    theme_handler(obj, &((struct KcData *)INST_DATA(cl, obj))->ehn);
+    return TRUE;
+  case MUIM_Cleanup: theme_cleanup(obj); break;
+  case MUIM_HandleEvent: {
+    struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
+    int v;
+    k = INST_DATA(cl, obj);
+    if (!im || im->Class != IDCMP_RAWKEY || (im->Code & IECODE_UP_PREFIX) || !(im->Qualifier & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) || !k->cyc || !k->map) return 0;
+    if ((v = k->map(rawkey_digit(im->Code))) < 0) return 0;
+    set(k->cyc, MUIA_Cycle_Active, v);
+    return MUI_EventHandlerRC_Eat; }
+  }
+  return DoSuperMethodA(cl, obj, msg);
+}
+static Object *key_catcher(Object *cyc, int (*map)(int))
+{
+  Object *o;
+  if (!kccls && !(kccls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, sizeof(struct KcData), (APTR)kcdispatch))) return HSpace(0);
+  if ((o = NewObject(kccls->mcc_Class, NULL, MUIA_FillArea, FALSE, TAG_DONE)) != NULL) {
+    struct KcData *k = INST_DATA(kccls->mcc_Class, o);
+    k->cyc = cyc; k->map = map;
+  }
+  return o ? o : HSpace(0);
+}
 void dlg_image_size(void)
 {
   Doc *d = cur_doc();
@@ -1213,7 +1259,7 @@ void dlg_image_size(void)
   static const int rs[] = { RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS, RS_BILINEAR, RS_NEAREST };
   static int last_method;
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *ws, *hs, *ps, *ck, *mc, *ds, *rc;
+  Object *w, *ws, *hs, *ps, *ck, *mc, *ds, *rc, *kc;
   LONG nw, nh, dpi;
   int ok, method, resample;
   if (!d) return;
@@ -1225,8 +1271,10 @@ void dlg_image_size(void)
         Child, QLabel(tr("Resolution (dpi):"), MUIO_Label_SingleFrame), Child, ds = string_num(d->dpi ? d->dpi : 72),
         Child, rc = check(1), Child, QLabel(tr("Resample (else only the resolution changes)"), 0),
         Child, QLabel(tr("Resample:"), MUIO_Label_Centered), Child, mc = cycle(methods, last_method),
+        Child, HSpace(0), Child, kc = key_catcher(NULL, resample_for_key),   /* (round 4: Alt+1 ... Alt+8 pick the resampling) */
       End, NULL);
   if (!w) return;
+  if (kccls && OCLASS(kc) == kccls->mcc_Class) ((struct KcData *)INST_DATA(kccls->mcc_Class, kc))->cyc = mc;
   set(w, MUIA_Window_ActiveObject, (ULONG)ws);
   ok = run_modal(w, ends, NULL) == ID_DLGOK;
   nw = str_val(ws); nh = str_val(hs);
