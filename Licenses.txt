@@ -16,7 +16,9 @@ PhotoCraft, ArtCraft Team    picture readers in core/: tiff.c,  MIT
                                amigafmt.c; brushes and painting
                                in core/: brush.h, brush.c,
                                stroke.c, preset.h, preset.c,
-                               gradient.h, gradient.c (each says
+                               gradient.h, gradient.c; the Filter
+                               Gallery effects' recipes in
+                               core/gallery.c (each says
                                what it took)
 X.Org rgb.txt colour names   XPM colour names (core/rasters.c)  MIT/X11 (The Open Group,
                                                                   Oracle)

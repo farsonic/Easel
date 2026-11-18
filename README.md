@@ -21,6 +21,31 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## After 1.0: the Filter Gallery, Color Lookup, Focus Area, Select and Mask
+
+- Filter > Filter Gallery: a stack of up to four effects, applied in order as one step; each row's
+  Settings shows that effect's sliders with the whole stack previewed on the picture. Filter > Last
+  Filter repeats the stack.
+- The rest of the gallery effects, each also in the Filter menu with its own dialog: Artistic
+  (Colored Pencil, Dry Brush, Fresco, Neon Glow, Paint Daubs, Palette Knife, Rough Pastels, Smudge
+  Stick, Sponge, Underpainting, Watercolor), Brush Strokes (Accented Edges, Angled Strokes,
+  Crosshatch, Dark Strokes, Ink Outlines, Sprayed Strokes, Sumi-e), Sketch (Bas Relief, Chalk &
+  Charcoal, Charcoal, Chrome, Conte Crayon, Graphic Pen, Note Paper, Plaster, Reticulation, Stamp,
+  Torn Edges, Water Paper; drawn in the foreground colour on the background colour) and Texture
+  (Craquelure, Grain). They work through the picture in 128-pixel tiles, so a large picture needs
+  little memory beyond its undo copy; Easel says how much is needed if there isn't enough.
+- Image > Adjustments > Color Lookup: 3D LUTs from .cube files (1D ones too), trilinear or
+  tetrahedral, with dither and opacity (Easel looks in PROGDIR:LUTs first).
+- Gradient Map has Custom: any gradient from the Gradient Editor. Black & White has Auto. Photo Filter
+  opens at the settings last used. Equalize, with part of the layer selected, asks whether to even out
+  the selected area only or the whole image by it.
+- Image Size: Bicubic Smoother, Bicubic Sharper and Preserve Details (Lanczos), the resolution, and
+  Resample off to change only the resolution.
+- Select > Focus Area (where the picture is sharp), Select > Select and Mask (edge radius, smooth,
+  feather, contrast, shift edge; out to the selection, a layer mask or a new layer with a mask), and
+  All Layers / Deselect Layers.
+- Filters and adjustments are greyed out in a Bitmap picture, all but Invert.
+
 ## New in 1.0: filters, adjustments and retouching
 
 - Retouching tools (J): the Spot Healing Brush (paint over a blemish; Easel finds a patch nearby

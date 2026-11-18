@@ -306,12 +306,16 @@ Items handled elsewhere in this document are listed in "How to read this".
 
 ### 2.3 Image (Adjustments are in section 5, Mode in section 11)
 
+Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
+
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | Auto Tone `image.autoTone` | **Have** | Done | — |
 | Auto Contrast `image.autoContrast` | **Have** | Done | — |
 | Auto Color `image.autoColor` | **Have** | Done | — |
-| Image Size… `image.imageSize`: Bicubic/Smoother/Sharper/Bilinear/Nearest/Preserve Details, units, resolution, scale styles | **Partial**: bicubic, bilinear or nearest, in pixels or per cent; resolution and units, Preserve Details and the Smoother/Sharper variants are missing | Easy | P2 |
+| Image Size… `image.imageSize`: Bicubic/Smoother/Sharper/Bilinear/Nearest/Preserve Details, units, resolution, scale styles | **Partial**: Bicubic, and new in this round Bicubic Smoother, Bicubic Sharper and Preserve Details (Lanczos-3, checked against Pillow), Bilinear, Nearest; the resolution, and Resample off to change only the resolution (`E:core/resample.c`, `dlg_image_size`). Sizes in inches, centimetres or columns (PhotoCraft #6214) and Scale Styles are missing | Easy | P3 |
+| Image Size: Alt+1…8 pick the resample method (PhotoCraft #15054) | **Missing**: the method is a cycle gadget | Easy | P3 |
+| Image Size, Fit Image, Canvas Size, Rotate Canvas and Duplicate drop the selection (PhotoCraft #13913, #14534, #14564, #15075) | **Have**, differently: Easel keeps the selection in step with the canvas instead (0.7); Duplicate starts without one, as PhotoCraft's does | Done | — |
 | Canvas Size… `image.canvasSize` | **Have**: anchor and fill | Done | — |
 | Image Rotation › 180° | **Have** | Done | — |
 | Image Rotation › 90° Clockwise | **Have** | Done | — |
@@ -586,164 +590,173 @@ missing mode is a few lines of integer or FPU arithmetic per pixel.
 ## 5. Adjustments (Image › Adjustments, 22 items)
 
 PhotoCraft's parameters are the `Adjustment` variants in ADJ and `engine/src/cmd/adjust_cmds.rs`.
-Easel's are in `E:core/adjust.h` and `dlg_adjust` in `E:amiga/dialogs.c`, and every one previews
-live.
+Easel's are in `E:core/adjust.h`, `E:core/adjust10.h` and `E:core/adjustx.h`, with `dlg_adjust` in
+`E:amiga/dialogs.c` and Color Lookup in `E:amiga/filtersx.c`, and every one previews live.
+Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 
 | PhotoCraft item (CAT id; parameters) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Brightness/Contrast… (brightness, contrast, Use Legacy) | **Have**: no Legacy toggle | Done | — |
-| Levels… (per channel, input and output, gamma, Auto, eyedroppers, presets, CMYK and Lab spaces) | **Partial**: RGB/R/G/B, histogram, gamma and output are there; the black, grey and white eyedroppers, presets (.alv) and Auto options are missing | Easy | P2 |
-| Curves… (per channel, spline or pencil (`pencil`), eyedroppers, presets .acv) | **Partial**: the point editor and channels are there; the pencil mode, eyedroppers and presets are missing | Easy | P2 |
+| Brightness/Contrast… (brightness, contrast, Use Legacy) | **Have**: Use Legacy too (`adj10_brightness_lut`) | Done | — |
+| Levels… (per channel, input and output, gamma, Auto, eyedroppers, presets, CMYK and Lab spaces) | **Have**: RGB/R/G/B, histogram, gamma, output, Black/Grey/White Point from the foreground colour (`adj_levels_pick`), Auto (`adj_levels_auto`), built-in and saved presets (`adj_preset_*`). CMYK and Lab don't apply: Easel works in RGB | Done | — |
+| Levels: Alt-drag shows the clipping (PhotoCraft #3693) | **Missing**: the sliders are MUI sliders, with no clipping view | Easy: the preview could show clipped pixels while a slider is held | P3 |
+| Curves… (per channel, spline or pencil (`pencil`), eyedroppers, presets .acv) | **Partial**: four curves (RGB, R, G, B; `adj10_curves_lut`), up to eight points, eyedroppers (`adj_curves_pick`), Auto, presets; the pencil (freehand) mode and .acv files are missing | Easy | P3 |
+| Curves: Alt+2…6 pick the dialog's channel (PhotoCraft #10475) | **Missing**: the channel is a cycle gadget | Easy | P3 |
 | Exposure… (exposure, offset, gamma) | **Have** | Done | — |
 | Vibrance… (vibrance, saturation) | **Have** | Done | — |
-| Hue/Saturation… (master plus six hue ranges, Colorize; `HueRange`) | **Partial**: master and Colorize only; the six ranges are missing | Easy | P1 |
+| Hue/Saturation… (master plus six hue ranges, Colorize; `HueRange`) | **Have**: Master and the six ranges with range and fuzziness (`adj_hue_saturation_ranges`), Colorize, presets; dragging a range's zones on a colour bar (PhotoCraft #9272) is missing (they are sliders) | Done | — |
 | Color Balance… (shadows, midtones, highlights, preserve luminosity) | **Have** | Done | — |
-| Black & White… (six weights R/Y/G/C/B/M, tint) | **Partial**: three weights (R/G/B) and no tint | Easy | P2 |
-| Photo Filter… (colour, density, preserve luminosity) | **Have**: the named filter presets are missing | Done | — |
-| Channel Mixer… (3 × 4 matrix, monochrome) | **Missing** | Easy | P1 |
-| Color Lookup… (3D LUT, trilinear or tetrahedral, dither) | **Missing** | Moderate | P3 |
+| Black & White… (six weights R/Y/G/C/B/M, tint, Auto) | **Have**: six weights, tint, presets (`adj_black_white6`); Auto (PhotoCraft #9301) is new in this round: the weights that spread the layer's greys widest without clipping (`bw_auto_weights` in `E:core/adjustx.c`, the dialog's Auto button) | Done | — |
+| Photo Filter… (colour, density, preserve luminosity; opens at its last settings) | **Have**: the twenty named filters (`photo_filter_names`) or the foreground colour; it now opens at the last settings used (PhotoCraft #9970; `photo_last` in `E:amiga/dialogs.c`) | Done | — |
+| Channel Mixer… (3 × 4 matrix, monochrome) | **Have**: `adj_channel_mixer`, and as an adjustment layer | Done | — |
+| Color Lookup… (3D LUT, trilinear or tetrahedral, dither; the LUT folder listed, PhotoCraft #9827) | **Partial**: new in this round: .cube files (3D, and 1D made 3D), trilinear or tetrahedral, dither, opacity (`adj_color_lookup` in `E:core/adjustx.c`; checked against numpy by `E:tests/check_fx.py`). Missing: it works on pixels, not as an adjustment layer, and there is no built-in set of looks (the file requester starts in `PROGDIR:LUTs`) | Moderate (an adjustment layer would need the table kept with the layer) | P3 |
 | Invert | **Have** | Done | — |
 | Posterize… | **Have** | Done | — |
 | Threshold… | **Have** | Done | — |
-| Gradient Map… (stops, reverse, dither) | **Missing** | Easy: also good for palette-style colouring | P1 |
-| Selective Color… (9 ranges × CMYK, relative or absolute) | **Missing** | Easy | P2 |
-| Shadows/Highlights… | **Missing** | Moderate: needs a large-radius blur (Easel's box-blur passes would do) | P2 |
+| Gradient Map… (stops, midpoints, smoothness, reverse, dither; PhotoCraft #9319, #10797) | **Have**: six ready gradients and, new in this round, Custom: any gradient made in the Gradient Editor (stops dragged on and off, midpoints, colours), sampled at 32 places so its midpoints come through (`gm_btn`/`gradmap_preset` in `E:amiga/dialogs.c`); Reverse; as pixels or an adjustment layer (`adj_gradient_map`). Dither is missing | Done | — |
+| Selective Color… (9 ranges × CMYK, relative or absolute) | **Have**: `adj_selective_color` | Done | — |
+| Shadows/Highlights… | **Have**: amounts, tones, radii, colour correction, midtone contrast (`adj_shadows_highlights`) | Done | — |
 | HDR Toning… | **Missing** | Hard: needs data above 8 bits; Easel tone-maps HDR files when it opens them | P3 |
 | Desaturate | **Have** | Done | — |
-| Match Color… | **Missing** | Easy: match the mean and variance of another document | P3 |
-| Replace Color… | **Missing** | Easy: Color Range plus Hue/Saturation | P2 |
-| Equalize | **Have** | Done | — |
+| Match Color… | **Have**: from another open picture, luminance, intensity, fade, neutralize (`adj_match_color`) | Done | — |
+| Replace Color… (fuzziness, hue, saturation, lightness; Add to and Subtract from Sample, PhotoCraft #10443) | **Partial**: one colour (the foreground's) with fuzziness, as pixels or an adjustment layer (`adj_replace_color`); sampling more colours (+ and −) is missing | Easy (Color Range's sampled colours, `E:core/selx.h`, could be reused) | P3 |
+| Equalize (with a selection: the selected area only, or the whole image based on it; PhotoCraft #9604) | **Have**: with a selection, Equalize now asks which (`adj_equalize_ex` in `E:core/adjustx.c`, `dlgx_equalize`) | Done | — |
+| Bitmap documents grey out adjustments and filters, all but Invert (PhotoCraft #10545) | **Have**: new in this round (the menu update in `E:amiga/main.c`) | Done | — |
 
 ## 6. Filters (the Filter menu: 75 items, plus the 47 Filter Gallery effects in GAL)
 
-Easel's filters are in `E:core/adjust.h` and `dlg_filter` in `E:amiga/dialogs.c`, and they preview
-live. PhotoCraft's are in `crates/algo/src/` (`blur.rs`, `distort.rs`, `stylize.rs`, `render.rs`,
-`pixelate.rs`, `other.rs`, `artistic.rs` and so on) and `crates/engine/src/filters`.
+Easel's filters are in `E:core/adjust.h`, `E:core/filters2.h`, `E:core/filters10.h` and
+`E:core/gallery.h`, with `dlg_filter` in `E:amiga/dialogs.c` and the gallery's dialogs in
+`E:amiga/filtersx.c`; they preview live on the canvas and run as jobs with progress and Abort.
+PhotoCraft's are in `crates/algo/src/` (`blur.rs`, `distort.rs`, `stylize.rs`, `render.rs`,
+`pixelate.rs`, `other.rs`, `artistic.rs`, `artistic_fx.rs` and so on) and `crates/engine/src/filters`.
+Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Last Filter `filter.lastFilter` (⌘⌥F) | **Missing** | Easy | P1 |
+| Last Filter `filter.lastFilter` (⌘⌥F) | **Have**: `dlg_filter_again`, with the settings last used (a Filter Gallery stack too) | Done | — |
 | Convert for Smart Filters | **Missing** | Hard (section 3.6) | P3 |
-| Filter Gallery… (a stack of effects with preview) `filter.filterGallery` | **Missing** | Moderate: a proxy preview, applied in full on OK | P3 |
-| Gallery › Artistic: Colored Pencil, Cutout, Dry Brush, Film Grain, Fresco, Neon Glow, Paint Daubs, Palette Knife, Plastic Wrap, Poster Edges, Rough Pastels, Smudge Stick, Sponge, Underpainting, Watercolor (15; GAL) | **Missing** | Easy to Moderate: neighbourhood filters, each a few seconds a megapixel | P3 |
-| Gallery › Brush Strokes: Accented Edges, Angled Strokes, Crosshatch, Dark Strokes, Ink Outlines, Spatter, Sprayed Strokes, Sumi-e (8) | **Missing** | Easy to Moderate | P3 |
-| Gallery › Distort: Diffuse Glow, Glass, Ocean Ripple (3) | **Missing** | Easy | P3 |
-| Gallery › Sketch: Bas Relief, Chalk & Charcoal, Charcoal, Chrome, Conté Crayon, Graphic Pen, Halftone Pattern, Note Paper, Photocopy, Plaster, Reticulation, Stamp, Torn Edges, Water Paper (14) | **Missing** | Easy to Moderate | P3 |
-| Gallery › Stylize: Glowing Edges (1) | **Missing** | Easy | P3 |
-| Gallery › Texture: Craquelure, Grain, Mosaic Tiles, Patchwork, Stained Glass, Texturizer (6) | **Missing** | Easy to Moderate | P3 |
+| Filter Gallery… (a stack of effects with preview) `filter.filterGallery` | **Partial**: new in this round: a stack of up to four effects applied in order as one step; each row's Settings shows its sliders with the whole stack previewed on the canvas (`filter_gallery` in `E:amiga/filtersx.c`, `flt_gallery` in `E:core/gallery.c`, worked out in 128-pixel tiles). Missing: thumbnails of the effects, a preview pane in the dialog, and the fifteen gallery effects of Easel 1.0 (Cutout, Film Grain, Poster Edges, Plastic Wrap, Glowing Edges, Diffuse Glow, Glass, Ocean Ripple, Spatter, Halftone Pattern, Photocopy, Mosaic Tiles, Patchwork, Stained Glass, Texturizer) can't join a stack yet: they run from their own menu items | Moderate | P3 |
+| Gallery › Artistic: Colored Pencil, Cutout, Dry Brush, Film Grain, Fresco, Neon Glow, Paint Daubs, Palette Knife, Plastic Wrap, Poster Edges, Rough Pastels, Smudge Stick, Sponge, Underpainting, Watercolor (15; GAL) | **Have**: Cutout, Film Grain, Plastic Wrap and Poster Edges since 1.0 (`E:core/filters10.c`), the other eleven new in this round (`E:core/gallery.c`, following PhotoCraft's `artistic_fx.rs`), each with PhotoCraft's settings | Done | — |
+| Gallery › Brush Strokes: Accented Edges, Angled Strokes, Crosshatch, Dark Strokes, Ink Outlines, Spatter, Sprayed Strokes, Sumi-e (8) | **Have**: Spatter since 1.0, the other seven new in this round (`E:core/gallery.c`) | Done | — |
+| Gallery › Distort: Diffuse Glow, Glass, Ocean Ripple (3) | **Have**: `flt_diffuse_glow`, `flt_glass`, `flt_ocean_ripple` (Glass has no texture choice: frosted only) | Done | — |
+| Gallery › Sketch: Bas Relief, Chalk & Charcoal, Charcoal, Chrome, Conté Crayon, Graphic Pen, Halftone Pattern, Note Paper, Photocopy, Plaster, Reticulation, Stamp, Torn Edges, Water Paper (14) | **Have**: Halftone Pattern and Photocopy since 1.0, the other twelve new in this round (`E:core/gallery.c`), in the foreground and background colours | Done | — |
+| Gallery › Stylize: Glowing Edges (1) | **Have**: `flt_glowing_edges` | Done | — |
+| Gallery › Texture: Craquelure, Grain, Mosaic Tiles, Patchwork, Stained Glass, Texturizer (6) | **Have**: Craquelure and Grain (ten grain types) new in this round, the rest since 1.0 | Done | — |
 | Camera Raw Filter… | **Missing** | Hard: dozens of controls on float data | P3 |
 | Adaptive Wide Angle… | **Missing** | Hard | P3 |
-| Lens Correction… (distortion, chromatic aberration, vignette, perspective) | **Missing** | Moderate. Easy subset: a barrel or pincushion slider, plus Easel's Vignette | P3 |
+| Lens Correction… (distortion, chromatic aberration, vignette, perspective; Auto Scale, PhotoCraft #14367) | **Partial**: distortion, both fringes, vignette and midpoint, scale (`flt_lens_correction`); the perspective controls and Auto Scale are missing | Moderate | P3 |
 | Liquify… | **Missing** | Moderate: warp a mesh on a proxy, then resample in full | P3 |
 | Vanishing Point… | **Missing** | Hard | P3 |
-| Blur › Average | **Missing** | Easy | P2 |
+| Blur › Average | **Have**: `flt_average` | Done | — |
 | Blur › Blur | **Have** | Done | — |
-| Blur › Blur More | **Missing** | Easy | P2 |
+| Blur › Blur More | **Have**: `flt_blur_more` | Done | — |
 | Blur › Box Blur… | **Have** | Done | — |
 | Blur › Gaussian Blur… | **Have** | Done | — |
-| Blur › Lens Blur… (depth map, iris, specular) | **Missing** | Hard | P3 |
+| Blur › Lens Blur… (depth map, iris, specular) | **Partial**: radius, specular brightness and threshold (`flt_lens_blur`); the depth map and iris shape are missing | Hard | P3 |
 | Blur › Motion Blur… | **Have** | Done | — |
-| Blur › Radial Blur… (spin or zoom, movable centre, quality) | **Partial**: spin or zoom from the middle only | Easy | P3 |
-| Blur › Shape Blur… | **Missing** | Moderate | P3 |
-| Blur › Smart Blur… | **Missing** | Moderate | P2 |
-| Blur › Surface Blur… | **Missing** | Moderate | P2 |
-| Blur Gallery › Field Blur… | **Missing** | Moderate: variable-radius blur | P3 |
-| Blur Gallery › Iris Blur… | **Missing** | Moderate | P3 |
-| Blur Gallery › Tilt-Shift… | **Missing** | Moderate | P3 |
+| Blur › Radial Blur… (spin or zoom, movable centre, quality) | **Have**: `flt_radial_blur_ex` (centre and Draft/Good/Best) | Done | — |
+| Blur › Shape Blur… | **Have**: five shapes (`flt_shape_blur`); custom shapes as the kernel are missing | Done | — |
+| Blur › Smart Blur… | **Have**: `flt_smart_blur` (Normal, Edge Only, Overlay Edge) | Done | — |
+| Blur › Surface Blur… | **Have**: `flt_surface_blur` | Done | — |
+| Blur Gallery › Field Blur… | **Missing** | Moderate: variable-radius blur (the tiled engine of `E:core/gallery.c` would carry it) | P3 |
+| Blur Gallery › Iris Blur… | **Have**: `flt_iris_blur` (one ellipse, set by numbers) | Done | — |
+| Blur Gallery › Tilt-Shift… | **Have**: `flt_tilt_shift` | Done | — |
 | Blur Gallery › Path Blur… | **Missing** | Hard | P3 |
-| Blur Gallery › Spin Blur… | **Missing** | Moderate | P3 |
-| Distort › Displace… (displacement map file) | **Missing** | Easy | P2 |
+| Blur Gallery › Spin Blur… | **Have**: `flt_spin_blur` (one centre) | Done | — |
+| Distort › Displace… (displacement map file) | **Have**: `flt_displace` (stretch or tile, wrap or repeat) | Done | — |
 | Distort › Pinch… | **Have** | Done | — |
-| Distort › Polar Coordinates… | **Missing** | Easy | P1 |
+| Distort › Polar Coordinates… | **Have**: `flt_polar_coordinates` | Done | — |
 | Distort › Ripple… | **Have** | Done | — |
-| Distort › Shear… | **Missing** | Easy | P2 |
-| Distort › Spherize… | **Have** | Done | — |
+| Distort › Shear… | **Have**: three points (`flt_shear`) | Done | — |
+| Distort › Spherize… | **Have**: Normal, Horizontal Only, Vertical Only (`flt_spherize_ex`) | Done | — |
 | Distort › Twirl… | **Have** | Done | — |
-| Distort › Wave… (generators, sine/triangle/square, ranges, randomize) | **Partial**: wavelength and amplitude only | Easy | P3 |
-| Distort › ZigZag… | **Missing** | Easy | P2 |
+| Distort › Wave… (generators, sine/triangle/square, ranges, randomize) | **Have**: `flt_wave_ex` | Done | — |
+| Distort › ZigZag… | **Have**: `flt_zigzag` | Done | — |
 | Noise › Add Noise… | **Have**: uniform or Gaussian, monochromatic | Done | — |
 | Noise › Despeckle | **Have** | Done | — |
-| Noise › Dust & Scratches… | **Missing** | Easy: a median with a threshold | P1 |
+| Noise › Dust & Scratches… | **Have**: `flt_dust_scratches` | Done | — |
 | Noise › Median… | **Have** | Done | — |
-| Noise › Reduce Noise… | **Missing** | Moderate (`algo/src/denoise.rs`) | P3 |
-| Pixelate › Color Halftone… | **Missing** | Easy | P2 |
-| Pixelate › Crystallize… | **Missing** | Easy | P2 |
-| Pixelate › Facet | **Missing** | Easy | P3 |
-| Pixelate › Fragment | **Missing** | Easy | P3 |
-| Pixelate › Mezzotint… (10 types) | **Missing** | Easy | P2 |
+| Noise › Reduce Noise… | **Have**: strength, preserve details, colour noise (`flt_reduce_noise`); the per-channel advanced mode is missing | Done | — |
+| Pixelate › Color Halftone… | **Have**: `flt_color_halftone` | Done | — |
+| Pixelate › Crystallize… | **Have**: `flt_crystallize` | Done | — |
+| Pixelate › Facet | **Have**: `flt_facet` | Done | — |
+| Pixelate › Fragment | **Have**: `flt_fragment` | Done | — |
+| Pixelate › Mezzotint… (10 types) | **Have**: `flt_mezzotint` | Done | — |
 | Pixelate › Mosaic… | **Have** | Done | — |
-| Pixelate › Pointillize… | **Missing** | Easy | P3 |
+| Pixelate › Pointillize… | **Have**: `flt_pointillize` | Done | — |
 | Render › Flame… | **Missing** | Moderate | P3 |
 | Render › Picture Frame… | **Missing** | Moderate | P3 |
 | Render › Tree… | **Missing** | Moderate | P3 |
-| Render › Clouds | **Have** | Done | — |
-| Render › Difference Clouds | **Missing** | Easy: Clouds with Difference mode | P1 |
-| Render › Fibers… | **Missing** | Easy | P3 |
-| Render › Lens Flare… | **Missing** | Easy | P2 |
-| Render › Lighting Effects… | **Missing** | Moderate | P3 |
+| Render › Clouds (tails compressed, not clipped: PhotoCraft #9997) | **Have**: `flt_clouds`; PhotoCraft's softer tails are not matched | Done | — |
+| Render › Difference Clouds | **Have**: `flt_difference_clouds` | Done | — |
+| Render › Fibers… | **Have**: `flt_fibers` | Done | — |
+| Render › Lens Flare… (PhotoCraft #8705 matched Photoshop's look) | **Have**: four lens types, centre, brightness (`flt_lens_flare`); its look is Easel's own, not matched to Photoshop's | Done | — |
+| Render › Lighting Effects… | **Have**: point, spot or infinite light, texture and gloss (`flt_lighting_ex`); one light, no saved styles | Done | — |
 | Render › Relight (`filter.render.relight`; engine only, not in a menu) | **Missing** | Moderate | P3 |
 | Sharpen › Sharpen | **Have** | Done | — |
-| Sharpen › Sharpen Edges | **Missing** | Easy | P2 |
+| Sharpen › Sharpen Edges | **Have**: `flt_sharpen_edges` | Done | — |
 | Sharpen › Sharpen More | **Have** | Done | — |
-| Sharpen › Smart Sharpen… | **Missing** | Moderate | P2 |
+| Sharpen › Smart Sharpen… | **Have**: Gaussian, Lens or Motion Blur removal, noise reduction (`flt_smart_sharpen`); the shadow and highlight fades are missing | Done | — |
 | Sharpen › Unsharp Mask… | **Have** | Done | — |
-| Stylize › Diffuse… | **Missing** | Easy | P2 |
+| Stylize › Diffuse… | **Have**: `flt_diffuse` | Done | — |
 | Stylize › Emboss… | **Have** | Done | — |
-| Stylize › Extrude… | **Missing** | Moderate | P3 |
-| Stylize › Find Edges | **Have** | Done | — |
+| Stylize › Extrude… | **Have**: `flt_extrude` | Done | — |
+| Stylize › Find Edges | **Have** (and Detect Edges: Sobel, Prewitt, Laplacian, Roberts) | Done | — |
 | Stylize › Oil Paint… (stylization, cleanliness, scale, bristle detail, lighting) | **Partial**: radius and levels (`flt_oil_paint`); the lighting and bristle controls are missing | Moderate | P3 |
 | Stylize › Solarize | **Have** | Done | — |
-| Stylize › Tiles… | **Missing** | Easy | P3 |
-| Stylize › Trace Contour… | **Missing** | Easy | P2 |
-| Stylize › Wind… | **Missing** | Easy | P2 |
-| Video › De-Interlace… | **Missing** | Easy: useful for frame-grabber captures (DigiView, VLab, FrameMachine) | P2 |
-| Video › NTSC Colors | **Missing** | Easy: add a PAL-legal limit for genlock work | P2 |
-| Other › Custom… (5 × 5 kernel, scale, offset) | **Missing** | Easy: ImageFX and ADPro had it | P1 |
-| Other › HSB/HSL | **Missing** | Easy | P3 |
+| Stylize › Tiles… | **Have**: `flt_tiles` | Done | — |
+| Stylize › Trace Contour… | **Have**: `flt_trace_contour` | Done | — |
+| Stylize › Wind… | **Have**: Wind, Blast, Stagger (`flt_wind`) | Done | — |
+| Video › De-Interlace… | **Have**: `flt_de_interlace` | Done | — |
+| Video › NTSC Colors | **Have**, and PAL Colors (`flt_ntsc_colors`) | Done | — |
+| Other › Custom… (5 × 5 kernel, scale, offset) | **Partial**: the core takes any 5 × 5 kernel (`flt_custom`), but the dialog sets a symmetric 3 × 3 (centre, edges, corners) | Easy: a 5 × 5 grid of number fields | P3 |
+| Other › HSB/HSL | **Have**: `flt_hsb_hsl` | Done | — |
 | Other › High Pass… | **Have** | Done | — |
-| Other › Maximum… | **Have** | Done | — |
-| Other › Minimum… | **Have** | Done | — |
-| Other › Offset… | **Have**: wrap or not | Done | — |
-| Other › Color to Alpha (`filter.other.colorToAlpha`; engine only) | **Missing** | Easy: good for sprites and brushes | P2 |
+| Other › Maximum… | **Have**: square or round (`flt_minmax`); it previews at the scale it applies (PhotoCraft #10524) | Done | — |
+| Other › Minimum… | **Have**: as Maximum | Done | — |
+| Other › Offset… | **Have**: transparent, background, repeat edge or wrap (`flt_offset_ex`) | Done | — |
+| Other › Color to Alpha (`filter.other.colorToAlpha`; engine only) | **Have**: `flt_color_to_alpha` | Done | — |
 | Live preview on the canvas, through the selection | **Have**: the dialogs' Preview tick (`E:amiga/dialogs.c` `sd_apply`) | Done | — |
+| Filter dialogs: a click on the image centres the preview window (PhotoCraft #9981) | **Left out**: Easel previews on the whole canvas, not in a pane inside the dialog | Not sensible | — |
 
 ## 7. Selection features (the Select menu, 25 items, and the selection model)
 
 Easel's selection is an 8-bit mask (`Doc::sel`, `E:core/paint.h` `sel_*`), so feathered and
 anti-aliased edges already work. PhotoCraft's commands are in `engine/src/cmd/selection_cmds.rs`,
 `select_extra_cmds.rs` and `smartselect_cmds.rs`, with the algorithms in `algo/src/selection.rs`,
-`segment.rs` and `matting.rs`.
+`segment.rs` and `matting.rs`. Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 
 | PhotoCraft item (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | All `select.all` | **Have** | Done | — |
-| Deselect | **Have** | Done | — |
-| Reselect (⇧⌘D) | **Missing**: `ID_RESELECT` is defined in `E:amiga/ids.h` but not in the menu or the code | Easy | P1 |
+| Deselect | **Have**: `sel_deselect` keeps the selection for Reselect | Done | — |
+| Reselect (⇧⌘D) | **Have**: `sel_reselect` (`E:core/selmore.c`) | Done | — |
 | Inverse Selection | **Have** | Done | — |
-| Convert to Shape (selection to path) | **Missing** | Moderate: outline tracing plus curve fitting | P3 |
-| All Layers / Deselect Layers (2 items) | **Missing** | Easy, with multi-layer selection | P2 |
+| Convert to Shape (selection to path) | **Have**: the selection's outline traced and fitted with curves (`path_from_selection`, the Paths panel's Make Work Path) | Done | — |
+| All Layers / Deselect Layers (2 items) | **Have**: new in this round (`doc_pick_all_layers`, `doc_pick_no_layers` in `E:core/selmask.c`; the Layers panel's picked layers, used by Merge Layers, Group and Align) | Done | — |
 | Find Layers | **Missing** | Easy | P3 |
 | Isolate Layers | **Missing** | Easy | P3 |
-| Color Range… (sampled colours with add and subtract, Reds…Magentas, Highlights/Midtones/Shadows, Skin Tones, Out of Gamut, localized clusters, preview modes) | **Partial**: one colour and fuzziness (`sel_color_range`) | Easy | P2 |
-| Focus Area… | **Missing** | Moderate: Laplacian energy (`segment.rs` `focus`) | P3 |
+| Color Range… (sampled colours with add and subtract, Reds…Magentas, Highlights/Midtones/Shadows, Skin Tones, Out of Gamut, localized clusters, preview modes) | **Partial**: sampled colours with + and −, the colour and tone ranges, Skin Tones, fuzziness, range, Invert, a preview (`sel_color_range_ex`, `E:core/selx.h`); Localized Color Clusters and the preview modes are missing; Out of Gamut means nothing in RGB-only Easel | Easy | P3 |
+| Focus Area… | **Have**: new in this round: In-Focus Range, Image Noise Level, Soften Edge, the current layer or all layers, output to a new, added, subtracted or intersected selection (`sel_focus_area` in `E:core/selmask.c`: Laplacian energy against the picture's own 99th percentile) | Done | — |
 | Subject | **Missing** | Hard: PhotoCraft's version is classical saliency plus GrabCut, with no AI, so it's possible, but it takes minutes on a proxy | P3 |
 | Sky | **Missing** | Hard: the same | P3 |
-| Select and Mask… (edge detection radius, smooth, feather, contrast, shift edge, decontaminate, output to mask or layer, view modes) | **Missing** | Moderate (radius and smooth); Hard (hair matting) | P3 |
+| Select and Mask… (edge detection radius, smooth, feather, contrast, shift edge, decontaminate, output to mask or layer, view modes) | **Partial**: new in this round: Edge Radius (pixels in the band round the edge placed between the local colours inside and outside), Smooth, Feather, Contrast, Shift Edge, output to the selection, a layer mask or a new layer with a layer mask (`sel_refine` in `E:core/selmask.c`, `select_and_mask` in `E:amiga/filtersx.c`). Missing: the refine brushes, hair matting, Decontaminate Colors and the view modes (the preview is the marching ants) | Moderate (radius and smooth); Hard (hair matting) | P3 |
 | Modify › Border… | **Have** | Done | — |
 | Modify › Smooth… | **Have** | Done | — |
 | Modify › Expand… | **Have** | Done | — |
 | Modify › Contract… | **Have** | Done | — |
 | Modify › Feather… | **Have** | Done | — |
-| Grow | **Missing**: `ID_GROWSIM` is defined but not wired up | Easy: a contiguous wand from the selection's colours | P1 |
-| Similar | **Missing** | Easy | P1 |
-| Transform Selection | **Missing** | Moderate: shares the on-canvas transform handles | P2 |
-| Edit in Quick Mask Mode (Q) | **Missing** | Easy: paint the existing mask, drawn as a red overlay | P1 |
-| Load Selection… | **Missing** | Easy, once alpha channels exist | P2 |
-| Save Selection… | **Missing** | Easy | P2 |
-| Float and drop the selection (`select.float`, `select.drop`) | **Partial**: Move drags the selected pixels, but there's no floating selection | Easy | P3 |
-| Alpha and spot channels (Channels panel; PSD and TIFF extra channels) | **Missing** | Easy (alpha channels as extra 8-bit masks); Not sensible (spot inks are a print feature) | P2 |
+| Grow | **Have**: `sel_grow_similar`, with the Magic Wand's tolerance | Done | — |
+| Similar | **Have**: `sel_similar` | Done | — |
+| Transform Selection | **Have**: the on-canvas transform handles on the selection (`ID_XFSEL`) | Done | — |
+| Edit in Quick Mask Mode (Q) | **Have**: `quickmask_enter`/`quickmask_leave` (`E:core/channels.h`), a red overlay painted with the brushes | Done | — |
+| Load Selection… | **Have**: `chan_load_selection` (replace, add, subtract, intersect, invert) | Done | — |
+| Save Selection… | **Have**: `chan_save_selection` | Done | — |
+| Float and drop the selection (`select.float`, `select.drop`) | **Partial**: Move drags the selected pixels (Alt copies), but there's no floating selection | Easy | P3 |
+| Alpha and spot channels (Channels panel; PSD and TIFF extra channels) | **Partial**: up to 24 alpha channels in a Channels tab, saved in OpenRaster (`E:core/channels.h`); spot inks are a print feature and stay out | Easy (reading PSD/TIFF extra channels into them) | P3 |
 | Marching ants and the selection modes on Shift, Alt and Shift-Alt | **Have** | Done | — |
 | Anti-aliased, feathered 8-bit selection | **Have** | Done | — |
+
 
 ## 8. Painting and brushes
 
