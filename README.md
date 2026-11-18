@@ -23,7 +23,8 @@ interface and icons. None of the icons are copied from any other program.
 
 ## New after 1.2: filters, selections, type and shapes (round 3)
 
-- Filters: Blur Gallery > Field Blur (up to four pins), Render > Flame (along a path), Picture Frame
+- Filters: Blur Gallery > Field Blur (up to four pins) and Path Blur, Lens Blur with an iris and a
+  depth map, Render > Flame (along a path), Picture Frame
   and Tree, Liquify (Forward Warp, Reconstruct, Smooth, Twirl, Pucker, Bloat, Push Left, brushed on
   the picture itself), Oil Paint with stylization, cleanliness, scale, bristle detail and a lit
   relief, Lens Correction's perspective, angle and Auto Scale. Field Blur, Oil Paint and HDR Toning
