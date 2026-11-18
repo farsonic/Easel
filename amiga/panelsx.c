@@ -143,7 +143,7 @@ static void actions_fill(void)
   }
   set(alist, MUIA_List_Quiet, FALSE);
   if (act_cur >= mx_actions.n) act_cur = mx_actions.n - 1;
-  set(alist, MUIA_List_Active, act_cur >= 0 ? act_cur : MUIV_List_Active_Off);
+  SetAttrs(alist, MUIA_NoNotify, TRUE, MUIA_List_Active, act_cur >= 0 ? act_cur : MUIV_List_Active_Off, TAG_DONE);
 }
 static void steps_fill(void)
 {
@@ -158,7 +158,7 @@ static void steps_fill(void)
     }
   }
   set(slist, MUIA_List_Quiet, FALSE);
-  if (act_cur >= 0 && act_step >= 0 && act_step < mx_actions.a[act_cur].n) set(slist, MUIA_List_Active, act_step);
+  if (act_cur >= 0 && act_step >= 0 && act_step < mx_actions.a[act_cur].n) SetAttrs(slist, MUIA_NoNotify, TRUE, MUIA_List_Active, act_step, TAG_DONE);
   else act_step = -1;
 }
 enum { AB_NEW = ID_MXB0, AB_DUP, AB_DEL, AB_RENAME, AB_TOGGLE, AB_UP, AB_DOWN, AB_DELSTEP, AB_STOP, AB_RECORD, AB_PLAY, AB_PLAYFROM,
@@ -168,8 +168,12 @@ static void actions_each(ULONG id)
   char name[ACT_NAMELEN], path[512];
   ActionLib *l = &mx_actions;
   switch (id) {
-  case AB_PICK: act_cur = (int)(LONG)xget(alist, MUIA_List_Active); act_step = -1; steps_fill(); return;
-  case AB_STEPPICK: act_step = (int)(LONG)xget(slist, MUIA_List_Active); return;
+  case AB_PICK: {
+    /* (a list cleared and filled again says it has no active row on the way: ignored) */
+    LONG a = (LONG)xget(alist, MUIA_List_Active);
+    if (a >= 0 && a != act_cur) { act_cur = (int)a; act_step = -1; steps_fill(); }
+    return; }
+  case AB_STEPPICK: { LONG a = (LONG)xget(slist, MUIA_List_Active); if (a >= 0) act_step = (int)a; return; }
   case AB_NEW: {
     char set[ACT_NAMELEN];
     strcpy(set, act_cur >= 0 ? l->a[act_cur].set : "Default Actions");
@@ -340,7 +344,7 @@ static void styles_fill(void)
   }
   set(stlist, MUIA_List_Quiet, FALSE);
   if (st_cur >= styles.n) st_cur = styles.n - 1;
-  set(stlist, MUIA_List_Active, st_cur >= 0 ? st_cur : MUIV_List_Active_Off);
+  SetAttrs(stlist, MUIA_NoNotify, TRUE, MUIA_List_Active, st_cur >= 0 ? st_cur : MUIV_List_Active_Off, TAG_DONE);
 }
 enum { SB_APPLY = ID_MXB0, SB_NEW, SB_RENAME, SB_DEL, SB_LOAD, SB_SAVE, SB_RESET, SB_PICK, SB_DBL };
 static void styles_each(ULONG id)
@@ -348,7 +352,7 @@ static void styles_each(ULONG id)
   Doc *d = cur_doc();
   char name[ACT_NAMELEN], path[512];
   switch (id) {
-  case SB_PICK: st_cur = (int)(LONG)xget(stlist, MUIA_List_Active); return;
+  case SB_PICK: { LONG a = (LONG)xget(stlist, MUIA_List_Active); if (a >= 0) st_cur = (int)a; return; }
   case SB_APPLY: case SB_DBL:
     if (!d || st_cur < 0) return;
     doc_paste_fx(d, &styles.s[st_cur].fx);
@@ -439,7 +443,7 @@ static void comps_fill(void)
   }
   set(clist, MUIA_List_Quiet, FALSE);
   if (comp_cur >= n) comp_cur = n - 1;
-  set(clist, MUIA_List_Active, comp_cur >= 0 ? comp_cur : MUIV_List_Active_Off);
+  SetAttrs(clist, MUIA_NoNotify, TRUE, MUIA_List_Active, comp_cur >= 0 ? comp_cur : MUIV_List_Active_Off, TAG_DONE);
 }
 enum { CB_NEW = ID_MXB0, CB_APPLY, CB_UPDATE, CB_DEL, CB_PREV, CB_NEXT, CB_EXPORT, CB_PICK, CB_DBL };
 static void comps_export(Doc *d)
@@ -473,7 +477,7 @@ static void comps_each(ULONG id)
   if (!d || comp_slot < 0) return;
   cs = comps[comp_slot].c;
   switch (id) {
-  case CB_PICK: comp_cur = (int)(LONG)xget(clist, MUIA_List_Active); return;
+  case CB_PICK: { LONG a = (LONG)xget(clist, MUIA_List_Active); if (a >= 0) comp_cur = (int)a; return; }
   case CB_NEW: {
     LONG what = 3;
     if (comps[comp_slot].n >= MAXCOMPS) { ask("OK", "%s", tr("A picture keeps at most 24 layer comps.")); return; }
