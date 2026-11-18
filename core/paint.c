@@ -11,6 +11,7 @@
 #include "gradient.h"
 #include "pattern.h"
 #include "palette.h"
+#include "resample.h"                 /* (Image Size's further methods) */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -1029,6 +1030,7 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
       if (cnt) { int k; for (k = 0; k < 4; k++) acc[k] /= cnt; }
       unpremul(acc, o + ((long)y * nw + x) * 4);
     }
+    if (method == RS_SHARPER && !progress_aborted) resample_sharpen(o, nw, nh);     /* (resample.h) */
     return;
   }
   for (y = 0; y < nh && !rm_row(y); y++) for (x = 0; x < nw; x++) {
@@ -1036,6 +1038,7 @@ static void remap_resize(Doc *d, const u8 *s, u8 *o, i32 nw, i32 nh, int bpp, co
     u8 *q = o + ((long)y * nw + x) * 4;
     if (method == RS_NEAREST) { i32 xx = (i32)fx, yy = (i32)fy; memcpy(q, s + ((long)(yy < d->h ? yy : d->h - 1) * d->w + (xx < d->w ? xx : d->w - 1)) * 4, 4); }
     else if (method == RS_BICUBIC) sample_bicubic(s, d->w, d->h, fx, fy, q);
+    else if (method >= RS_SMOOTHER) resample_kernel(s, d->w, d->h, fx, fy, method, q);
     else {
       /* bilinear, the edge repeated */
       double cx = fx < 0.5 ? 0.5 : fx > d->w - 0.5 ? d->w - 0.5 : fx, cy = fy < 0.5 ? 0.5 : fy > d->h - 0.5 ? d->h - 0.5 : fy;

@@ -29,6 +29,10 @@
 #include "../core/adjust10.h"
 #include "../core/filters10.h"
 #include "brushwin.h"
+#include "gradwin.h"
+#include "../core/adjustx.h"
+#include "dlgx.h"
+#include "../core/resample.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -226,8 +230,8 @@ static Object *graph(int mode, const u32 *hist, const LONG *lev)
 
 /* ------------------------------------------------------------------ the slider dialogs */
 /* each slider: its label, range and starting value; a value /scale is what the core function gets */
-typedef struct { const char *label; LONG min, max, def; } Param;
-typedef void (*ApplyFn)(Doc *d, const LONG *v, int choice, int tick);
+typedef DlgParam Param;              /* (dlgx.h) */
+typedef DlgApplyFn ApplyFn;
 /* the starting values of the sliders, list and tick (set before a dialog to show a layer's settings) */
 #define SDMAX 8                      /* (1.0: eight sliders, was six) */
 static LONG sd_init_v[SDMAX]; static int sd_init_set, sd_init_choice, sd_init_tick = -1;
@@ -384,8 +388,11 @@ static void balance_show(int c) { LONG v[3]; int k; for (k = 0; k < 3; k++) v[k]
 /* Photo Filter: Photoshop's twenty, the foreground colour, or (a layer's own colour) as it was */
 static const char *photo_labels[PHOTO_FILTERS + 3];
 static u32 photo_orig;
+static LONG photo_last[3] = { -1, 25, 1 };     /* (PhotoCraft #9970: it opens at the last settings) choice, density, preserve */
+static LONG photo_now[3];
 static void a_photo(Doc *d, const LONG *v, int c, int t)
 {
+  photo_now[0] = c; photo_now[1] = v[0]; photo_now[2] = t;
   adj_base.v[0] = (int)(c >= 0 && c < PHOTO_FILTERS ? photo_filter_colors[c] : c == PHOTO_FILTERS ? d->fg : photo_orig);
   adj_base.v[1] = (int)v[0]; adj_base.v[2] = t;
   put_adj(d, &adj_base);
@@ -458,9 +465,20 @@ static void a_mixer(Doc *d, const LONG *v, int c, int t)
 }
 static void mixer_show(int c) { LONG v[4]; int k; for (k = 0; k < 4; k++) v[k] = adj_base.v[(c >= 0 && c < 3 ? c : 0) * 4 + k]; sd_show(v, 4); }
 /* Gradient Map: a preset gradient (the colours in use, black to white, and some classic ramps) */
+static Gradient gm_grad;              /* Custom: the gradient edited in the Gradient Editor (PhotoCraft #9319: its stops, midpoints and smoothness) */
+static int gm_inited;
 static void gradmap_preset(int k, AdjParams *p)
 {
   Doc *d = cur_doc();
+  if (k == 6 && gm_inited) {
+    /* sampled at 32 places, so the midpoints and the blending between the stops come through */
+    int i;
+    u8 c[4];
+    gm_grad.fg = d ? d->fg : 0; gm_grad.bg = d ? d->bg : 0xFFFFFF;
+    for (i = 0; i < 32; i++) { gradient_sample(&gm_grad, i / 31.0, c); p->pts[2 * i] = i * 255 / 31; p->pts[2 * i + 1] = (int)(((u32)c[0] << 16) | ((u32)c[1] << 8) | c[2]); }
+    p->npts = 32;
+    return;
+  }
   static const ULONG sets[][4] = { { 0x000000, 0xFFFFFF, 0, 0 }, { 0x000000, 0x800000, 0xFFA000, 0xFFFFE0 }, { 0x001040, 0x2080C0, 0xE0F0FF, 0 },
                                    { 0x200040, 0xC02060, 0xFFE080, 0 }, { 0x402000, 0xC08040, 0xFFF0D0, 0 } };
   int n, i;
@@ -471,6 +489,14 @@ static void gradmap_preset(int k, AdjParams *p)
   for (n = 0; n < 4 && (n < 2 || sets[k][n]); n++) continue;
   for (i = 0; i < n; i++) { p->pts[2 * i] = i * 255 / (n - 1); p->pts[2 * i + 1] = (int)sets[k][i]; }
   p->npts = n;
+}
+static void gm_btn(int k)
+{
+  Doc *d = cur_doc();
+  (void)k;
+  if (!d) return;
+  if (!gm_inited) { gradient_init(&gm_grad, "Custom", d->fg, d->bg); gm_inited = 1; }
+  if (gradwin_edit(&gm_grad, gradwin_presets(), d->fg, d->bg) && sd.cyc) nnset(sd.cyc, MUIA_Cycle_Active, 6);
 }
 static void a_gradmap(Doc *d, const LONG *v, int c, int t)
 {
@@ -595,6 +621,16 @@ static void adj_btn(int k)
   Doc *d = cur_doc();
   int kind = adj_base.kind, picks = kind == AK_LEVELS || kind == AK_CURVES;
   if (kind == AK_REPLACECOLOR) { if (d) adj_base.v[0] = (int)(d->fg & 0xFFFFFF); return; }
+  if (kind == AK_BLACKWHITE && k == 2) {
+    /* Auto (PhotoCraft #9301): the six weights that spread this layer's greys widest */
+    int w6[6], i;
+    bw_six();
+    for (i = 0; i < 6; i++) w6[i] = adj_base.v[i];
+    if (!d || !bw_auto_weights(d, w6)) return;
+    for (i = 0; i < 6; i++) adj_base.v[i] = w6[i];
+    if (adj_reshow) adj_reshow();
+    return;
+  }
   if (picks && k == 5) {
     if (!auto_hist) return;
     if (kind == AK_LEVELS) adj_levels_auto(&adj_base, auto_hist); else adj_curves_auto(&adj_base, auto_hist);
@@ -621,6 +657,7 @@ static void adj_btn(int k)
 }
 static const char *const pick_btns[] = { "Black Point", "Grey Point", "White Point", "Load...", "Save...", "Auto", NULL };
 static const char *const file_btns[] = { "Load...", "Save...", NULL };
+static const char *const bw_btns[] = { "Load...", "Save...", "Auto", NULL };
 static const char *const fg_btn[] = { "Use Foreground Color", NULL };
 /* the adjustment a menu item stands for */
 static int adj_kind_of(ULONG id)
@@ -658,7 +695,8 @@ void dlg_adjust(ULONG id)
   static const char *const ranges[] = { "Shadows", "Midtones", "Highlights", NULL };
   static const char *const channels[] = { "RGB", "Red", "Green", "Blue", NULL };
   static const char *const outs[] = { "Red", "Green", "Blue", NULL };
-  static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", NULL };
+  static const char *const gmaps[] = { "Foreground to Background", "Black to White", "Fire", "Ocean", "Sunset", "Sepia", "Custom (Edit Gradient)", NULL };
+  static const char *const gm_btns[] = { "Edit Gradient...", NULL };
   static const char *const scolors[] = { "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", "Whites", "Neutrals", "Blacks", NULL };
   static const char *const hsedit[] = { "Master", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", NULL };
   int kind = adj_kind_of(id);
@@ -706,7 +744,7 @@ void dlg_adjust(ULONG id)
   case ID_ADJ_BW: {
     static const Param p[] = { { "Reds (%):", -200, 300, 40 }, { "Yellows (%):", -200, 300, 60 }, { "Greens (%):", -200, 300, 40 }, { "Cyans (%):", -200, 300, 60 },
                                { "Blues (%):", -200, 300, 20 }, { "Magentas (%):", -200, 300, 80 }, { "Tint Hue:", 0, 360, 42 }, { "Tint Saturation (%):", 0, 100, 20 } };
-    adj_reshow = bw_reshow; presets_for(AK_BLACKWHITE); sd_cfg_btns = file_btns; sd_cfg_btnhook = adj_btn;
+    adj_reshow = bw_reshow; presets_for(AK_BLACKWHITE); sd_cfg_btns = bw_btns; sd_cfg_btnhook = adj_btn;
     slider_dialog("Black & White", p, 8, NULL, NULL, "Tint", 0, a_bw, NULL); break; }
   case ID_ADJ_PHOTO: {
     static const Param p[] = { { "Density (%):", 1, 100, 25 } };
@@ -720,13 +758,15 @@ void dlg_adjust(ULONG id)
       sd_init_choice = k;
     }
     photo_labels[np] = NULL;
-    slider_dialog("Photo Filter", p, 1, photo_labels, "Filter:", "Preserve Luminosity", 1, a_photo, NULL); break; }
+    if (!adj_editing && photo_last[0] >= 0 && photo_last[0] < np) { sd_init_set = 1; sd_init_v[0] = photo_last[1]; sd_init_choice = (int)photo_last[0]; sd_init_tick = (int)photo_last[2]; }
+    if (slider_dialog("Photo Filter", p, 1, photo_labels, "Filter:", "Preserve Luminosity", 1, a_photo, NULL) && photo_now[0] <= PHOTO_FILTERS) memcpy(photo_last, photo_now, sizeof photo_last);
+    break; }
   case ID_ADJ_POSTERIZE: { static const Param p[] = { { "Levels:", 2, 255, 4 } }; slider_dialog("Posterize", p, 1, NULL, NULL, NULL, 0, a_posterize, NULL); break; }
   case ID_ADJ_THRESHOLD: { static const Param p[] = { { "Threshold Level:", 1, 255, 128 } }; slider_dialog("Threshold", p, 1, NULL, NULL, NULL, 0, a_threshold, NULL); break; }
   case ID_ADJ_MIXER: { static const Param p[] = { { "Red (%):", -200, 200, 100 }, { "Green (%):", -200, 200, 0 }, { "Blue (%):", -200, 200, 0 }, { "Constant (%):", -200, 200, 0 } };
     sd_cfg_cychook = mixer_show;
     slider_dialog("Channel Mixer", p, 4, outs, "Output Channel:", "Monochrome", 0, a_mixer, NULL); break; }
-  case ID_ADJ_GRADMAP: slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
+  case ID_ADJ_GRADMAP: sd_cfg_btns = gm_btns; sd_cfg_btnhook = gm_btn; slider_dialog("Gradient Map", NULL, 0, gmaps, "Gradient:", "Reverse", 0, a_gradmap, NULL); break;
   case ID_ADJ_SELCOLOR: { static const Param p[] = { { "Cyan (%):", -100, 100, 0 }, { "Magenta (%):", -100, 100, 0 }, { "Yellow (%):", -100, 100, 0 }, { "Black (%):", -100, 100, 0 } };
     sd_cfg_cychook = selcolor_show;
     slider_dialog("Selective Color", p, 4, scolors, "Colors:", "Absolute", 0, a_selcolor, NULL); break; }
@@ -787,7 +827,7 @@ void dlg_adjust(ULONG id)
     break; }
   case ID_ADJ_INVERT: if (!adj_editing) adj_invert(d); break;
   case ID_ADJ_DESAT: adj_desaturate(d); break;
-  case ID_ADJ_EQUALIZE: adj_equalize(d); break;
+  case ID_ADJ_EQUALIZE: if (d->sel) dlgx_equalize(); else adj_equalize(d); break;
   }
   sd_init_set = 0; sd_init_tick = -1; sd_init_choice = 0;
   adj_editing = 0; adj_reshow = NULL; auto_hist = NULL;
@@ -875,15 +915,6 @@ static void g_tiles(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt
 static void g_patch(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_patchwork(d, (int)v[0], (int)v[1]); }
 static void g_spatter(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spatter(d, (int)v[0], (int)v[1], 35); }
 static void f_deint(Doc *d, const LONG *v, int c, int t) { (void)v; flt_de_interlace(d, c == 1, t); }
-static void f_custom(Doc *d, const LONG *v, int c, int t)
-{
-  /* the 3 x 3 middle of the 5 x 5 kernel from the sliders: centre, edges, corners */
-  int k[25], i;
-  (void)c; (void)t;
-  for (i = 0; i < 25; i++) k[i] = 0;
-  k[12] = (int)v[0]; k[7] = k[11] = k[13] = k[17] = (int)v[1]; k[6] = k[8] = k[16] = k[18] = (int)v[2];
-  flt_custom(d, k, (int)v[3], (int)v[4]);
-}
 /* Filter > Last Filter: the last one again, with the same settings and no dialog */
 void dlg_filter_again(void)
 {
@@ -1022,8 +1053,7 @@ void dlg_filter(ULONG id)
                                                    { "Spot Cone:", 1, 90, 30 }, { "Intensity:", -100, 100, 60 }, { "Ambience:", -100, 100, 20 }, { "Texture:", 0, 100, 0 } };
     slider_dialog("Lighting Effects", p, 8, lights, "Light Type:", "Shiny", 0, f_lighting, NULL); break; }
   case ID_F_DEINTERLACE: slider_dialog("De-Interlace", NULL, 0, deint, "Eliminate:", "Interpolate (else duplicate)", 1, f_deint, NULL); break;
-  case ID_F_CUSTOM: { static const Param p[] = { { "Centre:", -99, 99, 5 }, { "Edges:", -99, 99, -1 }, { "Corners:", -99, 99, 0 }, { "Scale:", 1, 99, 1 }, { "Offset:", -255, 255, 0 } };
-    slider_dialog("Custom", p, 5, NULL, NULL, NULL, 0, f_custom, NULL); break; }
+  case ID_F_CUSTOM: sd_remember = 0; dlgx_command(ID_F_CUSTOM); break;     /* (the whole 5 x 5 kernel: filtersx.c) */
   case ID_F_DIFFCLOUDS: flt_difference_clouds(d, d->fg, d->bg, (unsigned)rand()); break;
   case ID_F_FACET: flt_facet(d); break;
   case ID_F_FRAGMENT: flt_fragment(d); break;
@@ -1116,18 +1146,23 @@ int dlg_new_values(LONG *w, LONG *h, LONG *dpi, int *bg)
 void dlg_image_size(void)
 {
   Doc *d = cur_doc();
-  static const char *const methods[] = { "Bicubic (smooth)", "Bilinear", "Nearest Neighbour (hard edges)", NULL };
+  static const char *const methods[] = { "Bicubic (smooth)", "Bicubic Smoother (enlargement)", "Bicubic Sharper (reduction)", "Preserve Details (enlargement)",
+                                         "Bilinear", "Nearest Neighbour (hard edges)", NULL };
+  static const int rs[] = { RS_BICUBIC, RS_SMOOTHER, RS_SHARPER, RS_DETAILS, RS_BILINEAR, RS_NEAREST };
+  static int last_method;
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *ws, *hs, *ps, *ck, *mc;
-  LONG nw, nh;
-  int ok, method;
+  Object *w, *ws, *hs, *ps, *ck, *mc, *ds, *rc;
+  LONG nw, nh, dpi;
+  int ok, method, resample;
   if (!d) return;
   w = dialog_window("Image Size", ColGroup(2),
         Child, QLabel(tr("Width (px):"), MUIO_Label_SingleFrame), Child, ws = string_num(d->w),
         Child, QLabel(tr("Height (px):"), MUIO_Label_SingleFrame), Child, hs = string_num(d->h),
         Child, QLabel(tr("or Percent:"), MUIO_Label_SingleFrame), Child, ps = string_num(100),
         Child, ck = check(1), Child, QLabel(tr("Constrain proportions (height follows width)"), 0),
-        Child, QLabel(tr("Resample:"), MUIO_Label_Centered), Child, mc = cycle(methods, 0),
+        Child, QLabel(tr("Resolution (dpi):"), MUIO_Label_SingleFrame), Child, ds = string_num(d->dpi ? d->dpi : 72),
+        Child, rc = check(1), Child, QLabel(tr("Resample (else only the resolution changes)"), 0),
+        Child, QLabel(tr("Resample:"), MUIO_Label_Centered), Child, mc = cycle(methods, last_method),
       End, NULL);
   if (!w) return;
   set(w, MUIA_Window_ActiveObject, (ULONG)ws);
@@ -1137,11 +1172,15 @@ void dlg_image_size(void)
   else if (xget(ck, MUIA_Selected) && nw != d->w && nh == d->h) nh = (LONG)((double)d->h * nw / d->w + 0.5);
   else if (xget(ck, MUIA_Selected) && nh != d->h && nw == d->w) nw = (LONG)((double)d->w * nh / d->h + 0.5);
   method = (int)xget(mc, MUIA_Cycle_Active);
+  dpi = str_val(ds); resample = (int)xget(rc, MUIA_Selected);
   MUI_DisposeObject(w);
-  if (!ok || (nw == d->w && nh == d->h)) return;
+  if (!ok) return;
+  last_method = method;
+  if (dpi >= 1 && dpi <= 9999) d->dpi = (u16)dpi;
+  if (!resample || (nw == d->w && nh == d->h)) return;
   if (nw < 1 || nh < 1 || nw > MAXDIM || nh > MAXDIM) { ask("OK", "%s", tr("The width and height must be between 1 and 16384 pixels.")); return; }
   set(app, MUIA_Application_Sleep, TRUE);
-  if (!image_resize(d, (i32)nw, (i32)nh, method == 0 ? RS_BICUBIC : method == 1 ? RS_BILINEAR : RS_NEAREST)) out_of_memory();
+  if (!image_resize(d, (i32)nw, (i32)nh, rs[method >= 0 && method < 6 ? method : 0])) out_of_memory();
   set(app, MUIA_Application_Sleep, FALSE);
 }
 void dlg_canvas_size(void)
@@ -1619,3 +1658,19 @@ void dlg_export(int fmt)
   MUI_DisposeObject(w);
 }
 void dlg_new(void) { }
+
+/* ------------------------------------------------------------------ for other files (dlgx.h) */
+int dlg_sliders(const char *title, const DlgParam *p, int n, const char *const *choices, const char *choicelabel, int choiceinit,
+                const char *const *choices2, const char *choice2label, int choice2init, const char *ticklabel, int tickinit,
+                const LONG *init, DlgApplyFn fn, Object *extra, int remember)
+{
+  int i, ok;
+  sd_init_set = 1; sd_init_choice = choiceinit; sd_init_tick = ticklabel ? tickinit : -1;
+  for (i = 0; i < SDMAX; i++) sd_init_v[i] = i < n ? (init ? init[i] : p[i].def) : 0;
+  if (choices2) { sd_cfg_cyc2 = choices2; sd_cfg_cyc2label = choice2label; sd_cfg_cyc2init = choice2init; }
+  sd_remember = remember;
+  ok = slider_dialog(title, p, n, choices, choicelabel, ticklabel, tickinit, fn, extra);
+  sd_remember = 0; sd_init_set = 0; sd_init_choice = 0; sd_init_tick = -1;
+  return ok;
+}
+void dlg_set_last(DlgApplyFn fn) { last_fn = fn; last_plain = 0; memset(last_v, 0, sizeof last_v); last_choice = last_tick = 0; }
