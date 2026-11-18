@@ -839,6 +839,49 @@ u8 *fits_encode(const Rgba *im, size_t *len)
   return done(&b, len);
 }
 
+/* ================================================================== JPEG quality */
+int jpeg_estimate_quality(const u8 *d, size_t n)
+{
+  static const u8 lum[64] = { 16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55, 14, 13, 16, 24, 40, 57, 69, 56,
+    14, 17, 22, 29, 51, 87, 80, 62, 18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92, 49, 64, 78, 87, 103, 121,
+    120, 101, 72, 92, 95, 98, 112, 100, 103, 99 };
+  size_t o = 2;
+  long sum = -1;
+  int q, best = 0;
+  long bestd = -1;
+  if (n < 4 || d[0] != 0xFF || d[1] != 0xD8) return 0;
+  /* the first luminance (table 0) quantization table's sum */
+  while (o + 4 <= n && sum < 0) {
+    size_t len, e;
+    if (d[o] != 0xFF) return 0;
+    if (d[o + 1] == 0xDA || d[o + 1] == 0xD9) break;
+    len = ((size_t)d[o + 2] << 8) | d[o + 3];
+    e = o + 2 + len;
+    if (len < 2 || e > n) return 0;
+    if (d[o + 1] == 0xDB) {
+      size_t p = o + 4;
+      while (p < e) {
+        int pq = d[p] >> 4, tq = d[p] & 15, k;
+        size_t tl = pq ? 128 : 64;
+        if (p + 1 + tl > e) return 0;
+        if (tq == 0) { sum = 0; for (k = 0; k < 64; k++) sum += pq ? (long)(((u32)d[p + 1 + 2 * k] << 8) | d[p + 2 + 2 * k]) : d[p + 1 + k]; break; }
+        p += 1 + tl;
+      }
+    }
+    o = e;
+  }
+  if (sum <= 0) return 0;
+  /* the IJG quality whose scaled Annex K table comes closest */
+  for (q = 1; q <= 100; q++) {
+    long sc = q < 50 ? 5000 / q : 200 - 2 * q, t = 0, dd;
+    int k;
+    for (k = 0; k < 64; k++) { long v = (lum[k] * sc + 50) / 100; t += v < 1 ? 1 : v > 255 ? 255 : v; }
+    dd = labs(t - sum);
+    if (bestd < 0 || dd < bestd) { bestd = dd; best = q; }
+  }
+  return best;
+}
+
 /* ================================================================== the table */
 static const struct { const char *ext; int fmt; int sub; } exts[] = {
   { "png", FMT_PNG, 0 }, { "jpg", FMT_JPEG, 0 }, { "jpeg", FMT_JPEG, 0 }, { "bmp", FMT_BMP, 0 }, { "iff", FMT_ILBM, 0 },

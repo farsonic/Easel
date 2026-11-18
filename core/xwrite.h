@@ -50,6 +50,10 @@ u8 *dpx_encode(const Rgba *im, int bits10, size_t *len);
    row first, as FITS keeps them */
 u8 *fits_encode(const Rgba *im, size_t *len);
 
+/* the quality (1-100, as IJG and Easel scale it) a JPEG was saved at, estimated from its luminance
+   quantization table; 0 if it isn't a JPEG or has none (so Save can keep an opened JPEG's quality) */
+int jpeg_estimate_quality(const u8 *d, size_t n);
+
 /* ------------------------------------------------------------------ the table */
 /* 1 if xwrite writes fmt (FMT_WEBP, FMT_PNM, FMT_QOI, FMT_ICO, FMT_DDS, FMT_DPX, FMT_FITS, FMT_PDF_OUT) */
 int  xwrite_handles(int fmt);

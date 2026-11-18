@@ -1614,7 +1614,7 @@ void dlg_export(int fmt)
         Child, HSpace(0), Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Low quality makes small files; JPEG keeps no layers\nor transparency (it is laid over white)."), End,
       End, "Save");
   if (!w) return;
-  if (run_modal(w, ends, NULL) == ID_DLGOK) export_quality = (int)xget(q, MUIA_Numeric_Value);
+  if (run_modal(w, ends, NULL) == ID_DLGOK) prefs.jpeg_quality = export_quality = (int)xget(q, MUIA_Numeric_Value);   /* (1.1: remembered) */
   else export_quality = 0;
   MUI_DisposeObject(w);
 }

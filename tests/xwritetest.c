@@ -297,6 +297,20 @@ int main(int argc, char **argv)
     }
   }
 
+  /* the quality an opened JPEG was saved at */
+  {
+    static const int qs[6] = { 10, 35, 50, 75, 90, 100 };
+    int good = 1;
+    for (i = 0; i < 6; i++) {
+      u8 *j = jpeg_encode(&pic, qs[i], 72, &len);
+      int e = j ? jpeg_estimate_quality(j, len) : -1;
+      if (e < qs[i] - 1 || e > qs[i] + 1) { good = 0; printf("  quality %d estimated %d\n", qs[i], e); }
+      free(j);
+    }
+    ok("jpeg quality estimated", good);
+    ok("jpeg quality of a PNG", jpeg_estimate_quality((const u8 *)"\x89PNG", 4) == 0);
+  }
+
   /* the table and the document writer */
   ok("ext webp", xwrite_format_of_ext(".WebP") == FMT_WEBP && xwrite_format_of_ext("pdf") == FMT_PDF_OUT && xwrite_format_of_ext(".tiff") == FMT_TIFF);
   ok("ext pbm", xwrite_format_of_ext(".pbm") == FMT_PNM && xwrite_sub_of_ext(".pbm") == PNM_PBM && xwrite_sub_of_ext(".pam") == PNM_PAM);

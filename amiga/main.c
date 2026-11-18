@@ -1062,7 +1062,14 @@ static int save(void)
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
   }
-  if (v->fmt == FMT_JPEG) export_quality = prefs.jpeg_quality;
+  if (v->fmt == FMT_JPEG) {
+    /* 1.1: the quality the file was saved at, when it can be told, else the preference */
+    size_t jl = 0;
+    u8 *j = read_file(v->path, &jl);
+    int q = j ? jpeg_estimate_quality(j, jl) : 0;
+    free(j);
+    export_quality = q ? q : prefs.jpeg_quality;
+  }
   if (!write_doc(v->doc, v->path, v->fmt)) return 0;
   icon_for(v->doc, v->path);
   v->doc->dirty = 0;
