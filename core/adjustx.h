@@ -18,6 +18,8 @@ typedef struct { int n; float *t; float dmin[3], dmax[3]; char title[64]; } Lut3
 Lut3D *lut_parse_cube(const char *text, long len, char *err, int errcap);
 /* 1.2: an Autodesk .3dl (lut3dl.c); lut_load_cube tries it when the file isn't a .cube */
 Lut3D *lut_parse_3dl(const char *text, long len, char *err, int errcap);
+/* round 3: a SpeedGrade .look (lutlook.c: XML, UTF-8 or UTF-16, hex floats); lut_load_cube tries it last */
+Lut3D *lut_parse_look(const char *text, long len, char *err, int errcap);
 Lut3D *lut_load_cube(const char *path, char *err, int errcap);
 Lut3D *lut_identity(int n);
 void   lut_free(Lut3D *l);

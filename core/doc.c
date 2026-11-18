@@ -136,6 +136,7 @@ void doc_free(Doc *d)
   path_free(d->workpath);
   free(d->annot);                                          /* 1.2 */
   free(d->icc);                                          /* 1.2 */
+  free(d->exif);                                         /* round 3 */
   free(d);
 }
 

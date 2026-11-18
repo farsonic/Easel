@@ -6,6 +6,8 @@
 #include <string.h>
 #include "codec.h"
 #include "loadx.h"
+#include "foreign.h"
+#include "filesx.h"
 #include "xread2.h"
 #include "avif.h"
 #include "rasters.h"
@@ -237,7 +239,8 @@ Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
   Doc *doc;
   int fmt = codec_detect(d, n);
   int cmyk = codec_cmyk_begin(d, n);                     /* 1.2: CMYK through the press or the file's profile */
-  if (fmt == FMT_ORA) doc = ora_read(d, n, err, errcap);
+  if (fmt != FMT_ORA && foreign_detect(d, n)) doc = foreign_load_doc(d, n, err, errcap);   /* round 3: GIMP, Krita, Paint.NET */
+  else if (fmt == FMT_ORA) doc = ora_read(d, n, err, errcap);
   else if (fmt == FMT_PSD) { codec_oom = 0; doc = psd_read_doc(d, n, err, errcap); }   /* 0.6: with its layers */
   else {
     if (!codec_decode(d, n, &im, err, errcap)) doc = NULL;
@@ -253,6 +256,7 @@ Doc *codec_load_doc(const u8 *d, size_t n, char *err, size_t errcap)
   }
   if (doc) codec_read_info(d, n, &doc->info);           /* 0.6: File Info */
   if (doc) codec_load_extras(doc, d, n);                /* 1.2: profile, colour model, palette and 1-bit files */
+  if (doc) filesx_load_extras(doc, d, n);               /* round 3: EXIF */
   return doc;
 }
 /* a decoded picture made the one layer of a new document (its pixels taken over, not copied) */
@@ -281,6 +285,6 @@ Doc *codec_load_doc_scaled(const u8 *d, size_t n, i32 w, i32 h, char *err, size_
     if (!ok) return NULL;
   }
   if (progress_aborted) { rgba_free(&im); codec_err(err, errcap, "Opening the picture was stopped"); return NULL; }   /* (0.8) */
-  if ((doc = doc_of(&im, d, n, err, errcap)) != NULL) { codec_read_info(d, n, &doc->info); codec_load_extras(doc, d, n); }
+  if ((doc = doc_of(&im, d, n, err, errcap)) != NULL) { codec_read_info(d, n, &doc->info); codec_load_extras(doc, d, n); filesx_load_extras(doc, d, n); }
   return doc;
 }

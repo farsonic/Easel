@@ -50,6 +50,7 @@
 #include "../core/swatch.h"
 #include "../core/xwrite.h"
 #include "../core/xread2.h"                  /* 1.2: Cineon, HDR */
+#include "../core/filesx.h"                  /* round 3: EXIF, Open As */
 #include "../core/exportx.h"                 /* 1.2: Export As */
 #include "../core/resample.h"
 #include "../core/frames.h"
@@ -1163,6 +1164,7 @@ static int write_doc(Doc *d, const char *path, int fmt)
   }
   if (progress_aborted) { free(data); set(app, MUIA_Application_Sleep, FALSE); return 0; }   /* (0.8: Abort: nothing written) */
   if (data && !model) data = colorx_embed(d, fmt, data, &len);   /* 1.2: the profile kept */
+  if (data) data = exif_embed(d, fmt, data, &len);              /* round 3: and the EXIF */
   ok = data && write_file(path, data, len);
   free(data);
   set(app, MUIA_Application_Sleep, FALSE);
