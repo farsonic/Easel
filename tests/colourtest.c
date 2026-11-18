@@ -23,6 +23,8 @@
 #include "core/fx.h"
 #include "core/adjustx.h"
 #include "core/exportx.h"
+#include "core/typex.h"
+#include "core/shape.h"
 #include "core/paint.h"
 #include "core/resample.h"
 #include "core/fonts.h"
@@ -711,6 +713,29 @@ static void test_type(void)
       CHECK(q && q->run[0].ot == tp.run[0].ot && q->indent_left == 3 && q->indent_right == 4 && q->align == TA_JUSTIFY_CENTER, "kept in OpenRaster");
     }
     doc_free(d); doc_free(e); free(f2);
+  }
+  /* Convert to Shape: the same ink, now a shape layer; undone, type again */
+  {
+    Doc *d = doc_new(200, 80, 0xFFFFFF, 0);
+    TextParams tp;
+    u8 *c1, *c2;
+    long k, diff = 0, ink = 0;
+    text_params_init(&tp, "Carlito", 40, 0x000000, 10, 55); text_set_string(&tp, "Shape");
+    doc_new_text(d, &tp, "T");
+    c1 = (u8 *)malloc(200 * 80 * 4); c2 = (u8 *)malloc(200 * 80 * 4);
+    doc_composite(d, doc_box(d), c1, 200 * 4);
+    CHECK(doc_text_to_shape(d, 1) && d->lay[1]->kind == LK_SHAPE && !strcmp(d->lay[1]->name, "T"), "Convert to Shape");
+    doc_composite(d, doc_box(d), c2, 200 * 4);
+    /* (the type's glyphs land on whole pixels, the outlines where they fall: the edges differ a little) */
+    for (k = 0; k < 200 * 80; k++) { if (c1[k * 4] < 128) ink++; if (c2[k * 4] < 128) diff++; }
+    CHECK(ink > 200 && labs(diff - ink) * 10 < ink, "the shape draws what the type did");
+    doc_undo(d);
+    CHECK(d->lay[1]->kind == LK_TEXT, "undone: type again");
+    CHECK(doc_update_text(d) == 1, "Update All Text Layers");
+    doc_composite(d, doc_box(d), c2, 200 * 4);
+    CHECK(!memcmp(c1, c2, 200 * 80 * 4), "drawn again the same");
+    free(c1); free(c2);
+    doc_free(d);
   }
   if (gsub_out) fclose(gsub_out);
   gsub_out = NULL;

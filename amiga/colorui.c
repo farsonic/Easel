@@ -20,6 +20,7 @@
 #include "../core/aspect.h"
 #include "../core/colorx.h"
 #include "../core/type.h"
+#include "../core/typex.h"
 
 ViewSpec view_spec = { PRF_CMYK, 0, 0, CI_RELATIVE, 1, 0, NULL };
 int view_spec_gen;
@@ -175,6 +176,11 @@ int colorui_command(Doc *d, ULONG id)
     if (!colorx_convert_model(d, CM_CMYK, work_cmyk)) ask("OK", "%s", tr("Not enough memory to convert the picture."));
     job_end();
     break;
+  case ID_TOSHAPE:
+    if (d && !type_editing && !doc_text_to_shape(d, d->active)) ask("OK", "%s", tr("Choose a type layer first (or click in the picture with the Type tool)."));
+    DoMethod(canvas, MUIM_Canvas_Refresh);
+    break;
+  case ID_UPDATETEXT: if (d) doc_update_text(d); DoMethod(canvas, MUIM_Canvas_Refresh); break;
   case ID_MODE_LAB:
     if (!d || (d->mode == MODE_RGB && d->cmode == CM_LAB)) return 1;
     colorx_convert_model(d, CM_LAB, NULL);
@@ -206,6 +212,11 @@ void colorui_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
       menu_set(ID_OT0 + i, MUIA_Menuitem_Checked, tp && (tp->run[0].ot & (TO_LIGA << i)));
       menu_set(ID_OT0 + i, MUIA_Menuitem_Enabled, tp != NULL || type_editing);
     }
+  }
+  {
+    Layer *al = d && d->active >= 0 && d->active < d->nlay ? d->lay[d->active] : NULL;
+    menu_set(ID_TOSHAPE, MUIA_Menuitem_Enabled, al && al->kind == LK_TEXT && !type_editing);
+    menu_set(ID_UPDATETEXT, MUIA_Menuitem_Enabled, d != NULL);
   }
   menu_set(ID_ASSIGNPROF, MUIA_Menuitem_Enabled, d != NULL);
   menu_set(ID_CONVERTPROF, MUIA_Menuitem_Enabled, d != NULL);

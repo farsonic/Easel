@@ -216,6 +216,7 @@ static struct NewMenu menus[] = {
   I("Layer Content Options...", 0, ID_FILLSETTINGS),
   H("Type"), S("Edit Type", 0, ID_EDITTYPE), S("Character...", 0, ID_TYPECHAR), S("Paragraph...", 0, ID_TYPEPARA), SBAR, S("Create Work Path", 0, ID_TYPEWORKPATH),
   S("Warp Text...", 0, ID_WARPTEXT), S("Paste Lorem Ipsum", 0, ID_LOREM), SBAR, S("Convert to Paragraph Text", 0, ID_TOPARA), S("Convert to Point Text", 0, ID_TOPOINT), S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
+  S("Convert to Shape", 0, ID_TOSHAPE), S("Update All Text Layers", 0, ID_UPDATETEXT),                 /* 1.2 */
   SBAR, ST("Standard Ligatures", ID_OT0), ST("Contextual Alternates", ID_OT0 + 9), ST("Discretionary Ligatures", ID_OT0 + 1), ST("Swash", ID_OT0 + 2),   /* 1.2: OpenType */
   ST("Oldstyle", ID_OT0 + 3), ST("Stylistic Alternates", ID_OT0 + 4), ST("Titling Alternates", ID_OT0 + 5), ST("Ornaments", ID_OT0 + 6), ST("Ordinals", ID_OT0 + 7),
   ST("Fractions", ID_OT0 + 8),

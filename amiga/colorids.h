@@ -22,5 +22,7 @@
 #define ID_MODE_CMYK    5065
 #define ID_MODE_LAB     5066
 #define ID_OT0          5070           /* + 0..TO_NFEAT-1: Layer > Type's OpenType features (type.h's TO_LIGA << k) */
+#define ID_TOSHAPE      5080           /* Layer > Type > Convert to Shape */
+#define ID_UPDATETEXT   5081           /* Layer > Type > Update All Text Layers */
 #define ID_CU_LAST      5099
 #endif
