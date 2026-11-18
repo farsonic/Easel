@@ -26,6 +26,7 @@
 #include "../core/selmask.h"
 #include "../core/selmore.h"
 #include "../core/layers.h"
+#include "../core/filters2.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
@@ -296,6 +297,78 @@ static void select_and_mask(void)
   }
 }
 
+/* ------------------------------------------------------------------ Other > Custom: the whole 5 x 5 kernel */
+static int cu_k[25] = { 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, -1, 5, -1, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0 }, cu_scale = 1, cu_offset = 0;
+static Object *cu_str[27];
+static Doc *cu_doc;
+static void *cu_top;
+static int cu_pending, cu_shown;
+static Object *num_field(LONG v)
+{
+  char buf[24];
+  sprintf(buf, "%ld", (long)v);
+  return StringObject, StringFrame, MUIA_String_Contents, (ULONG)buf, MUIA_String_Accept, (ULONG)"0123456789-", MUIA_String_MaxLen, 6,
+    MUIA_String_Format, MUIV_String_Format_Right, MUIA_CycleChain, 1, MUIA_FixWidthTxt, (ULONG)"-9999", End;
+}
+static void cu_read(int *k, int *scale, int *offset)
+{
+  int i;
+  for (i = 0; i < 25; i++) k[i] = atoi((const char *)xget(cu_str[i], MUIA_String_Contents));
+  *scale = atoi((const char *)xget(cu_str[25], MUIA_String_Contents));
+  *offset = atoi((const char *)xget(cu_str[26], MUIA_String_Contents));
+  if (*scale == 0) *scale = 1;
+}
+static void cu_drop(void)
+{
+  if (cu_shown && (void *)cu_doc->undo != cu_top && doc_can_undo(cu_doc)) doc_discard_last(cu_doc);
+  cu_shown = 0;
+}
+static void cu_apply(void)
+{
+  int k[25], sc, off;
+  cu_read(k, &sc, &off);
+  cu_drop();
+  set(app, MUIA_Application_Sleep, TRUE);
+  job_begin(cu_doc, NULL);
+  flt_custom(cu_doc, k, sc, off);
+  job_end();
+  set(app, MUIA_Application_Sleep, FALSE);
+  cu_shown = (void *)cu_doc->undo != cu_top;
+  DoMethod(canvas, MUIM_Canvas_Refresh);
+}
+static void cu_each(ULONG id)
+{
+  if (id == ID_DLGCHANGE) { cu_pending = 1; return; }
+  if (id == 0 && cu_pending) { cu_pending = 0; cu_apply(); }
+}
+static void cu_again(Doc *d, const LONG *v, int c, int t) { (void)v; (void)c; (void)t; flt_custom(d, cu_k, cu_scale, cu_offset); }
+static void custom_filter(void)
+{
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  Object *grid, *w;
+  int i, ok;
+  if (!(cu_doc = cur_doc())) return;
+  grid = ColGroup(5), End;
+  if (!grid) return;
+  for (i = 0; i < 25; i++) DoMethod(grid, OM_ADDMEMBER, (ULONG)(cu_str[i] = num_field(cu_k[i])));
+  w = dialog_window("Custom", VGroup, Child, grid,
+        Child, ColGroup(4), Child, QLabel(tr("Scale:"), MUIO_Label_SingleFrame), Child, cu_str[25] = num_field(cu_scale),
+                            Child, QLabel(tr("Offset:"), MUIO_Label_SingleFrame), Child, cu_str[26] = num_field(cu_offset), End,
+        Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Each pixel becomes the sum of its neighbours times these weights\n(the middle one is the pixel itself), divided by Scale, plus Offset."), MUIA_Font, MUIV_Font_Tiny, End,
+      End, NULL);
+  if (!w) return;
+  for (i = 0; i < 27; i++) DoMethod(cu_str[i], MUIM_Notify, MUIA_String_Contents, MUIV_EveryTime, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGCHANGE);
+  cu_top = (void *)cu_doc->undo; cu_shown = 0; cu_pending = 0;
+  ok = run_modal(w, ends, cu_each) == ID_DLGOK;
+  if (ok) {
+    cu_read(cu_k, &cu_scale, &cu_offset);
+    if (!cu_shown || cu_pending) cu_apply();
+    dlg_set_last(cu_again);
+  } else cu_drop();
+  MUI_DisposeObject(w);
+  DoMethod(canvas, MUIM_Canvas_Refresh);
+}
+
 void dlgx_command(ULONG id)
 {
   if (id >= ID_GX0 && id < ID_GX0 + GX_N) { gx_command((int)(id - ID_GX0)); return; }
@@ -304,6 +377,7 @@ void dlgx_command(ULONG id)
   case ID_FX_LOOKUP: color_lookup(); break;
   case ID_FX_FOCUS: focus_area(); break;
   case ID_FX_REFINE: select_and_mask(); break;
+  case ID_F_CUSTOM: custom_filter(); break;
   case ID_FX_ALLLAYERS: if (cur_doc()) doc_pick_all_layers(cur_doc()); break;
   case ID_FX_NOLAYERS: if (cur_doc()) doc_pick_no_layers(cur_doc()); break;
   }

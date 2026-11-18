@@ -709,7 +709,7 @@ Rechecked 2026-11-18 against Easel 1.0 and PhotoCraft `c337d6e`.
 | Stylize › Wind… | **Have**: Wind, Blast, Stagger (`flt_wind`) | Done | — |
 | Video › De-Interlace… | **Have**: `flt_de_interlace` | Done | — |
 | Video › NTSC Colors | **Have**, and PAL Colors (`flt_ntsc_colors`) | Done | — |
-| Other › Custom… (5 × 5 kernel, scale, offset) | **Partial**: the core takes any 5 × 5 kernel (`flt_custom`), but the dialog sets a symmetric 3 × 3 (centre, edges, corners) | Easy: a 5 × 5 grid of number fields | P3 |
+| Other › Custom… (5 × 5 kernel, scale, offset) | **Have**: the dialog is now the whole 5 × 5 grid of weights with Scale and Offset, previewed as they are typed (`custom_filter` in `E:amiga/filtersx.c`, `flt_custom`) | Done | — |
 | Other › HSB/HSL | **Have**: `flt_hsb_hsl` | Done | — |
 | Other › High Pass… | **Have** | Done | — |
 | Other › Maximum… | **Have**: square or round (`flt_minmax`); it previews at the scale it applies (PhotoCraft #10524) | Done | — |

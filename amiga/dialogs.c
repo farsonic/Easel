@@ -915,15 +915,6 @@ static void g_tiles(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt
 static void g_patch(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_patchwork(d, (int)v[0], (int)v[1]); }
 static void g_spatter(Doc *d, const LONG *v, int c, int t) { (void)c; (void)t; flt_spatter(d, (int)v[0], (int)v[1], 35); }
 static void f_deint(Doc *d, const LONG *v, int c, int t) { (void)v; flt_de_interlace(d, c == 1, t); }
-static void f_custom(Doc *d, const LONG *v, int c, int t)
-{
-  /* the 3 x 3 middle of the 5 x 5 kernel from the sliders: centre, edges, corners */
-  int k[25], i;
-  (void)c; (void)t;
-  for (i = 0; i < 25; i++) k[i] = 0;
-  k[12] = (int)v[0]; k[7] = k[11] = k[13] = k[17] = (int)v[1]; k[6] = k[8] = k[16] = k[18] = (int)v[2];
-  flt_custom(d, k, (int)v[3], (int)v[4]);
-}
 /* Filter > Last Filter: the last one again, with the same settings and no dialog */
 void dlg_filter_again(void)
 {
@@ -1062,8 +1053,7 @@ void dlg_filter(ULONG id)
                                                    { "Spot Cone:", 1, 90, 30 }, { "Intensity:", -100, 100, 60 }, { "Ambience:", -100, 100, 20 }, { "Texture:", 0, 100, 0 } };
     slider_dialog("Lighting Effects", p, 8, lights, "Light Type:", "Shiny", 0, f_lighting, NULL); break; }
   case ID_F_DEINTERLACE: slider_dialog("De-Interlace", NULL, 0, deint, "Eliminate:", "Interpolate (else duplicate)", 1, f_deint, NULL); break;
-  case ID_F_CUSTOM: { static const Param p[] = { { "Centre:", -99, 99, 5 }, { "Edges:", -99, 99, -1 }, { "Corners:", -99, 99, 0 }, { "Scale:", 1, 99, 1 }, { "Offset:", -255, 255, 0 } };
-    slider_dialog("Custom", p, 5, NULL, NULL, NULL, 0, f_custom, NULL); break; }
+  case ID_F_CUSTOM: sd_remember = 0; dlgx_command(ID_F_CUSTOM); break;     /* (the whole 5 x 5 kernel: filtersx.c) */
   case ID_F_DIFFCLOUDS: flt_difference_clouds(d, d->fg, d->bg, (unsigned)rand()); break;
   case ID_F_FACET: flt_facet(d); break;
   case ID_F_FRAGMENT: flt_fragment(d); break;
