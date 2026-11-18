@@ -137,6 +137,9 @@ typedef struct {
   int flatten;                        /* one layer; else a layer each, named after its picture */
   int rotate;                         /* turned to fit a cell's orientation best */
   u32 bg;
+  int captions;                       /* each picture's name under it, as a type layer */
+  int font_px;                        /* the captions' size (pixels) */
+  char family[48];                    /* and font family */
 } ContactOpts;
 void contact_defaults(ContactOpts *o);
 /* page p (0 up) of the sheet of pics[0..n) (any sizes), each fitted in its cell and centred;
@@ -222,6 +225,11 @@ int  blend_step(int mode, int dir);
    second) 45 %, "00" 0 %. State kept by the caller (zeroed at first); ms: the time of the key */
 typedef struct { int first; unsigned long ms; int pending; } OpacityKeys;
 int  opacity_key(OpacityKeys *k, int digit, unsigned long ms);
+
+/* the tool each letter chose last (26 entries, tool + 1, 0 none) as a preference value ("0,3,0,...")
+   and back (tools past ntools dropped); 1 if it was one */
+void toolkeys_format(const signed char *k, char *out, size_t cap);
+int  toolkeys_parse(const char *s, signed char *k, int ntools);
 
 /* ------------------------------------------------------------------ View > Snap To > Layers, Slices */
 #define SNAP_LAYERS 64                 /* (guides.h's flags) the edges and centres of the other layers */

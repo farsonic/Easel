@@ -34,7 +34,8 @@
 #include "ids.h"
 #include "fxids.h"                    /* 1.1 */
 #include "mxids.h"
-#include "m3ids.h"                    /* 1.2 */
+#include "m3ids.h"
+#include "../core/menu3.h"                    /* 1.2 */
 #include "../core/viewx.h"
 #include "../core/fx.h"
 #include "../core/layerops.h"
@@ -728,7 +729,7 @@ static void opts_defaults(void)
 }
 const int sample_layers[3] = { SAMPLE_CURRENT, SAMPLE_BELOW, SAMPLE_ALL };
 /* each letter's tool: the one used last of those sharing it, at first the group's usual one */
-static signed char key_tool[26];
+signed char key_tool[26];                 /* (1.3: kept in Easel.prefs, prefs.c) */
 int tool_for_key(int c)
 {
   static const int first[] = { TL_MOVE, TL_MARQUEE, TL_LASSO, TL_WAND, TL_CROP, TL_EYEDROPPER, TL_CLONE, TL_BRUSH, TL_ERASER, TL_GRADIENT,
@@ -1566,6 +1567,16 @@ static void export_scaled(void)
   t = exportx_prepare(v->doc, &xo_last);
   set(app, MUIA_Application_Sleep, FALSE);
   if (!t) { ask("OK", "%s", tr("There isn't enough memory for that.")); return; }
+  {
+    /* 1.3: the size it will have, before it is written (Save for Web shows it with a preview) */
+    size_t est;
+    char sz[16];
+    set(app, MUIA_Application_Sleep, TRUE);
+    est = export_estimate(t, NULL, fmt, fmt == FMT_JPEG ? export_quality : 0);
+    set(app, MUIA_Application_Sleep, FALSE);
+    size_text(sz, est);
+    if (est && !ask("Export|Cancel", tr("The file will be about %s."), sz)) { doc_free(t); return; }
+  }
   write_doc(t, path, fmt);
   doc_free(t);
 }

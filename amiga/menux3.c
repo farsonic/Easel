@@ -529,7 +529,7 @@ static void contact_sheet_cmd(void)
   static int set_up;
   static const ULONG ends[] = { ID_DLGOK, 0 };
   static const char *const placing[] = { "across first", "down first", NULL };
-  Object *w, *ws, *hs, *rs, *cs, *rws, *sp, *pl, *fl, *ro;
+  Object *w, *ws, *hs, *rs, *cs, *rws, *sp, *pl, *fl, *ro, *cp, *fs;
   int ok, p, pages;
   if (!set_up) { contact_defaults(&o); o.w = 1240; o.h = 1754; o.dpi = 150; set_up = 1; }
   w = dialog_window("Contact Sheet II", ColGroup(4),
@@ -538,11 +538,16 @@ static void contact_sheet_cmd(void)
         Child, label("Columns:"), Child, cs = numstr(o.cols), Child, label("Rows:"), Child, rws = numstr(o.rows),
         Child, label("Place:"), Child, pl = cycle(placing, !o.across), Child, ro = check(o.rotate), Child, QLabel(tr("Rotate for Best Fit"), 0),
         Child, fl = check(o.flatten), Child, QLabel(tr("Flatten All Layers"), 0), Child, HSpace(0), Child, HSpace(0),
+        Child, cp = check(o.captions), Child, QLabel(tr("Use Filename as Caption"), 0), Child, label("Font Size (px):"), Child, fs = numstr(o.font_px),
       End, "OK");
   if (!w) return;
   ok = run_modal(w, ends, NULL) == ID_DLGOK;
   o.w = (i32)numof(ws); o.h = (i32)numof(hs); o.dpi = (int)numof(rs); o.spacing = (int)numof(sp); o.cols = (int)numof(cs); o.rows = (int)numof(rws);
   o.across = !xget(pl, MUIA_Cycle_Active); o.rotate = (int)xget(ro, MUIA_Selected); o.flatten = (int)xget(fl, MUIA_Selected);
+  o.captions = (int)xget(cp, MUIA_Selected); o.font_px = (int)numof(fs);
+  if (o.font_px < 4) o.font_px = 4;
+  if (o.font_px > 200) o.font_px = 200;
+  snprintf(o.family, sizeof o.family, "%s", font_name(opt.text_font));
   MUI_DisposeObject(w);
   if (!ok) return;
   if (o.w < 16 || o.h < 16 || o.w > MAXDIM || o.h > MAXDIM || o.cols < 1 || o.rows < 1) { say("The width and height must be between 1 and 16384 pixels."); return; }

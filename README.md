@@ -21,6 +21,36 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.3: menus, automation and tool details
+
+- File > New: presets (built in, from PAL Low Res to A4, and your own, saved and deleted), width and
+  height in pixels, inches, centimetres, millimetres, points or picas, the colour mode (Bitmap,
+  Grayscale, RGB, CMYK, Lab), the background and the pixel aspect.
+- File > Open As: a file read as the format you choose, or as Photoshop Raw (width, height,
+  channels, header). File > Import > Grab Screen: the frontmost screen as a new picture (a palette
+  screen opens indexed, with its colours).
+- File > Export More > Save for Web (Legacy): GIF, PNG-8, PNG-24, JPEG or IFF ILBM with colours,
+  palette, dither, quality and matte, the original and the result side by side with the file's size
+  and download time - Easel's "Save for Screen". Export As says how big the file will be. Picked
+  Layers to Files, Color Lookup Tables (.cube, .3dl, from the adjustment layers), Export Preferences
+  (Quick Export's format and place). File > Generate > Image Assets: layers named like files
+  ("logo.png, 50% logo-small.jpg8") written trimmed into a drawer.
+- File > Scripts > Image Processor (the open pictures or files, to JPEG, PSD, TIFF, PNG and IFF
+  ILBM, fitted, with a copyright and icons) and Statistics (the stack modes over files); File >
+  Automate > Contact Sheet II (with file names as captions).
+- Edit > Find and Replace Text in the type layers; Reset Tool and Reset All Tools (PhotoCraft's tips);
+  Fill from History and Preserve Transparency; Stroke in a blend mode, with Preserve Transparency.
+- Image > Apply Image and Calculations; Image > Analysis: Set Measurement Scale, Record and Export
+  Measurements, Place Scale Marker.
+- Layer: Artboard from Layers, Frame from Layers, New Layer Based Slice.
+- View: Flip Horizontal, Pixel Art Preview (whole zoom steps), Fit Artboard on Screen, Snap To >
+  Layers and Slices, Lock Slices and Clear Slices.
+- Tools: the Magic Wand's and Paint Bucket's Sample Size, the Bucket's Mode, the Vertical Type Mask,
+  ten colour samplers, Copy Color as HTML in the Eyedropper's menu, two digits for an exact opacity,
+  Shift + and Shift - through the blend modes, Shift-[ and Shift-] for the Magnetic Lasso's width
+  limits, and each tool letter remembers its last tool between runs. A copyrighted picture's tab
+  shows ©.
+
 ## New in 1.2: colour management, more formats and type
 
 - Colour management: ICC profiles (v2 and v4; matrix, grey and LUT profiles) are kept when a picture

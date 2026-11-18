@@ -27,6 +27,7 @@
 #include "easel.h"
 #include "../core/menu3.h"
 #include "m3ids.h"
+#include "colorids.h"
 #include "../core/layers.h"
 #include "brushwin.h"
 #include "../core/guides.h"
@@ -1547,7 +1548,7 @@ static int ty_new(Doc *doc, double x, double y, int box, double w, double h)
   text_params_init(tp, font_name(opt.text_font), opt.text_size, mask ? 0xFF0000 : doc->fg, x, y);
   ty_run_style(&tp->run[0], font_name(opt.text_font), opt.text_style);
   tp->aa = (u8)opt.text_aa; tp->align = (u8)opt.text_align;
-  tp->vertical = tool == TL_VTEXT;
+  tp->vertical = tool == TL_VTEXT || (tool == TL_TYPEMASK && opt.tmask_vertical);   /* (1.3: the Vertical Type Mask) */
   if (box) { tp->box = 1; tp->bw = w; tp->bh = h; }
   i = doc_new_text(doc, tp, mask ? "Type Mask" : "Text");
   free(tp);
@@ -3043,7 +3044,9 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
     case 'l': if (shift && alt) id = ID_AUTOCONTRAST; break;
     case 'r': id = ID_RULERS; break;
     case '\'': id = ID_SHOWGRID; break;
-    case ';': id = ID_SHOWGUIDES; break;
+    case ';': id = alt ? ID_LOCKGUIDES : ID_SHOWGUIDES; break;         /* (1.3: Ctrl-Alt-; Lock Guides) */
+    case 'a': if (alt) id = ID_FX_ALLLAYERS; break;                       /* (1.3: Ctrl-Alt-A Select All Layers) */
+    case 'y': if (shift) id = ID_GAMUT; break;                            /* (1.3: Shift-Ctrl-Y Gamut Warning) */
     case ':': id = ID_SNAP; break;
     case 'h': id = ID_SHOWEDGES; break;
     case 's': if (alt) id = ID_SAVECOPY; break;

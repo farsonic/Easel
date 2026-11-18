@@ -142,6 +142,7 @@ typedef struct {
   int crop_angle;                     /* Crop: the box's turn (degrees), a drag outside it turns it */
   /* 1.3 (r3) */
   int wand_sample;                    /* Magic Wand and Paint Bucket: the Sample Size (pick_sizes[] index) */
+  int tmask_vertical;                 /* the Type Mask tool sets vertical type (the Vertical Type Mask) */
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */

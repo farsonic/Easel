@@ -18,6 +18,7 @@
 #include "iconwrite.h"
 #include "resample.h"
 #include "type.h"
+#include "text.h"
 #include "guides.h"
 #include "toolsx.h"
 #include "adjust.h"
@@ -527,6 +528,7 @@ void contact_defaults(ContactOpts *o)
 {
   memset(o, 0, sizeof *o);
   o->w = 2480; o->h = 3508; o->dpi = 300; o->cols = 5; o->rows = 6; o->across = 1; o->spacing = 20; o->bg = 0xFFFFFF;
+  o->captions = 1; o->font_px = 24; strcpy(o->family, "Sans");
 }
 int contact_pages(int n, const ContactOpts *o)
 {
@@ -556,7 +558,8 @@ Doc *contact_sheet(Doc **pics, const char *const *names, int n, int page, const 
   Doc *d;
   Layer *flatl = NULL;
   if (first >= n || first < 0) return NULL;
-  cw = (o->w - sp * (cols + 1)) / cols; ch = (o->h - sp * (rows + 1)) / rows;
+  i32 caph = o->captions ? o->font_px + o->font_px / 2 : 0;
+  cw = (o->w - sp * (cols + 1)) / cols; ch = (o->h - sp * (rows + 1)) / rows - caph;
   if (cw < 1 || ch < 1) return NULL;
   if (!(d = doc_new(o->w, o->h, o->bg, 0))) return NULL;
   d->dpi = (u16)(o->dpi > 0 ? o->dpi : 72);
@@ -573,7 +576,7 @@ Doc *contact_sheet(Doc **pics, const char *const *names, int n, int page, const 
     Layer *l;
     fit_size(pw, ph, cw, ch, 0, &nw, &nh);
     if (!(px = scaled_flat(p, nw, nh, turn))) { doc_free(d); return NULL; }
-    x0 = sp + cx * (cw + sp) + (cw - nw) / 2; y0 = sp + cy * (ch + sp) + (ch - nh) / 2;
+    x0 = sp + cx * (cw + sp) + (cw - nw) / 2; y0 = sp + cy * (ch + caph + sp) + (ch - nh) / 2;
     if (flatl) l = flatl;
     else {
       if (!(l = layer_new(d, names && names[i] ? names[i] : "Picture"))) { free(px); doc_free(d); return NULL; }
@@ -585,6 +588,17 @@ Doc *contact_sheet(Doc **pics, const char *const *names, int n, int page, const 
       blend_pixel(l->px + ((long)(y0 + y) * d->w + x0 + x) * 4, px + ((long)y * nw + x) * 4, 255, BM_NORMAL);
     }
     free(px);
+    if (caph && names && names[i] && d->nlay < MAXLAYERS) {
+      /* the caption: a type layer centred under the cell */
+      TextParams *tp = (TextParams *)calloc(1, sizeof *tp);
+      if (tp) {
+        text_params_init(tp, o->family[0] ? o->family : "Sans", o->font_px, 0x000000, sp + cx * (cw + sp) + cw / 2.0, sp + cy * (ch + caph + sp) + ch + o->font_px);
+        tp->align = TA_CENTER;
+        text_set_string(tp, names[i]);
+        doc_new_text(d, tp, names[i]);
+        free(tp);
+      }
+    }
   }
   if (flatl) { doc_flatten(d); snprintf(d->lay[0]->name, sizeof d->lay[0]->name, "Contact Sheet II"); }
   d->active = d->nlay - 1;
@@ -1164,6 +1178,29 @@ int opacity_key(OpacityKeys *k, int digit, unsigned long ms)
   }
   k->pending = 1; k->first = digit; k->ms = ms;
   return digit == 0 ? 100 : digit * 10;
+}
+
+void toolkeys_format(const signed char *k, char *out, size_t cap)
+{
+  size_t n = 0;
+  int i;
+  if (cap) out[0] = 0;
+  for (i = 0; i < 26 && n + 5 < cap; i++) n += (size_t)sprintf(out + n, "%s%d", i ? "," : "", k[i] < 0 ? 0 : k[i]);
+}
+int toolkeys_parse(const char *s, signed char *k, int ntools)
+{
+  signed char t[26];
+  int i;
+  for (i = 0; i < 26; i++) {
+    char *e;
+    long v = strtol(s, &e, 10);
+    if (e == s) return 0;
+    t[i] = (signed char)(v >= 1 && v <= ntools && v < 127 ? v : 0);
+    s = e;
+    if (i < 25) { if (*s != ',') return 0; s++; }
+  }
+  memcpy(k, t, 26);
+  return 1;
 }
 
 /* ================================================================== snapping to layers and slices */

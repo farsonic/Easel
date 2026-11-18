@@ -208,6 +208,15 @@ static void test_small(void)
   CHECK(blend_step(BM_NORMAL, 1) == BM_DISSOLVE && blend_step(BM_DISSOLVE, -1) == BM_NORMAL, "Shift + and -");
   CHECK(blend_step(BM_NORMAL, -1) == BM_NORMAL && blend_step(BM_LUMINOSITY, 1) == BM_LUMINOSITY, "stops at the ends");
   CHECK(blend_step(BM_DARKERCOLOR, 1) == BM_LIGHTEN, "group to group");
+  {
+    signed char a[26], b[26]; char line[200]; int i;
+    for (i = 0; i < 26; i++) a[i] = (signed char)(i % 3 ? 0 : i + 1);
+    toolkeys_format(a, line, sizeof line);
+    CHECK(!strncmp(line, "1,0,0,4,", 8), "the tool letters' memory as text");
+    CHECK(toolkeys_parse(line, b, 80) && !memcmp(a, b, 26), "and back");
+    CHECK(toolkeys_parse(line, b, 3) && b[0] == 1 && b[3] == 0, "tools past the count dropped");
+    CHECK(!toolkeys_parse("1,2,x", b, 80), "a bad line refused");
+  }
   memset(&k, 0, sizeof k);
   CHECK(opacity_key(&k, 4, 1000) == 40, "4 is 40 %");
   CHECK(opacity_key(&k, 5, 1200) == 45, "4 5 quickly is 45 %");
@@ -280,12 +289,16 @@ static void test_contact_stats(void)
   int i;
   for (i = 0; i < 7; i++) { p[i] = doc_new(i % 2 ? 40 : 20, i % 2 ? 20 : 40, (u32)(i * 0x202020), 0); }
   contact_defaults(&o);
-  o.w = 200; o.h = 100; o.cols = 2; o.rows = 2; o.spacing = 10; o.dpi = 72; o.bg = 0xFFFFFF;
+  o.w = 200; o.h = 100; o.cols = 2; o.rows = 2; o.spacing = 10; o.dpi = 72; o.bg = 0xFFFFFF; o.captions = 0;
   CHECK(contact_pages(7, &o) == 2, "seven on two pages");
   s = contact_sheet(p, names, 7, 0, &o);
   CHECK(s && s->w == 200 && s->nlay == 5 && !strcmp(s->lay[1]->name, "a") && !strcmp(s->lay[4]->name, "d"), "a layer each, named");
   CHECK(s && px(s, 2, 120, 20)[3] == 255 && px(s, 2, 108, 20)[3] == 0, "the second picture in the second cell");
   CHECK(s && px(s, 0, 2, 2)[0] == 255, "on white");
+  doc_free(s);
+  o.captions = 1; o.font_px = 8;
+  s = contact_sheet(p, names, 7, 0, &o);
+  CHECK(s && s->nlay == 9 && layer_text(s->lay[2]) && !strcmp(layer_text(s->lay[2])->text, "a"), "a caption under each, as type");
   doc_free(s);
   o.flatten = 1;
   s = contact_sheet(p, names, 7, 1, &o);

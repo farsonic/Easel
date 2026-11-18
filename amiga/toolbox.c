@@ -488,7 +488,7 @@ static int fields_for(int t, Field *f)
     /* 0.9: the font, its style and size, anti-aliasing, alignment, the colour; Warp, Character, Paragraph */
     Doc *doc = cur_doc();
     for (i = 0; i < font_count() && i < 96; i++) fontlist[i] = font_label(i);
-    if (t == TL_TYPEMASK) SELOPS();
+    if (t == TL_TYPEMASK) { SELOPS(); CHECK("Vertical", opt.tmask_vertical); }     /* (1.3: the Vertical Type Mask) */
     if (i) CHOICE("", opt.text_font, fontlist, i);
     CHOICE("", opt.text_style, tstyles, 4);
     SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 3); CHOICE("", opt.text_align, taligns, 5);
