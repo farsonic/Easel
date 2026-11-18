@@ -625,7 +625,7 @@ dodge.
 | Xor (Paint.NET) | **Have** (1.1) | Done | — |
 | Paint.NET Color Burn | **Have** (1.1) | Done | — |
 | Paint.NET Color Dodge | **Have** (1.1) | Done | — |
-| Painting-only Clear and Behind (`input/blend_keys.rs`; upstream #13028 gives the Pattern Stamp Behind) | **Partial**: the Eraser does what Clear does; the Brush's Mode list has neither | Easy | P3 |
+| Painting-only Clear and Behind (`input/blend_keys.rs`; upstream #13028 gives the Pattern Stamp Behind) | **Have** (round 3): the Brush's and Pencil's Mode lists end with Behind (paints only where the layer is see-through, under what is there) and Clear (takes the paint's coverage away), painting-only modes past the layer modes (`BM_BEHIND`, `BM_CLEAR`, `paint_px_mode` in `E:core/paint.c`; `E:tests/filestest.c`); the Eraser does what Clear does too | Done | — |
 | Separators between the mode groups in the lists (upstream #5532) | **Missing**: Easel's lists are plain (the Layers panel's pop-up list draws no separators) | Easy | P3 |
 
 ## 5. Adjustments (Image › Adjustments, 22 items)

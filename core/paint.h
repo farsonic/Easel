@@ -24,6 +24,12 @@ enum { PT_BRUSH, PT_PENCIL, PT_ERASER, PT_CLONE, PT_BLUR, PT_SHARPEN, PT_SMUDGE,
        PT_MIXER,                      /* Mixer Brush: paints from a reservoir, picking up the canvas's colour */
        PT_N };
 enum { ER_BRUSH, ER_PENCIL, ER_BLOCK };                    /* the Eraser's modes */
+/* round 3: painting-only modes past the layer modes (Brush and Pencil, as Photoshop's): Behind paints
+   only where the layer is see-through (under what is there), Clear takes the paint's coverage away
+   as the Eraser does. Never given to blend_pixel: put_px does them */
+#define BM_BEHIND BM_N
+#define BM_CLEAR  (BM_N + 1)
+void paint_px_mode(u8 *p, const u8 *col, int cov, int blend);   /* one painted pixel in any of them */
 enum { SMP_CONTINUOUS, SMP_ONCE, SMP_SWATCH };             /* Color Replacement and Background Eraser: what they sample */
 enum { LIM_CONTIGUOUS, LIM_DISCONTIGUOUS, LIM_FINDEDGES }; /* and where they act */
 enum { RPL_HUE, RPL_SATURATION, RPL_COLOR, RPL_LUMINOSITY };

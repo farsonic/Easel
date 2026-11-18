@@ -23,6 +23,7 @@
 #include "core/toolsx.h"
 #include "core/gradient.h"
 #include "core/brushx.h"
+#include "core/paint.h"
 #include "core/palette.h"
 #include <math.h>
 
@@ -791,6 +792,41 @@ static void test_grd(void)
   free(f);
 }
 
+/* the Brush's Behind and Clear modes */
+static void test_behind_clear(void)
+{
+  Doc *d = doc_new(40, 20, 0, 1);
+  Brush b;
+  Box ch;
+  Stroke *s;
+  u8 *p = d->lay[0]->px;
+  i32 x, y;
+  for (y = 0; y < 20; y++) for (x = 0; x < 20; x++) { u8 *q = p + (y * 40 + x) * 4; q[0] = 255; q[3] = 255; }   /* the left half opaque red */
+  doc_forget_undo(d);
+  memset(&b, 0, sizeof b);
+  b.tool = PT_BRUSH; b.size = 6; b.hardness = 100; b.opacity = 100; b.flow = 100; b.spacing = 25; b.strength = 50; b.bg = 0xFFFFFF;
+  b.blend = BM_BEHIND;
+  s = stroke_begin(d, &b, 0x0000FF, 2, 10, &ch);
+  CHECK(s != NULL, "a Behind stroke");
+  if (s) { stroke_to(s, 38, 10, &ch); stroke_end(s); }
+  CHECK(p[(10 * 40 + 10) * 4] == 255 && p[(10 * 40 + 10) * 4 + 2] == 0, "the opaque red stays red: Behind paints under it");
+  CHECK(p[(10 * 40 + 30) * 4 + 2] == 255 && p[(10 * 40 + 30) * 4 + 3] == 255, "where the layer was see-through it is blue");
+  doc_undo(d);
+  b.blend = BM_CLEAR;
+  s = stroke_begin(d, &b, 0x0000FF, 2, 10, &ch);
+  if (s) { stroke_to(s, 38, 10, &ch); stroke_end(s); }
+  p = d->lay[0]->px;
+  CHECK(p[(10 * 40 + 10) * 4 + 3] == 0, "Clear takes the red away along the stroke");
+  CHECK(p[(2 * 40 + 10) * 4 + 3] == 255, "and leaves the rest");
+  CHECK(p[(10 * 40 + 30) * 4 + 3] == 0, "and puts no paint where there was none");
+  {
+    u8 px[4] = { 10, 20, 30, 128 }, c[3] = { 200, 200, 200 };
+    paint_px_mode(px, c, 255, BM_BEHIND);
+    CHECK(px[3] == 255 && px[0] > 10 && px[0] < 200, "Behind: the half see-through pixel over the paint");
+  }
+  doc_free(d);
+}
+
 static void test_look(void)
 {
   /* an inverting 2x2x2 table, hex floats little-endian, red fastest, in UTF-8 and UTF-16 */
@@ -852,6 +888,7 @@ int main(int argc, char **argv)
   test_timeline();
   test_measure();
   test_grd();
+  test_behind_clear();
   test_exif();
   test_layered();
   test_exr2();
