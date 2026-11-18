@@ -74,6 +74,7 @@ static void save_text(Buf *b, const TextParams *tp)
   if (tp->box) { kv_num(b, "box", 1); kv_num(b, "bw", tp->bw); kv_num(b, "bh", tp->bh); }
   kv_num(b, "align", tp->align); kv_num(b, "aa", tp->aa); kv_num(b, "kern", tp->kern);
   if (tp->hyphenate) kv_num(b, "hy", 1);                   /* r3 */
+  if (tp->path[0]) kv_str(b, "tpath", tp->path);           /* r3: type on a path */
   if (tp->vertical) kv_num(b, "vert", 1);
   if (tp->leading) kv_num(b, "lead", tp->leading);
   if (tp->indent) kv_num(b, "indent", tp->indent);
@@ -178,6 +179,7 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "aa")) tp->aa = (u8)(x >= 0 && x <= 4 ? x : 2);        /* (r3: up to Strong) */
     else if (!strcmp(k, "kern")) tp->kern = x != 0;
     else if (!strcmp(k, "hy")) tp->hyphenate = x != 0;          /* r3 */
+    else if (!strcmp(k, "tpath")) { dec(v); strncpy(tp->path, v, TP_MAXPATH - 1); tp->path[TP_MAXPATH - 1] = 0; }
     else if (!strcmp(k, "vert")) tp->vertical = x != 0;
     else if (!strcmp(k, "lead")) tp->leading = x;
     else if (!strcmp(k, "indent")) tp->indent = x;
@@ -341,6 +343,25 @@ static void transform_text(TextParams *tp, const double *m)
   double s = 1, X[6], S[6];
   int i;
   int uniform = fabs(m[1]) < 1e-12 && fabs(m[3]) < 1e-12 && m[0] > 0 && fabs(m[0] - m[4]) < 1e-9 * m[0];
+  if (tp->path[0] && !tp->xf_on) {
+    /* r3: type on a path: the path moves (turns, scales) and the text follows it; a uniform
+       scale scales the type too */
+    Path *p = path_from_svg(tp->path);
+    char *svg;
+    if (p) {
+      path_transform(p, m);
+      svg = path_to_svg(p);
+      path_free(p);
+      if (svg && strlen(svg) < TP_MAXPATH) {
+        strcpy(tp->path, svg);
+        free(svg);
+        if (uniform && m[0] != 1)
+          for (i = 0; i < tp->nruns; i++) { tp->run[i].size *= m[0]; tp->run[i].baseline *= m[0]; if (tp->run[i].size > 2000) tp->run[i].size = 2000; }
+        return;
+      }
+      free(svg);
+    }
+  }
   if (uniform && m[0] != 1) {
     /* sizes scaled: the text is laid out again at the new size, as sharp as ever */
     s = m[0];

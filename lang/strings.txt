@@ -2871,3 +2871,6 @@ Add to Sample	Zur Aufnahme hinzufügen	Ajouter à l'échantillon	Añadir a la mu
 Subtract from Sample	Von Aufnahme subtrahieren	Soustraire de l'échantillon	Restar de la muestra	Sottrai dal campione
 Foreground Color:	Vordergrundfarbe:	Couleur de premier plan :	Color frontal:	Colore di primo piano:
 Only Web Colors	Nur Webfarben	Couleurs Web uniquement	Sólo colores web	Solo colori Web
+Type on Active Path	Text auf aktivem Pfad	Texte sur le tracé actif	Texto en el trazado activo	Testo sul tracciato attivo
+Type off the Path	Text vom Pfad lösen	Détacher le texte du tracé	Separar el texto del trazado	Stacca il testo dal tracciato
+That path is too long to keep with the text.	Dieser Pfad ist zu lang, um ihn mit dem Text zu speichern.	Ce tracé est trop long pour être gardé avec le texte.	Ese trazado es demasiado largo para guardarlo con el texto.	Quel tracciato è troppo lungo da tenere con il testo.

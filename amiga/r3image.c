@@ -27,6 +27,7 @@
 #include "../core/layers.h"
 #include "../core/selr3.h"
 #include "../core/hyphen.h"
+#include "../core/type.h"
 
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
 /* enough memory for need bytes? If not, the user is told how much is needed */
@@ -380,6 +381,13 @@ int r3_command(Doc *d, ULONG id)
   case ID_LIQUIFY: liquify(d); break;
   case ID_SELSUBJECT: select_found(d, 0); break;
   case ID_SELSKY: select_found(d, 1); break;
+  case ID_TYPEONPATH: case ID_TYPEOFFPATH: {
+    /* Layer > Type > Type on Active Path, and Off the Path */
+    Path *p = id == ID_TYPEONPATH ? active_path(d) : NULL;
+    if (d->active < 0 || d->active >= d->nlay || !layer_text(d->lay[d->active])) { ask("OK", "%s", tr("Choose a type layer first.")); break; }
+    if (id == ID_TYPEONPATH && (!p || !p->na)) { ask("OK", "%s", tr("Choose a path in the Paths panel first (or draw one with the Pen tool).")); break; }
+    if (!doc_text_on_path(d, d->active, p) && id == ID_TYPEONPATH) ask("OK", "%s", tr("That path is too long to keep with the text."));
+    break; }
   default: break;
   }
   return 1;

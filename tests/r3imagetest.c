@@ -808,6 +808,56 @@ static void test_type(void)
   }
   text_layout_free(a);
   hyphen_free();
+  /* type on a path: along a horizontal line it lies as point text would; along a vertical one
+     it stands on end; the layer follows the path when moved; off the path again */
+  {
+    Doc *d = doc_new(300, 300, 0xFFFFFF, 0);
+    TextParams t0;
+    Path *p = path_new();
+    Box bp, bq;
+    int li;
+    text_params_init(&t0, "Carlito", 30, 0, 50, 100);
+    text_set_string(&t0, "Path");
+    li = doc_new_text(d, &t0, NULL);
+    bq = text_bounds(&t0);
+    path_move_to(p, 50, 100); path_line_to(p, 280, 100);
+    CHECK(li >= 0 && doc_text_on_path(d, li, p), "put on a path");
+    bp = text_bounds(layer_text(d->lay[li]));
+    CHECK(abs(bp.x0 - bq.x0) <= 1 && abs(bp.y0 - bq.y0) <= 1 && abs(bp.x1 - bq.x1) <= 1 && abs(bp.y1 - bq.y1) <= 1, "along a level line: where point text would be");
+    path_clear(p); path_move_to(p, 150, 20); path_line_to(p, 150, 280);
+    CHECK(doc_text_on_path(d, li, p), "a downward path");
+    bp = text_bounds(layer_text(d->lay[li]));
+    CHECK(bp.y1 - bp.y0 > bp.x1 - bp.x0 && bp.x0 > 125 && bp.x1 > 170 && bp.x1 < 200 && bp.y0 >= 5 && bp.y1 < 100, "stands on end, its tops to the path's left (east, going down)");
+    {
+      u8 *px = NULL;
+      Box rb;
+      long k, inkn = 0;
+      CHECK(text_render(layer_text(d->lay[li]), 300, 300, &px, &rb) && px, "drawn along it");
+      if (px) for (k = 0; k < (long)(rb.x1 - rb.x0) * (rb.y1 - rb.y0); k++) inkn += px[k * 4 + 3] > 128;
+      CHECK(inkn > 100, "with ink");
+      free(px);
+    }
+    {
+      /* moved with the layer: the path moves */
+      double m[6] = { 1, 0, 20, 0, 1, 5 };
+      Box before = text_bounds(layer_text(d->lay[li])), after;
+      live_transform(d->lay[li], m);
+      after = text_bounds(layer_text(d->lay[li]));
+      CHECK(after.x0 - before.x0 == 20 && after.y0 - before.y0 == 5, "moved along with its path");
+    }
+    {
+      char *sv = live_save(d->lay[li]);
+      Layer l2;
+      memset(&l2, 0, sizeof l2);
+      CHECK(sv && strstr(sv, "tpath=") && live_load(&l2, LK_TEXT, sv) && layer_text(&l2)->path[0] == 'M', "the path kept in OpenRaster's text");
+      free(sv); free(l2.live);
+    }
+    CHECK(doc_text_on_path(d, li, NULL) && !layer_text(d->lay[li])->path[0], "off the path");
+    doc_undo(d);
+    CHECK(layer_text(d->lay[li])->path[0], "undo: on it again");
+    path_free(p);
+    doc_free(d);
+  }
   /* contextual alternates and fractions (GSUB lookups 6), for check_r3.py to redo with fontTools */
   snprintf(path, sizeof path, "%s/r3_gsub.txt", tmpdir);
   gf = fopen(path, "w");

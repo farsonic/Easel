@@ -23,6 +23,7 @@
 
 #define TP_MAXTEXT 4096                /* bytes of text a type layer holds, the 0 included */
 #define TP_MAXRUNS 64
+#define TP_MAXPATH 2048               /* r3: bytes of SVG path data a type layer on a path keeps */
 
 /* alignments: text.h's TA_LEFT, TA_CENTER, TA_RIGHT, and */
 enum { TA_JUSTIFY = 3,                 /* justified, the last line of each paragraph left */
@@ -107,7 +108,14 @@ typedef struct TextParams {
   u8 pad2[3];
   TextRun run[TP_MAXRUNS];
   char text[TP_MAXTEXT];
+  char path[TP_MAXPATH];              /* r3: type on a path: SVG path data ("" none). The text runs along the
+                                         path's first subpath from its start (left aligned), its middle
+                                         (centred) or its end (right aligned), the baseline on the path;
+                                         x and y are 0, the box and the warp unused */
 } TextParams;
+/* r3: type layer i's text put on path p (its first subpath; NULL takes it off the path, where it
+   lay); one undo step. 0 if it isn't a type layer, the path is empty or too long to keep */
+int  doc_text_on_path(Doc *d, int i, const Path *p);
 
 /* ------------------------------------------------------------------ fonts */
 /* how a run's family and style become a face: set by the UI (the default looks in text_fonts,

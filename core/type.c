@@ -252,6 +252,7 @@ static void sanitize(TextParams *tp)
 {
   i32 n, i;
   tp->text[TP_MAXTEXT - 1] = 0;
+  tp->path[TP_MAXPATH - 1] = 0;                             /* (r3) */
   n = (i32)strlen(tp->text);
   if (tp->nruns < 1) { tp->nruns = 1; if (tp->run[0].size <= 0) tp->run[0].size = 24; }
   if (tp->nruns > TP_MAXRUNS) tp->nruns = TP_MAXRUNS;
@@ -919,14 +920,68 @@ int text_extent(const TextParams *tp, double *w, double *h)
 }
 
 /* ------------------------------------------------------------------ warps */
+#define WP_MAX 400                     /* r3: points of the path type runs along */
 typedef struct {
   const TextParams *tp;
   int warp;
   double cx, cy, W, H, b, hd, vd;
+  /* r3: type on a path: the path flattened, the length to each point, where the text starts */
+  int np; double *pxy, *cum, start;     /* (malloc'd: warp_free) */
 } Warp;
+static void warp_free(Warp *w) { free(w->pxy); w->pxy = w->cum = NULL; w->np = 0; }
+/* r3: the path's first subpath as at most WP_MAX points, with their distances along it */
+static void path_init(Warp *w, const TextParams *tp, const TextLayout *tl)
+{
+  Path *p;
+  Poly pl;
+  i32 n, i, step;
+  w->np = 0; w->pxy = w->cum = NULL;
+  if (!tp->path[0] || !(p = path_from_svg(tp->path))) return;
+  if (!(w->pxy = (double *)malloc(3 * WP_MAX * sizeof(double)))) { path_free(p); return; }
+  w->cum = w->pxy + 2 * WP_MAX;
+  poly_init(&pl);
+  if (path_flatten(p, 0.25, &pl) && pl.nc > 0) {
+    n = pl.end[0];
+    step = n > WP_MAX ? (n + WP_MAX - 2) / (WP_MAX - 1) : 1;
+    for (i = 0; i < n && w->np < WP_MAX; i += step) { w->pxy[2 * w->np] = pl.xy[2 * i]; w->pxy[2 * w->np + 1] = pl.xy[2 * i + 1]; w->np++; }
+    if ((n - 1) % step && w->np < WP_MAX) { w->pxy[2 * w->np] = pl.xy[2 * (n - 1)]; w->pxy[2 * w->np + 1] = pl.xy[2 * (n - 1) + 1]; w->np++; }
+    else if ((n - 1) % step) { w->pxy[2 * (w->np - 1)] = pl.xy[2 * (n - 1)]; w->pxy[2 * (w->np - 1) + 1] = pl.xy[2 * (n - 1) + 1]; }
+  }
+  poly_free(&pl); path_free(p);
+  if (w->np < 2) { warp_free(w); return; }
+  w->cum[0] = 0;
+  for (i = 1; i < w->np; i++) w->cum[i] = w->cum[i - 1] + hypot(w->pxy[2 * i] - w->pxy[2 * i - 2], w->pxy[2 * i + 1] - w->pxy[2 * i - 1]);
+  /* centred or right-aligned text starts before the middle or the end */
+  {
+    double len = w->cum[w->np - 1], tw = tl ? tl->bx1 - tl->bx0 : 0;
+    (void)tw;
+    w->start = tp->align == TA_CENTER ? len / 2 : tp->align == TA_RIGHT ? len : 0;
+  }
+}
+/* layout x (along) and y (below the baseline) to the canvas on the path */
+static void path_pt(const Warp *w, double *px, double *py)
+{
+  double s = *px + w->start, along = *py, tx, ty, ax, ay;
+  int lo = 0, hi = w->np - 1;
+  /* the segment holding s (past the ends: the end segments carried on) */
+  if (s <= 0) hi = 1;
+  else if (s >= w->cum[w->np - 1]) lo = w->np - 2;
+  else while (hi - lo > 1) { int m = (lo + hi) / 2; if (w->cum[m] <= s) lo = m; else hi = m; }
+  if (s <= 0) lo = 0;
+  {
+    double L = w->cum[lo + 1] - w->cum[lo], t;
+    tx = w->pxy[2 * lo + 2] - w->pxy[2 * lo]; ty = w->pxy[2 * lo + 3] - w->pxy[2 * lo + 1];
+    if (L < 1e-9) { tx = 1; ty = 0; L = 1; t = 0; }
+    else { tx /= L; ty /= L; t = s - w->cum[lo]; }
+    ax = w->pxy[2 * lo] + tx * t; ay = w->pxy[2 * lo + 1] + ty * t;
+  }
+  /* above the baseline (y < 0) is the path's left side */
+  *px = ax - ty * along; *py = ay + tx * along;
+}
 static void warp_init(Warp *w, const TextParams *tp, const TextLayout *tl)
 {
-  w->tp = tp; w->warp = tp->warp;
+  path_init(w, tp, tl);                                   /* (r3) */
+  w->tp = tp; w->warp = w->np ? TW_NONE : tp->warp;
   w->cx = (tl->bx0 + tl->bx1) / 2; w->cy = (tl->by0 + tl->by1) / 2;
   w->W = tl->bx1 - tl->bx0; w->H = tl->by1 - tl->by0;
   if (w->W < 1) w->W = 1;
@@ -939,7 +994,8 @@ static void warp_init(Warp *w, const TextParams *tp, const TextLayout *tl)
 static void map_pt(const Warp *w, double *px, double *py)
 {
   double x = *px, y = *py;
-  if (w->warp != TW_NONE) {
+  if (w->np) path_pt(w, &x, &y);                          /* r3: along the path */
+  else if (w->warp != TW_NONE) {
     double u = (x - w->cx) / (w->W / 2), v = (y - w->cy) / (w->H / 2), b = w->b, H = w->H;
     /* the distortions: horizontal (height grows across) and vertical (width grows down) */
     x = w->cx + (x - w->cx) * (1 + w->vd * v * 0.5);
@@ -1017,6 +1073,7 @@ Box text_bounds(const TextParams *tp)
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
+  warp_free(&w);
   text_layout_free(tl);
   if (x0 < -1e7) x0 = -1e7;
   if (y0 < -1e7) y0 = -1e7;
@@ -1245,7 +1302,7 @@ static void draw_glyph(Render *R, const TGlyph *g)
       }
       /* long lines cut up so a warp can bend them */
       len = fabs(lx1 - lx0) + fabs(ly1 - ly0);
-      sub = R->w.warp != TW_NONE ? (int)(len / 2) + 1 : 1;
+      sub = R->w.warp != TW_NONE || R->w.np ? (int)(len / 2) + 1 : 1;
       if (sub > 64) sub = 64;
       for (j = 1; j <= sub; j++) {
         double t = (double)j / sub, x = lx0 + (lx1 - lx0) * t, y = ly0 + (ly1 - ly0) * t;
@@ -1314,7 +1371,7 @@ static int render(const TextParams *tp, i32 w, i32 h, Canvas *cv, Poly *collect)
   if (!(R.rf = (RunFont *)malloc((size_t)tl->tp->nruns * sizeof(RunFont)))) { text_layout_free(tl); return 0; }
   for (r = 0; r < tl->tp->nruns; r++) run_font(&tl->tp->run[r], &R.rf[r]);
   warp_init(&R.w, tl->tp, tl);
-  R.complex = tl->tp->warp != TW_NONE;
+  R.complex = tl->tp->warp != TW_NONE || R.w.np > 0;     /* (r3: on a path too) */
   if (tl->tp->xf_on) {
     const double *m = tl->tp->xf;
     if (m[0] == 1 && m[1] == 0 && m[3] == 0 && m[4] == 1) { R.ox = m[2]; R.oy = m[5]; }
@@ -1332,6 +1389,7 @@ static int render(const TextParams *tp, i32 w, i32 h, Canvas *cv, Poly *collect)
     }
   }
   draw_lines(&R);
+  warp_free(&R.w);
   free(R.rf);
   text_layout_free(tl);
   *cv = R.cv;
@@ -1378,6 +1436,36 @@ Path *text_to_path(const TextParams *tp)
 }
 
 /* ------------------------------------------------------------------ in the document */
+int doc_text_on_path(Doc *d, int i, const Path *p)
+{
+  const TextParams *cur;
+  TextParams *tp;
+  int ok;
+  if (i < 0 || i >= d->nlay || !(cur = layer_text(d->lay[i]))) return 0;
+  if (!(tp = (TextParams *)malloc(sizeof *tp))) return 0;
+  *tp = *cur;
+  if (p) {
+    char *svg = path_to_svg(p);
+    Path *first;
+    double x0, y0, x1, y1;
+    if (!svg || !p->na || strlen(svg) >= TP_MAXPATH) { free(svg); free(tp); return 0; }
+    /* (the path as given; its first subpath is the one used) */
+    strcpy(tp->path, svg);
+    free(svg);
+    if (!(first = path_from_svg(tp->path)) || !path_bounds(first, &x0, &y0, &x1, &y1)) { path_free(first); free(tp); return 0; }
+    path_free(first);
+    tp->box = 0; tp->x = 0; tp->y = 0; tp->warp = TW_NONE; tp->vertical = 0;
+  } else {
+    Box b = text_bounds(cur);
+    if (!cur->path[0]) { free(tp); return 0; }
+    tp->path[0] = 0;
+    /* off the path: a line of point text where it began */
+    tp->x = b.x0; tp->y = b.y1;
+  }
+  ok = doc_set_text(d, i, tp);
+  free(tp);
+  return ok;
+}
 const TextParams *layer_text(const Layer *l)
 {
   return l && l->kind == LK_TEXT && l->live && l->livelen == sizeof(TextParams) ? (const TextParams *)l->live : NULL;

@@ -15,6 +15,8 @@
 #define ID_LIQUIFY      7715
 #define ID_SELSUBJECT   7720
 #define ID_SELSKY       7721
+#define ID_TYPEONPATH   7740
+#define ID_TYPEOFFPATH  7741
 #define ID_R3_LAST      7899
 
 #include "../core/doc.h"

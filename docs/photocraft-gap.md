@@ -867,7 +867,7 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Justify Left/Center/Right/All (`TextAlign`) | **Have** (1.2): `TA_JUSTIFY` (last line left), `TA_JUSTIFY_CENTER`, `TA_JUSTIFY_RIGHT` and `TA_JUSTIFY_ALL` | Done | — |
 | Indents, space before and after, hyphenation (`ParagraphStyle`) | **Have**: first-line indent, space before and after, left and right indents; round 3 adds hyphenation of paragraph text (Paragraph › Hyphenate): a word that doesn't fit is broken at its last hyphenation point that fits, with a hyphen drawn (Liang's patterns from a Hyphen .dic file in `PROGDIR:Dict`, the interface's language's or British English: Quill's reader, `E:core/hyphen.c`) | Done | — |
 | Paragraph text in a box with wrapping (`TextShape::Box`) | **Have** (0.9): drag a box with the Type tool | Done | — |
-| Type on a path (`TextShape::Path`) | **Missing** | Moderate: paths exist (`E:core/path.h`) | P3 |
+| Type on a path (`TextShape::Path`) | **Have** (r3): Layer › Type › Type on Active Path puts the type layer's text along the path chosen in the Paths panel (its first subpath; from its start, middle or end as the text is aligned; the glyphs bent to it as a warp bends them), Type off the Path takes it off; the path moves, turns and scales with the layer and is kept in OpenRaster (`path` in `TextParams`, `doc_text_on_path` in `E:core/type.c`). The caret isn't shown along the path: edit the text with the layer off the path, or through Character | Done | — |
 | Area type (`TextShape::Area`) | **Missing** | Moderate | P3 |
 | Type › Orientation › Horizontal / Vertical (2 items) | **Have** (0.9): Layer › Type › Horizontal / Vertical, the Vertical Type tool | Done | — |
 | Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Have**: None, Sharp (hinted), Smooth and, new in round 3, Crisp (a steeper edge) and Strong (heavier) (`TAA_` in `E:core/type.h`, on the Type tool's options bar); the Windows ones are **Left out** (they are Windows' own rendering) | Done | — |
@@ -885,7 +885,7 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Type › Paste Lorem Ipsum | **Have** (1.1): Layer › Type › Paste Lorem Ipsum, into the active type layer or as a new paragraph (`lorem_ipsum` in `E:core/scripts.c`) | Done | — |
 | Type › Load / Save Default Type Styles (2 items) | **Missing** | Easy | P3 |
 | Type options bar: a list of preset font sizes (PhotoCraft #12718, since eb6c1ab) | **Missing**: the size is a slider | Easy | P3 |
-| Type options bar: a button showing the Character and Paragraph panels (#13020) | **Missing** | Easy | P3 |
+| Type options bar: a button showing the Character and Paragraph panels (#13020) | **Have** (stale row): the Type tool's options bar has had Character and Paragraph buttons since 1.1 (`ICONBTN("Character"...)` in `E:amiga/toolbox.c`); they open the dialogs, Easel's form of those panels | Done | — |
 | Cmd-. (Ctrl-.) cancels a type editing session (#12076) | **Have** (r3): Ctrl-. (and Amiga-.) throws the edit away and ends it, the layer as it was (a new one not made); Esc and Enter still finish it (`ty_key` in `E:amiga/canvas.c`) | Done | — |
 
 ## 10. Vector paths and shapes

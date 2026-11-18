@@ -2856,3 +2856,6 @@
   { { "Subtract from Sample", "Von Aufnahme subtrahieren", "Soustraire de l'\351chantillon", "Restar de la muestra", "Sottrai dal campione" } },
   { { "Foreground Color:", "Vordergrundfarbe:", "Couleur de premier plan :", "Color frontal:", "Colore di primo piano:" } },
   { { "Only Web Colors", "Nur Webfarben", "Couleurs Web uniquement", "S\363lo colores web", "Solo colori Web" } },
+  { { "Type on Active Path", "Text auf aktivem Pfad", "Texte sur le trac\351 actif", "Texto en el trazado activo", "Testo sul tracciato attivo" } },
+  { { "Type off the Path", "Text vom Pfad l\366sen", "D\351tacher le texte du trac\351", "Separar el texto del trazado", "Stacca il testo dal tracciato" } },
+  { { "That path is too long to keep with the text.", "Dieser Pfad ist zu lang, um ihn mit dem Text zu speichern.", "Ce trac\351 est trop long pour \352tre gard\351 avec le texte.", "Ese trazado es demasiado largo para guardarlo con el texto.", "Quel tracciato \350 troppo lungo da tenere con il testo." } },
