@@ -127,6 +127,7 @@ struct Data {
   int ov_crop, ov_bounds; Box bbox; Doc *bb_doc; void *bb_undo; int bb_active, bb_nlay; u8 *bb_px; Box ov_bbox;
   double zs_z; LONG zs_mx, zs_my; int zs_moved;
   int tilde;                             /* 1.1: the ` key held: the Brush erases */
+  int shape_centre;                      /* 1.1: Alt held while a shape is dragged out: from its centre */
 };
 
 static struct MUI_CustomClass *ccls;
@@ -623,6 +624,7 @@ static void bounds_handles(LONG x0, LONG y0, LONG x1, LONG y1, LONG *hx, LONG *h
   hx[0] = x0; hy[0] = y0; hx[1] = x1; hy[1] = y0; hx[2] = x1; hy[2] = y1; hx[3] = x0; hy[3] = y1;
   hx[4] = mx; hy[4] = y0; hx[5] = x1; hy[5] = my; hx[6] = mx; hy[6] = y1; hx[7] = x0; hy[7] = my;
 }
+static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1);
 /* everything in the overlay drawn (or, drawn again, taken away) */
 static void ov_draw(struct Data *d, Object *obj)
 {
@@ -650,8 +652,12 @@ static void ov_draw(struct Data *d, Object *obj)
     break;
   case DR_SHAPE:
     if (d->ov_prev) break;
-    if (tool == TL_ELLIPSE) xellipse(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
-    else xrect(rp, to_sx(d, obj, d->ax), to_sy(d, obj, d->ay), to_sx(d, obj, d->bx), to_sy(d, obj, d->by));
+    {
+      double x0, y0, x1, y1;
+      drag_box(d, &x0, &y0, &x1, &y1);
+      if (tool == TL_ELLIPSE) xellipse(rp, to_sx(d, obj, x0), to_sy(d, obj, y0), to_sx(d, obj, x1), to_sy(d, obj, y1));
+      else xrect(rp, to_sx(d, obj, x0), to_sy(d, obj, y0), to_sx(d, obj, x1), to_sy(d, obj, y1));
+    }
     break;
   case DR_LINE:
     if (d->ov_prev) break;
@@ -1760,6 +1766,11 @@ static Path *custom_path(Doc *doc, double x0, double y0, double x1, double y1)
 static void drag_box(struct Data *d, double *x0, double *y0, double *x1, double *y1)
 {
   if (tool == TL_LINE) { *x0 = d->ax; *y0 = d->ay; *x1 = d->bx; *y1 = d->by; return; }
+  if (d->shape_centre && d->drag == DR_SHAPE && tool != TL_REDEYE) {
+    double w = fabs(d->bx - d->ax), h = fabs(d->by - d->ay);
+    *x0 = d->ax - w; *x1 = d->ax + w; *y0 = d->ay - h; *y1 = d->ay + h;
+    return;
+  }
   *x0 = d->ax < d->bx ? d->ax : d->bx; *x1 = d->ax < d->bx ? d->bx : d->ax;
   *y0 = d->ay < d->by ? d->ay : d->by; *y1 = d->ay < d->by ? d->by : d->ay;
 }
@@ -1861,6 +1872,7 @@ static void press(struct Data *d, Object *obj, LONG mx, LONG my, UWORD qual, ULO
   if (doc && brushlike(t) && doc->guides.show_grid && (doc->guides.snap & SNAP_GRID)) grid_snap_paint(doc, &x, &y);
   d->ax = d->bx = x; d->ay = d->by = y;
   if (!doc) return;
+  d->shape_centre = 0;
   ov_hide(d, obj);
   if (d->xf_on && t != TL_HAND) {
     /* 0.7: Free Transform's handles take the mouse, whatever the tool */
@@ -2170,7 +2182,8 @@ static void motion(struct Data *d, Object *obj, LONG mx, LONG my)
     ov_hide(d, obj);
     if (doc->guides.snap && d->drag != DR_MOVE) snap_point(doc, &x, &y, SNAP_DOC);
     d->bx = x; d->by = y;
-    if (d->modifiers & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
+    d->shape_centre = d->drag == DR_SHAPE && (d->qual & QALT) != 0;        /* (1.1: Alt: from the centre) */
+    if ((d->modifiers | (d->drag == DR_SHAPE ? d->qual : 0)) & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
       if (d->drag == DR_MARQUEE || d->drag == DR_SHAPE) {
         /* Shift: a square or a circle */
         double w = fabs(d->bx - d->ax), h = fabs(d->by - d->ay), s = w > h ? w : h;
