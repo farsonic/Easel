@@ -156,3 +156,7 @@ Look.cube
 Untitled-assets
 PROGDIR:Easel.newpresets
 PROGDIR:
+smartquotes=
+canvascolor=
+gamutopacity=
+gamutcol=

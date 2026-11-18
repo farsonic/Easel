@@ -328,6 +328,10 @@ typedef struct {
   char qx_dir[256];
   int place_smart, beep_done;
   char monitor_icc[256];              /* round 3: the monitor's ICC profile file ("": none, sRGB) */
+  /* round 4: the Type page's smart quotes; the pasteboard's colour (0 the theme's, 1 black, 2 dark grey,
+     3 medium grey, 4 light grey, 5 white); the gamut warning's colour and opacity (per cent) */
+  int smart_quotes, canvas_color;
+  ULONG gamut_color; int gamut_opacity;
 } Prefs;
 enum { QX_PNG, QX_JPEG, QX_GIF, QX_WEBP, QX_TIFF, QX_N };
 enum { QW_BESIDE, QW_LAST, QW_DRAWER, QW_ASK };

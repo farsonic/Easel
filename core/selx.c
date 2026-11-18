@@ -101,6 +101,16 @@ static double near_col(const u8 *p, u32 c, int fuzz)
   if (fuzz < 1) return dist < 0.5;
   return dist >= fuzz ? 0 : 1 - dist / fuzz;
 }
+/* r4: Localized Color Clusters' fall-off with the distance from where sample i was picked: 1 there,
+   0 at lrange per cent of the picture's longer side (smoothly, as 1 - (d/R)^2 squared) */
+static double cluster_weight(const ColorRange *cr, int i, i32 x, i32 y, i32 side)
+{
+  double R = side * (cr->lrange > 0 ? cr->lrange : 50) / 100.0, dx = x - cr->cx[i], dy = y - cr->cy[i], q;
+  if (R < 1) R = 1;
+  q = (dx * dx + dy * dy) / (R * R);
+  if (q >= 1) return 0;
+  return (1 - q) * (1 - q);
+}
 u8 *color_range_mask(Doc *d, const ColorRange *cr)
 {
   long k, n = (long)d->w * d->h;
@@ -116,7 +126,11 @@ u8 *color_range_mask(Doc *d, const ColorRange *cr)
     double v = 0;
     if (!(k & 4095) && progress(k, n)) break;              /* (0.8: progress, and Abort) */
     if (cr->preset == CR_SAMPLED) {
-      for (i = 0; i < cr->ncolors && i < CR_MAXCOLORS; i++) { double t = near_col(p, cr->colors[i], fuzz); if (t > v) v = t; }
+      for (i = 0; i < cr->ncolors && i < CR_MAXCOLORS; i++) {
+        double t = near_col(p, cr->colors[i], fuzz);
+        if (t > 0 && cr->localized && cr->has_xy[i]) t *= cluster_weight(cr, i, k % d->w, k / d->w, d->w > d->h ? d->w : d->h);
+        if (t > v) v = t;
+      }
     } else v = preset_value(cr, p);
     for (i = 0; i < cr->nminus && i < CR_MAXCOLORS; i++) v *= 1 - near_col(p, cr->minus[i], fuzz);
     if (cr->invert) v = 1 - v;

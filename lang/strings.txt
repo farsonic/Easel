@@ -3127,3 +3127,44 @@ Ask each time	Jedes Mal fragen	Toujours demander	Preguntar cada vez	Chiedi ogni 
 Open As...	Öffnen als...	Ouvrir sous...	Abrir como...	Apri come...
 Open as Photoshop Raw...	Als Photoshop Raw öffnen...	Ouvrir au format Photoshop brut...	Abrir como Photoshop Raw...	Apri come Photoshop Raw...
 Open a file of raw samples	Eine Datei mit Rohdaten öffnen	Ouvrir un fichier de données brutes	Abrir un archivo de muestras sin procesar	Apri un file di dati grezzi
+
+## r4 (round 4: Find and Isolate Layers, Float and Drop, Show Clipping, Color Range, Check Spelling, preferences)
+Show Clipping	Beschneidung anzeigen	Afficher l'écrêtage	Mostrar recorte	Mostra tagli
+Localized Color Clusters	Lokalisierte Farbgruppen	Clusters de couleurs localisés	Grupos de colores localizados	Cluster di colori localizzati
+Preview:	Vorschau:	Aperçu :	Previsualizar:	Anteprima:
+Click the preview to sample a colour there (Shift-click adds one,\nAlt-click takes one away); Range is then how far it reaches.	Klicken Sie in die Vorschau, um eine Farbe aufzunehmen (Umschalt-Klick\nfügt hinzu, Alt-Klick entfernt); Bereich bestimmt dann die Reichweite.	Cliquez dans l'aperçu pour y prélever une couleur (Maj-clic en ajoute une,\nAlt-clic en retire une) ; Plage indique alors sa portée.	Haga clic en la previsualización para tomar un color (Mayús-clic añade uno,\nAlt-clic quita uno); Rango indica entonces su alcance.	Fare clic sull'anteprima per campionare un colore (Maiusc-clic\nne aggiunge uno, Alt-clic ne toglie uno); Intervallo ne indica la portata.
+Check Spelling...	Rechtschreibprüfung...	Vérifier l'orthographe...	Revisar ortografía...	Controllo ortografia...
+Find Layers...	Ebenen suchen...	Rechercher des calques...	Buscar capas...	Trova livelli...
+Isolate Layers	Ebenen isolieren	Isoler les calques	Aislar capas	Isola livelli
+Float	Schwebend	Flottante	Flotante	Mobile
+Drop	Ablegen	Déposer	Soltar	Rilascia
+Isolated	Isoliert	Isolés	Aisladas	Isolati
+Filtered	Gefiltert	Filtrés	Filtradas	Filtrati
+Transparency & Gamut	Transparenz & Farbumfang	Transparence et gamme	Transparencia y gama	Trasparenza e gamma
+Dark Grey	Dunkelgrau	Gris foncé	Gris oscuro	Grigio scuro
+Medium Grey	Mittelgrau	Gris moyen	Gris medio	Grigio medio
+Light Grey	Hellgrau	Gris clair	Gris claro	Grigio chiaro
+Gamut Warning Colour	Farbumfang-Warnfarbe	Couleur d'avertissement de gamme	Color de aviso de gama	Colore avviso gamma
+Canvas colour:	Arbeitsflächenfarbe:	Couleur de la zone de travail :	Color del lienzo:	Colore area di lavoro:
+Gamut warning colour:	Farbumfang-Warnfarbe:	Couleur d'avertissement :	Color de aviso de gama:	Colore avviso gamma:
+Gamut warning opacity (%):	Deckkraft der Warnung (%):	Opacité de l'avertissement (%) :	Opacidad del aviso (%):	Opacità avviso (%):
+Use Smart Quotes:	Typografische Anführungszeichen:	Guillemets typographiques :	Usar comillas tipográficas:	Usa virgolette tipografiche:
+(Quotes typed with the Type tool become typographer's quotes.)	(Mit dem Textwerkzeug getippte Anführungszeichen werden typografisch.)	(Les guillemets tapés avec l'outil Texte deviennent typographiques.)	(Las comillas escritas con la herramienta Texto se vuelven tipográficas.)	(Le virgolette digitate con lo strumento Testo diventano tipografiche.)
+Find Layers	Ebenen suchen	Rechercher des calques	Buscar capas	Trova livelli
+Kind:	Art:	Type :	Tipo:	Tipo:
+The Layers panel shows only the layers that match.\nAn empty name and All show every layer again.	Das Ebenenbedienfeld zeigt nur die passenden Ebenen.\nEin leerer Name und Alle zeigen wieder alle Ebenen.	Le panneau Calques n'affiche que les calques correspondants.\nUn nom vide et Tous affichent de nouveau tous les calques.	El panel Capas solo muestra las capas que coinciden.\nUn nombre vacío y Todas vuelven a mostrar todas las capas.	Il pannello Livelli mostra solo i livelli corrispondenti.\nUn nome vuoto e Tutti mostrano di nuovo tutti i livelli.
+The spelling check is complete.	Die Rechtschreibprüfung ist abgeschlossen.	La vérification orthographique est terminée.	La revisión ortográfica ha terminado.	Il controllo ortografico è completato.
+There is no type layer to check.	Es gibt keine Textebene zum Prüfen.	Il n'y a aucun calque de texte à vérifier.	No hay ninguna capa de texto que revisar.	Non c'è nessun livello di testo da controllare.
+The word list wasn't found: Easel looks for Dict/british-english\nin its drawer.	Die Wortliste wurde nicht gefunden: Easel sucht Dict/british-english\nin seiner Schublade.	La liste de mots est introuvable : Easel cherche Dict/british-english\ndans son tiroir.	No se encontró la lista de palabras: Easel busca Dict/british-english\nen su cajón.	L'elenco di parole non è stato trovato: Easel cerca Dict/british-english\nnel suo cassetto.
+Check Spelling	Rechtschreibprüfung	Vérifier l'orthographe	Revisar ortografía	Controllo ortografia
+Not in Dictionary:	Nicht im Wörterbuch:	Absent du dictionnaire :	No está en el diccionario:	Non nel dizionario:
+Suggestions:	Vorschläge:	Suggestions :	Sugerencias:	Suggerimenti:
+Ignore	Ignorieren	Ignorer	Omitir	Ignora
+Ignore All	Alle ignorieren	Tout ignorer	Omitir todo	Ignora tutto
+Done	Fertig	Terminé	Hecho	Fine
+Select some pixels on a pixel layer first.	Wählen Sie zuerst Pixel auf einer Pixelebene aus.	Sélectionnez d'abord des pixels sur un calque de pixels.	Seleccione primero píxeles en una capa de píxeles.	Selezionare prima dei pixel su un livello di pixel.
+Make the floating selection's layer active first.	Aktivieren Sie zuerst die Ebene der schwebenden Auswahl.	Activez d'abord le calque de la sélection flottante.	Active primero la capa de la selección flotante.	Rendere prima attivo il livello della selezione mobile.
+Pixel	Pixel	Pixel	Píxel	Pixel
+Adjustment	Einstellung	Réglage	Ajuste	Regolazione
+Black Matte	Schwarzer Hintergrund	Cache noir	Mate negro	Opaco nero
+White Matte	Weißer Hintergrund	Cache blanc	Mate blanco	Opaco bianco

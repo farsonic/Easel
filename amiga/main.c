@@ -37,6 +37,7 @@
 #include "m3ids.h"
 #include "../core/menu3.h"
 #include "r3ids.h"                    /* r3-image */
+#include "r4ids.h"                    /* round 4 */
 #include "../core/vecx.h"
 #include "../core/viewx.h"
 #include "../core/fx.h"
@@ -196,7 +197,7 @@ static struct NewMenu menus[] = {
   I("Fade...", 0, ID_FADE), BAR,
   I("Cut", "X", ID_CUT), I("Copy", "C", ID_COPY), I("Copy Merged", 0, ID_COPYMERGED), I("Paste", "V", ID_PASTE), I("Paste in Place", 0, ID_PASTEINPLACE),
   I("Paste Into", 0, ID_PASTEINTO), I("Paste Outside", 0, ID_PASTEOUTSIDE), I("Paste from Amiga Clipboard", 0, ID_PASTEAMIGA), I("Clear", 0, ID_CLEAR), BAR,
-  I("Search...", 0, ID_SEARCH), I("Find and Replace Text...", 0, ID_FINDREPLACE), BAR,      /* (1.3) */
+  I("Search...", 0, ID_SEARCH), I("Find and Replace Text...", 0, ID_FINDREPLACE), I("Check Spelling...", 0, ID_CHECKSPELL), BAR,      /* (1.3; r4) */
   I("Fill...", 0, ID_FILL), I("Fill with Foreground", 0, ID_FILLFG), I("Fill with Background", 0, ID_FILLBG), I("Content-Aware Fill...", 0, ID_CAFILL), I("Stroke...", 0, ID_STROKE), BAR,
   I("Define Brush Preset...", 0, ID_DEFBRUSH), I("Pick Up Brush", 0, ID_PICKUPBRUSH), I("Define Pattern...", 0, ID_DEFPATTERN), I("Fill with Pattern", 0, ID_FILLPATTERN),
   H("Presets"), S("Load Patterns (.pat)...", 0, ID_LOADPAT), S("Load Gradients (.grd)...", 0, ID_LOADGRD), SBAR,      /* 1.2 */
@@ -297,11 +298,11 @@ static struct NewMenu menus[] = {
   I("Merge Down", "E", ID_MERGEDOWN), I("Merge Group", 0, ID_MERGEGROUP), I("Merge Layers", 0, ID_MERGELAYERS), I("Merge Visible", 0, ID_MERGEVISIBLE), I("Flatten Image", 0, ID_FLATTEN),
   M("Select"),
   I("All", "A", ID_SELALL), I("Deselect", "D", ID_DESELECT), I("Reselect", 0, ID_RESELECT), I("Inverse", 0, ID_INVERSE), BAR,
-  I("All Layers", 0, ID_FX_ALLLAYERS), I("Deselect Layers", 0, ID_FX_NOLAYERS), BAR,
+  I("All Layers", 0, ID_FX_ALLLAYERS), I("Deselect Layers", 0, ID_FX_NOLAYERS), I("Find Layers...", 0, ID_FINDLAYERS), T("Isolate Layers", 0, ID_ISOLATE), BAR,   /* (r4) */
   I("Color Range...", 0, ID_COLORRANGE), I("Focus Area...", 0, ID_FX_FOCUS), I("Subject", 0, ID_SELSUBJECT), I("Sky", 0, ID_SELSKY), I("Layer Transparency", 0, ID_SELALPHA), I("Layer Mask", 0, ID_SELFROMMASK), BAR,
   I("Select and Mask...", 0, ID_FX_REFINE),
   H("Modify"), S("Border...", 0, ID_BORDER), S("Smooth...", 0, ID_SMOOTH), S("Expand...", 0, ID_EXPAND), S("Contract...", 0, ID_CONTRACT), S("Feather...", 0, ID_FEATHER),
-  I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR), BAR,
+  I("Grow", 0, ID_GROWSIM), I("Similar", 0, ID_SIMILAR), I("Float", 0, ID_FLOATSEL), I("Drop", 0, ID_DROPSEL), BAR,   /* (r4: Float, Drop) */
   I("Transform Selection", 0, ID_XFSEL), T("Edit in Quick Mask Mode", 0, ID_QUICKMASK), BAR,
   I("Load Selection...", 0, ID_LOADSEL), I("Save Selection...", 0, ID_SAVESEL),
   M("Filter"),
@@ -873,6 +874,7 @@ static void update_menus(void)
   colorui_menus(has ? d : NULL, menu_set);               /* 1.2 */
   mx_menus(d, menu_set);                                 /* 1.2 */
   m3_menus(d, menu_set);                                 /* 1.3 */
+  r4_menus(d, menu_set);                                 /* round 4 */
   menu_set(ID_PASTEOUTSIDE, MUIA_Menuitem_Enabled, has && clip != NULL && d->sel != NULL);
   /* 0.9: type and shape layers' items */
   {
@@ -2227,6 +2229,7 @@ static void command(ULONG id)
   if (id > ID_OPENAS && id <= ID_FU_LAST) { if (filesui_command(id)) refresh_all(); return; }   /* round 3 (filesui.c) */
   if (id >= ID_MX_FIRST && id <= ID_MX_LAST && mx_command(d, id)) { refresh_all(); return; }               /* 1.2 (menux.c) */
   if (id >= ID_R3_FIRST && id <= ID_R3_LAST) { r3_command(d, id); refresh_all(); return; }                  /* r3-image (r3image.c) */
+  if (id >= ID_R4_FIRST && id <= ID_R4_LAST) { r4_command(d, id); refresh_all(); return; }                  /* round 4 (r4ui.c) */
   if (id > ID_M3_FIRST && id < ID_M3_LAST) { m3_command(d, id); refresh_all(); return; }                    /* 1.3 (menux3.c) */
   if (id >= ID_RECENT0 && id < ID_RECENT0 + NRECENT) {
     char p[512];

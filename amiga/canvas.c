@@ -60,6 +60,7 @@
 #include "../core/guides.h"
 #include "mxids.h"
 #include "r3ids.h"                    /* r3: the brush hook (Liquify) */
+#include "../core/r4.h"                /* round 4: smart quotes */
 
 char canvas_info[96];
 CanvasPoint canvas_pt;
@@ -262,7 +263,13 @@ static int view_ready(struct Data *d, Object *obj)
   return d->view && d->xmap;
 }
 /* the pasteboard round the image */
-static ULONG board(void) { return theme_is_dark() ? 0x282828 : 0xA8A8A8; }
+static ULONG board(void)
+{
+  /* round 4: Preferences > Interface > Canvas colour (0: the theme's) */
+  static const ULONG cc[] = { 0, 0x000000, 0x282828, 0x606060, 0xA8A8A8, 0xFFFFFF };
+  if (prefs.canvas_color > 0 && prefs.canvas_color < (int)(sizeof cc / sizeof cc[0])) return cc[prefs.canvas_color];
+  return theme_is_dark() ? 0x282828 : 0xA8A8A8;
+}
 /* the canvas area's columns x0..x1-1 and rows y0..y1-1 rendered into view */
 /* image row iy (columns ix0..ix1-1) composited into rowbuf, when there is no comp: the row's
    pixels, or NULL if even a row's buffer couldn't be had */
@@ -1604,6 +1611,12 @@ static void ty_insert(struct Data *d, Object *obj, const char *u, int n)
   int a = ty.anchor < ty.caret ? ty.anchor : ty.caret, b = ty.anchor < ty.caret ? ty.caret : ty.anchor;
   ov_hide(d, obj);
   if (a < b) { text_delete(ty.tp, a, b); ty.caret = a; }
+  /* round 4: Preferences > Type > Use Smart Quotes - a straight quote typed becomes a curly one */
+  if (prefs.smart_quotes && n == 1 && (u[0] == '"' || u[0] == '\'')) {
+    static char q[4];
+    n = smart_quote_for(u[0], ty.caret > 0 ? (unsigned char)ty.tp->text[ty.caret - 1] : 0, q);
+    u = q;
+  }
   if (n && text_insert(ty.tp, ty.caret, u, n)) ty.caret += n;
   ty.anchor = ty.caret;
   ty_apply(d, obj);

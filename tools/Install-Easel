@@ -4,7 +4,7 @@
 ; Started from its icon (default tool Installer). It installs or updates Easel in a drawer of your
 ; choosing, or removes it.
 ;
-; Installs:  <where you choose>/Easel: the program, README.md, Licenses.txt, the Fonts and TrueType drawers,
+; Installs:  <where you choose>/Easel: the program, README.md, Licenses.txt, the Fonts, TrueType and Dict drawers,
 ;            the example pictures (optional) and the source code (optional), all with their
 ;            icons; the Easel drawer gets Easel's own icon. The example pictures' icons are set
 ;            to open in the Easel just installed.
@@ -186,6 +186,15 @@
     (all))
   (if (exists "TrueType.info" (noreq)) (copyfiles (source "TrueType.info") (dest #dest) (nogauge)))
   (complete 80)
+  ; round 4: the word list for Check Spelling and the hyphenation patterns
+  (if (exists "Dict")
+    (copyfiles
+      (prompt "Copying the word list and hyphenation patterns")
+      (help @copyfiles-help)
+      (source "Dict")
+      (dest (tackon #dest "Dict"))
+      (all)))
+  (if (exists "Dict.info" (noreq)) (copyfiles (source "Dict.info") (dest #dest) (nogauge)))
   (complete 85)
 
   (if (in #parts 0)

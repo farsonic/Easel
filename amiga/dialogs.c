@@ -35,6 +35,8 @@
 #include "../core/adjustx.h"
 #include "dlgx.h"
 #include "../core/resample.h"
+#include "../core/r4.h"                 /* round 4: channel keys, Show Clipping, Color Range views */
+#include <devices/inputevent.h>
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 static Object *slider(LONG min, LONG max, LONG v)
@@ -93,6 +95,8 @@ struct GData {
 };
 static struct MUI_CustomClass *gcls;
 #define GS 256
+/* round 4: the channel list of the dialog the graph is in (Levels, Curves): Alt+2 ... Alt+5 pick it */
+static Object *gkey_cycle;
 static LONG gx(Object *obj, int v) { return _mleft(obj) + 1 + v * (_mwidth(obj) - 3) / 255; }
 static LONG gy(Object *obj, int v) { return _mbottom(obj) - 1 - v * (_mheight(obj) - 3) / 255; }
 static void graph_draw(struct GData *g, Object *obj)
@@ -150,7 +154,7 @@ static ULONG gdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
     g->lev = (const LONG *)GetTagData(MUIA_Graph_Levels, 0, ((struct opSet *)msg)->ops_AttrList);
     g->npts = 2; g->pts[0] = 0; g->pts[1] = 0; g->pts[2] = 255; g->pts[3] = 255;
     g->drag = -1;
-    g->ehn.ehn_Object = obj; g->ehn.ehn_Class = cl; g->ehn.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE;
+    g->ehn.ehn_Object = obj; g->ehn.ehn_Class = cl; g->ehn.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_RAWKEY;   /* (round 4: and keys) */
     return (ULONG)obj;
   case OM_SET: {
     struct TagItem *t;
@@ -186,7 +190,13 @@ static ULONG gdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, _
     struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
     int x, y, i;
     g = INST_DATA(cl, obj);
-    if (!im || !g->shown || !g->mode) return 0;
+    /* (round 4) Alt and a digit: Photoshop's channel keys (Alt+2 the composite, Alt+3 red ...) */
+    if (im && g->shown && im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && (im->Qualifier & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) && gkey_cycle) {
+      int ch = channel_for_key(rawkey_digit(im->Code), 4);
+      if (ch >= 0) { set(gkey_cycle, MUIA_Cycle_Active, ch); return MUI_EventHandlerRC_Eat; }
+      return 0;
+    }
+    if (!im || !g->shown || !g->mode || im->Class == IDCMP_RAWKEY) return 0;
     x = (int)((im->MouseX - _mleft(obj) - 1) * 255 / (_mwidth(obj) - 3));
     y = (int)((_mbottom(obj) - 1 - im->MouseY) * 255 / (_mheight(obj) - 3));
     if (im->Class == IDCMP_MOUSEMOVE && g->drag >= 0) {
@@ -244,6 +254,7 @@ static ApplyFn last_fn; static LONG last_v[SDMAX]; static int last_choice, last_
    (its choice comes to the ApplyFn as v[7]), a row of buttons (labels NULL-ended, up to six), and
    calls when the first list, the second list or a button is chosen (to show other settings) */
 static const char *const *sd_cfg_cyc2; static const char *sd_cfg_cyc2label; static int sd_cfg_cyc2init;
+static int sd_cfg_tickview;          /* (round 4) the tick shows something on the preview only (Show Clipping) */
 static const char *const *sd_cfg_btns; static void (*sd_cfg_cychook)(int), (*sd_cfg_cyc2hook)(int), (*sd_cfg_btnhook)(int);
 #define ID_DLGCYC (ID_DLGBTN0 + 7)
 #define ID_DLGCYC2 (ID_DLGBTN0 + 6)
@@ -309,6 +320,7 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   if (choices) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(choicelabel), MUIO_Label_Centered));
     DoMethod(grp, OM_ADDMEMBER, (ULONG)(sd.cyc = cycle(choices, sd_init_set ? sd_init_choice : 0)));
+    gkey_cycle = sd.cyc;                  /* (round 4: Alt+2 ... in a graph picks from it) */
   }
   if (sd_cfg_cyc2) {
     DoMethod(grp, OM_ADDMEMBER, (ULONG)QLabel(tr(sd_cfg_cyc2label), MUIO_Label_Centered));
@@ -346,6 +358,10 @@ static int slider_dialog(const char *title, const Param *p, int n, const char *c
   DoMethod(reset, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGRESET);
   /* (the starting values change nothing: the preview is shown once something moves) */
   ok = run_modal(w, ends, sd_each) == ID_DLGOK;
+  gkey_cycle = NULL;
+  /* (round 4) a tick that only changes the view (Levels' Show Clipping): off for the result */
+  if (ok && sd_cfg_tickview && sd.chk && xget(sd.chk, MUIA_Selected)) { nnset(sd.chk, MUIA_Selected, FALSE); sd.pending = 1; }
+  sd_cfg_tickview = 0;
   if (ok && (!sd.pv.shown || sd.pending)) sd_apply();
   if (ok && sd_remember) {
     sd_read();
@@ -403,6 +419,7 @@ static void a_photo(Doc *d, const LONG *v, int c, int t)
 }
 /* Levels: the five numbers of the channel chosen; Curves: the editor's points of the channel chosen */
 static LONG lev[3] = { 0, 255, 100 };
+static int lev_clip_white;           /* (round 4) Show Clipping shows the white end */
 static Object *lev_graph;
 static u32 lev_hist[1024];
 static void lev_rows(void)
@@ -421,7 +438,28 @@ static void a_levels(Doc *d, const LONG *v, int c, int t)
   q[0] = (int)v[0]; q[1] = (int)lev[1]; q[2] = (int)v[1]; q[3] = (int)v[3]; q[4] = (int)v[4];
   if (c == 0) for (k = 0; k < 5; k++) adj_base.v[k] = q[k];
   else { lev_rows(); for (k = 0; k < 5; k++) adj_base.pts[(c - 1) * 5 + k] = q[k]; }
-  put_adj(d, &adj_base);
+  {
+    /* round 4: Show Clipping (Photoshop's Alt-drag) - the picture as the end last moved clips it: white
+       with black or coloured pixels where they reach the output black, black with lit ones where they
+       reach the output white (one step with the adjustment, so the preview takes both back) */
+    static long prev[5];
+    int lo[3], hi[3], e;
+    long now[5];
+    for (k = 0; k < 5; k++) now[k] = v[k];
+    e = levels_clip_end(prev, now);
+    if (e >= 0) lev_clip_white = e;
+    memcpy(prev, now, sizeof prev);
+    if (!t) { put_adj(d, &adj_base); return; }
+    for (k = 0; k < 3; k++) {
+      int ob = adj_base.v[3], ow = adj_base.v[4];
+      if (adj_base.npts >= 15) { if (adj_base.pts[k * 5 + 3] > ob) ob = adj_base.pts[k * 5 + 3]; if (adj_base.pts[k * 5 + 4] < ow) ow = adj_base.pts[k * 5 + 4]; }
+      lo[k] = ob; hi[k] = ow;
+    }
+    doc_begin(d, adj_names[adj_base.kind]);
+    put_adj(d, &adj_base);
+    doc_clip_view_layer(d, lev_clip_white, lo, hi);
+    doc_end(d);
+  }
 }
 static void levels_show(int c)
 {
@@ -827,7 +865,8 @@ void dlg_adjust(ULONG id)
     lev_graph = graph(0, lev_hist, lev);
     auto_hist = lev_hist;
     adj_reshow = levels_reshow; sd_cfg_cychook = levels_show; presets_for(AK_LEVELS); sd_cfg_btns = pick_btns; sd_cfg_btnhook = adj_btn;
-    slider_dialog("Levels", p, 5, channels, "Channel:", NULL, 0, a_levels, lev_graph ? VGroup, Child, lev_graph,
+    sd_cfg_tickview = 1; lev_clip_white = 0;
+    slider_dialog("Levels", p, 5, channels, "Channel:", "Show Clipping", 0, a_levels, lev_graph ? VGroup, Child, lev_graph,
                   Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Black, Grey and White Point take the foreground\ncolour (pick it with the Eyedropper)."), MUIA_Font, MUIV_Font_Tiny, End, End : NULL);
     lev_graph = NULL;
     break; }
@@ -1513,10 +1552,35 @@ void dlg_select(ULONG id)
 /* the Color Range preview: the mask it would make, small and grey (mv_rgb, mv_w x mv_h) */
 static UBYTE *mv_rgb;
 static LONG mv_w, mv_h;
+static u8 *mv_pic;                    /* (round 4) the picture at the preview's size, RGBA */
+static int mv_mode;                   /* (round 4) CRV_: how the preview shows the selection */
 static struct MUI_CustomClass *mvcls;
+/* round 4: a click on the preview samples the picture there (Shift-click adds a colour, Alt-click takes
+   one away), with the place, for Localized Color Clusters */
+static void (*mv_click)(LONG x, LONG y, UWORD qual);
+struct MvData { struct MUI_EventHandlerNode ehn; };
 static ULONG mvdispatch(__reg("a0") struct IClass *cl, __reg("a2") Object *obj, __reg("a1") Msg msg)
 {
   switch (msg->MethodID) {
+  case OM_NEW: {
+    struct MvData *m;
+    if (!(obj = (Object *)DoSuperMethodA(cl, obj, msg))) return 0;
+    m = INST_DATA(cl, obj);
+    memset(m, 0, sizeof *m);
+    m->ehn.ehn_Object = obj; m->ehn.ehn_Class = cl; m->ehn.ehn_Events = IDCMP_MOUSEBUTTONS;
+    return (ULONG)obj; }
+  case MUIM_Setup:
+    if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
+    theme_setup(obj);
+    theme_handler(obj, &((struct MvData *)INST_DATA(cl, obj))->ehn);
+    return TRUE;
+  case MUIM_Cleanup: theme_cleanup(obj); break;
+  case MUIM_HandleEvent: {
+    struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
+    if (!im || im->Class != IDCMP_MOUSEBUTTONS || im->Code != SELECTDOWN || !mv_click) return 0;
+    if (im->MouseX < _mleft(obj) || im->MouseY < _mtop(obj) || im->MouseX >= _mleft(obj) + mv_w || im->MouseY >= _mtop(obj) + mv_h) return 0;
+    mv_click(im->MouseX - _mleft(obj), im->MouseY - _mtop(obj), im->Qualifier);
+    return MUI_EventHandlerRC_Eat; }
   case MUIM_AskMinMax: {
     struct MUIP_AskMinMax *m = (struct MUIP_AskMinMax *)msg;
     DoSuperMethodA(cl, obj, msg);
@@ -1540,11 +1604,12 @@ static void mv_make(Doc *d, const ColorRange *cr)
   for (y = 0; y < mv_h; y++)
     for (x = 0; x < mv_w; x++) {
       UBYTE v = m[(long)(y * d->h / mv_h) * d->w + (long)(x * d->w / mv_w)];
-      mv_rgb[(y * mv_w + x) * 3] = mv_rgb[(y * mv_w + x) * 3 + 1] = mv_rgb[(y * mv_w + x) * 3 + 2] = v;
+      static const u8 grey[4] = { 128, 128, 128, 255 };
+      cr_view_pixel(mv_mode, v, mv_pic ? mv_pic + (y * mv_w + x) * 4 : grey, mv_rgb + (y * mv_w + x) * 3);   /* (round 4: the preview modes) */
     }
   free(m);
 }
-static Object *cr_sel, *cr_fuzz, *cr_range, *cr_inv, *cr_view;
+static Object *cr_sel, *cr_fuzz, *cr_range, *cr_inv, *cr_view, *cr_loc, *cr_vm;
 static ColorRange cr_set;
 static int cr_dirty;
 /* the dialog's settings read into cr_set */
@@ -1554,6 +1619,31 @@ static void cr_read(void)
   cr_set.fuzziness = (int)xget(cr_fuzz, MUIA_Numeric_Value);
   cr_set.range = (int)xget(cr_range, MUIA_Numeric_Value);
   cr_set.invert = (int)xget(cr_inv, MUIA_Selected);
+  cr_set.localized = (int)xget(cr_loc, MUIA_Selected); cr_set.lrange = cr_set.range;
+  mv_mode = (int)xget(cr_vm, MUIA_Cycle_Active);
+}
+/* (round 4) a click on the preview: that colour sampled, with its place; Shift adds, Alt takes away */
+static void cr_click(LONG x, LONG y, UWORD qual)
+{
+  Doc *d = cur_doc();
+  i32 px, py;
+  u8 c[4];
+  u32 rgb;
+  if (!d) return;
+  px = (i32)(x * d->w / mv_w); py = (i32)(y * d->h / mv_h);
+  if (px >= d->w) px = d->w - 1;
+  if (py >= d->h) py = d->h - 1;
+  doc_composite(d, box_make(px, py, px + 1, py + 1), c, 4);
+  rgb = ((u32)c[0] << 16) | ((u32)c[1] << 8) | c[2];
+  if (qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) { if (cr_set.nminus < CR_MAXCOLORS) cr_set.minus[cr_set.nminus++] = rgb; }
+  else {
+    int k = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) && cr_set.ncolors < CR_MAXCOLORS ? cr_set.ncolors : 0;
+    if (!k) cr_set.nminus = 0;
+    cr_set.colors[k] = rgb; cr_set.cx[k] = px; cr_set.cy[k] = py; cr_set.has_xy[k] = 1; cr_set.ncolors = k + 1;
+  }
+  nnset(cr_sel, MUIA_Cycle_Active, CR_SAMPLED);
+  cr_dirty = 1;
+  DoMethod(app, MUIM_Application_ReturnID, ID_DLGCHANGE);
 }
 /* (run_modal's) a change marks the preview out of date; when idle it is made again */
 static void cr_each(ULONG id)
@@ -1572,7 +1662,7 @@ void dlg_color_range(void)
   Doc *d = cur_doc();
   static const ULONG ends[] = { ID_DLGOK, 0 };
   static const char *names[CR_N + 1];
-  static int last_preset, last_fuzz = 40, last_range = 50, last_inv;
+  static int last_preset, last_fuzz = 40, last_range = 50, last_inv, last_loc, last_mode;
   char note[120];
   Object *w;
   int i, ok;
@@ -1585,9 +1675,18 @@ void dlg_color_range(void)
   if (mv_w < 1) mv_w = 1;
   if (mv_h < 1) mv_h = 1;
   mv_rgb = (UBYTE *)calloc((size_t)mv_w * mv_h, 3);
-  if (!mvcls) mvcls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, 4, (APTR)mvdispatch);
+  if (!mvcls) mvcls = MUI_CreateCustomClass(NULL, (STRPTR)MUIC_Area, NULL, sizeof(struct MvData), (APTR)mvdispatch);
   memset(&cr_set, 0, sizeof cr_set);
   cr_set.colors[0] = d->fg; cr_set.ncolors = 1; cr_set.all_layers = 1;
+  /* (round 4) the picture at the preview's size, for the preview modes */
+  if ((mv_pic = (u8 *)malloc((size_t)mv_w * mv_h * 4)) != NULL) {
+    LONG x, y;
+    for (y = 0; y < mv_h; y++) for (x = 0; x < mv_w; x++) {
+      i32 px = (i32)(x * d->w / mv_w), py = (i32)(y * d->h / mv_h);
+      doc_composite(d, box_make(px, py, px + 1, py + 1), mv_pic + (y * mv_w + x) * 4, 4);
+    }
+  }
+  mv_mode = last_mode; mv_click = cr_click;
   sprintf(note, tr("Sampled Colors: from the foreground colour, #%06lX\n(pick it with the Eyedropper first)"), (unsigned long)(d->fg & 0xFFFFFF));
   cr_view = mvcls && mv_rgb ? NewObject(mvcls->mcc_Class, NULL, TextFrame, MUIA_FillArea, FALSE, TAG_DONE) : NULL;
   w = dialog_window("Color Range", VGroup,
@@ -1596,19 +1695,24 @@ void dlg_color_range(void)
           Child, QLabel(tr("Fuzziness:"), MUIO_Label_Centered), Child, cr_fuzz = slider(0, 200, last_fuzz),
           Child, QLabel(tr("Range (%):"), MUIO_Label_Centered), Child, cr_range = slider(1, 100, last_range),
           Child, QLabel(tr("Invert"), MUIO_Label_Centered), Child, HGroup, Child, cr_inv = check(last_inv), Child, HSpace(0), End,
+          Child, QLabel(tr("Localized Color Clusters"), MUIO_Label_Centered), Child, HGroup, Child, cr_loc = check(last_loc), Child, HSpace(0), End,
+          Child, QLabel(tr("Preview:"), MUIO_Label_Centered), Child, cr_vm = cycle(cr_view_names, last_mode),
         End,
         Child, TextObject, MUIA_Text_Contents, (ULONG)note, End,
+        Child, TextObject, MUIA_Text_Contents, (ULONG)tr("Click the preview to sample a colour there (Shift-click adds one,\nAlt-click takes one away); Range is then how far it reaches."), MUIA_Font, MUIV_Font_Tiny, End,
         Child, HGroup, Child, HSpace(0), Child, cr_view ? cr_view : HSpace(0), Child, HSpace(0), End,
       End, NULL);
-  if (!w) { free(mv_rgb); mv_rgb = NULL; return; }
+  if (!w) { free(mv_rgb); mv_rgb = NULL; free(mv_pic); mv_pic = NULL; mv_click = NULL; return; }
   notify_change(cr_sel, MUIA_Cycle_Active); notify_change(cr_fuzz, MUIA_Numeric_Value); notify_change(cr_range, MUIA_Numeric_Value); notify_change(cr_inv, MUIA_Selected);
+  notify_change(cr_loc, MUIA_Selected); notify_change(cr_vm, MUIA_Cycle_Active);
   cr_dirty = 1;
   ok = run_modal(w, ends, cr_each) == ID_DLGOK;
   cr_read();
   last_preset = cr_set.preset; last_fuzz = cr_set.fuzziness; last_range = cr_set.range; last_inv = cr_set.invert;
+  last_loc = cr_set.localized; last_mode = mv_mode;
   MUI_DisposeObject(w);
-  cr_view = NULL;
-  free(mv_rgb); mv_rgb = NULL;
+  cr_view = NULL; mv_click = NULL;
+  free(mv_rgb); mv_rgb = NULL; free(mv_pic); mv_pic = NULL;
   if (!ok) return;
   set(app, MUIA_Application_Sleep, TRUE);
   sel_color_range_ex(d, &cr_set, SEL_REPLACE);

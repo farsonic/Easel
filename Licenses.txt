@@ -30,7 +30,12 @@ Quill, Easel's sister        core/hyphen.c: Quill's reader of   GPL-2.0-only (as
   program                      Liang's hyphenation patterns; the
                                patterns themselves are files in
                                the Dict drawer, each with its
-                               own licence (LICENSE-hyph.txt)
+                               own licence (LICENSE-hyph.txt);
+                               round 4: core/spell.c, Quill's
+                               spelling (word list search and
+                               suggestions)
+SCOWL word list (Kevin        Dict/british-english, Check        SCOWL's licence (BSD-like;
+  Atkinson and others)         Spelling's words (Quill's copy)    Dict/LICENSE-dict.txt)
 X.Org rgb.txt colour names   XPM colour names (core/rasters.c)  MIT/X11 (The Open Group,
                                                                   Oracle)
 libwebp, Google              core/webp.c follows its integer    BSD 3-clause, with Google's

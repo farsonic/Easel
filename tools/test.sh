@@ -16,6 +16,7 @@ CORE="$CORE core/cms.c core/iccio.c core/loadx.c core/colorx.c core/xread2.c cor
 CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"   # r3-image: vector, filter, selection and type extras
 CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c core/modex.c core/timeline.c core/measure.c core/grdw.c"   # round 3: file formats, import and export
 CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation additions
+CORE="$CORE core/r4.c core/spell.c"   # round 4: Find and Isolate Layers, Float and Drop, Show Clipping, Check Spelling
   # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
   # interface translated and every row used (langcheck lists what is missing), then tr() and the table
   python3 tools/mklang.py --check
@@ -103,3 +104,6 @@ CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation addit
   python3 tests/make_foreign.py $T/easel_foreign > /dev/null
   t filestest;    r 1 $T/easel_filestest $T/easel_foreign
   r 1 python3 tests/check_files.py $T/easel_foreign
+  # round 4: Find and Isolate Layers, Float and Drop, Levels' Show Clipping, the channel keys, Color
+  # Range's localized clusters and preview modes, smart quotes, Check Spelling
+  t r4test;       r 1 $T/easel_r4test

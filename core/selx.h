@@ -36,6 +36,11 @@ typedef struct {
   int range;                          /* Highlights, Midtones, Shadows: how wide (0-100; 0 means 50) */
   int invert;
   int all_layers;                     /* sample what shows (1) or the active layer (0) */
+  /* r4: Localized Color Clusters - each sampled colour counts only near where it was picked (x, y
+     in canvas pixels; has_xy 0 for a colour from the foreground, which counts everywhere), fading
+     to nothing at lrange per cent of the picture's longer side */
+  int localized, lrange;
+  i32 cx[CR_MAXCOLORS], cy[CR_MAXCOLORS]; u8 has_xy[CR_MAXCOLORS];
 } ColorRange;
 /* the soft mask Color Range would make (w * h, 0-255, malloc'd; the dialog's preview), NULL if out of memory */
 u8  *color_range_mask(Doc *d, const ColorRange *cr);

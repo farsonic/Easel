@@ -867,11 +867,21 @@ void cms_xform_apply(const CmsXform *x, u8 *p, long n)
   for (i = 0; i < n; i++, p += 4) {
     int o[4], gam = 0;
     grid_at(x, p, o, x->gam ? &gam : NULL);
-    if (x->gam && gam > 4 * 6) { p[0] = (u8)(GAMUT_GREY >> 16); p[1] = (u8)(GAMUT_GREY >> 8); p[2] = (u8)GAMUT_GREY; continue; }
+    if (x->gam && gam > 4 * 6) { gamut_warn_mix(p, o); continue; }
     p[0] = (u8)o[0]; p[1] = (u8)o[1]; p[2] = (u8)o[2];
   }
 }
 
+u32 gamut_warn_color = GAMUT_GREY;
+int gamut_warn_opacity = 100;
+void gamut_warn_mix(u8 *p, const int *o)
+{
+  int k, a = gamut_warn_opacity < 0 ? 0 : gamut_warn_opacity > 100 ? 100 : gamut_warn_opacity;
+  for (k = 0; k < 3; k++) {
+    int c = (int)((gamut_warn_color >> (16 - 8 * k)) & 255);
+    p[k] = (u8)((o[k] * (100 - a) + c * a + 50) / 100);
+  }
+}
 void cms_xform_apply_rgb(const CmsXform *x, u8 *p, long n)
 {
   u8 t[4 * 64];

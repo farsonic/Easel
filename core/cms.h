@@ -133,6 +133,11 @@ typedef struct {
 CmsXform   *cms_view_new(const IccProfile *doc, const ViewSpec *v);
 /* the grey the gamut warning paints (0xRRGGBB) */
 #define GAMUT_GREY 0x808080
+/* round 4: the colour it paints (Preferences > Transparency & Gamut; GAMUT_GREY at first) and its
+   opacity in per cent (100 at first), and one pixel of it over the colour o (0-255 each) into p */
+extern u32 gamut_warn_color;
+extern int gamut_warn_opacity;
+void gamut_warn_mix(u8 *p, const int *o);
 
 /* ------------------------------------------------------------------ files */
 /* the ICC profile a picture file holds (PNG iCCP, JPEG APP2 ICC_PROFILE, TIFF tag 34675, PSD

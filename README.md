@@ -21,6 +21,27 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.3: checked in an emulator, and round 4's additions
+
+- Round 3 was run in FS-UAE (A4000/68040, AROS ROM with Zune, 640 × 480) in English and German, and
+  what that showed is fixed: Liquify's brush works on the picture (the picture was asleep while the
+  window was open) and its window opens in the bottom right corner, off the picture; the Measurement
+  Log no longer overflows past 21 million (an integrated density showed as 21474836.47); requesters
+  wrap long sentences; the Edit menu fits 480 lines (Autosave and Save Icons with Pictures are on
+  Preferences' General page); check boxes in slider dialogs sit beside their labels.
+- Select > Find Layers (by a part of the name, or by kind) and Isolate Layers filter the Layers panel;
+  Select > Float lifts the selected pixels onto a floating layer, Drop puts them back.
+- Edit > Check Spelling checks the type layers with Quill's British English word list (the package
+  has a Dict drawer now), with suggestions, Ignore, Ignore All, Add, Change and Change All.
+- Levels: Show Clipping shows where the black or white point clips the picture; Levels and Curves
+  take Alt+2 (composite) to Alt+5 (blue) for the channel.
+- Color Range: click the preview to sample (Shift adds, Alt takes away), Localized Color Clusters,
+  and the preview as Selection, Image, Grayscale, Black or White Matte or Quick Mask.
+- The Measurement Log counts in the picture's measurement scale (Set Measurement Scale) and exports
+  the scale's units and factor.
+- Preferences: Interface > Canvas colour, Transparency & Gamut > the gamut warning's colour and
+  opacity, and a Type page with Use Smart Quotes.
+
 ## New in 1.3: filters, selections, type and shapes
 
 - Filters: Blur Gallery > Field Blur (up to four pins) and Path Blur, Lens Blur with an iris and a

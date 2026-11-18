@@ -21,6 +21,7 @@
 #include "lang.h"
 #include "ids.h"
 #include "../core/viewx.h"                 /* 1.2 */
+#include "../core/cms.h"                   /* round 4: the gamut warning's colour */
 #include "mxids.h"                         /* (vx_par_correct, kept in Easel.prefs) */
 
 Prefs prefs;
@@ -41,6 +42,7 @@ void prefs_defaults(void)
   prefs.checker_size = 2; prefs.checker_scheme = CHK_LIGHT; prefs.checker_c1 = 0xFFFFFF; prefs.checker_c2 = 0xCCCCCC;   /* 1.2 */
   prefs.screen_dpi = 72; prefs.column_w = 180; prefs.gutter_w = 12;
   prefs.qx_fmt = QX_PNG; prefs.qx_where = QW_BESIDE; prefs.qx_meta = 2; prefs.webp_quality = 80;   /* round 3 (2: EXD_ALL) */
+  prefs.gamut_color = GAMUT_GREY; prefs.gamut_opacity = 100;   /* round 4 */
 }
 /* (see easel.h) one line of Easel.prefs taken if it is one of these settings; 1 if it was */
 extern signed char key_tool[26];                           /* (main.c) */
@@ -61,7 +63,8 @@ int prefs_line(const char *l)
     { "guidestyle=", &prefs.guide_style }, { "screendpi=", &prefs.screen_dpi }, { "columnw=", &prefs.column_w },
     { "gutterw=", &prefs.gutter_w }, { "pointkind=", &prefs.point_kind },
     { "qxfmt=", &prefs.qx_fmt }, { "qxwhere=", &prefs.qx_where }, { "qxmeta=", &prefs.qx_meta }, { "qxsrgb=", &prefs.qx_srgb },   /* round 3 */
-    { "webpq=", &prefs.webp_quality }, { "placesmart=", &prefs.place_smart }, { "beepdone=", &prefs.beep_done }
+    { "webpq=", &prefs.webp_quality }, { "placesmart=", &prefs.place_smart }, { "beepdone=", &prefs.beep_done },
+    { "smartquotes=", &prefs.smart_quotes }, { "canvascolor=", &prefs.canvas_color }, { "gamutopacity=", &prefs.gamut_opacity }   /* round 4 */
   };
   int i;
   for (i = 0; i < (int)(sizeof ints / sizeof ints[0]); i++) {
@@ -71,6 +74,7 @@ int prefs_line(const char *l)
   if (!strncmp(l, "guidecol=", 9)) { prefs.guide_color = strtoul(l + 9, NULL, 16) & 0xFFFFFF; return 1; }
   if (!strncmp(l, "gridcol=", 8)) { prefs.grid_color = strtoul(l + 8, NULL, 16) & 0xFFFFFF; return 1; }
   if (!strncmp(l, "checkerc1=", 10)) { prefs.checker_c1 = strtoul(l + 10, NULL, 16) & 0xFFFFFF; return 1; }
+  if (!strncmp(l, "gamutcol=", 9)) { prefs.gamut_color = strtoul(l + 9, NULL, 16) & 0xFFFFFF; return 1; }   /* round 4 */
   if (!strncmp(l, "checkerc2=", 10)) { prefs.checker_c2 = strtoul(l + 10, NULL, 16) & 0xFFFFFF; return 1; }
   if (!strncmp(l, "screenid=", 9)) { prefs.screen_id = strtoul(l + 9, NULL, 16); return 1; }
   if (!strncmp(l, "recovery=", 9)) { strncpy(prefs.recovery, l + 9, sizeof prefs.recovery - 1); return 1; }
@@ -103,6 +107,8 @@ void prefs_write(FILE *f)
   fprintf(f, "qxfmt=%d\nqxwhere=%d\nqxmeta=%d\nqxsrgb=%d\nqxdir=%s\nwebpq=%d\nplacesmart=%d\nbeepdone=%d\n", prefs.qx_fmt, prefs.qx_where,
           prefs.qx_meta, prefs.qx_srgb, prefs.qx_dir, prefs.webp_quality, prefs.place_smart, prefs.beep_done);   /* round 3 */
   fprintf(f, "monitoricc=%s\n", prefs.monitor_icc);
+  fprintf(f, "smartquotes=%d\ncanvascolor=%d\ngamutcol=%06lX\ngamutopacity=%d\n", prefs.smart_quotes, prefs.canvas_color,
+          (unsigned long)prefs.gamut_color, prefs.gamut_opacity);                    /* round 4 */
 }
 /* the settings kept in range and handed to the parts that use them (the core's undo, the bubbles) */
 void prefs_apply(void)
@@ -135,6 +141,9 @@ void prefs_apply(void)
   if (prefs.qx_where < QW_BESIDE || prefs.qx_where > QW_ASK) prefs.qx_where = QW_BESIDE;
   if (prefs.qx_meta < 0 || prefs.qx_meta > 2) prefs.qx_meta = 2;
   if (prefs.webp_quality < 1 || prefs.webp_quality > 100) prefs.webp_quality = 80;
+  if (prefs.canvas_color < 0 || prefs.canvas_color > 5) prefs.canvas_color = 0;          /* round 4 */
+  if (prefs.gamut_opacity < 1 || prefs.gamut_opacity > 100) prefs.gamut_opacity = 100;
+  gamut_warn_color = prefs.gamut_color; gamut_warn_opacity = prefs.gamut_opacity;
   undo_budget = (long)prefs.undo_mb * 1024 * 1024;
   undo_levels = prefs.undo_levels;
   if (prefs.scratch_on && prefs.scratch[0]) { strncpy(undo_scratch, prefs.scratch, sizeof undo_scratch - 1); undo_scratch[sizeof undo_scratch - 1] = 0; }
@@ -169,7 +178,8 @@ void unit_text(char *out, double px, long length, int dpi, int name)
 }
 
 /* ------------------------------------------------------------------ the window */
-static const char *const pages[] = { "General", "Interface", "Tools", "File Handling", "Export", "Units & Rulers", "Guides & Grid", "Scratch Drawer", "Transparency", NULL };
+static const char *const pages[] = { "General", "Interface", "Tools", "File Handling", "Export", "Units & Rulers", "Guides & Grid", "Scratch Drawer", "Transparency & Gamut", "Type", NULL };
+static const char *const canvas_colors[] = { "Default", "Black", "Dark Grey", "Medium Grey", "Light Grey", "White", NULL };   /* round 4 */
 /* round 3: the Export page's choices */
 static const char *const qx_formats[] = { "PNG", "JPEG", "GIF", "WebP", "TIFF", NULL };
 static const char *const qx_wheres[] = { "Beside the picture's file", "In the last drawer exported to", "In this drawer:", "Ask each time", NULL };
@@ -178,9 +188,9 @@ static const char *const point_kinds[] = { "PostScript (72 points/inch)", "Tradi
 static const char *cyc_labels[3][CHK_N + 1];       /* (1.2: the cycles' labels, translated) */
 static const char *const cursors[] = { "Brush outline", "Crosshair", "Outline and crosshair", NULL };
 static const char *const formats[] = { "OpenRaster (.ora)", "PNG", "JPEG", "TIFF", "Photoshop PSD", "IFF ILBM", NULL };
-static const char *pagelist[10];
-static ULONG pick_guide, pick_grid, pick_c1, pick_c2;   /* the colours as they are being chosen */
-static Object *guide_txt, *grid_txt, *c1_txt, *c2_txt;
+static const char *pagelist[12];
+static ULONG pick_guide, pick_grid, pick_c1, pick_c2, pick_gam;   /* the colours as they are being chosen */
+static Object *guide_txt, *grid_txt, *c1_txt, *c2_txt, *gam_txt;
 static const char *langlist[UI_NLANG + 2];  /* (1.1) Locale prefs' choice, then each language in its own words */
 static Object *slider(LONG min, LONG max, LONG v) { return SliderObject, MUIA_Numeric_Min, min, MUIA_Numeric_Max, max, MUIA_Numeric_Value, v, MUIA_CycleChain, 1, End; }
 static Object *check(int on)
@@ -193,7 +203,7 @@ static Object *string(const char *s, int max) { return StringObject, StringFrame
 static Object *text(const char *s) { return TextObject, MUIA_Text_Contents, (ULONG)s, End; }
 static Object *label(const char *s) { return QLabel(tr(s), MUIO_Label_Centered); }
 /* a colour's hex shown in its text */
-static void show_color(Object *t, ULONG c) { static char b[4][16]; char *p = b[t == grid_txt ? 1 : t == c1_txt ? 2 : t == c2_txt ? 3 : 0]; sprintf(p, "#%06lX", (unsigned long)c); set(t, MUIA_Text_Contents, (ULONG)p); }
+static void show_color(Object *t, ULONG c) { static char b[5][16]; char *p = b[t == grid_txt ? 1 : t == c1_txt ? 2 : t == c2_txt ? 3 : t == gam_txt ? 4 : 0]; sprintf(p, "#%06lX", (unsigned long)c); set(t, MUIA_Text_Contents, (ULONG)p); }
 /* the colour buttons' presses (the dialog's loop calls this) */
 static void each(ULONG id)
 {
@@ -202,6 +212,7 @@ static void each(ULONG id)
   if (id == ID_DLGAUTO && (c = pick_color("Grid Colour", pick_grid)) >= 0) { pick_grid = (ULONG)c; show_color(grid_txt, pick_grid); }
   if (id == ID_DLGBTN0 && (c = pick_color("Checkerboard Colour", pick_c1)) >= 0) { pick_c1 = (ULONG)c; show_color(c1_txt, pick_c1); }
   if (id == ID_DLGBTN0 + 1 && (c = pick_color("Checkerboard Colour", pick_c2)) >= 0) { pick_c2 = (ULONG)c; show_color(c2_txt, pick_c2); }
+  if (id == ID_DLGBTN0 + 2 && (c = pick_color("Gamut Warning Colour", pick_gam)) >= 0) { pick_gam = (ULONG)c; show_color(gam_txt, pick_gam); }   /* round 4 */
 }
 /* (see easel.h) Edit > Preferences: 1 if OK was pressed (the settings are then in prefs and applied;
    *reopen set when the window must open again for the theme or text size) */
@@ -212,6 +223,7 @@ int dlg_preferences(int *reopen)
   Object *ck, *cks, *c1p, *c2p, *grs, *gus, *sdp, *cw, *gw, *pk, *hl, *hp;
   char sdb[8], cwb[8], gwb[8];
   Object *qf, *qw, *qd, *qm, *qs, *wq, *psm, *bd;   /* round 3 */
+  Object *smq, *cvc, *gmp, *gmo;                     /* round 4 */
   Object *spx, *lgc, *as, *ic, *lv, *mb, *tp, *dk, *lg, *cu, *cp, *xn, *sf, *jq, *af, *nr, *rc, *un, *dp, *gs, *gsub, *so, *sp, *smb;
   char asb[8], dpb[8], usage[120];
   int i, ok;
@@ -222,7 +234,7 @@ int dlg_preferences(int *reopen)
   langlist[0] = tr("As in Locale preferences");
   for (i = 0; i < UI_NLANG; i++) langlist[i + 1] = ui_languages[i];
   langlist[UI_NLANG + 1] = NULL;
-  pick_guide = prefs.guide_color; pick_grid = prefs.grid_color; pick_c1 = prefs.checker_c1; pick_c2 = prefs.checker_c2;
+  pick_guide = prefs.guide_color; pick_grid = prefs.grid_color; pick_c1 = prefs.checker_c1; pick_c2 = prefs.checker_c2; pick_gam = prefs.gamut_color;
   sprintf(sdb, "%d", prefs.screen_dpi); sprintf(cwb, "%d", prefs.column_w); sprintf(gwb, "%d", prefs.gutter_w);
   sprintf(asb, "%d", pref_autosave); sprintf(dpb, "%d", prefs.dpi);
   sprintf(usage, tr("In the drawer now: %ld KB of undo steps."), undo_scratch_bytes / 1024);
@@ -248,6 +260,7 @@ int dlg_preferences(int *reopen)
             Child, label("Dark interface:"), Child, HGroup, Child, dk = check(pref_dark), Child, HSpace(0), End,
             Child, label("Large interface text:"), Child, HGroup, Child, lg = check(prefs.large_text), Child, HSpace(0), End,
             Child, label("Language:"), Child, lgc = CycleObject, MUIA_Cycle_Entries, (ULONG)langlist, MUIA_Cycle_Active, prefs.language + 1, MUIA_CycleChain, 1, End,
+            Child, label("Canvas colour:"), Child, cvc = cycle(canvas_colors, prefs.canvas_color),
             End, Child, text(tr("(A new language shows when Easel starts again.)")), Child, HVSpace, End,
           /* Tools */
           Child, VGroup, Child, QTitleObject(tr("Tools")), Child, ColGroup(2),
@@ -299,16 +312,23 @@ int dlg_preferences(int *reopen)
             Child, text(tr("Past the undo memory, the oldest steps are written to this drawer\ninstead of being forgotten, and read back when you undo that far.")),
             Child, text(usage), Child, HVSpace, End,
           /* 1.2: Transparency */
-          Child, VGroup, Child, QTitleObject(tr("Transparency")), Child, ColGroup(2),
+          Child, VGroup, Child, QTitleObject(tr("Transparency & Gamut")), Child, ColGroup(2),
             Child, label("Grid size:"), Child, cks = cycle(cyc_labels[1], prefs.checker_size),
             Child, label("Grid colours:"), Child, ck = cycle(cyc_labels[0], prefs.checker_scheme),
             Child, label("Custom colour 1:"), Child, HGroup, Child, c1_txt = text(""), Child, c1p = QButton(tr("Choose...")), End,
             Child, label("Custom colour 2:"), Child, HGroup, Child, c2_txt = text(""), Child, c2p = QButton(tr("Choose...")), End,
+            Child, label("Gamut warning colour:"), Child, HGroup, Child, gam_txt = text(""), Child, gmp = QButton(tr("Choose...")), End,
+            Child, label("Gamut warning opacity (%):"), Child, gmo = slider(1, 100, prefs.gamut_opacity),
             End, Child, HVSpace, End,
+          /* round 4: Type */
+          Child, VGroup, Child, QTitleObject(tr("Type")), Child, ColGroup(2),
+            Child, label("Use Smart Quotes:"), Child, HGroup, Child, smq = check(prefs.smart_quotes), Child, HSpace(0), End,
+            End, Child, text(tr("(Quotes typed with the Type tool become typographer's quotes.)")), Child, HVSpace, End,
         End,
       End, "OK");
   if (!w) return 0;
-  show_color(guide_txt, pick_guide); show_color(grid_txt, pick_grid); show_color(c1_txt, pick_c1); show_color(c2_txt, pick_c2);
+  show_color(guide_txt, pick_guide); show_color(grid_txt, pick_grid); show_color(c1_txt, pick_c1); show_color(c2_txt, pick_c2); show_color(gam_txt, pick_gam);
+  DoMethod(gmp, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGBTN0 + 2);
   DoMethod(c1p, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGBTN0);
   DoMethod(c2p, MUIM_Notify, MUIA_Pressed, FALSE, (ULONG)app, 2, MUIM_Application_ReturnID, ID_DLGBTN0 + 1);
   DoMethod(list, MUIM_Notify, MUIA_List_Active, MUIV_EveryTime, (ULONG)pg, 3, MUIM_Set, MUIA_Group_ActivePage, MUIV_TriggerValue);
@@ -344,6 +364,8 @@ int dlg_preferences(int *reopen)
     /* 1.2 */
     prefs.checker_size = (int)xget(cks, MUIA_Cycle_Active); prefs.checker_scheme = (int)xget(ck, MUIA_Cycle_Active);
     prefs.checker_c1 = pick_c1; prefs.checker_c2 = pick_c2;
+    prefs.smart_quotes = xget(smq, MUIA_Selected) != 0; prefs.canvas_color = (int)xget(cvc, MUIA_Cycle_Active);   /* round 4 */
+    prefs.gamut_color = pick_gam; prefs.gamut_opacity = (int)xget(gmo, MUIA_Numeric_Value);
     prefs.grid_style = (int)xget(grs, MUIA_Cycle_Active); prefs.guide_style = (int)xget(gus, MUIA_Cycle_Active);
     prefs.screen_dpi = atoi((const char *)xget(sdp, MUIA_String_Contents)); prefs.column_w = atoi((const char *)xget(cw, MUIA_String_Contents));
     prefs.gutter_w = atoi((const char *)xget(gw, MUIA_String_Contents)); prefs.point_kind = (int)xget(pk, MUIA_Cycle_Active);
@@ -353,6 +375,6 @@ int dlg_preferences(int *reopen)
     prefs_apply();
   }
   MUI_DisposeObject(w);
-  guide_txt = grid_txt = c1_txt = c2_txt = NULL;
+  guide_txt = grid_txt = c1_txt = c2_txt = gam_txt = NULL;
   return ok;
 }

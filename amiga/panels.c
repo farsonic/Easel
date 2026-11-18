@@ -22,6 +22,7 @@
 #include <clib/alib_protos.h>
 #include "easel.h"
 #include "../core/layers.h"
+#include "../core/r4.h"                   /* (round 4: the layer filter) */
 #include "../core/live.h"
 #include "../core/fx.h"                 /* 1.1 */
 #include "../core/layerops.h"
@@ -347,6 +348,8 @@ static void lay_list(struct LData *d, Doc *doc)
 {
   int i;
   d->nlist = 0;
+  /* (round 4: Select > Find Layers and Isolate Layers show only the layers that pass, closed groups' too) */
+  if (layer_filter_on(doc)) { for (i = doc->nlay - 1; i >= 0; i--) if (layer_filter_pass(doc, i)) d->list[d->nlist++] = i; return; }
   for (i = doc->nlay - 1; i >= 0; i--) if (!layer_hidden_by_collapse(doc, i)) d->list[d->nlist++] = i;
 }
 static int lock_on(const Layer *a, int k) { return k == 0 ? a->alpha_lock : k == 1 ? a->locked : k == 2 ? a->lock_pos : a->lock_all; }
@@ -541,6 +544,8 @@ static void lay_draw(struct LData *d, Object *obj)
   }
   /* the buttons */
   SetAPen(rp, tpen(T_BORDER)); Move(rp, l, lay_bottom(obj)); Draw(rp, r, lay_bottom(obj));
+  /* (round 4) a filter on: said at the left of the buttons */
+  if (layer_filter_on(doc)) text_fit(rp, theme_small(), l + 6, lay_bottom(obj) + 7, tr(layer_filter.isolate ? "Isolated" : "Filtered"), r - NLB * 24 - 12 - l, tpen(T_ACCENT));
   for (i = 0; i < NLB; i++) {
     LONG bx = r - (NLB - i) * 24 - 4;
     theme_icon(rp, lay_buttons[i], bx + 4, lay_bottom(obj) + 5, 16, i == 0 && doc->lay[doc->active]->mask != NULL);
