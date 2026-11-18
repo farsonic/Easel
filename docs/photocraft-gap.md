@@ -886,7 +886,7 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Type › Load / Save Default Type Styles (2 items) | **Missing** | Easy | P3 |
 | Type options bar: a list of preset font sizes (PhotoCraft #12718, since eb6c1ab) | **Missing**: the size is a slider | Easy | P3 |
 | Type options bar: a button showing the Character and Paragraph panels (#13020) | **Missing** | Easy | P3 |
-| Cmd-. (Ctrl-.) cancels a type editing session (#12076) | **Partial**: Esc finishes editing; there's no key that throws the edit away (Undo does) | Easy | P3 |
+| Cmd-. (Ctrl-.) cancels a type editing session (#12076) | **Have** (r3): Ctrl-. (and Amiga-.) throws the edit away and ends it, the layer as it was (a new one not made); Esc and Enter still finish it (`ty_key` in `E:amiga/canvas.c`) | Done | — |
 
 ## 10. Vector paths and shapes
 

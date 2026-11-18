@@ -1607,8 +1607,10 @@ static int ty_key(struct Data *d, Object *obj, struct IntuiMessage *im)
   if (code & IECODE_UP_PREFIX) return code == (0x40 | IECODE_UP_PREFIX);
   if (q & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) {
     if (code == 0x44 || code == 0x43) { ty_end(d, obj, 1); return 1; }     /* Amiga-Return commits */
+    if (code == 0x39) { ty_end(d, obj, 0); return 1; }                      /* r3: Amiga-. throws the edit away (PhotoCraft #12076) */
     return 0;
   }
+  if (ctrl && code == 0x39) { ty_end(d, obj, 0); return 1; }               /* r3: and Ctrl-. (Cmd-. on a Mac) */
   switch (code) {
   case 0x45: case 0x43: ty_end(d, obj, 1); return 1;                     /* Esc, Enter: done */
   case 0x44: ty_insert(d, obj, "\n", 1); return 1;                        /* Return: a new paragraph */
