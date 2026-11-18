@@ -42,6 +42,7 @@ int  doc_hide_all_fx(Doc *d, int hide);                 /* Hide All Effects (1) 
 int  doc_scale_fx(Doc *d, int i, int percent);          /* Scale Effects: sizes and distances by 1-1000 % */
 int  doc_global_light(Doc *d, int angle, int alt);      /* Global Light (effects that use it change) */
 int  doc_fx_to_layers(Doc *d, int i);                   /* Create Layers: each effect a pixel layer of its own */
+int  doc_rasterize_fx(Doc *d, int i);                   /* Rasterize > Layer Style: drawn into the layer's pixels */
 
 /* the style as text (OpenRaster's easel:effects attribute; "" when there is none), malloc'd; and back
    (1 if it was understood; what can't be is left at the defaults) */

@@ -41,7 +41,7 @@ int prefs_line(const char *l)
     { "askflatten=", &prefs.ask_flatten }, { "nrecent=", &prefs.nrecent }, { "units=", &prefs.units }, { "dpi=", &prefs.dpi },
     { "gridsp=", &prefs.grid_spacing }, { "gridsub=", &prefs.grid_sub }, { "scratchon=", &prefs.scratch_on },
     { "scratchmb=", &prefs.scratch_mb }, { "undomb=", &prefs.undo_mb }, { "undolevels=", &prefs.undo_levels },
-    { "screenmode=", &prefs.screen_mode }
+    { "screenmode=", &prefs.screen_mode }, { "skipplacexf=", &prefs.skip_place_xf }
   };
   int i;
   for (i = 0; i < (int)(sizeof ints / sizeof ints[0]); i++) {
@@ -64,6 +64,7 @@ void prefs_write(FILE *f)
           (unsigned long)prefs.guide_color, (unsigned long)prefs.grid_color, prefs.grid_spacing, prefs.grid_sub);
   fprintf(f, "scratchon=%d\nscratch=%s\nscratchmb=%d\nundomb=%d\nundolevels=%d\n", prefs.scratch_on, prefs.scratch, prefs.scratch_mb, prefs.undo_mb, prefs.undo_levels);
   fprintf(f, "screenmode=%d\nscreenid=%08lX\n", prefs.screen_mode, (unsigned long)prefs.screen_id);
+  fprintf(f, "skipplacexf=%d\n", prefs.skip_place_xf);
 }
 /* the settings kept in range and handed to the parts that use them (the core's undo, the bubbles) */
 void prefs_apply(void)
@@ -146,7 +147,7 @@ int dlg_preferences(int *reopen)
 {
   static const ULONG ends[] = { ID_DLGOK, 0 };
   Object *w, *list, *pg, *gpick, *gridpick;
-  Object *as, *ic, *lv, *mb, *tp, *dk, *lg, *cu, *cp, *xn, *sf, *jq, *af, *nr, *rc, *un, *dp, *gs, *gsub, *so, *sp, *smb;
+  Object *spx, *as, *ic, *lv, *mb, *tp, *dk, *lg, *cu, *cp, *xn, *sf, *jq, *af, *nr, *rc, *un, *dp, *gs, *gsub, *so, *sp, *smb;
   char asb[8], dpb[8], usage[120];
   int i, ok;
   for (i = 0; pages[i]; i++) pagelist[i] = tr(pages[i]);
@@ -164,6 +165,7 @@ int dlg_preferences(int *reopen)
             Child, label("History states:"), Child, lv = slider(2, 1000, prefs.undo_levels),
             Child, label("Undo memory (MB):"), Child, mb = slider(1, 512, prefs.undo_mb),
             Child, label("Help bubbles:"), Child, HGroup, Child, tp = check(prefs.tips), Child, HSpace(0), End,
+            Child, label("Skip Transform when Placing:"), Child, HGroup, Child, spx = check(prefs.skip_place_xf), Child, HSpace(0), End,
             End, Child, HVSpace, End,
           /* Interface */
           Child, VGroup, Child, QTitleObject(tr("Interface")), Child, ColGroup(2),
@@ -223,6 +225,7 @@ int dlg_preferences(int *reopen)
     pref_icons = xget(ic, MUIA_Selected) != 0;
     prefs.undo_levels = (int)xget(lv, MUIA_Numeric_Value); prefs.undo_mb = (int)xget(mb, MUIA_Numeric_Value);
     prefs.tips = xget(tp, MUIA_Selected) != 0;
+    prefs.skip_place_xf = xget(spx, MUIA_Selected) != 0;
     prefs.cursor = (int)xget(cu, MUIA_Cycle_Active); prefs.caps_precise = xget(cp, MUIA_Selected) != 0; prefs.xform_numbers = xget(xn, MUIA_Selected) != 0;
     prefs.save_fmt = (int)xget(sf, MUIA_Cycle_Active); prefs.jpeg_quality = (int)xget(jq, MUIA_Numeric_Value);
     prefs.ask_flatten = xget(af, MUIA_Selected) != 0; prefs.nrecent = (int)xget(nr, MUIA_Numeric_Value);

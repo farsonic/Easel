@@ -277,6 +277,7 @@ typedef struct {
   int scratch_on, scratch_mb; char scratch[256];        /* undo steps spilled to a drawer, up to so much */
   int undo_mb, undo_levels;           /* undo's memory and states */
   int screen_mode; ULONG screen_id;   /* SM_, and the ModeID of Easel's own screen (0: Workbench's) */
+  int skip_place_xf;                  /* 1.1: Place as Layer doesn't go on into Free Transform */
 } Prefs;
 extern Prefs prefs;
 extern int pref_autosave, pref_icons;

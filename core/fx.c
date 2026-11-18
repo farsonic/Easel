@@ -658,6 +658,32 @@ int doc_fx_to_layers(Doc *d, int i)
   return m;
 }
 
+/* Rasterize > Layer Style: a pixel layer's effects (and its mask and fill opacity) drawn into its own
+   pixels, at its own opacity and mode as before */
+int doc_rasterize_fx(Doc *d, int i)
+{
+  Layer *l;
+  u8 *buf, op, bl, fc, bi[4];
+  if (!fx_layer_ok(d, i) || d->lay[i]->kind != LK_PIXEL || !d->lay[i]->px || !fx_any(d->lay[i])) return 0;
+  l = d->lay[i];
+  if (!(buf = (u8 *)malloc((size_t)d->w * d->h * 4))) return 0;
+  op = l->opacity; bl = l->blend; fc = l->fill_cut; memcpy(bi, l->blendif, 4);
+  l->opacity = 255; l->blend = BM_NORMAL; memset(l->blendif, 0, 4);
+  doc_composite_range(d, i, i + 1, l->depth, doc_box(d), buf, (long)d->w * 4, 0);
+  l->opacity = op; l->blend = bl; l->fill_cut = fc; memcpy(l->blendif, bi, 4);
+  doc_begin(d, "Rasterize Layer Style");
+  doc_note_all(d);
+  memcpy(l->px, buf, (size_t)d->w * d->h * 4);
+  free(buf);
+  free(l->mask); l->mask = NULL; free(l->maskfx); l->maskfx = NULL; l->maskfx_ok = 0;
+  l->fill_cut = 0;
+  { int k; for (k = 0; k < FX_N; k++) l->fx.e[k].on = 0; }
+  l->fx.hidden = 0;
+  fx_free(l);
+  doc_end(d);
+  return 1;
+}
+
 /* ------------------------------------------------------------------ as text */
 char *fx_save(const LayerFx *fx)
 {

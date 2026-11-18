@@ -199,7 +199,7 @@ static struct NewMenu menus[] = {
   S("Enable/Disable", 0, ID_MASK_ENABLE), S("Link/Unlink", 0, ID_MASK_LINK), S("Invert Mask", 0, ID_MASK_INVERT), S("Edit Mask/Layer", "\\", ID_MASK_EDIT),
   I("Create/Release Clipping Mask", "G", ID_CLIP), BAR,
   I("Group Layers", 0, ID_GROUPLAYERS), I("Ungroup Layers", 0, ID_UNGROUP),
-  H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE),
+  H("Rasterize"), S("Type", 0, ID_RASTERTYPE), S("Shape", 0, ID_RASTERSHAPE), S("Layer", 0, ID_RASTERIZE), S("Layer Style", 0, ID_FXRASTER),
   H("Stack Mode"), S("Mean", 0, ID_STACKMODE0 + STK_MEAN), S("Median", 0, ID_STACKMODE0 + STK_MEDIAN), S("Minimum", 0, ID_STACKMODE0 + STK_MIN),
   S("Maximum", 0, ID_STACKMODE0 + STK_MAX), S("Range", 0, ID_STACKMODE0 + STK_RANGE), S("Summation", 0, ID_STACKMODE0 + STK_SUM),
   S("Variance", 0, ID_STACKMODE0 + STK_VARIANCE), S("Standard Deviation", 0, ID_STACKMODE0 + STK_STDDEV), S("Entropy", 0, ID_STACKMODE0 + STK_ENTROPY),
@@ -1436,8 +1436,8 @@ static void place_file(void)
     doc_set_layer_props(d, d->active, name, -1, -1, -1);
   }
   refresh_all();
-  /* 0.6: then its size and angle, as Place goes into Free Transform */
-  transform_dialog();
+  /* 0.6: then its size and angle, as Place goes into Free Transform (1.1: unless the preferences skip it) */
+  if (!prefs.skip_place_xf) transform_dialog();
 }
 
 /* ------------------------------------------------------------------ 0.8: History snapshots */

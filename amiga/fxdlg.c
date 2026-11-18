@@ -299,6 +299,10 @@ int layerstyle_command(Doc *d, ULONG id)
   case ID_FXCOPY: copied = l->fx; have_copied = 1; break;
   case ID_FXPASTE: if (have_copied) doc_paste_fx(d, &copied); break;
   case ID_FXCLEAR: doc_clear_fx(d, d->active); break;
+  case ID_FXRASTER:
+    if (l->kind != LK_PIXEL) { ask("OK", "%s", tr("Rasterize the layer first: its style can be drawn into a pixel layer's own pixels.")); break; }
+    if (!doc_rasterize_fx(d, d->active)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break;
   case ID_FXLIGHT: dlg_global_light(d); break;
   case ID_FXLAYERS:
     if (!fx_any(l)) { ask("OK", "%s", tr("This layer has no effects to turn into layers.")); break; }
@@ -343,6 +347,7 @@ void layerstyle_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
   menu_set(ID_FXPASTE, MUIA_Menuitem_Enabled, styled && have_copied);
   menu_set(ID_FXCLEAR, MUIA_Menuitem_Enabled, l && fx_has(l));
   menu_set(ID_FXLAYERS, MUIA_Menuitem_Enabled, l && fx_any(l));
+  menu_set(ID_FXRASTER, MUIA_Menuitem_Enabled, l && fx_any(l));
   menu_set(ID_FXSCALE, MUIA_Menuitem_Enabled, l && fx_has(l));
   menu_set(ID_FXLIGHT, MUIA_Menuitem_Enabled, d != NULL);
   if (d) for (i = 0; i < d->nlay; i++) if (fx_has(d->lay[i])) { any = 1; if (d->lay[i]->fx.hidden) hidden = 1; }

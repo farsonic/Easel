@@ -294,6 +294,19 @@ static void test_ops(void)
     doc_undo(d);
     CHECK(d->nlay == before && fx_has(d->lay[1]), "undo create layers");
   }
+  /* Rasterize Layer Style: the same picture, the style gone */
+  {
+    u8 *c3;
+    d->lay[1]->fill_cut = 100;
+    free(c1); c1 = comp(d);
+    CHECK(doc_rasterize_fx(d, 1) && !fx_has(d->lay[1]) && !d->lay[1]->fill_cut, "rasterize layer style");
+    c3 = comp(d);
+    CHECK(maxdiff(c1, c3, (long)W * H * 4) <= 2, "rasterize layer style: looks the same");
+    free(c3);
+    doc_undo(d);
+    CHECK(fx_has(d->lay[1]) && d->lay[1]->fill_cut == 100, "undo rasterize layer style");
+    d->lay[1]->fill_cut = 0;
+  }
   /* a layer clipped to the one below keeps to its alpha, effects and all */
   {
     Layer *c = layer_new(d, "Clipped");

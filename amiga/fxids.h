@@ -15,6 +15,7 @@
 #define ID_FXLAYERS    3315
 #define ID_FXHIDEALL   3316
 #define ID_FXSCALE     3317
+#define ID_FXRASTER    3318           /* Rasterize > Layer Style */
 #define ID_LABEL0      3320           /* + 0..7: None, Red ... Gray */
 #define ID_DELHIDDEN   3330
 #define ID_REVERSE     3331
