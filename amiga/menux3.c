@@ -43,6 +43,7 @@
 #include "../core/exportx.h"
 #include "../core/batch.h"
 #include "../core/guides.h"
+#include "../core/actions.h"
 
 int m3_pixelart, m3_flip, m3_slices_locked;
 extern struct IntuitionBase *IntuitionBase;
@@ -470,18 +471,33 @@ static int src_choose(const char *title, int load)
 }
 
 /* ================================================================== Scripts > Image Processor */
+extern ActionLib mx_actions;           /* (panelsx.c) */
+void t2_doc_switch(int i);
+static int ip_step(void *ctx, u32 id, int dialog, const char *name)
+{
+  (void)ctx; (void)dialog; (void)name;
+  if (id == ACT_STOP) return 1;          /* (a batch doesn't stop to ask) */
+  do_command((ULONG)id);
+  return 1;
+}
 static void image_processor(void)
 {
   static ImProcOpts o;
   static int set_up;
   static char dest[512];
   static const ULONG ends[] = { ID_DLGOK, 0 };
-  Object *w, *jc, *jq, *jr, *jw, *jh, *pc, *pr, *pw, *ph, *tc, *tr_, *tw, *th, *gc, *gr, *gw, *gh, *ic, *ir, *iw, *ih, *icc, *sc, *cc, *bc, *ds;
+  Object *w, *jc, *jq, *jr, *jw, *jh, *pc, *pr, *pw, *ph, *tc, *tr_, *tw, *th, *gc, *gr, *gw, *gh, *ic, *ir, *iw, *ih, *icc, *sc, *cc, *bc, *ds, *rc, *ra = NULL;
+  static int run_action, act;
+  const char *anames[65];
   int i, n = 0, ok;
   char err[160];
   if (!set_up) { improc_defaults(&o); set_up = 1; }
   if (!src_choose("Image Processor: the pictures to process", 0)) return;
   if (!dest[0]) strcpy(dest, m3dir);
+  for (i = 0; i < mx_actions.n && i < 64; i++) anames[i] = mx_actions.a[i].name;
+  anames[i] = NULL;
+  if (!i) { anames[0] = "-"; anames[1] = NULL; run_action = 0; }
+  if (act >= mx_actions.n) act = 0;
   w = dialog_window("Image Processor", VGroup,
         Child, HGroup, Child, label("Save in drawer:"), Child, ds = textstr(dest, 500), End,
         Child, QTitleObject(tr("File Type")),
@@ -495,6 +511,7 @@ static void image_processor(void)
         Child, QTitleObject(tr("Preferences")),
         Child, HGroup, Child, sc = check(o.to_srgb), Child, QLabel(tr("Convert Profile to sRGB"), 0), Child, HSpace(8),
           Child, bc = check(o.icon), Child, QLabel(tr("Icons"), 0), Child, HSpace(0), End,
+        Child, HGroup, Child, rc = check(run_action), Child, QLabel(tr("Run Action:"), 0), Child, ra = cycle_raw(anames, act), Child, HSpace(0), End,
         Child, HGroup, Child, label("Copyright Info:"), Child, cc = textstr(o.copyright, 250), End,
       End, "Run");
   if (!w) { src_free(); return; }
@@ -510,6 +527,7 @@ static void image_processor(void)
     o.to_srgb = (int)xget(sc, MUIA_Selected); o.icon = (int)xget(bc, MUIA_Selected);
     snprintf(o.copyright, sizeof o.copyright, "%s", (const char *)xget(cc, MUIA_String_Contents));
     snprintf(dest, sizeof dest, "%s", (const char *)xget(ds, MUIA_String_Contents));
+    run_action = mx_actions.n && xget(rc, MUIA_Selected); act = (int)xget(ra, MUIA_Cycle_Active);
   }
   MUI_DisposeObject(w);
   if (!ok) { src_free(); return; }
@@ -519,8 +537,20 @@ static void image_processor(void)
   for (i = 0; i < nsrc && !progress_aborted; i++) {
     Doc *d = src_doc[i];
     long pp = progress_push(1000L * i / nsrc, 1000L * (i + 1) / nsrc);
-    if (!d) d = m3_load(src_path[i]);
-    if (d) { n += improc_doc(d, src_name[i], dest, &o, make_drawer, err, sizeof err); if (!src_doc[i]) doc_free(d); }
+    if (run_action) {
+      /* Run Action: on the picture shown (a file is opened as one, and closed after) */
+      int k, shown = 0;
+      if (d) { for (k = 0; k < ndocs; k++) if (docs[k].doc == d) { t2_doc_switch(k); shown = 1; } }
+      else shown = mx_open(src_path[i]);
+      if (shown && cur_doc()) {
+        act_play(&mx_actions, act, 0, ip_step, NULL);
+        if (cur_doc()) n += improc_doc(cur_doc(), src_name[i], dest, &o, make_drawer, err, sizeof err);
+        if (!d) mx_close_current();
+      }
+    } else {
+      if (!d) d = m3_load(src_path[i]);
+      if (d) { n += improc_doc(d, src_name[i], dest, &o, make_drawer, err, sizeof err); if (!src_doc[i]) doc_free(d); }
+    }
     progress_pop(pp);
     progress(1000L * (i + 1) / nsrc, 1000);
   }
