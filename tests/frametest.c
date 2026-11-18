@@ -11,6 +11,8 @@
 #include <string.h>
 #include "core/frames.h"
 #include "core/palette.h"
+#include "core/scripts.h"
+#include "core/layers.h"
 
 static int ntests, nfailed;
 static const char *outdir = "/tmp/easel_frames_out";
@@ -248,6 +250,31 @@ int main(int argc, char **argv)
     doc_free(d);
   }
   ok("not an animation", !frames_read((const u8 *)"\x89PNG\r\n\x1a\n........", 16, &f, 0, 0, err, sizeof err) && err[0]);
+
+  /* File > Scripts and Automate */
+  {
+    Doc *s = make_doc(3, W, H, 0);
+    Layer *e1 = layer_new(s, "empty"), *e2 = layer_new(s, "empty 2");
+    char *lo;
+    doc_add_layer(s, e1, 1); doc_add_layer(s, e2, s->nlay);
+    doc_forget_undo(s);
+    ok("delete empty layers", doc_delete_empty_layers(s) == 2 && s->nlay == 3 && !strcmp(s->lay[1]->name, "Frame 2 (0.15 s)"));
+    ok("delete empty layers is one step", doc_undo(s) && s->nlay == 5 && !doc_undo(s));
+    doc_redo(s);
+    ok("nothing empty left", doc_delete_empty_layers(s) == 0 && s->nlay == 3);
+    ok("mask added", doc_mask_add(s, 0, MK_REVEAL_ALL) && doc_mask_add(s, 2, MK_REVEAL_ALL) && s->lay[0]->mask);
+    memset(s->lay[0]->mask, 0, (size_t)W * H / 2);
+    layer_mask_changed(s->lay[0]);
+    ok("flatten all masks", doc_flatten_all_masks(s) == 2 && !s->lay[0]->mask && !s->lay[2]->mask && s->lay[0]->px[3] == 0 && s->lay[0]->px[(W * H - 1) * 4 + 3] == 255);
+    ok("fit image", doc_fit_image(s, 20, 20, 0) && s->w == 20 && s->h == 12 && !doc_fit_image(s, 40, 40, 0) && doc_fit_image(s, 40, 40, 1) && s->w == 40);
+    doc_free(s);
+    lo = lorem_ipsum(5);
+    ok("lorem ipsum", lo && !strcmp(lo, "Lorem ipsum dolor sit amet."));
+    free(lo);
+    lo = lorem_ipsum(300);
+    { int words = 1; char *q; for (q = lo; q && *q; q++) words += *q == ' '; ok("lorem ipsum long", lo && words == 300); }
+    free(lo);
+  }
 
   free(ref);
   printf("frametest: %ld mutated files read\n", nfuzz);

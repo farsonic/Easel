@@ -41,6 +41,10 @@
 #include "../core/amigamodes.h"
 #include "../core/guides.h"
 #include "../core/swatch.h"
+#include "../core/xwrite.h"
+#include "../core/frames.h"
+#include "../core/scripts.h"
+#include "../core/type.h"
 #include "palwin.h"
 #include "modedlg.h"
 #include "brushwin.h"
@@ -129,11 +133,15 @@ static struct NewMenu menus[] = {
   H("Open Recent"), S("1", 0, ID_RECENT0), S("2", 0, ID_RECENT0 + 1), S("3", 0, ID_RECENT0 + 2), S("4", 0, ID_RECENT0 + 3), S("5", 0, ID_RECENT0 + 4),
   S("6", 0, ID_RECENT0 + 5), S("7", 0, ID_RECENT0 + 6), S("8", 0, ID_RECENT0 + 7), S("9", 0, ID_RECENT0 + 8), S("10", 0, ID_RECENT0 + 9), SBAR,
   S("Clear Recent List", 0, ID_CLEARRECENT),
-  I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), BAR,
-  I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), BAR,
+  I("Place as Layer...", 0, ID_PLACE), I("Load Files into Stack...", 0, ID_STACK), I("Import Frames to Layers...", 0, ID_IMPFRAMES), BAR,
+  I("Close", "W", ID_CLOSE), I("Close All", 0, ID_CLOSEALL), I("Close Others", 0, ID_CLOSEOTHERS), BAR,
   I("Save", "S", ID_SAVE), I("Save As...", 0, ID_SAVEAS), I("Save a Copy...", 0, ID_SAVECOPY), I("Revert", 0, ID_REVERT),
-  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD), SBAR,
+  H("Export"), S("Export As (with scale)...", 0, ID_EXPORTAS), S("Layers to Files...", 0, ID_LAYERSTOFILES), SBAR, S("PNG...", 0, ID_EXPPNG), S("JPEG...", 0, ID_EXPJPEG), S("BMP...", 0, ID_EXPBMP), S("GIF...", 0, ID_EXPGIF), S("TIFF...", 0, ID_EXPTIFF), S("Targa...", 0, ID_EXPTGA), S("Photoshop PSD...", 0, ID_EXPPSD),
+  S("WebP (lossless)...", 0, ID_EXPXW0), S("PDF...", 0, ID_EXPXW0 + 1), S("QOI...", 0, ID_EXPXW0 + 2), S("Netpbm (PPM, PGM, PBM, PAM)...", 0, ID_EXPXW0 + 3),
+  S("Windows Icon...", 0, ID_EXPXW0 + 4), S("DDS Texture...", 0, ID_EXPXW0 + 5), S("DPX...", 0, ID_EXPXW0 + 6), S("FITS...", 0, ID_EXPXW0 + 7), SBAR,
+  S("Layers as Animated GIF...", 0, ID_EXPANIMGIF), S("Layers as IFF ANIM...", 0, ID_EXPANIM), S("Quick Export as PNG", 0, ID_QUICKPNG), SBAR,
   S("IFF ILBM (24-bit)...", 0, ID_EXPILBM), S("IFF ILBM (256 colours)...", 0, ID_EXPILBM8), S("IFF ILBM (Amiga options)...", 0, ID_EXPILBMOPT), BAR,
+  H("Scripts"), S("Delete All Empty Layers", 0, ID_DELEMPTY), S("Flatten All Masks", 0, ID_FLATMASKS), S("Fit Image...", 0, ID_FITIMAGE),
   I("File Info...", 0, ID_FILEINFO), BAR,
   I("About Easel...", "?", ID_ABOUT), I("Quit", "Q", ID_QUIT),
   M("Edit"),
@@ -178,7 +186,7 @@ static struct NewMenu menus[] = {
   H("New Fill Layer"), S("Solid Color...", 0, ID_NEWFILLSOLID), S("Gradient...", 0, ID_NEWFILLGRAD),
   I("Layer Content Options...", 0, ID_FILLSETTINGS),
   H("Type"), S("Edit Type", 0, ID_EDITTYPE), S("Character...", 0, ID_TYPECHAR), S("Paragraph...", 0, ID_TYPEPARA), SBAR, S("Create Work Path", 0, ID_TYPEWORKPATH),
-  S("Warp Text...", 0, ID_WARPTEXT), SBAR, S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
+  S("Warp Text...", 0, ID_WARPTEXT), S("Paste Lorem Ipsum", 0, ID_LOREM), SBAR, S("Horizontal", 0, ID_TYPEHORIZ), S("Vertical", 0, ID_TYPEVERT), SBAR, S("Rasterize Type", 0, ID_RASTERTYPE2),
   I("Shape Properties...", 0, ID_SHAPEPROPS), BAR,
   H("Layer Mask"), S("Reveal All", 0, ID_MASK_REVEALALL), S("Hide All", 0, ID_MASK_HIDEALL), S("Reveal Selection", 0, ID_MASK_REVEALSEL),
   S("Hide Selection", 0, ID_MASK_HIDESEL), S("From Transparency", 0, ID_MASK_ALPHA), SBAR, S("Delete", 0, ID_MASK_DELETE), S("Apply", 0, ID_MASK_APPLY), SBAR,
@@ -904,8 +912,11 @@ static int ext_fmt(const char *path)
   if (!Stricmp((STRPTR)e, (STRPTR)".tif") || !Stricmp((STRPTR)e, (STRPTR)".tiff")) return FMT_TIFF;
   if (!Stricmp((STRPTR)e, (STRPTR)".tga")) return FMT_TGA;
   if (!Stricmp((STRPTR)e, (STRPTR)".psd")) return FMT_PSD;
-  return FMT_UNKNOWN;
+  return xwrite_format_of_ext(e);                      /* (1.1: WebP, PDF, Netpbm, QOI, ICO, DDS, DPX, FITS) */
 }
+/* 1.1: what xwrite_doc's sub and quality are for the next write (export_sub -1: from the extension) */
+static int export_sub = -1, export_pdf_quality;
+#define SAVE_PATTERN "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga|webp|pdf|ppm|pgm|pbm|pam|pnm|qoi|ico|dds|dpx|fits)"
 int export_quality = 85, export_indexed;
 /* the document written to path as fmt; 1 if it was */
 static int write_doc(Doc *d, const char *path, int fmt)
@@ -925,6 +936,10 @@ static int write_doc(Doc *d, const char *path, int fmt)
   else if (fmt == FMT_PSD) data = psd_write_doc(d, &len);
   else if (fmt == FMT_PNG) data = png_write_doc(d, &len);
   else if (fmt == FMT_JPEG) data = jpeg_write_doc(d, export_quality, &len);
+  else if (xwrite_handles(fmt)) {
+    const char *e = strrchr((const char *)FilePart((STRPTR)path), '.');
+    data = xwrite_doc(d, fmt, export_sub >= 0 ? export_sub : xwrite_sub_of_ext(e), fmt == FMT_PDF_OUT ? export_pdf_quality : 0, &len);
+  }
   else if (fmt == FMT_ILBM && d->mode == MODE_INDEXED && !export_indexed) {
     IlbmOpts o;
     char err[120];
@@ -1042,7 +1057,7 @@ static int save(void)
 {
   DocView *v = cur_view();
   if (!v) return 0;
-  if (!v->path[0] || !codec_writable_06(v->fmt)) return save_as();
+  if (!v->path[0] || !(codec_writable_06(v->fmt) || xwrite_handles(v->fmt))) return save_as();
   if (v->fmt != FMT_ORA && v->fmt != FMT_PSD && v->doc->nlay > 1 && prefs.ask_flatten &&
       ask("Save as ORA|Flatten and Save|Cancel", "%s", tr("This picture has layers, which the file's format can't keep.\nSave it as an OpenRaster (.ora) file, which keeps them?")) != 2) {
     return save_as();
@@ -1075,7 +1090,7 @@ static int save_as(void)
     static const char *const ext[SF_N] = { ".ora", ".png", ".jpg", ".tif", ".psd", ".iff" };
     with_ext(path, sizeof path, ext[prefs.save_fmt]);
   }
-  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga)")) return 0;
+  if (!file_request(1, "Save the picture as (.ora keeps the layers)", path, sizeof path, SAVE_PATTERN)) return 0;
   fmt = ext_fmt(path);
   if (fmt == FMT_UNKNOWN) { fmt = FMT_ORA; strncat(path, ".ora", sizeof path - 1 - strlen(path)); }
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return 0; }
@@ -1099,12 +1114,110 @@ static void export_as(int fmt, int indexed)
   if (!v) return;
   strcpy(path, v->path[0] ? v->path : lastdir);
   if (!v->path[0]) { *PathPart((STRPTR)path) = 0; AddPart((STRPTR)path, (STRPTR)v->name, sizeof path); }
-  with_ext(path, sizeof path, ext[fmt]);
+  with_ext(path, sizeof path, fmt <= FMT_TGA ? ext[fmt] : xwrite_ext(fmt));
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   if (!file_request(1, "Export as", path, sizeof path, NULL)) return;
   export_indexed = indexed;
   write_doc(v->doc, path, fmt);
   export_indexed = 0;
+}
+static void start_path(DocView *v, char *path, size_t cap);
+/* 1.1: File > Export's new formats, with the one choice each has */
+static void export_x(int fmt)
+{
+  int r;
+  export_sub = -1; export_pdf_quality = 0;
+  if (fmt == FMT_PDF_OUT) {
+    if (!(r = ask("Lossless|JPEG|Cancel", "%s", tr("Put the picture in the PDF without loss (Flate), or as a JPEG (smaller)?")))) return;
+    if (r == 2) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; export_pdf_quality = export_quality; }
+  } else if (fmt == FMT_DDS) {
+    if (!(r = ask("BC3 (DXT5)|BC1 (DXT1)|Uncompressed|Cancel", "%s", tr("How should the texture be stored? (Each comes with its mipmaps.)")))) return;
+    export_sub = r == 1 ? DDS_BC3 : r == 2 ? DDS_BC1 : DDS_RGBA;
+  } else if (fmt == FMT_DPX) {
+    if (!(r = ask("8 Bits|10 Bits|Cancel", "%s", tr("Bits per channel in the DPX file?")))) return;
+    export_sub = r == 2;
+  }
+  export_as(fmt, 0);
+  export_sub = -1; export_pdf_quality = 0;
+}
+/* 1.1: File > Export > Layers as Animated GIF / IFF ANIM: each pixel layer a frame, bottom first */
+static void export_anim(int gif)
+{
+  DocView *v = cur_view();
+  char path[512], err[160];
+  AnimOpts o;
+  u8 *data;
+  size_t len = 0;
+  static char msg[300];
+  if (!v) return;
+  anim_opts_default(&o);
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, gif ? ".gif" : ".anim");
+  if (!file_request(1, gif ? "Export the layers as an animated GIF" : "Export the layers as an IFF ANIM", path, sizeof path, NULL)) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  err[0] = 0;
+  data = gif ? gif_write_anim(v->doc, &o, &len, err, sizeof err) : anim_write(v->doc, &o, &len, err, sizeof err);
+  if (data && !write_file(path, data, len)) { free(data); data = NULL; strcpy(err, tr("the disk is full or write-protected")); }
+  free(data);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!data && !progress_aborted) { snprintf(msg, sizeof msg, tr("%s couldn't be saved:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not enough memory")); ask("OK", "%s", msg); }
+}
+/* 1.1: File > Import Frames to Layers: every frame of an animated GIF or IFF ANIM, a layer each */
+static void import_frames(void)
+{
+  char path[512], err[160];
+  static char msg[400];
+  Frames *f;
+  u8 *data;
+  size_t len = 0;
+  Doc *d = NULL;
+  int r;
+  strcpy(path, lastdir);
+  if (!file_request(0, "Import the frames of an animated GIF or IFF ANIM", path, sizeof path, "#?.(gif|anim|anm|iff)")) return;
+  strncpy(lastdir, path, sizeof lastdir - 1);
+  if (!(f = (Frames *)malloc(sizeof *f))) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  err[0] = 0;
+  if ((data = read_file(path, &len))) {
+    /* the frames may take three quarters of the memory free (the layers need as much again) */
+    r = frames_read(data, len, f, FRAMES_MAX, (long)(AvailMem(MEMF_ANY) / 8 * 3), err, sizeof err);
+    free(data);
+    if (r) d = frames_to_doc(f);
+    else f->n = 0;
+  } else strcpy(err, tr("it couldn't be read"));
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (d && f->truncated) {
+    snprintf(msg, sizeof msg, tr("Only the first %ld frames fitted in memory (or in the %ld layers a picture can have)."), (long)f->n, (long)FRAMES_MAX);
+    ask("OK", "%s", msg);
+  }
+  frames_free(f);
+  free(f);
+  if (!d) { snprintf(msg, sizeof msg, tr("%s couldn't be opened:\n%s"), (const char *)FilePart((STRPTR)path), err[0] ? err : tr("not enough memory")); ask("OK", "%s", msg); return; }
+  doc_show(d, "", FMT_ORA);
+  base_name(path, docs[curdoc].name, sizeof docs[curdoc].name);
+}
+/* 1.1: File > Export > Quick Export as PNG: beside the picture's file (or in the last drawer), no questions */
+static void quick_png(void)
+{
+  DocView *v = cur_view();
+  char path[512];
+  BPTR l;
+  if (!v) return;
+  start_path(v, path, sizeof path);
+  with_ext(path, sizeof path, ".png");
+  if (v->fmt == FMT_PNG && v->path[0] && !Stricmp((STRPTR)path, (STRPTR)v->path)) with_ext(path, sizeof path, "-copy.png");
+  if ((l = Lock((STRPTR)path, ACCESS_READ))) {
+    UnLock(l);
+    if (!ask("Replace|Cancel", tr("%s is there already. Replace it?"), (const char *)FilePart((STRPTR)path))) return;
+  }
+  write_doc(v->doc, path, FMT_PNG);
+}
+/* 1.1: File > Close Others */
+static int doc_close(int i);
+static void close_others(void)
+{
+  int i;
+  for (i = ndocs - 1; i >= 0; i--) if (i != curdoc && !doc_close(i)) return;
 }
 /* File > Export > IFF ILBM (Amiga options): planes, EHB, HAM, SHAM, mask, colour cycling, ModeID */
 static void export_ilbm_options(void)
@@ -1152,7 +1265,7 @@ static void save_copy(void)
   if (!v) return;
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, v->doc->nlay > 1 ? "-copy.ora" : "-copy.png");
-  if (!file_request(1, "Save a copy as (the extension picks the format)", path, sizeof path, "#?.(ora|psd|png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
+  if (!file_request(1, "Save a copy as (the extension picks the format)", path, sizeof path, SAVE_PATTERN)) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
   write_doc(v->doc, path, fmt);
@@ -1171,7 +1284,7 @@ static void export_scaled(void)
   if (pct < 1 || pct > 1000) { ask("OK", "%s", tr("The scale goes from 1 to 1000 per cent.")); return; }
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
-  if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, "#?.(png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
+  if (!file_request(1, "Export as (the extension picks the format)", path, sizeof path, SAVE_PATTERN)) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1197,7 +1310,7 @@ static void layers_to_files(void)
   if (!v) return;
   start_path(v, path, sizeof path);
   with_ext(path, sizeof path, ".png");
-  if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, "#?.(png|jpg|bmp|iff|gif|tif|tiff|tga)")) return;
+  if (!file_request(1, "Layers to Files: the drawer, and the name they start with", path, sizeof path, SAVE_PATTERN)) return;
   fmt = out_fmt(path, sizeof path);
   if (fmt == FMT_ORA) fmt = FMT_PNG;
   if (fmt == FMT_JPEG) { export_quality = 0; dlg_export(FMT_JPEG); if (!export_quality) return; }
@@ -1712,6 +1825,16 @@ static void command(ULONG id)
   case ID_EXPTIFF: export_as(FMT_TIFF, 0); return;
   case ID_EXPTGA: export_as(FMT_TGA, 0); return;
   case ID_EXPPSD: export_as(FMT_PSD, 0); return;
+  case ID_EXPXW0: case ID_EXPXW0 + 1: case ID_EXPXW0 + 2: case ID_EXPXW0 + 3: case ID_EXPXW0 + 4: case ID_EXPXW0 + 5: case ID_EXPXW0 + 6: case ID_EXPXW0 + 7: {
+    static const int fm[8] = { FMT_WEBP, FMT_PDF_OUT, FMT_QOI, FMT_PNM, FMT_ICO, FMT_DDS, FMT_DPX, FMT_FITS };
+    export_x(fm[id - ID_EXPXW0]);
+    return;
+  }
+  case ID_EXPANIMGIF: export_anim(1); return;
+  case ID_EXPANIM: export_anim(0); return;
+  case ID_QUICKPNG: quick_png(); return;
+  case ID_IMPFRAMES: import_frames(); return;
+  case ID_CLOSEOTHERS: close_others(); return;
   case ID_FILEINFO: if (d) dlg_file_info(d); return;
   case ID_EXPILBMOPT: export_ilbm_options(); return;
   case ID_SAVECOPY: save_copy(); return;
@@ -1949,6 +2072,37 @@ static void command(ULONG id)
     if (doc_path_set(d, -1, p, "Create Work Path")) d->path_active = -1;
     path_free(p);
     break; }
+  /* 1.1: File > Scripts and Layer > Type > Paste Lorem Ipsum */
+  case ID_DELEMPTY: if (!doc_delete_empty_layers(d)) ask("OK", "%s", tr("There are no empty layers to delete.")); break;
+  case ID_FLATMASKS: if (!doc_flatten_all_masks(d)) ask("OK", "%s", tr("No layer has a mask.")); break;
+  case ID_FITIMAGE: {
+    char buf[32];
+    long fw = 0, fh = 0;
+    sprintf(buf, "%ld x %ld", (long)(d->w > 640 ? 640 : d->w), (long)(d->h > 512 ? 512 : d->h));
+    if (!ask_string("Fit Image", "Fit inside (width x height):", buf, sizeof buf)) break;
+    if (sscanf(buf, "%ld %*[xX*] %ld", &fw, &fh) != 2 || fw < 1 || fh < 1 || fw > MAXDIM || fh > MAXDIM) { ask("OK", "%s", tr("Give the size as width x height, for example 640 x 512.")); break; }
+    if (!doc_fit_image(d, (i32)fw, (i32)fh, 0) && (fw < d->w || fh < d->h)) ask("OK", "%s", tr("There isn't enough memory for that."));
+    break;
+  }
+  case ID_LOREM: {
+    char *lo = lorem_ipsum(60);
+    const TextParams *cur = layer_text(d->lay[d->active]);
+    TextParams *tp = (TextParams *)malloc(sizeof *tp);
+    if (!lo || !tp) { free(lo); free(tp); break; }
+    if (cur) {
+      /* the active type layer: the text added at its end */
+      *tp = *cur;
+      if (text_insert(tp, (int)strlen(tp->text), " ", 1) && text_insert(tp, (int)strlen(tp->text), lo, (int)strlen(lo))) doc_set_text(d, d->active, tp);
+    } else {
+      /* a new paragraph of it in a box over the middle of the picture */
+      text_params_init(tp, font_name(opt.text_font), opt.text_size, d->fg, d->w / 10, d->h / 10);
+      tp->box = 1; tp->bw = d->w * 0.8; tp->bh = d->h * 0.8;
+      text_set_string(tp, lo);
+      doc_new_text(d, tp, "Lorem Ipsum");
+    }
+    free(lo); free(tp);
+    break;
+  }
   case ID_RASTERTYPE: case ID_RASTERTYPE2: if (d->lay[d->active]->kind == LK_TEXT) doc_rasterize(d, d->active); break;
   case ID_RASTERSHAPE: if (d->lay[d->active]->kind == LK_SHAPE) doc_rasterize(d, d->active); break;
   case ID_SHAPEPROPS: shape_props(d); break;
