@@ -23,6 +23,8 @@
 #include "easel.h"
 #include "../core/layers.h"
 #include "../core/live.h"
+#include "../core/fx.h"                 /* 1.1 */
+#include "../core/layerops.h"
 #include "theme.h"
 #include "lang.h"
 #include "ids.h"
@@ -318,7 +320,8 @@ static int thumb_sz = 28;
 #define THUMB thumb_sz
 static const char *const blendnames[BM_N + 1] = { "Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference", "Add", "Subtract",
   "Color Dodge", "Color Burn", "Soft Light", "Hard Light", "Exclusion", "Hue", "Saturation", "Color", "Luminosity", "Dissolve", "Linear Burn",
-  "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide", "Pass Through" };
+  "Darker Color", "Lighter Color", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix", "Divide",
+  "Reflect", "Glow", "Negation", "Xor", "Color Burn (Paint.NET)", "Color Dodge (Paint.NET)", "Pass Through" };
 static const char *blend_label(const Layer *l) { return tr(blendnames[l->blend == BM_PASS ? BM_N : l->blend < BM_N ? l->blend : 0]); }
 struct LData {
   struct MUI_EventHandlerNode ehn;
@@ -516,7 +519,10 @@ static void lay_draw(struct LData *d, Object *obj)
       }
     }
     to_latin1(ly->name, buf, sizeof buf);
-    text_fit(rp, theme_font(), nx, ry + (rowh() - fh()) / 2 - 1, buf, r - nx - 22, tpen(T_TEXT));
+    text_fit(rp, theme_font(), nx, ry + (rowh() - fh()) / 2 - 1, buf, r - nx - (fx_has(ly) ? 38 : 22), tpen(T_TEXT));
+    /* 1.1: the colour label down the eye's column, and "fx" for a layer with a style */
+    if (ly->label && ly->label < NLABELS) draw_rgb_box(rp, scr, l + 1, ry + 1, l + 3, ry + rowh() - 3, label_colors[ly->label]);
+    if (fx_has(ly)) theme_text(rp, theme_small(), r - 34, ry + (rowh() - fh()) / 2, "fx", tpen(ly->fx.hidden ? T_BORDER2 : T_DIM));
     if (ly->lock_all || ly->locked) theme_icon(rp, IC_LOCKL, r - 18, ry + (rowh() - 12) / 2, 12, 0);
     else if (ly->lock_pos) theme_icon(rp, IC_LOCKPOS, r - 18, ry + (rowh() - 12) / 2, 12, 0);
     else if (ly->alpha_lock) theme_icon(rp, IC_ALPHALOCK, r - 18, ry + (rowh() - 12) / 2, 12, 0);
