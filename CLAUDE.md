@@ -76,6 +76,12 @@ branches are merged into `main`. What is still missing is listed area by area in
 should be recounted. The README's "Not included" lists what may come next (clipboard export to other
 programs, animated brushes, guides dragged from the rulers).
 
+The interface is in English, German, French, Spanish and Italian (`lang/strings.txt`, Photoshop's terms
+in each language). The translations have been checked for fit with `tools/langfit.py`, not yet read on
+a real Amiga screen: a native speaker's look at each language, and a run in German at 640x480 on
+AmigaOS with MUI (dialogs and requesters use MUI's fonts there), are still to do. The right mouse
+button's menus (`amiga/ctxmenu.c`, `amiga/ctxmui.c`) also want checking on MUI 3.8 and on Zune.
+
 ## Issues
 
 Bugs and requests come in as GitHub issues (templates in `.github/ISSUE_TEMPLATE/`). To work on them:
