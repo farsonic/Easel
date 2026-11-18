@@ -401,8 +401,8 @@ Re-checked 2026-11-18 (Easel 1.1).
 
 | PhotoCraft item (CAT id) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Partial**: a picture's pixel aspect is kept and set from its Amiga screen mode (Image › Amiga Screen Mode, ILBM's BMHD), but the canvas always draws square pixels and there are no video presets | Easy: a vertical zoom of its own in `E:amiga/canvas.c` (to_iy/to_sy and the rows drawn). Very relevant on the Amiga, where PAL/NTSC lores and hires-interlace pixels aren't square | P1 |
-| Pixel Aspect Ratio Correction (toggle) | **Missing** | Easy, with the above | P1 |
+| Pixel Aspect Ratio › Custom, Square, D1/DV NTSC, PAL, widescreen, HDV, DVCPRO, Anamorphic (9 items) | **Have** (1.2): View › Pixel Aspect Ratio: Square, the Amiga's PAL and NTSC low res, laced, high res and super-high res aspects, D1/DV NTSC and PAL (and their widescreen), HDV 1080/DVCPRO HD 720, DVCPRO HD 1080, Anamorphic 2:1, and Custom (a pixel's width and height); an undo step, kept in the document and IFF BMHD (`E:core/aspect.c`) | Done | — |
+| Pixel Aspect Ratio Correction (toggle) | **Have** (1.2): View › Pixel Aspect Ratio Correction: the canvas draws the rows with a vertical zoom of their own (`zy` in `E:amiga/canvas.c`: the picture, the pointer's mapping, guides, grid, rulers, the selection, the brush outline and the Navigator's frame), kept within 1/4 to 4 times | Done | — |
 | Zoom In | **Have** | Done | — |
 | Zoom Out | **Have** | Done | — |
 | Fit on Screen | **Have** | Done | — |
@@ -861,17 +861,17 @@ or Amiga bitmap fonts (`E:core/amifont.c`). Re-checked 2026-11-18 (Easel 1.1).
 | Tracking, and kerning metric/optical/manual | **Partial**: tracking per run and the font's kerning pairs (`kern`, `text_kern`); optical and manual kerning are missing | Moderate (optical) | P3 |
 | Baseline shift, horizontal and vertical scale | **Partial**: baseline shift per run; horizontal and vertical scale are missing | Easy | P3 |
 | Underline and strikethrough | **Have** (0.9) | Done | — |
-| All Caps, Small Caps, superscript and subscript (`Caps`, `FontBaseline`) | **Missing** (size and baseline shift can be set by hand) | Easy: per-glyph size in the layout (`E:core/type.c`) | P3 |
+| All Caps, Small Caps, superscript and subscript (`Caps`, `FontBaseline`) | **Have** (1.2): the Character dialog's Case (All Caps; Small Caps from the font's `smcp`, else capitals at 75%) and Position (superscript and subscript at 58.3% of the size, 33.3% up or down, Photoshop's defaults), per glyph in the layout (`TO_` in `E:core/type.h`, `text_upper`); kept in ORA | Done | — |
 | Colour per character run (`TextRun`) | **Have** (0.9) | Done | — |
 | Alignment Left/Center/Right | **Have** | Done | — |
-| Justify Left/Center/Right/All (`TextAlign`) | **Partial**: `TA_JUSTIFY` (last line left) and `TA_JUSTIFY_ALL`; last line centred or right is missing | Easy | P3 |
-| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Partial**: first-line indent and space before and after (`indent`, `space_before`, `space_after`); left/right indents and hyphenation are missing | Easy (indents); Moderate (hyphenation) | P3 |
+| Justify Left/Center/Right/All (`TextAlign`) | **Have** (1.2): `TA_JUSTIFY` (last line left), `TA_JUSTIFY_CENTER`, `TA_JUSTIFY_RIGHT` and `TA_JUSTIFY_ALL` | Done | — |
+| Indents, space before and after, hyphenation (`ParagraphStyle`) | **Partial**: first-line indent, space before and after, and (1.2) left and right indents (`indent_left`, `indent_right`); hyphenation is missing | Moderate (hyphenation) | P3 |
 | Paragraph text in a box with wrapping (`TextShape::Box`) | **Have** (0.9): drag a box with the Type tool | Done | — |
 | Type on a path (`TextShape::Path`) | **Missing** | Moderate: paths exist (`E:core/path.h`) | P3 |
 | Area type (`TextShape::Area`) | **Missing** | Moderate | P3 |
 | Type › Orientation › Horizontal / Vertical (2 items) | **Have** (0.9): Layer › Type › Horizontal / Vertical, the Vertical Type tool | Done | — |
 | Type › Anti-Alias › None, Sharp, Crisp, Strong, Smooth, Windows LCD, Windows (7 items) | **Have** for the Amiga's three: None, Sharp (hinted) and Smooth (`TAA_`); Crisp and Strong are missing; the Windows ones are **Left out** (they are Windows' own rendering) | Easy (Crisp, Strong) | P3 |
-| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Missing**: no GSUB lookups | Moderate: GSUB parsing in `ttraster.c` | P3 |
+| Type › OpenType › Standard Ligatures, Contextual Alternates, Discretionary Ligatures, Swash, Oldstyle, Stylistic Alternates, Titling Alternates, Ornaments, Ordinals, Fractions (10 items) | **Partial** (1.2): Layer › Type's ten toggles; GSUB single, alternate, ligature and extension lookups (`E:core/gsub.c`) for Standard and Discretionary Ligatures, Swash, Oldstyle, Stylistic and Titling Alternates, Ornaments, Ordinals and Fractions, in the font's Latin script, checked against fontTools' reading of Carlito and FreeSerif; the contextual lookups (types 5, 6, 8) aren't applied, so Contextual Alternates and the contextual half of Fractions change nothing | Moderate (contextual lookups) | P3 |
 | Type › Panels › Character, Paragraph, Glyphs, Character Styles, Paragraph Styles (5 items; the panels are rated in section 15) | **Partial**: Character and Paragraph are dialogs (Layer › Type); Glyphs and the style panels are missing | Easy to Moderate | P3 |
 | Type › Create Work Path | **Have** (0.9): `text_to_path` | Done | — |
 | Type › Convert to Shape | **Missing** (Create Work Path, then a Custom Shape from it, does the same in two steps) | Easy | P3 |
@@ -918,9 +918,11 @@ whenever wanted. Re-checked 2026-11-18 (Easel 1.1).
 PhotoCraft's model is `ColorMode` in `crates/color/src/lib.rs`, with the depth as runtime data.
 Image › Mode is CAT `image.mode.*`, colour management is `crates/cms`, and indexed conversion is
 QNT. Easel (0.4) has RGB, Grayscale, Indexed and Bitmap documents (`MODE_` in `E:core/doc.h`,
-conversion in `E:core/palette.c`), all 8 bits a channel, with no colour profiles. It shows pictures
-on RTG screens exactly, or dithered to a colour cube on AGA and ECS (an indexed picture with its
-own palette). Re-checked 2026-11-18 (Easel 1.1).
+conversion in `E:core/palette.c`), all 8 bits a channel; 1.2 adds colour management (`E:core/cms.c`:
+ICC profiles, a small CMS, proofing; `E:core/colorx.c`: Assign and Convert to Profile) and CMYK and
+Lab documents, kept as RGB inside and saved in their model (the reasons are in their rows). It shows
+pictures on RTG screens exactly, or dithered to a colour cube on AGA and ECS (an indexed picture with
+its own palette). Re-checked 2026-11-18 (Easel 1.1); round 2 work marked 1.2.
 
 | PhotoCraft feature (CAT id / source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
@@ -930,23 +932,23 @@ own palette). Re-checked 2026-11-18 (Easel 1.1).
 | Mode › Indexed Color: palettes Exact, System (Mac OS), System (Windows), Web, Uniform, Perceptual, Selective, Adaptive, Custom, Previous; forced colours; transparency; matte; dither None/Diffusion/Pattern/Noise with amount; preserve exact colours | **Have** (0.4): median cut, octree and Wu from the picture, the current palette, Workbench, MagicWB, AGA and web presets instead of the Mac and Windows ones, OCS 12-bit, forced colours, transparency, 12 dithers; exact when the picture has few enough colours. The matte (below) and a dither amount are missing | Done | — |
 | Indexed Color › Matte (#9887 since eb6c1ab): the colour transparent edges are blended against | **Missing** | Easy | P3 |
 | Mode › RGB Color | **Have** | Done | — |
-| Mode › CMYK Color | **Missing** (CMYK JPEG, TIFF and PSD open converted to RGB) | Moderate: 5 bytes a pixel with alpha | P3 |
-| Mode › Lab Color | **Missing** (Lab TIFF and PSD open converted) | Moderate | P3 |
+| Mode › CMYK Color | **Have** (1.2): Image › Mode › CMYK Color. A CMYK document stays 8-bit RGB inside (`cmode` in `E:core/doc.h`): its colours are brought into the press's gamut when it is converted (through the separation and back), it is shown and edited as RGB, and it is separated again when saved, as a CMYK TIFF or a CMYK JPEG (Adobe APP14). Why: a native CMYK mode needs 5 bytes a pixel per layer and four-channel versions of every paint, blend, filter and adjustment routine, too much for a 68040 with a few MB; because every colour of the document is printable the round trip loses at most a level or two. The separation is Easel's own SWOP-like press model (medium GCR, 300% ink, 15% dot gain) or a CMYK profile loaded in View › Proof Setup; CMYK JPEG, TIFF and PSD files open through their own CMYK profile or the press, as CMYK documents. The Channels panel doesn't show C, M, Y and K | Done | — |
+| Mode › Lab Color | **Have** (1.2): Image › Mode › Lab Color, designed as CMYK is: edited as RGB (8-bit Lab holds nothing a screen shows that sRGB doesn't), saved as a CIELab TIFF (D50, a* and b* signed); Lab TIFF and PSD files open as Lab documents. The L, a and b channels aren't shown separately | Done | — |
 | Mode › Multichannel | **Missing** | Moderate | P3 |
 | Mode › 8 Bits/Channel | **Have** | Done | — |
-| Mode › 16 Bits/Channel | **Missing**: 16-bit PNG, TIFF and PSD layers are cut to 8 bits on opening | Hard: doubles the memory (24 MB for a 2000 × 1500 layer), and every routine needs a 16-bit path | P3 |
+| Mode › 16 Bits/Channel | **Missing** (1.2 decided against it for now): 16-bit PNG, TIFF and PSD layers are cut to 8 bits on opening. A 16-bit mode doubles every layer (24 MB for one 2000 × 1500 layer, more than most 68040 machines have free with undo) and needs a 16-bit path through every routine; colour conversions are done exactly in floating point from the 8-bit values instead | Hard | P3 |
 | Mode › 32 Bits/Channel (float, HDR) | **Left out**: 16 bytes a pixel and slow floats on a 68040; HDR, PFM, float TIFF and FITS are tone-mapped or scaled on opening instead | Not sensible | — |
 | Mode › Color Table… (edit the palette, load and save .act) | **Have** (0.4): Image › Color Table | Done | — |
-| A 1-bit TIFF (or PBM) opens in Bitmap mode (#10539 since eb6c1ab) | **Missing**: it opens as RGB (a 1-bit ILBM opens indexed) | Easy | P3 |
-| ICC profiles kept when opening and saving (PNG iCCP, JPEG APP2, TIFF tag 34675, PSD) | **Missing** | Easy (keep the bytes); Moderate (honour them) | P3 |
-| A pure-code CMS: v2/v4 matrix/TRC and CLUT profiles, 4 intents, black point compensation (`crates/cms`) | **Missing** | Moderate: matrix/TRC transforms through lookup tables are fast; CLUT transforms are slower | P3 |
-| View › Proof Colors (⌘Y), computed on the GPU in PhotoCraft | **Missing** | Moderate: a CPU 3D LUT applied as the canvas is drawn | P3 |
-| View › Gamut Warning (⇧⌘Y) | **Missing** | Moderate | P3 |
-| Proof Setup › Custom, Working CMYK and the Cyan/Magenta/Yellow/Black/CMY plates (7 items) | **Missing** | Moderate | P3 |
-| Proof Setup › Legacy Macintosh RGB, Internet Standard RGB, Monitor RGB (3 items) | **Missing** | Easy: gamma 1.8 and 2.2 matrices | P3 |
-| Proof Setup › Color Blindness Protanopia and Deuteranopia (2 items) | **Missing** | Easy: one 3 × 3 matrix each | P3 |
+| A 1-bit TIFF (or PBM) opens in Bitmap mode (#10539 since eb6c1ab) | **Have** (1.2): a 1-bit TIFF or PBM whose pixels are all black or white opens in Bitmap mode (`E:core/loadx.c`) | Done | — |
+| ICC profiles kept when opening and saving (PNG iCCP, JPEG APP2, TIFF tag 34675, PSD) | **Have** (1.2): read from and written to PNG iCCP, JPEG APP2, TIFF tag 34675, PSD resource 1039 and WebP ICCP (`E:core/iccio.c`); kept by undo, Duplicate and EaselConvert; Pillow reads them back byte for byte. Edit › Assign Profile (none, sRGB, Adobe RGB, a file) and Convert to Profile | Done | — |
+| A pure-code CMS: v2/v4 matrix/TRC and CLUT profiles, 4 intents, black point compensation (`crates/cms`) | **Have** (1.2): `E:core/cms.c`: v2 and v4 matrix/TRC (curv and para), grey TRC and LUT profiles (lut8, lut16, lutAtoB/lutBtoA, XYZ or Lab PCS) of RGB, grey, CMYK and Lab; sRGB and Adobe RGB built in; the four intents (absolute through the media white) and black point compensation; matrix pairs through tables, anything else through a 33-point grid with tetrahedral interpolation. LittleCMS (through Pillow) converts within a level or two | Done | — |
+| View › Proof Colors (⌘Y), computed on the GPU in PhotoCraft | **Have** (1.2): View › Proof Colors: the canvas draws through a 17-point 3D table worked out once (`cms_view_new`), so it costs one interpolation a pixel on a 68040 | Done | — |
+| View › Gamut Warning (⇧⌘Y) | **Have** (1.2): colours the press (or the CMYK profile) can't print more than about 6 ΔE closely are painted grey | Done | — |
+| Proof Setup › Custom, Working CMYK and the Cyan/Magenta/Yellow/Black/CMY plates (7 items) | **Have** (1.2): View › Proof Setup › Working CMYK, the Cyan, Magenta, Yellow and Black plates (each ink as grey) and Working CMY Plates; Custom is Load Working CMYK Profile (any CMYK ICC profile) or Easel's Press; the intent and black point compensation are in Edit › Color Settings | Done | — |
+| Proof Setup › Legacy Macintosh RGB, Internet Standard RGB, Monitor RGB (3 items) | **Have** (1.2): gamma 1.8 (sRGB primaries), the numbers as sRGB, and the numbers sent to the screen unconverted | Done | — |
+| Proof Setup › Color Blindness Protanopia and Deuteranopia (2 items) | **Have** (1.2): Machado, Oliveira and Fernandes' (2009) full-severity matrices on linear sRGB | Done | — |
 | View › 32-bit Preview Options… | **Left out**: there are no 32-bit documents | Not sensible | — |
-| Monitor profile for the display (`apps/photocraft/src/monitor_profile.rs`) | **Missing** | Moderate. Amiga stand-in: a display gamma preference | P3 |
+| Monitor profile for the display (`apps/photocraft/src/monitor_profile.rs`) | **Partial** (1.2): pictures with a profile are shown converted to the display, which is taken as sRGB or (Edit › Color Settings) a gamma of its own; a monitor ICC profile isn't loaded | Easy (a monitor profile through the same code) | P3 |
 
 ## 12. History and undo
 
@@ -988,29 +990,29 @@ one (Pillow, and ImageMagick, poppler and psd-tools where installed: `E:tests/ch
 
 | Format (PhotoCraft source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| PSD/PSB with layers, groups, masks, effects, text, smart objects, 1-32 bits, every mode (`crates/psd`) | **Partial** (0.6): 8- and 16-bit RGB and grey layers with names, opacity, blend modes, visibility, clipping, fill opacity, locks, Blend If, masks (density, feather) and groups; any other kind opens flattened. Effects, type, smart objects (and their filters, such as Puppet Warp, #8140), frame animation (#8633) and CMYK/Lab layers are missing | Moderate (effects); Hard (full fidelity) | P3 |
-| TIFF: every page, layered TIFF, 8/16/32f, CMYK/Lab, BigTIFF | **Partial**: the first page, flattened, cut to 8 bits; every compression and colour space (`E:core/tiff.c`) | Easy (more pages, as layers); Moderate (layers) | P3 |
-| JPEG: 8-bit Gray/RGB/CMYK, ICC/EXIF/XMP, EXIF orientation (`algo/src/exif.rs`) | **Have**: baseline and progressive, grey, RGB and CMYK, turned upright from EXIF (0.6), File Info from XMP and the comment; opened at a reduced size when memory is short. ICC profiles aren't kept (section 11) | Done | — |
-| PNG: 8/16-bit, palette PNGs as Indexed, APNG first frame, sTER | **Partial**: every kind (16 bits keep the high byte, an APNG shows its first frame); a palette PNG opens as RGB, not indexed | Easy | P3 |
+| PSD/PSB with layers, groups, masks, effects, text, smart objects, 1-32 bits, every mode (`crates/psd`) | **Partial** (0.6): 8- and 16-bit RGB and grey layers with names, opacity, blend modes, visibility, clipping, fill opacity, locks, Blend If, masks (density, feather) and groups; 1.2: layer effects (lfx2: the nine Easel draws), the ICC profile, CMYK and Lab files as CMYK and Lab documents (flattened, through their profile); any other kind opens flattened. Type, smart objects (and their filters, such as Puppet Warp, #8140), frame animation (#8633) and CMYK/Lab layers are missing | Hard (full fidelity) | P3 |
+| TIFF: every page, layered TIFF, 8/16/32f, CMYK/Lab, BigTIFF | **Partial**: the first page, flattened, cut to 8 bits; every compression and colour space (`E:core/tiff.c`); 1.2: CMYK through the file's profile or Easel's press, CMYK and Lab files open as CMYK and Lab documents, 1-bit as Bitmap, the profile kept | Easy (more pages, as layers); Moderate (layers) | P3 |
+| JPEG: 8-bit Gray/RGB/CMYK, ICC/EXIF/XMP, EXIF orientation (`algo/src/exif.rs`) | **Have**: baseline and progressive, grey, RGB and CMYK, turned upright from EXIF (0.6), File Info from XMP and the comment; opened at a reduced size when memory is short; 1.2: the ICC profile kept, CMYK through the file's profile or the press (a CMYK document) | Done | — |
+| PNG: 8/16-bit, palette PNGs as Indexed, APNG first frame, sTER | **Have**: every kind (16 bits keep the high byte, an APNG shows its first frame); 1.2: a palette PNG opens Indexed with its palette (`E:core/loadx.c`), the ICC profile is kept | Done | — |
 | GIF: first frame, and every frame for video layers | **Have**: the first frame when opened; every frame (with disposal, transparency and times) through File › Import Frames to Layers (1.1) | Done | — |
-| BMP (palette BMPs open as Indexed) | **Have** (palette BMPs open as RGB) | Done | — |
+| BMP (palette BMPs open as Indexed) | **Have** (1.2): 1-, 4- and 8-bit palette BMPs open Indexed with their colour table | Done | — |
 | WebP: lossless, lossy, animation's first frame | **Have** | Done | — |
 | AVIF (PhotoCraft can't read it, FFP #463) | **Have**: dav1d, 8/10/12-bit, grids; Easel is ahead here | Done | — |
 | HEIF/HEIC (`crates/heif`) | **Missing** | Hard: HEVC decoding takes minutes per photo on a 68040 | P3 |
-| OpenEXR (half and float, deep, Cryptomatte) | **Missing** | Moderate: PIZ and ZIP decoding, then the tone-map Easel uses for HDR | P3 |
+| OpenEXR (half and float, deep, Cryptomatte) | **Partial** (1.2): scanline files, uncompressed, RLE, ZIPS, ZIP and PIZ, half, float and uint channels (R, G, B, A or Y), tone-mapped as Radiance files are (`E:core/xread2.c`; checked against test files written from the format's description by `E:tests/make_exr.py`); tiles, PXR24, B44, DWA, subsampled, deep and multi-part files are refused | Moderate (tiles, PXR24, B44) | P3 |
 | Radiance HDR | **Have**: tone-mapped | Done | — |
 | PBM/PGM/PPM/PAM/PFM | **Have** | Done | — |
 | FITS | **Have**: scaled to 8 bits | Done | — |
 | Targa | **Have** | Done | — |
 | DPX | **Have** | Done | — |
-| Cineon (.cin) | **Missing** | Easy | P3 |
-| DICOM (single frame, uncompressed) | **Missing** | Easy | P3 |
+| Cineon (.cin) | **Have** (1.2): 8, 10 (packed three to a word) and 16 bits, grey or RGB, the log values through the usual reference points (black 95, white 685); ImageMagick agrees | Done | — |
+| DICOM (single frame, uncompressed) | **Have** (1.2): explicit and implicit little-endian, 8 or 16 bits, MONOCHROME1/2 or RGB, the rescale and the window (else the data's range); sequences skipped; compressed transfer syntaxes refused | Done | — |
 | PCX (FMT `Pcx`) | **Have** | Done | — |
 | XPM | **Have** | Done | — |
 | DDS (BC1-BC3 in PhotoCraft) | **Have**: also BC4, BC5 and BC7 | Done | — |
 | QOI | **Have** | Done | — |
 | ICO | **Have**: the biggest picture (also CUR) | Done | — |
-| Amiga IFF ILBM/PBM (PhotoCraft: 1-8 planes, 24-bit) | **Have**: also EHB, HAM6/8, 32-bit deep, ACBM, RGBN/RGB8, DEEP, SHAM/CTBL/PCHG, every frame of an ANIM (1.1, op 0 and 5) and Workbench icons; palette pictures open indexed with their cycling; Easel is far ahead | Done | — |
+| Amiga IFF ILBM/PBM (PhotoCraft: 1-8 planes, 24-bit) | **Have**: also EHB, HAM6/8, 32-bit deep, ACBM, RGBN/RGB8, DEEP, SHAM/CTBL/PCHG, every frame of an ANIM (1.1, op 0 and 5; 1.2, ops 7 and 8, short and long) and Workbench icons; palette pictures open indexed with their cycling; Easel is far ahead | Done | — |
 | Camera raw: DNG, CR2 (and sRAW/mRAW, #7122), NEF/NRW, ARW, RW2, PEF, ORF, RAF (`crates/raw`) | **Missing** | Hard: a full-size demosaic of 24 MP needs 96 MB. Stand-in: open the embedded JPEG preview (Easy), or demosaic at half size (Moderate) | P3 |
 | SVG as editable shape layers or a vector smart object | **Partial** (1.1): opens as shape layers (section 10, `E:core/svg.c`); text, images and gradients are left out | Moderate | P3 |
 | OpenRaster with groups and masks (`docs/ora.md`) | **Have** (0.3): groups, masks, clipping, adjustment, fill, type and shape layers | Done | — |
@@ -1019,28 +1021,28 @@ one (Pillow, and ImageMagick, poppler and psd-tools where installed: `E:tests/ch
 | Krita .kra | **Missing** | Moderate: zip, XML and LZF tiles | P3 |
 | Affinity .af/.afphoto/.afdesign/.afpub | **Missing** | Hard | P3 |
 | PhotoCraft .pcraft (native, incremental) | **Missing** | Moderate | P3 |
-| Metadata kept: ICC, EXIF, XMP, text and dpi (FMT caps) | **Partial**: dpi, and File Info (title, author, description, keywords, copyright, URL) from PNG text chunks, JPEG XMP and comment, TIFF tags, PSD and ORA (0.6); ICC and EXIF aren't kept | Easy (keep the blocks) | P3 |
+| Metadata kept: ICC, EXIF, XMP, text and dpi (FMT caps) | **Partial**: dpi, File Info (title, author, description, keywords, copyright, URL) from PNG text chunks, JPEG XMP and comment, TIFF tags, PSD and ORA (0.6), and (1.2) ICC profiles; EXIF isn't kept | Easy (keep the block) | P3 |
 | Open As (a format forced, #14286) | **Missing** | Easy | P3 |
 
 ### 13.2 Write
 
 | Format (PhotoCraft source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
-| PSD/PSB with layers (`crates/psd`) | **Have** (0.6): 8-bit RGB with layers, masks, groups, blend modes, File Info and the merged composite (which PhotoCraft's maximizeCompatibility choice, #10001, makes optional); PSB isn't written | Done | — |
-| TIFF: 8/16/32f, none/LZW/ZIP, layered (`tiffCompression`) | **Partial** (0.6): 8-bit RGB(A), grey, palette and 1-bit, uncompressed, PackBits, LZW or Deflate (`tiff_encode_doc`; the menus write LZW); 16/32 bits and layers are missing | Easy (the compression choice); Moderate (layers) | P3 |
-| JPEG: quality 0-12 (or 1-100), keeps an opened file's quality, ICC/EXIF | **Have**: quality 1-100, JFIF dpi, File Info as XMP and comment; 1.1: Save keeps an opened JPEG's quality (`jpeg_estimate_quality`). Progressive JPEG (#13773) and ICC/EXIF aren't written | Done | — |
-| PNG: 8/16-bit, gray, palette for Indexed, ICC, text | **Have**: RGB(A), palette with tRNS for Indexed and Bitmap, grey (0.4), File Info text chunks and XMP (0.6), pHYs; 16-bit and ICC are missing (no 16-bit documents) | Done | — |
+| PSD/PSB with layers (`crates/psd`) | **Have** (0.6): 8-bit RGB with layers, masks, groups, blend modes, File Info and the merged composite (which PhotoCraft's maximizeCompatibility choice, #10001, makes optional); 1.2: layer styles (lfx2, which psd-tools reads) and the ICC profile; PSB isn't written | Done | — |
+| TIFF: 8/16/32f, none/LZW/ZIP, layered (`tiffCompression`) | **Partial** (0.6): 8-bit RGB(A), grey, palette and 1-bit, uncompressed, PackBits, LZW or Deflate (`tiff_encode_doc`); 1.2: File › Export › TIFF asks which, the ICC profile is kept, CMYK and Lab documents are written as CMYK (with the working CMYK profile) and CIELab TIFFs; 16/32 bits and layers are missing | Moderate (layers) | P3 |
+| JPEG: quality 0-12 (or 1-100), keeps an opened file's quality, ICC/EXIF | **Have**: quality 1-100, JFIF dpi, File Info as XMP and comment; 1.1: Save keeps an opened JPEG's quality (`jpeg_estimate_quality`); 1.2: progressive (#13773; libjpeg decodes it to the baseline file's pixels), the ICC profile, CMYK JPEGs for CMYK documents. EXIF isn't written | Done | — |
+| PNG: 8/16-bit, gray, palette for Indexed, ICC, text | **Have**: RGB(A), palette with tRNS for Indexed and Bitmap, grey (0.4), File Info text chunks and XMP (0.6), pHYs, the ICC profile (1.2); 16-bit is missing (no 16-bit documents) | Done | — |
 | GIF: 256-colour palette | **Have** (0.4): the picture's palette or 256 colours; 1.1: animated, from the layers | Done | — |
-| BMP (palette BMP for Indexed) | **Partial**: 24-bit, or 32-bit with transparency; palette BMPs are missing | Easy | P3 |
-| WebP: lossless, and lossy VP8 | **Partial** (1.1): lossless (VP8L with the subtract-green and predictor transforms, LZ77 and Huffman codes: `webp_encode_lossless`; Pillow reads it exactly); lossy VP8 is missing | Hard (a lossy VP8 encoder is slow) | P3 |
+| BMP (palette BMP for Indexed) | **Have** (1.2): 24-bit, 32-bit with transparency, and 1-, 4- or 8-bit palette BMPs for Indexed and Bitmap documents (`colorx_bmp_indexed`; Pillow reads them as palette pictures) | Done | — |
+| WebP: lossless, and lossy VP8 | **Have**: lossless (1.1, VP8L: `webp_encode_lossless`) and (1.2) lossy: VP8 key frames with 16x16 and chroma intra prediction, the default token probabilities and no loop filter, alpha in ALPH (`webp_encode_lossy`); libwebp decodes it exactly as Easel does, within a few dB of its own encoder at the same quality | Done | — |
 | AVIF (optional `avif` feature) | **Left out**: AV1 encoding takes hours on a 68040 | Not sensible | — |
 | OpenEXR | **Left out**: there are no float documents | Not sensible | — |
-| Radiance HDR | **Missing** | Easy, but of little use without float data | P3 |
+| Radiance HDR | **Have** (1.2): RGBE with new-style run lengths, from the picture's colours as linear light (`hdr_encode` in `E:core/xread2.c`); ImageMagick reads it back | Done | — |
 | PBM/PGM/PPM/PAM/PFM | **Have** (1.1): PBM for Bitmap, PGM for grey, PPM, PAM with alpha (`pnm_encode`); PFM is missing (no float data) | Done | — |
 | FITS (header cards kept) | **Have** (1.1): 8-bit, one plane or three (`fits_encode`); an opened file's header cards aren't kept | Done | — |
 | Targa (RLE) | **Have** (0.6): raw or RLE, true colour, grey and colour-mapped | Done | — |
-| DPX (8/10/12/16 bits) | **Have** (1.1): 8 bits, or 10 bits packed (Method A), RGB or RGBA (`dpx_encode`; ImageMagick reads both); 12 and 16 bits are missing | Done | — |
-| Cineon | **Missing** | Easy | P3 |
+| DPX (8/10/12/16 bits) | **Have** (1.1): 8 bits, or 10 bits packed (Method A), RGB or RGBA (`dpx_encode`; ImageMagick reads both); 1.2: 12 bits (Method A) and 16 bits | Done | — |
+| Cineon | **Have** (1.2): 10-bit log RGB packed three to a word, the usual 95/685 reference points (`cineon_encode`); ImageMagick reads it as Easel does | Done | — |
 | ICO | **Have** (1.1): every standard size from 16 to 256 up to the picture's, small ones as DIBs with a mask, 128 and 256 as PNG (`ico_encode`) | Done | — |
 | QOI | **Have** (1.1): `qoi_encode` | Done | — |
 | DDS (uncompressed or BC1-BC3, mipmaps) | **Have** (1.1): uncompressed BGRA, BC1 (with transparency) or BC3, with the mipmaps (`dds_encode`); BC2 is missing | Done | — |
@@ -1057,9 +1059,9 @@ one (Pillow, and ImageMagick, poppler and psd-tools where installed: `E:tests/ch
 | Gradients .grd: read and write | **Missing** both ways (GIMP .ggr gradients load and save, 0.5) | Easy | P3 |
 | Patterns .pat: read and write | **Missing** both ways (pattern sets load and save as IFF, 0.5) | Easy | P3 |
 | Swatches .aco, .act, .ase: read and write | **Have** (0.5): .aco, .act, .ase, GIMP .gpl, JASC/RIFF .pal, IFF CMAP and Easel's own, both ways | Done | — |
-| LUTs .cube (read and write), .3dl and .look (read) | **Missing** | Moderate | P3 |
+| LUTs .cube (read and write), .3dl and .look (read) | **Partial**: .cube read and written by Color Lookup (1.1, `E:core/adjustx.c`), .3dl read (1.2, `E:core/lut3dl.c`); .look is missing | Easy (.look) | P3 |
 | Keyboard shortcuts .kys: read and write | **Missing** (Easel keeps its own in PROGDIR:Easel.keys, 0.8) | Easy | P3 |
-| ICC profiles: read | **Missing** | Moderate | P3 |
+| ICC profiles: read | **Have** (1.2): Assign Profile, Convert to Profile and Load Working CMYK Profile read .icc/.icm files (`icc_parse`) | Done | — |
 | Actions .atn: read and write (`psd/src/atn.rs`) | **Missing** | Moderate: map the events to Easel's commands, once there are actions | P3 |
 | Styles .asl: read and write | **Missing** | Moderate | P3 |
 | Contours .shc: read and write | **Missing** | Easy | P3 |
@@ -1075,17 +1077,17 @@ PhotoCraft's options are in `crates/codecs` (`EncodeOptions`), `engine/src/cmd/f
 | PhotoCraft option (source) | Easel | Amiga feasibility | Pri |
 |---|---|---|---|
 | JPEG options: quality, keeping an opened file's quality (FFP #2399), remembering the last quality and format (#9661) | **Have** (1.1): the quality slider remembers the last quality; Save keeps an opened JPEG's quality, estimated from its tables | Done | — |
-| JPEG options: the size the file will be (#9952), progressive at every quality (#13773) | **Missing** | Easy (progressive); Moderate (the size, an encode per change) | P3 |
+| JPEG options: the size the file will be (#9952), progressive at every quality (#13773) | **Partial** (1.2): JPEG Options has a Progressive tick (written at every quality); the size the file will be isn't shown | Moderate (the size, an encode per change) | P3 |
 | PNG options: depth, palette, metadata | **Partial**: chosen by the picture's mode (palette for Indexed and Bitmap, grey for Grayscale), File Info always kept; there are no choices | Easy | P3 |
-| WebP options: lossless, quality | **Partial** (1.1): lossless only | Hard (lossy) | P3 |
-| TIFF options: compression none/LZW/ZIP, layers | **Partial**: the writer has None, PackBits, LZW and Deflate, but Export always uses LZW; no layers | Easy | P3 |
+| WebP options: lossless, quality | **Have** (1.2): File › Export › WebP asks lossless or lossy, and lossy's quality | Done | — |
+| TIFF options: compression none/LZW/ZIP, layers | **Partial** (1.2): File › Export › TIFF asks for LZW, Deflate, PackBits or none (Save uses LZW); layers aren't written | Moderate (layers) | P3 |
 | DDS options: BC1/BC2/BC3, mipmaps | **Have** (1.1): BC3, BC1 or uncompressed, each with mipmaps (BC2 missing) | Done | — |
-| DPX bits (8/10/12/16) | **Partial** (1.1): 8 or 10 | Easy | P3 |
+| DPX bits (8/10/12/16) | **Have** (1.2): 8, 10, 12 or 16, asked on export | Done | — |
 | PDF: lossless or JPEG (PhotoCraft's export settings) | **Have** (1.1): asked on export | Done | — |
 | IFF options: PhotoCraft has none (24-plane only) | **Have**: 24-bit, 1-8 planes, EHB, HAM6/8, SHAM, mask or transparent colour, cycling, ModeID, compression (`IlbmOpts`). Easel is ahead; see section 21 | Done | — |
-| Export As: scale, resample method, canvas size, transparency or matte | **Partial** (0.6): scaled by a percentage (bicubic), the format by the name's extension (every writer, 1.1); the resample method, canvas size and matte are missing | Easy | P2 |
-| Export metadata choice: none, copyright, all (PREFS `metadata`; the CLI's `--metadata`, #9975) | **Missing**: File Info is always written where the format keeps it | Easy | P3 |
-| Convert to sRGB on export | **Missing** | Moderate, once there's a CMS | P3 |
+| Export As: scale, resample method, canvas size, transparency or matte | **Have** (1.2): File › Export › Export As: the scale with any of Image Size's six methods, the canvas size (about the centre), a matte (none, white, black, the foreground or background colour), the metadata and sRGB (`E:core/exportx.c`); the format by the name's extension | Done | — |
+| Export metadata choice: none, copyright, all (PREFS `metadata`; the CLI's `--metadata`, #9975) | **Have** (1.2): Export As keeps all of the File Info, only the copyright, or none | Done | — |
+| Convert to sRGB on export | **Have** (1.2): Export As's Convert to sRGB (through the CMS, the copy tagged sRGB) | Done | — |
 | Warnings about what a format loses (`fidelity_warnings`: depth reduced, CMYK converted, layers flattened) | **Have**: saving layers to a flat format offers ORA or flattening | Done | — |
 | Quick Export format and location preferences | **Partial** (1.1): Quick Export as PNG writes beside the picture's file (or in the last drawer); there's no choice of format or place | Easy | P3 |
 | Export dialogs start in the last exported folder (#10448) | **Partial**: they start in the picture's own drawer, or the last drawer used | Easy | P3 |
@@ -1333,7 +1335,7 @@ figures in section 23. Easel's status was re-checked on 2026-11-18 (Easel 1.1) a
 |---|---|---|---|---|
 | Pick the target ModeID from the ASL ScreenMode requester, and write CAMG and the page size to match | all | **Have** (0.4): Image › Amiga Screen Mode (`E:amiga/modedlg.c`, `E:core/amigamodes.c`), CAMG and page size written | Done | — |
 | Enforce the chipset's limits: OCS/ECS 32 colours in lores, 16 in hires, 64 EHB, 4096 HAM; AGA 256 or HAM8 | all | **Have** (0.4): the mode dialog warns when the picture doesn't fit the mode and chipset | Done | — |
-| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Partial**: each mode's aspect is known, kept in the document (`aspect_x`, `aspect_y`) and written to ILBM's BMHD; the canvas doesn't draw it (section 2.5) | Easy: a separate vertical zoom in `E:amiga/canvas.c` | P1 |
+| Pixel aspect for each mode (PAL and NTSC lores, hires, interlace, super-hires): show it on the canvas and correct it on import and export | DPaint, ADPro | **Have** (1.2): each mode's aspect is known, kept (`aspect_x`, `aspect_y`), written to BMHD, offered in View › Pixel Aspect Ratio and drawn by View › Pixel Aspect Ratio Correction (section 2) | Done | — |
 | Overscan presets (352 × 283, 704 × 566, 368 × 241…) and safe-area guides | DPaint, Brilliance, TVPaint | **Partial**: New and the Crop presets have the PAL and NTSC sizes; overscan sizes and safe-area guides are missing | Easy | P2 |
 | A "Save for Screen" preview that dithers and quantizes to the chosen mode before saving | ADPro, ImageFX | **Partial**: Image › Mode › Indexed Color previews the palette and dither on the canvas, and undo takes it back; there's no side-by-side preview at export | Moderate | P2 |
 | A display dither choice on palette screens: none, ordered or Floyd-Steinberg; a HAM8 preview on AGA | ImageFX, TVPaint | **Partial**: AGA and ECS screens get a fixed colour cube with ordered dither (`draw_rgb` in `E:amiga/widgets.c`); an indexed picture shows its own palette | Moderate | P2 |

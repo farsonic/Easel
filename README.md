@@ -21,6 +21,31 @@ interface and icons. None of the icons are copied from any other program.
 - Size: Easel fits a 640 × 480 screen. On short screens the toolbox goes into two columns, and
   Color and History share one panel with tabs.
 
+## New in 1.2: colour management, pixel aspect, more formats and type
+
+- Colour management: ICC profiles (v2 and v4; matrix, grey and LUT profiles) are kept when a picture
+  is opened and saved as PNG, JPEG, TIFF, PSD or WebP. Edit > Color Settings (proofing intent, black
+  point compensation, the display's gamma), Assign Profile and Convert to Profile (sRGB and Adobe
+  RGB built in, or any .icc file). Pictures with a profile are shown converted for the screen.
+- View > Proof Colors and Proof Setup: working CMYK (Easel's own press or a CMYK profile you load)
+  and its plates, legacy Macintosh, Internet and monitor RGB, and two kinds of colour blindness.
+  View > Gamut Warning paints what can't be printed grey.
+- Image > Mode > CMYK Color and Lab Color: the picture is still edited in RGB (a native CMYK mode
+  would need five bytes a pixel and a second set of every tool), with its colours brought into the
+  printable range, and is saved as a CMYK TIFF or JPEG or a CIELab TIFF. CMYK files open through
+  their own profile.
+- View > Pixel Aspect Ratio (the Amiga's PAL and NTSC modes, video formats, Custom) and Pixel Aspect
+  Ratio Correction: hires and interlaced pictures look on the canvas as they do on their screen.
+- Opening: palette PNG and BMP files open Indexed, 1-bit TIFF and PBM in Bitmap mode; Cineon,
+  DICOM and OpenEXR (uncompressed, RLE, ZIP and PIZ) are read; IFF ANIM ops 7 and 8; PSD layer
+  styles; Color Lookup reads .3dl LUTs.
+- Saving: lossy WebP, progressive JPEG, palette BMP, Cineon, Radiance HDR, 12- and 16-bit DPX, PSD
+  layer styles; File > Export > TIFF asks its compression. Export As has a resampling method, a
+  canvas size, a matte, a choice of metadata and Convert to sRGB.
+- Type: All Caps, Small Caps, superscript and subscript (Layer > Type > Character), OpenType
+  ligatures, swashes, oldstyle figures, alternates, ordinals and fractions (Layer > Type), justified
+  paragraphs with the last line centred or right, and left and right indents.
+
 ## New in 1.1: tool options
 
 - Dodge and Burn have a Range (Shadows, Midtones, Highlights) and Protect Tones; the Sponge
