@@ -58,6 +58,14 @@ typedef struct {
   int protect_fg;                     /* PT_BGERASE: keeps the foreground colour */
   int replace_mode;                   /* PT_REPLACE: RPL_ */
   BrushDynamics dyn;                  /* Brush Settings' sections */
+  /* 1.1 (toolopts.h); zero is still "as before" */
+  int tone_range, protect_tones;      /* PT_DODGE, PT_BURN: TR_ (TR_ALL: 1.0's even change), Protect Tones */
+  int sponge_saturate, vibrance;      /* PT_SPONGE: Saturate instead of Desaturate; Vibrance */
+  int erase_history;                  /* PT_ERASER: Erase to History, the snapshot painted back */
+  int finger_painting;                /* PT_SMUDGE: each stroke starts with the foreground colour */
+  int protect_detail;                 /* PT_SHARPEN: gentler, without haloes or noise */
+  /* (also 1.1: blend is the Clone Stamp's, Blur's, Sharpen's and Smudge's Mode; sample_all takes
+     SAMPLE_BELOW, the layers up to the active one) */
 } Brush;
 typedef struct Stroke Stroke;
 /* a stroke on the active layer, begun at x, y (an undo step "name" while it lasts); then
