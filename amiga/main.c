@@ -489,11 +489,8 @@ static void ami_free(void)
 
 /* ------------------------------------------------------------------ tools */
 /* 1.1: the Blur, Sharpen and Smudge tools' Mode list (toolbox.c) as blend modes */
-static int retouch_blend(int k)
-{
-  static const int m[RETOUCH_MODES] = { BM_NORMAL, BM_DARKEN, BM_LIGHTEN, BM_HUE, BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
-  return k >= 0 && k < RETOUCH_MODES ? m[k] : BM_NORMAL;
-}
+const int retouch_bm[RETOUCH_MODES] = { BM_NORMAL, BM_DARKEN, BM_LIGHTEN, BM_HUE, BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
+static int retouch_blend(int k) { return k >= 0 && k < RETOUCH_MODES ? retouch_bm[k] : BM_NORMAL; }
 Brush tool_brush(int t)
 {
   Brush b;

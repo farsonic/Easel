@@ -128,7 +128,8 @@ typedef struct {
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */
-#define RETOUCH_MODES 7               /* (1.1) Blur, Sharpen, Smudge: Normal, Darken, Lighten, Hue, Saturation, Color, Luminosity */    /* (1.1) the options bar's Current Layer, Current & Below, All Layers as SAMPLE_ */
+#define RETOUCH_MODES 7               /* (1.1) Blur, Sharpen, Smudge: Normal, Darken, Lighten, Hue, Saturation, Color, Luminosity */
+extern const int retouch_bm[RETOUCH_MODES];   /* (main.c) those as BM_ */    /* (1.1) the options bar's Current Layer, Current & Below, All Layers as SAMPLE_ */
 /* 0.7: the marquee's styles in its options bar (the first three are selx.h's MQ_) */
 enum { MQS_NORMAL, MQS_RATIO, MQS_SIZE, MQS_ROW, MQS_COL };
 /* 0.5: the gradient and pattern the tools use (main.c) */

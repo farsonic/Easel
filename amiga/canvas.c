@@ -2439,7 +2439,11 @@ static int keys(struct Data *d, Object *obj, struct IntuiMessage *im)
       BM_SATURATION, BM_COLOR, BM_LUMINOSITY };
     for (i = 0; i < (int)sizeof raw; i++) if (raw[i] == code) {
       if (tool == TL_MOVE) { if (doc->lay[doc->active]->kind != LK_GROUP || mode[i]) doc_set_layer_props(doc, doc->active, NULL, -1, mode[i], -1); changed(d, obj); tell_changed(d, obj); draw_all(d, obj); }
-      else if (brushlike(tool) || tool == TL_GRADIENT) { opt.mode[tool] = mode[i]; DoMethod(optbar, MUIM_Opts_Refresh); }
+      else if (tool == TL_BLUR || tool == TL_SHARPEN || tool == TL_SMUDGE) {
+        /* (1.1: their Mode list has seven of the modes) */
+        int k;
+        for (k = 0; k < RETOUCH_MODES; k++) if (retouch_bm[k] == mode[i]) { opt.mode[tool] = k; DoMethod(optbar, MUIM_Opts_Refresh); }
+      } else if (brushlike(tool) || tool == TL_GRADIENT) { opt.mode[tool] = mode[i]; DoMethod(optbar, MUIM_Opts_Refresh); }
       return 1;
     }
   }
