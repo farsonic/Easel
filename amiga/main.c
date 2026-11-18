@@ -643,6 +643,14 @@ Brush tool_brush(int t)
   b.spacing = 25; b.blend = opt.mode[t]; b.strength = opt.strength[t];
   /* 0.5: the tip, dynamics and symmetry from the Brush Settings window; then the options bar's */
   brushwin_apply(&b);
+  if (b.dyn.sym_mode == SYM_PATH) {
+    /* r3: symmetry along the active path, flattened for the strokes (none: no copies) */
+    static Poly sym_poly;
+    Doc *dd = cur_doc();
+    Path *ap = dd ? active_path(dd) : NULL;
+    poly_free(&sym_poly); poly_init(&sym_poly);
+    brush_sym_path = ap && ap->na >= 2 && path_flatten(ap, 0.5, &sym_poly) ? &sym_poly : NULL;
+  }
   b.pattern = tool_pattern(); b.pattern_aligned = opt.pattern_aligned;
   if (t == TL_REPLACE || t == TL_BGERASE) { b.sampling = opt.sampling; b.limits = opt.limits; b.tolerance = opt.tolerance; b.replace_mode = opt.replace_mode; b.protect_fg = opt.protect_fg; }
   if (t == TL_HISTORY) { DocView *v = cur_view(); b.snapshot = v ? v->snap : NULL; }

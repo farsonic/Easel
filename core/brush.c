@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "paint.h"
+#include "path.h"                       /* r3: symmetry along a path */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -24,7 +25,8 @@
 #define MAXTIP 8192
 const char *const cb_mode_names[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle", "Tint" };
 const char *const ctl_names[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction", "Pen Tilt" };
-const char *const sym_names[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile" };
+const char *const sym_names[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile", "Path" };
+const struct Poly *brush_sym_path;
 
 static int clamp255(double v) { return v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5); }
 static double clampf(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -106,6 +108,29 @@ int brush_symmetry(const BrushDynamics *dy, i32 w, i32 h, double x, double y, do
     }
     c = 4;
     break;
+  case SYM_PATH: {                                         /* r3: across the path's tangent where it is nearest */
+    const Poly *pl = brush_sym_path;
+    i32 ci, s0 = 0, i;
+    double best = 1e300, qx = 0, qy = 0, tx = 1, ty = 0;
+    if (!pl || pl->n < 2) break;
+    for (ci = 0; ci < pl->nc; s0 = pl->end[ci], ci++) {
+      i32 n = pl->end[ci] - s0, m = pl->closed[ci] ? n : n - 1;
+      for (i = 0; i < m; i++) {
+        const double *a = pl->xy + 2 * (s0 + i), *b = pl->xy + 2 * (s0 + (i + 1) % n);
+        double vx = b[0] - a[0], vy = b[1] - a[1], L2 = vx * vx + vy * vy, t = L2 > 0 ? ((x - a[0]) * vx + (y - a[1]) * vy) / L2 : 0, px, py, d2;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        px = a[0] + vx * t; py = a[1] + vy * t;
+        d2 = (x - px) * (x - px) + (y - py) * (y - py);
+        if (d2 < best && L2 > 0) { best = d2; qx = px; qy = py; tx = vx / sqrt(L2); ty = vy / sqrt(L2); }
+      }
+    }
+    if (best < 1e300) {
+      double dx = x - qx, dy = y - qy, along = dx * tx + dy * ty;
+      ox[1] = qx + 2 * along * tx - dx; oy[1] = qy + 2 * along * ty - dy;
+      rot[1] = 2 * atan2(ty, tx) * 180 / 3.14159265358979323846; mir[1] = 1; c = 2;
+    }
+    break; }
   case SYM_TILE: {                                         /* 1.2: the canvas as n x n tiles, the dab in each */
     int t = dy->sym_segments < 2 ? 2 : dy->sym_segments > 8 ? 8 : dy->sym_segments, i, j;
     double tw = (double)w / t, tht = (double)h / t, fx = fmod(x, tw), fy = fmod(y, tht);

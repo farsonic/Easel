@@ -93,8 +93,13 @@ typedef struct { int jitter, control, fade_steps, minimum; } Dynamic;
 /* painting symmetry */
 enum { SYM_OFF, SYM_VERTICAL, SYM_HORIZONTAL, SYM_BOTH, SYM_RADIAL, SYM_MANDALA,
        SYM_DIAGONAL, SYM_TILE,         /* 1.2: both diagonals; tiled (sym_segments across and down, DPaint's tile) */
+       SYM_PATH,                       /* r3: mirrored across a path (brush_sym_path) */
        SYM_N };
 extern const char *const sym_names[SYM_N];
+/* r3: SYM_PATH's path, flattened (canvas pixels; the UI sets it from the active path). Each point
+   is mirrored across the path where it passes nearest: across its tangent there */
+struct Poly;
+extern const struct Poly *brush_sym_path;
 #define SYM_MAXCOPIES 64
 typedef struct {
   /* Shape Dynamics */

@@ -910,6 +910,34 @@ static void test_picker_colours(void)
   CHECK(is_web_safe(0x33CC99) && !is_web_safe(0x34CC99), "web-safe or not");
 }
 
+static void test_path_symmetry(void)
+{
+  BrushDynamics dy;
+  Poly pl;
+  double ox[SYM_MAXCOPIES], oy[SYM_MAXCOPIES], rot[SYM_MAXCOPIES];
+  int mir[SYM_MAXCOPIES], n;
+  memset(&dy, 0, sizeof dy);
+  dy.sym_mode = SYM_PATH;
+  brush_sym_path = NULL;
+  CHECK(brush_symmetry(&dy, 100, 100, 30, 40, ox, oy, rot, mir) == 1, "no path: no copies");
+  /* a vertical line at x = 50: the same as Vertical symmetry */
+  poly_init(&pl);
+  poly_add(&pl, 50, 0); poly_add(&pl, 50, 100); poly_end(&pl, 0);
+  brush_sym_path = &pl;
+  n = brush_symmetry(&dy, 100, 100, 30, 40, ox, oy, rot, mir);
+  CHECK(n == 2 && fabs(ox[1] - 70) < 1e-9 && fabs(oy[1] - 40) < 1e-9 && mir[1], "mirrored across a straight path");
+  poly_free(&pl);
+  /* a bent path (an L): each side mirrored across its nearest leg */
+  poly_init(&pl);
+  poly_add(&pl, 10, 10); poly_add(&pl, 10, 90); poly_add(&pl, 90, 90); poly_end(&pl, 0);
+  n = brush_symmetry(&dy, 100, 100, 20, 30, ox, oy, rot, mir);
+  CHECK(n == 2 && fabs(ox[1] - 0) < 1e-9 && fabs(oy[1] - 30) < 1e-9, "near the upright leg: across it");
+  n = brush_symmetry(&dy, 100, 100, 60, 80, ox, oy, rot, mir);
+  CHECK(n == 2 && fabs(ox[1] - 60) < 1e-9 && fabs(oy[1] - 100) < 1e-9, "near the bottom leg: across that");
+  poly_free(&pl);
+  brush_sym_path = NULL;
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -931,6 +959,7 @@ int main(int argc, char **argv)
   test_replace_color();
   test_acv();
   test_picker_colours();
+  test_path_symmetry();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

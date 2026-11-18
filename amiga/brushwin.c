@@ -100,7 +100,7 @@ enum { C_ROUNDTIP = 1, C_SYMCENTRE, C_NEWSEED, C_PICKUP, C_PICKUPSEL, C_RELEASE,
 static int ui_round, ui_fade, ui_seed, ui_rate, ui_count, ui_segments;
 static const char *const ctl_list[CTL_N] = { "Off", "Fade", "Pen Pressure", "Direction", "Initial Direction", "Pen Tilt" };
 static const char *const ctl_list3[3] = { "Off", "Fade", "Pen Pressure" };
-static const char *const sym_list[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile" };
+static const char *const sym_list[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala", "Diagonal", "Tile", "Path" };   /* (r3: Path) */
 static const char *const erase_list[3] = { "Brush", "Pencil", "Block" };
 static const char *const smp_list[3] = { "Continuous", "Once", "Background Swatch" };
 static const char *const stc_list[3] = { "Off", "Background Colour", "Locked Palette Colours" };   /* (1.1) */

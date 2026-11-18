@@ -81,7 +81,7 @@ void  bez_point(const double *c, double t, double *x, double *y);
 
 /* ------------------------------------------------------------------ polygons */
 /* contours of points: contour c is xy[2 * start .. 2 * end[c]) with start = end[c - 1] (or 0) */
-typedef struct {
+typedef struct Poly {                 /* (r3: named, so brush.h can point at one) */
   double *xy; i32 n, cap;             /* points */
   i32 *end; u8 *closed; i32 nc, capc;
 } Poly;
