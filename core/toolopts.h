@@ -60,6 +60,18 @@ int  auto_select_target(const Doc *d, int i, int group);
    grid spacing and offset, 16 pixels when unset; at the pixel's centre, where a dab lands) */
 void grid_snap_paint(const Doc *d, double *x, double *y);
 
+/* ------------------------------------------------------------------ DPaint's ranges and stencils */
+struct Gradient;
+/* a range fill's gradient: palette entries lo..hi (of npal, RGB triples) as evenly spaced colour
+   stops (at most GRAD_MAXSTOPS: a longer range is sampled evenly, always with both ends), opaque */
+int  gradient_from_palette(struct Gradient *g, const u8 *pal, int npal, int lo, int hi);
+/* the palette range a range fill uses: the first active colour-cycling range, else the whole palette */
+void doc_fill_range(const Doc *d, int *lo, int *hi);
+/* a stencil's colours: STC_BACKGROUND the background colour, STC_LOCKED the palette entries locked
+   in the Color Table (indexed pictures); into out (up to 256), how many */
+enum { STC_OFF, STC_BACKGROUND, STC_LOCKED };
+int  stencil_colors(const Doc *d, int kind, u32 *out);
+
 /* ------------------------------------------------------------------ the History panel */
 /* History > Delete: undo step k (0 the oldest) and every step after it taken away, the picture
    going back to the state before k (k -1: the last step done). 0 if there is no such step */

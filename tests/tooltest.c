@@ -14,6 +14,7 @@
 #include "../core/paint.h"
 #include "../core/layers.h"
 #include "../core/toolopts.h"
+#include "../core/gradient.h"
 
 static int tests, failed;
 static void ok(const char *name, int cond) { tests++; if (!cond) { failed++; printf("FAIL %s\n", name); } }
@@ -340,8 +341,61 @@ static void delete_state(void)
   doc_free(d);
 }
 
+static void dpaint(void)
+{
+  u8 pal[256 * 3], rgba[4];
+  Gradient g;
+  int k, lo, hi;
+  u32 sc[256];
+  Doc *d;
+  Brush b;
+  for (k = 0; k < 256; k++) { pal[k * 3] = (u8)k; pal[k * 3 + 1] = (u8)(255 - k); pal[k * 3 + 2] = 7; }
+  ok("range gradient", gradient_from_palette(&g, pal, 256, 10, 14) && g.ncolor == 5);
+  gradient_sample(&g, 0, rgba);
+  ok("range starts at lo", rgba[0] == 10 && rgba[1] == 245 && rgba[3] == 255);
+  gradient_sample(&g, 1, rgba);
+  ok("range ends at hi", rgba[0] == 14);
+  gradient_sample(&g, 0.5, rgba);
+  ok("range middle", rgba[0] == 12);
+  ok("long range sampled", gradient_from_palette(&g, pal, 256, 0, 255) && g.ncolor == GRAD_MAXSTOPS && g.color[GRAD_MAXSTOPS - 1].rgb >> 16 == 255);
+  ok("range backwards and clipped", gradient_from_palette(&g, pal, 20, 30, 5) && (g.color[0].rgb >> 16) == 5 && (g.color[g.ncolor - 1].rgb >> 16) == 19);
+  ok("one entry", gradient_from_palette(&g, pal, 256, 3, 3) && g.ncolor == 2);
+  ok("no palette", !gradient_from_palette(&g, pal, 0, 0, 3));
+
+  d = doc_new(40, 20, 0xFFFFFF, 0);
+  d->npal = 16; d->ncycle = 1; d->cycle[0].lo = 4; d->cycle[0].hi = 9; d->cycle[0].active = 1;
+  doc_fill_range(d, &lo, &hi);
+  ok("fill range from the cycle range", lo == 4 && hi == 9);
+  d->cycle[0].active = 0;
+  doc_fill_range(d, &lo, &hi);
+  ok("fill range: the whole palette", lo == 0 && hi == 15);
+  /* the stencil: the background colour (white) is kept, the rest painted */
+  {
+    i32 x, y;
+    for (y = 0; y < 20; y++) for (x = 20; x < 40; x++) { u8 *p = px(d, 0, x, y); p[0] = 0x80; p[1] = p[2] = 0; }
+  }
+  doc_forget_undo(d);
+  d->bg = 0xFFFFFF;
+  ok("stencil colours: background", stencil_colors(d, STC_BACKGROUND, sc) == 1 && sc[0] == 0xFFFFFF);
+  ok("stencil colours: none locked outside indexed", stencil_colors(d, STC_LOCKED, sc) == 0);
+  b = brush(PT_BRUSH, 10, 100, 100);
+  b.stencil = sc; b.nstencil = 1;
+  line(d, &b, 0x0000FF, 2, 10, 38, 10);
+  ok("stencil keeps the background colour", px(d, 0, 10, 10)[0] == 255 && px(d, 0, 10, 10)[2] == 255);
+  ok("stencil paints the rest", px(d, 0, 30, 10)[2] == 255 && px(d, 0, 30, 10)[0] == 0);
+  doc_undo(d);
+  b.stencil_invert = 1;
+  line(d, &b, 0x0000FF, 2, 10, 38, 10);
+  ok("inverted stencil paints only the background colour", px(d, 0, 10, 10)[0] == 0 && px(d, 0, 30, 10)[0] == 0x80);
+  d->mode = MODE_INDEXED; d->pal[3] = 1; d->pal[4] = 2; d->pal[5] = 3; d->pal_lock[1] = 1;
+  ok("stencil colours: locked entries", stencil_colors(d, STC_LOCKED, sc) == 1 && sc[0] == 0x010203);
+  d->mode = MODE_RGB;
+  doc_free(d);
+}
+
 int main(void)
 {
+  dpaint();
   delete_state();
   grid_snap();
   curves();

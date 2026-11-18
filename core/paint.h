@@ -64,6 +64,8 @@ typedef struct {
   int erase_history;                  /* PT_ERASER: Erase to History, the snapshot painted back */
   int finger_painting;                /* PT_SMUDGE: each stroke starts with the foreground colour */
   int protect_detail;                 /* PT_SHARPEN: gentler, without haloes or noise */
+  const u32 *stencil; int nstencil;   /* DPaint's stencil: pixels of these colours (0xRRGGBB, opaque) are not painted (kept by the caller) */
+  int stencil_invert;                 /*   or, inverted, only they are */
   /* (also 1.1: blend is the Clone Stamp's, Blur's, Sharpen's and Smudge's Mode; sample_all takes
      SAMPLE_BELOW, the layers up to the active one) */
 } Brush;

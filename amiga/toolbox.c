@@ -436,7 +436,9 @@ static int fields_for(int t, Field *f)
     CHECK("Contiguous", opt.contiguous); CHECK("All Layers", opt.all_layers); break;
   case TL_GRADIENT: if (ngrad_names) CHOICE("", opt.grad_preset, grad_names, ngrad_names);
     BUTTON("Edit...", ID_GRADEDIT); CHOICE("Style:", opt.grad_kind, gradkinds, 5); CHOICE("Mode:", opt.mode[t], blendlist, BM_N);
-    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); CHECK("Dither", opt.grad_dither); break;
+    SCRUB("Opacity:", opt.opacity[t], 1, 100, "%"); CHECK("Reverse", opt.grad_reverse); CHECK("Dither", opt.grad_dither);
+    if (cur_doc() && cur_doc()->mode == MODE_INDEXED) CHECK("Palette Range", opt.grad_palrange);
+    break;
   case TL_BLUR: case TL_SHARPEN: case TL_SMUDGE: SCRUB("Size:", opt.size[t], 1, 2500, "px");
     if (opt.mode[t] >= RETOUCH_MODES) opt.mode[t] = 0;
     CHOICE("Mode:", opt.mode[t], rtmodes, RETOUCH_MODES); SCRUB("Strength:", opt.strength[t], 1, 100, "%");
@@ -574,6 +576,7 @@ static const char *field_help(const Field *f)
     { "Airbrush", "Builds up paint while the button is held and the pointer stays still." },
     { "Straighten", "Drag along something that should be level (or upright): the picture is turned to match and cropped." },
     { "Fill Screen", "Zooms so the picture fills the whole window." },
+    { "Palette Range", "Fills through the palette's colours from one end of its first cycling range to the other (or the whole palette), as Deluxe Paint's range fills do." },
     { "Snapshot", "Takes a snapshot of the layer as it is now for the History Brush to paint back (Edit > Take Snapshot)." },
     { "From History", "The History Brush paints back the snapshot clicked last in the History panel instead." },
     /* 0.9 */

@@ -401,6 +401,16 @@ static void paint_px(Stroke *s, const Place *pl, const DabParams *dp, i32 i, i32
   const u8 *o;
   if (!a || !(sel = sel_at(d, i, j))) return;
   if (!tile_ready(s, i, j)) return;
+  if (s->b.nstencil && s->t.bpp == 4) {
+    /* 1.1: the stencil: pixels of its colours (as they were before the stroke) kept */
+    const u8 *q = orig_px(s, i, j, tmp);
+    int k, hit = 0;
+    if (q[3] == 255) {
+      u32 c = (u32)q[0] << 16 | (u32)q[1] << 8 | q[2];
+      for (k = 0; k < s->b.nstencil; k++) if (s->b.stencil[k] == c) { hit = 1; break; }
+    }
+    if (hit != s->b.stencil_invert) return;
+  }
   t = (j / TS) * s->ntx + i / TS;
   mp = s->mask[t] + (j % TS) * TS + i % TS;
   m = *mp;
@@ -979,6 +989,7 @@ Stroke *stroke_begin_target(Doc *d, const PaintTarget *t, const Brush *b, u32 co
   if (s->b.opacity < 0) s->b.opacity = 0;
   if (s->b.opacity > 100) s->b.opacity = 100;
   if (s->b.tool == PT_ERASER && s->b.eraser_mode == ER_BLOCK) { s->b.opacity = 100; s->b.flow = 100; }
+  if (!s->b.stencil) s->b.nstencil = 0;
   if (s->b.tip && (!s->b.tip->a || s->b.tip->w < 1 || s->b.tip->h < 1)) s->b.tip = NULL;
   if (s->b.custom && (!s->b.custom->px || s->b.custom->w < 1 || s->b.custom->h < 1)) s->b.custom = NULL;
   if (s->b.tool != PT_BRUSH && s->b.tool != PT_PENCIL) s->b.custom = NULL;   /* (colour brushes paint with the brush tools) */

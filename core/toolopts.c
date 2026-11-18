@@ -4,6 +4,7 @@
 #include <math.h>
 #include "toolopts.h"
 #include "layers.h"
+#include "gradient.h"
 
 /* ------------------------------------------------------------------ Dodge, Burn, Sponge */
 /* PhotoCraft's tone_curve for v and e in 0..1 */
@@ -215,4 +216,43 @@ int doc_delete_state(Doc *d, int k)
   /* (the redo list dropped a step at a time: redone and discarded) */
   while (doc_can_redo(d)) if (!doc_redo(d) || !doc_discard_last(d)) return 0;
   return 1;
+}
+
+/* ------------------------------------------------------------------ DPaint's ranges and stencils */
+int gradient_from_palette(Gradient *g, const u8 *pal, int npal, int lo, int hi)
+{
+  int n, k, e;
+  if (lo > hi) { k = lo; lo = hi; hi = k; }
+  if (lo < 0) lo = 0;
+  if (hi >= npal) hi = npal - 1;
+  if (hi < lo || npal < 1) return 0;
+  n = hi - lo + 1;
+  if (n > GRAD_MAXSTOPS) n = GRAD_MAXSTOPS;
+  gradient_init(g, "Palette Range", 0, 0);
+  g->ncolor = n;
+  for (k = 0; k < n; k++) {
+    e = n > 1 ? lo + (int)(((long)k * (hi - lo) * 2 + (n - 1)) / (2 * (n - 1))) : lo;
+    g->color[k].pos = n > 1 ? (double)k / (n - 1) : 0;
+    g->color[k].mid = 0.5;
+    g->color[k].kind = GS_RGB;
+    g->color[k].rgb = (u32)pal[e * 3] << 16 | (u32)pal[e * 3 + 1] << 8 | pal[e * 3 + 2];
+  }
+  if (n == 1) { g->ncolor = 2; g->color[1] = g->color[0]; g->color[1].pos = 1; }
+  return 1;
+}
+void doc_fill_range(const Doc *d, int *lo, int *hi)
+{
+  int k;
+  for (k = 0; k < d->ncycle; k++)
+    if (d->cycle[k].active && d->cycle[k].hi > d->cycle[k].lo && d->cycle[k].hi < d->npal) { *lo = d->cycle[k].lo; *hi = d->cycle[k].hi; return; }
+  *lo = 0; *hi = d->npal > 0 ? d->npal - 1 : 0;
+}
+int stencil_colors(const Doc *d, int kind, u32 *out)
+{
+  int n = 0, k;
+  if (kind == STC_BACKGROUND) out[n++] = d->bg & 0xFFFFFF;
+  else if (kind == STC_LOCKED && d->mode == MODE_INDEXED)
+    for (k = 0; k < d->npal && k < 256; k++)
+      if (d->pal_lock[k]) out[n++] = (u32)d->pal[k * 3] << 16 | (u32)d->pal[k * 3 + 1] << 8 | d->pal[k * 3 + 2];
+  return n;
 }

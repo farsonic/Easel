@@ -539,6 +539,14 @@ void names_refresh(void)
 const Gradient *tool_gradient(void)
 {
   GradientList *g = gradwin_presets();
+  Doc *d = cur_doc();
+  if (opt.grad_palrange && d && d->mode == MODE_INDEXED) {
+    /* 1.1: DPaint's range fill: the palette's first cycling range (else all of it) as the gradient */
+    static Gradient pg;
+    int lo, hi;
+    doc_fill_range(d, &lo, &hi);
+    if (gradient_from_palette(&pg, d->pal, d->npal, lo, hi)) return &pg;
+  }
   return g && opt.grad_preset >= 0 && opt.grad_preset < g->n ? &g->g[opt.grad_preset] : &cur_grad;
 }
 const Pattern *tool_pattern(void) { return opt.pattern >= 0 && opt.pattern < patterns.n ? patterns.p[opt.pattern] : NULL; }

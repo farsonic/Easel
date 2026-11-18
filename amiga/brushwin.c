@@ -26,6 +26,7 @@
 #include "theme.h"
 #include "lang.h"
 #include "brushwin.h"
+#include "../core/toolopts.h"
 
 #define BW_ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (ULONG)(d))
 #define WHEEL_UP 0x7A
@@ -101,6 +102,7 @@ static const char *const ctl_list3[3] = { "Off", "Fade", "Pen Pressure" };
 static const char *const sym_list[SYM_N] = { "Off", "Vertical", "Horizontal", "Vertical and Horizontal", "Radial", "Mandala" };
 static const char *const erase_list[3] = { "Brush", "Pencil", "Block" };
 static const char *const smp_list[3] = { "Continuous", "Once", "Background Swatch" };
+static const char *const stc_list[3] = { "Off", "Background Colour", "Locked Palette Colours" };   /* (1.1) */
 static const char *const lim_list[3] = { "Contiguous", "Discontiguous", "Find Edges" };
 static const char *const rpl_list[4] = { "Hue", "Saturation", "Color", "Luminosity" };
 static const char *const cb_list[CB_N] = { "Matte", "Color", "Replace", "Smear", "Shade", "Blend", "Cycle" };
@@ -201,6 +203,7 @@ static int build_settings(PItem *it)
   SCRUB("Tolerance", b->tolerance, 0, 255, "");
   CHECK("Protect Foreground Color", b->protect_fg);
   CHOICE("Replace Mode", b->replace_mode, rpl_list, 4);
+  CHOICE("Stencil", brushui.stencil, stc_list, 3); CHECK("Stencil Inverted", b->stencil_invert);
   SCRUB("Seed (0: new each stroke)", ui_seed, 0, 99999, "");
   BUTTONS(b_seed, 1, C_NEWSEED);
   return n;
@@ -943,6 +946,13 @@ void brushwin_apply(Brush *b)
   b->eraser_mode = s->eraser_mode; b->auto_erase = s->auto_erase; b->sample_all = s->sample_all; b->pattern_aligned = s->pattern_aligned;
   b->sampling = s->sampling; b->limits = s->limits; b->tolerance = s->tolerance; b->protect_fg = s->protect_fg; b->replace_mode = s->replace_mode;
   b->custom_mode = s->custom_mode;
+  /* 1.1: the stencil's colours, from the picture as it is now */
+  {
+    static u32 stc[256];
+    b->nstencil = d && brushui.stencil ? stencil_colors(d, brushui.stencil, stc) : 0;
+    b->stencil = b->nstencil ? stc : NULL;
+    b->stencil_invert = s->stencil_invert;
+  }
   b->custom = brushui.use_custom && brushui.custom && (b->tool == PT_BRUSH || b->tool == PT_PENCIL) ? brushui.custom : NULL;
   if (d) b->bg = d->bg;
 }

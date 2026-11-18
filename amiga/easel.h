@@ -124,6 +124,7 @@ typedef struct {
   int move_group, move_bounds;        /* move: Auto-Select picks the group; the layer's bounding box shown */
   int crop_overlay, crop_straighten;  /* crop: CO_; a drag draws the line to straighten by */
   int zoom_out;                       /* zoom: a click zooms out (Alt-click in) */
+  int grad_palrange;                  /* gradient: an indexed picture's palette range (DPaint's range fill) */
 } Opts;
 extern const int sample_layers[3];
 extern int extras_hidden;              /* (1.1) Ctrl-H: the selection's outline (and the guides and grid) not drawn */
