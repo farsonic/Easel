@@ -26,6 +26,7 @@
 #include "../core/filtr3.h"
 #include "../core/layers.h"
 #include "../core/selr3.h"
+#include "../core/hyphen.h"
 
 static void out_of_memory(void) { if (!progress_aborted) ask("OK", "%s", tr("There isn't enough memory for that.")); }
 /* enough memory for need bytes? If not, the user is told how much is needed */
@@ -332,6 +333,19 @@ static void select_found(Doc *d, int sky)
   ok = sky ? sel_sky(d, SEL_REPLACE, 50, 50) : sel_subject(d, SEL_REPLACE);
   if (job_end()) return;
   if (!ok) ask("OK", "%s", tr(sky ? "No sky was found in the picture." : "Nothing stands out from the rest of the picture."));
+}
+
+/* ------------------------------------------------------------------ hyphenation patterns */
+int r3_hyphen_patterns(void)
+{
+  static int tried;
+  static const char *const files[UI_NLANG] = { "hyph_en_GB.dic", "hyph_de_DE.dic", "hyph_fr_FR.dic", "hyph_es_ES.dic", "hyph_it_IT.dic" };
+  char path[64];
+  int l = lang_current();
+  if (hyphen_ready() || tried) return hyphen_ready();
+  tried = 1;
+  if (l >= 0 && l < UI_NLANG) { snprintf(path, sizeof path, "PROGDIR:Dict/%s", files[l]); if (hyphen_load(path)) return 1; }
+  return hyphen_load("PROGDIR:Dict/hyph_en_GB.dic");
 }
 
 /* ------------------------------------------------------------------ Combine Shapes */

@@ -28,6 +28,11 @@
 #include "core/codec.h"
 #include "core/util.h"
 #include "core/selr3.h"
+#include "core/type.h"
+#include "core/fonts.h"
+#include "core/hyphen.h"
+#include "core/gsub.h"
+#include "core/ttraster.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -678,6 +683,154 @@ static void test_decontaminate(void)
   doc_free(d);
 }
 
+/* ------------------------------------------------------------------ type */
+static const char *find_font(const char *name)
+{
+  static char path[512];
+  static const char *const dirs[] = { "/usr/share/fonts/truetype/crosextra", "/usr/share/fonts/truetype/carlito", "../quill/fonts", "/home/user/quill/fonts", NULL };
+  int k;
+  for (k = 0; dirs[k]; k++) {
+    FILE *f;
+    snprintf(path, sizeof path, "%s/%s", dirs[k], name);
+    if ((f = fopen(path, "rb"))) { fclose(f); return path; }
+  }
+  return NULL;
+}
+static TextLayout *lay_t(TextParams *tp, const char *text, u16 ot, double size)
+{
+  text_params_init(tp, "Carlito", size, 0, 10, 100);
+  text_set_string(tp, text);
+  tp->run[0].ot = ot;
+  return text_layout(tp);
+}
+static void gsub_note(FILE *f, const char *path, const char *tag, const char *text, const TextLayout *tl)
+{
+  i32 i;
+  if (!f || !tl) return;
+  fprintf(f, "%s\t%s\t%s\t", path, tag, text);
+  for (i = 0; i < tl->ng; i++) fprintf(f, " %d", tl->g[i].dead ? -1 : (int)tl->g[i].glyph);
+  fprintf(f, "\n");
+}
+static long ink(const u8 *px, Box b)
+{
+  long k, s = 0;
+  for (k = 0; k < (long)(b.x1 - b.x0) * (b.y1 - b.y0); k++) s += px[k * 4 + 3];
+  return s;
+}
+static void test_type(void)
+{
+  const char *carlito = find_font("Carlito-Regular.ttf");
+  static TextParams tp;
+  FontSet *fs;
+  TextLayout *a, *b;
+  Face *c;
+  FILE *gf = NULL;
+  char path[512];
+  /* hyphenation: Liang's own example patterns */
+  static const char pats[] = "UTF-8\nLEFTHYPHENMIN 2\nRIGHTHYPHENMIN 2\n.hy3ph\nhe2n\nhena4\nhen5at\n1na\nn2at\n1tio\n2io\no2n\n";
+  u8 brk[16];
+  CHECK(!hyphen_ready(), "no patterns at first");
+  CHECK(hyphen_load_mem(pats, sizeof pats - 1) && hyphen_ready(), "patterns loaded");
+  CHECK(hyphen_word("hyphenation", 11, brk) == 2 && brk[2] && brk[6], "hy-phen-ation, as Liang's paper has it");
+  CHECK(hyphen_word("Hyphenation", 11, brk) >= 2 && brk[2], "capitals too");
+  CHECK(hyphen_word("hy-ph", 5, brk) == 0, "not across punctuation");
+  if (!carlito) { printf("Carlito isn't installed: the type tests that need a font are skipped\n"); hyphen_free(); return; }
+  fs = (FontSet *)calloc(1, sizeof *fs);
+  fonts_add(fs, carlito, "Carlito", 0, 0);
+  text_fonts = fs;
+  c = fonts_face(fs, "Carlito", 0, 0);
+  CHECK(c && ttf_load(c), "Carlito loads");
+  /* horizontal and vertical scale */
+  a = lay_t(&tp, "Wide", 0, 40);
+  tp.run[0].hscale = 150;
+  b = text_layout(&tp);
+  CHECK(a && b && fabs((b->g[3].x + b->g[3].adv - b->g[0].x) - 1.5 * (a->g[3].x + a->g[3].adv - a->g[0].x)) < 0.5, "150% horizontal scale: half as wide again");
+  text_layout_free(a); text_layout_free(b);
+  {
+    u8 *p0 = NULL, *p1 = NULL;
+    Box b0, b1;
+    text_layout_free(lay_t(&tp, "H", 0, 60));
+    text_render(&tp, 300, 300, &p0, &b0);
+    tp.run[0].vscale = 200;
+    text_render(&tp, 300, 300, &p1, &b1);
+    CHECK(p0 && p1 && fabs((b1.y1 - b1.y0) - 2.0 * (b0.y1 - b0.y0)) < 4 && abs((b1.x1 - b1.x0) - (b0.x1 - b0.x0)) <= 2, "200% vertical scale: twice as tall, as wide");
+    free(p0); free(p1);
+    {
+      /* kept in OpenRaster's text */
+      Layer l;
+      char *sv;
+      memset(&l, 0, sizeof l);
+      l.kind = LK_TEXT; l.live = &tp; l.livelen = sizeof tp;
+      sv = live_save(&l);
+      l.live = NULL;
+      CHECK(sv && strstr(sv, "rhv=0,0,200"), "scales saved");
+      CHECK(sv && live_load(&l, LK_TEXT, sv) && layer_text(&l) && layer_text(&l)->run[0].vscale == 200, "and read");
+      free(sv); free(l.live);
+    }
+    tp.run[0].vscale = 0;
+    /* Crisp and Strong: Strong has more ink, Crisp the same shape with fewer half-covered pixels */
+    {
+      u8 *ps = NULL, *pc = NULL, *pg = NULL;
+      Box bs, bc, bg;
+      long half_s = 0, half_c = 0, k;
+      text_set_string(&tp, "a e");
+      tp.aa = TAA_SMOOTH; text_render(&tp, 300, 300, &ps, &bs);
+      tp.aa = TAA_CRISP; text_render(&tp, 300, 300, &pc, &bc);
+      tp.aa = TAA_STRONG; text_render(&tp, 300, 300, &pg, &bg);
+      CHECK(ps && pc && pg && ink(pg, bg) > ink(ps, bs) * 105 / 100, "Strong is heavier");
+      if (ps && pc && bs.x0 == bc.x0 && bs.y0 == bc.y0 && bs.x1 == bc.x1 && bs.y1 == bc.y1)
+        for (k = 0; k < (long)(bs.x1 - bs.x0) * (bs.y1 - bs.y0); k++) { half_s += ps[k * 4 + 3] > 40 && ps[k * 4 + 3] < 215; half_c += pc[k * 4 + 3] > 40 && pc[k * 4 + 3] < 215; }
+      CHECK(half_c < half_s, "Crisp has fewer grey edge pixels");
+      free(ps); free(pc); free(pg);
+      tp.aa = TAA_SMOOTH;
+    }
+  }
+  /* hyphenation in paragraph text: a narrow box breaks the long word with a hyphen */
+  text_params_init(&tp, "Carlito", 30, 0, 10, 10);
+  text_set_string(&tp, "hyphenation hyphenation");
+  tp.box = 1; tp.bw = 140; tp.bh = 400; tp.hyphenate = 1;
+  a = text_layout(&tp);
+  {
+    int hy = 0, ok = 1;
+    i32 i;
+    if (a) for (i = 0; i < a->ng; i++) hy += a->g[i].hyph;
+    if (a) for (i = 0; i < a->nl; i++) if (a->ln[i].x1 - a->ln[i].x0 > tp.bw + 0.5) ok = 0;
+    CHECK(hy >= 1, "a word broken with a hyphen");
+    CHECK(ok, "every line fits the box (with its hyphen)");
+    tp.hyphenate = 0;
+    b = text_layout(&tp);
+    if (b) for (i = 0, hy = 0; i < b->ng; i++) hy += b->g[i].hyph;
+    CHECK(b && hy == 0, "hyphenation off: none");
+    text_layout_free(b);
+  }
+  text_layout_free(a);
+  hyphen_free();
+  /* contextual alternates and fractions (GSUB lookups 6), for check_r3.py to redo with fontTools */
+  snprintf(path, sizeof path, "%s/r3_gsub.txt", tmpdir);
+  gf = fopen(path, "w");
+  a = lay_t(&tp, "1/2", TO_FRAC, 40);
+  CHECK(a && a->g[0].glyph != ttf_glyph(c, '1') && a->g[1].glyph != ttf_glyph(c, '/') && a->g[2].glyph != ttf_glyph(c, '2'), "1/2: numerator, fraction slash, denominator");
+  gsub_note(gf, carlito, "frac", "1/2", a); text_layout_free(a);
+  a = lay_t(&tp, "12/345 6", TO_FRAC, 40);
+  CHECK(a && a->g[7].glyph == ttf_glyph(c, '6'), "a figure away from the fraction stays as it is");
+  gsub_note(gf, carlito, "frac", "12/345 6", a); text_layout_free(a);
+  a = lay_t(&tp, "\xce\x86\xce\x93", TO_CALT, 40);   /* Greek capital alpha with tonos, then gamma */
+  b = lay_t(&tp, "\xce\x86\xce\x93", 0, 40);
+  CHECK(a && b && a->g[0].glyph != b->g[0].glyph, "contextual alternate before a gamma");
+  gsub_note(gf, carlito, "calt", "\xce\x86\xce\x93", a); text_layout_free(a); text_layout_free(b);
+  a = lay_t(&tp, "\xce\x86\xce\x91", TO_CALT, 40);
+  b = lay_t(&tp, "\xce\x86\xce\x91", 0, 40);
+  gsub_note(gf, carlito, "calt", "\xce\x86\xce\x91", a); text_layout_free(a); text_layout_free(b);
+  a = lay_t(&tp, "\xce\x93\xce\x86", TO_CALT, 40);
+  gsub_note(gf, carlito, "calt", "\xce\x93\xce\x86", a); text_layout_free(a);
+  a = lay_t(&tp, "\xce\x86 \xce\x93", TO_CALT, 40);
+  gsub_note(gf, carlito, "calt", "\xce\x86 \xce\x93", a); text_layout_free(a);
+  if (gf) fclose(gf);
+  text_fonts = NULL;
+  text_cache_flush();
+  fonts_free(fs); free(fs);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -695,6 +848,7 @@ int main(int argc, char **argv)
   test_sky();
   test_subject();
   test_decontaminate();
+  test_type();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

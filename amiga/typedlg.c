@@ -20,6 +20,7 @@
 #include "ids.h"
 #include "../core/type.h"
 #include "../core/shape.h"
+#include "r3ids.h"
 
 static ULONG xget(Object *o, ULONG a) { ULONG v = 0; get(o, a, &v); return v; }
 /* the small controls the dialogs are made of, as dialogs.c makes them */
@@ -107,7 +108,7 @@ int dlg_character(struct TextParams *tp, int from, int to)
   static const char *const cases[] = { "Normal", "All Caps", "Small Caps" }, *const positions[] = { "Normal", "Superscript", "Subscript" };   /* 1.2 */
   const TextRun *r0 = &tp->run[text_run_at(tp, from < to ? from + 1 : from)];
   TextRun r;
-  Object *w, *fc, *sc, *sz, *ld, *tk, *bs, *col, *ul, *st, *fb, *fi, *cc, *pc;
+  Object *w, *fc, *sc, *sz, *ld, *tk, *bs, *col, *ul, *st, *fb, *fi, *cc, *pc, *hsc, *vsc;
   int nf = font_count(), i, f0 = font_find(r0->family), s0, ok;
   u32 m = 0;
   if (nf > 99) nf = 99;
@@ -123,6 +124,8 @@ int dlg_character(struct TextParams *tp, int from, int to)
         Child, QLabel(tr("Leading (px, 0 auto):"), MUIO_Label_SingleFrame), Child, HGroup, Child, ld = numfield(tp->leading), Child, HSpace(0), End,
         Child, QLabel(tr("Tracking (1/1000 em):"), MUIO_Label_SingleFrame), Child, HGroup, Child, tk = numfield(r0->tracking), Child, HSpace(0), End,
         Child, QLabel(tr("Baseline Shift (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, bs = numfield(r0->baseline), Child, HSpace(0), End,
+        Child, QLabel(tr("Horizontal, Vertical Scale (%):"), MUIO_Label_SingleFrame),        /* r3 */
+        Child, HGroup, Child, hsc = numfield(text_hscale(r0) * 100), Child, vsc = numfield(text_vscale(r0) * 100), Child, HSpace(0), End,
         Child, QLabel(tr("Case:"), MUIO_Label_Centered), Child, cc = cycle(labels_of(cases, 3, csl), r0->ot & TO_CASE),
         Child, QLabel(tr("Position:"), MUIO_Label_Centered), Child, pc = cycle(labels_of(positions, 3, psl), (r0->ot & TO_POS) >> 2),
         Child, QLabel(tr("Color (hex #):"), MUIO_Label_SingleFrame), Child, HGroup, Child, col = hexfield(r0->color), Child, pick_button(ID_DLGRESET), Child, HSpace(0), End,
@@ -147,6 +150,8 @@ int dlg_character(struct TextParams *tp, int from, int to)
     if ((v = num_of(sz)) >= 1 && v <= 2000 && fabs(v - r0->size) > 0.004) { r.size = v; m |= TS_SIZE; }
     if (fabs((v = num_of(tk)) - r0->tracking) > 0.004) { r.tracking = v; m |= TS_TRACKING; }
     if (fabs((v = num_of(bs)) - r0->baseline) > 0.004) { r.baseline = v; m |= TS_BASELINE; }
+    if ((v = num_of(hsc)) >= 1 && v <= 1000 && fabs(v - text_hscale(r0) * 100) > 0.004) { r.hscale = v; m |= TS_HSCALE; }     /* r3 */
+    if ((v = num_of(vsc)) >= 1 && v <= 1000 && fabs(v - text_vscale(r0) * 100) > 0.004) { r.vscale = v; m |= TS_VSCALE; }
     if (hex_of(col) != r0->color) { r.color = hex_of(col); m |= TS_COLOR; }
     if (sel_of(ul) != r0->underline) { r.underline = (u8)sel_of(ul); m |= TS_UNDERLINE; }
     if (sel_of(st) != r0->strike) { r.strike = (u8)sel_of(st); m |= TS_STRIKE; }
@@ -171,6 +176,8 @@ int dlg_character(struct TextParams *tp, int from, int to)
         if (m & TS_SIZE) a->size = r.size;
         if (m & TS_TRACKING) a->tracking = r.tracking;
         if (m & TS_BASELINE) a->baseline = r.baseline;
+        if (m & TS_HSCALE) a->hscale = r.hscale;
+        if (m & TS_VSCALE) a->vscale = r.vscale;
         if (m & TS_COLOR) a->color = r.color;
         if (m & TS_UNDERLINE) a->underline = r.underline;
         if (m & TS_STRIKE) a->strike = r.strike;
@@ -189,7 +196,7 @@ int dlg_paragraph(struct TextParams *tp)
   static const char *const aligns[] = { "Left", "Centre", "Right", "Justify (last line left)", "Justify All",
                                         "Justify (last line centred)", "Justify (last line right)" };   /* (1.2: the last two) */
   static const char *al[8];
-  Object *w, *ac, *ind, *sb, *sa, *kc, *bw = NULL, *bh = NULL, *grp, *il, *ir;
+  Object *w, *ac, *ind, *sb, *sa, *kc, *bw = NULL, *bh = NULL, *grp, *il, *ir, *hy;
   int ok;
   grp = ColGroup(2),
         Child, QLabel(tr("Align:"), MUIO_Label_Centered), Child, ac = cycle(labels_of(aligns, 7, al), tp->align < 7 ? tp->align : 0),
@@ -199,6 +206,7 @@ int dlg_paragraph(struct TextParams *tp)
         Child, QLabel(tr("Space Before (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, sb = numfield(tp->space_before), Child, HSpace(0), End,
         Child, QLabel(tr("Space After (px):"), MUIO_Label_SingleFrame), Child, HGroup, Child, sa = numfield(tp->space_after), Child, HSpace(0), End,
         Child, kc = check(tp->kern), Child, QLabel(tr("Kerning from the font (Metrics)"), 0),
+        Child, hy = check(tp->hyphenate), Child, QLabel(tr("Hyphenate (paragraph text)"), 0),     /* r3 */
       End;
   if (grp && tp->box) {
     /* paragraph text: its box too */
@@ -215,6 +223,8 @@ int dlg_paragraph(struct TextParams *tp)
     tp->indent = num_of(ind); tp->space_before = num_of(sb); tp->space_after = num_of(sa);
     { double v = num_of(il); tp->indent_left = v >= 0 ? v : 0; v = num_of(ir); tp->indent_right = v >= 0 ? v : 0; }   /* 1.2 */
     tp->kern = (u8)sel_of(kc);
+    tp->hyphenate = (u8)sel_of(hy);
+    if (tp->hyphenate && !r3_hyphen_patterns()) ask("OK", "%s", tr("No hyphenation patterns were found: put hyph_en_GB.dic (or your language's) in Easel's Dict drawer."));
     if (bw && num_of(bw) >= 1) tp->bw = num_of(bw);
     if (bh && num_of(bh) >= 1) tp->bh = num_of(bh);
   }

@@ -73,6 +73,7 @@ static void save_text(Buf *b, const TextParams *tp)
   kv_num(b, "x", tp->x); kv_num(b, "y", tp->y);
   if (tp->box) { kv_num(b, "box", 1); kv_num(b, "bw", tp->bw); kv_num(b, "bh", tp->bh); }
   kv_num(b, "align", tp->align); kv_num(b, "aa", tp->aa); kv_num(b, "kern", tp->kern);
+  if (tp->hyphenate) kv_num(b, "hy", 1);                   /* r3 */
   if (tp->vertical) kv_num(b, "vert", 1);
   if (tp->leading) kv_num(b, "lead", tp->leading);
   if (tp->indent) kv_num(b, "indent", tp->indent);
@@ -92,6 +93,10 @@ static void save_text(Buf *b, const TextParams *tp)
     buf_printf(b, "&r=%ld,%.10g,%ld,%.10g,%.10g,%d,", (long)r->start, r->size, (long)(r->color & 0xFFFFFF), r->tracking, r->baseline, fl);
     enc(b, r->family);
   }
+  /* r3: horizontal and vertical scale, for the runs that have them */
+  for (i = 0; i < tp->nruns; i++)
+    if ((tp->run[i].hscale > 0 && tp->run[i].hscale != 100) || (tp->run[i].vscale > 0 && tp->run[i].vscale != 100))
+      buf_printf(b, "&rhv=%d,%.10g,%.10g", i, tp->run[i].hscale, tp->run[i].vscale);
 }
 static void save_shape(Buf *b, const ShapeParams *sp)
 {
@@ -150,7 +155,8 @@ static int load_text(Layer *l, char *s)
 {
   TextParams *tp = (TextParams *)calloc(1, sizeof *tp);
   char *p = s;
-  int nr = 0;
+  int nr = 0, nhv = 0;
+  static double hv[TP_MAXRUNS][3];
   if (!tp) return 0;
   text_params_init(tp, "", 24, 0, 0, 0);
   tp->nruns = 0;
@@ -169,8 +175,9 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "bw")) tp->bw = x;
     else if (!strcmp(k, "bh")) tp->bh = x;
     else if (!strcmp(k, "align")) tp->align = (u8)(x >= 0 && x <= 6 ? x : 0);   /* (1.2: up to Justify Last Right) */
-    else if (!strcmp(k, "aa")) tp->aa = (u8)(x >= 0 && x <= 2 ? x : 2);
+    else if (!strcmp(k, "aa")) tp->aa = (u8)(x >= 0 && x <= 4 ? x : 2);        /* (r3: up to Strong) */
     else if (!strcmp(k, "kern")) tp->kern = x != 0;
+    else if (!strcmp(k, "hy")) tp->hyphenate = x != 0;          /* r3 */
     else if (!strcmp(k, "vert")) tp->vertical = x != 0;
     else if (!strcmp(k, "lead")) tp->leading = x;
     else if (!strcmp(k, "indent")) tp->indent = x;
@@ -185,6 +192,10 @@ static int load_text(Layer *l, char *s)
     else if (!strcmp(k, "warpv")) tp->warp_vertical = x != 0;
     else if (!strcmp(k, "xf")) { if (nums(v, tp->xf, 6) == 6) tp->xf_on = 1; }
     else if (!strcmp(k, "text")) { dec(v); strncpy(tp->text, v, TP_MAXTEXT - 1); }
+    else if (!strcmp(k, "rhv")) {                           /* r3 */
+      double a[3];
+      if (nums(v, a, 3) == 3 && a[0] >= 0 && a[0] < TP_MAXRUNS && nhv < TP_MAXRUNS) { hv[nhv][0] = a[0]; hv[nhv][1] = a[1]; hv[nhv][2] = a[2]; nhv++; }
+    }
     else if (!strcmp(k, "r") && nr < TP_MAXRUNS) {
       double a[6];
       char *c = v;
@@ -204,6 +215,10 @@ static int load_text(Layer *l, char *s)
   }
   tp->nruns = nr;
   if (!nr) { tp->nruns = 1; tp->run[0].size = 24; }
+  {
+    int j;
+    for (j = 0; j < nhv; j++) if ((int)hv[j][0] < tp->nruns) { tp->run[(int)hv[j][0]].hscale = hv[j][1]; tp->run[(int)hv[j][0]].vscale = hv[j][2]; }
+  }
   /* (text_layout sanitizes the rest whenever it is used; here the essentials) */
   {
     i32 n = (i32)strlen(tp->text), i;

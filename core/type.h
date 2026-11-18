@@ -29,7 +29,8 @@ enum { TA_JUSTIFY = 3,                 /* justified, the last line of each parag
        TA_JUSTIFY_ALL = 4,             /* every line justified */
        TA_JUSTIFY_CENTER = 5,          /* 1.2: justified, the last line centred */
        TA_JUSTIFY_RIGHT = 6 };         /* 1.2: justified, the last line right */
-enum { TAA_NONE, TAA_SHARP, TAA_SMOOTH };   /* anti-aliasing: none, sharp (hinted), smooth */
+enum { TAA_NONE, TAA_SHARP, TAA_SMOOTH,     /* anti-aliasing: none, sharp (hinted), smooth */
+       TAA_CRISP, TAA_STRONG };       /* r3: crisp (smooth with firmer edges), strong (heavier) */
 enum { TW_NONE, TW_ARC, TW_ARCH, TW_BULGE, TW_FLAG, TW_WAVE, TW_FISH, TW_RISE, TW_SQUEEZE, TW_TWIST,
        TW_ARCLOWER, TW_ARCUPPER, TW_SHELLLOWER, TW_SHELLUPPER, TW_FISHEYE, TW_INFLATE,   /* 1.1 */
        TW_N };
@@ -46,12 +47,17 @@ typedef struct {
   double size;                        /* pixels to the em (1-2000) */
   double tracking;                    /* thousandths of an em added after each character */
   double baseline;                    /* baseline shift, pixels up */
+  double hscale, vscale;              /* r3: horizontal and vertical scale, per cent (0: 100) */
 } TextRun;
 /* which fields text_style sets */
 enum { TS_FAMILY = 1, TS_BOLD = 2, TS_ITALIC = 4, TS_FAUXBOLD = 8, TS_FAUXITALIC = 16, TS_UNDERLINE = 32,
        TS_STRIKE = 64, TS_COLOR = 128, TS_SIZE = 256, TS_TRACKING = 512, TS_BASELINE = 1024,
        TS_OT = 2048,                  /* 1.2: the run's ot */
-       TS_ALL = 4095 };
+       TS_HSCALE = 4096, TS_VSCALE = 8192,   /* r3 */
+       TS_ALL = 16383 };
+/* r3: a run's horizontal and vertical scale as factors (1 for 100%) */
+double text_hscale(const TextRun *r);
+double text_vscale(const TextRun *r);
 /* 1.2: TextRun's ot. Case: All Caps (letters drawn as capitals) or Small Caps (the font's small
    capitals where it has them, OpenType smcp, else capitals at 75%); position: superscript or
    subscript (58.3% of the size, 33.3% of it up or down, as Photoshop's defaults); and the OpenType
@@ -71,7 +77,7 @@ enum { TS_FAMILY = 1, TS_BOLD = 2, TS_ITALIC = 4, TS_FAUXBOLD = 8, TS_FAUXITALIC
 #define TO_ORNM      (1 << 10)        /* Ornaments (ornm) */
 #define TO_ORDN      (1 << 11)        /* Ordinals (ordn) */
 #define TO_FRAC      (1 << 12)        /* Fractions (frac) */
-#define TO_CALT      (1 << 13)        /* Contextual Alternates (calt: kept, but its lookups are contextual and not applied) */
+#define TO_CALT      (1 << 13)        /* Contextual Alternates (calt; r3: its contextual lookups applied) */
 #define TO_NFEAT     10
 extern const char *const text_ot_tags[TO_NFEAT];  /* "liga" ... "calt", in the TO_ order */
 extern const char *const text_ot_names[TO_NFEAT]; /* "Standard Ligatures" ... */
@@ -97,7 +103,8 @@ typedef struct TextParams {
   double xf[6];                       /* drawn through x' = xf0 x + xf1 y + xf2, y' = xf3 x + xf4 y + xf5 (Free Transform) */
   double indent_left, indent_right;   /* 1.2: paragraph text's left and right indents, pixels */
   i32 nruns;
-  i32 pad2;
+  u8 hyphenate;                       /* r3: paragraph text breaks words at their hyphenation points (hyphen.h) */
+  u8 pad2[3];
   TextRun run[TP_MAXRUNS];
   char text[TP_MAXTEXT];
 } TextParams;
@@ -138,6 +145,7 @@ typedef struct {
   double adv;                         /* how far it moves the pen (along the line) */
   double scale;                       /* 1.2: its size against its run's (small caps, superscript, subscript) */
   u8 dead;                            /* 1.2: part of a ligature drawn by the glyph before it: not drawn */
+  u8 hyph;                            /* r3: its line breaks after it inside a word: a hyphen drawn after it */
 } TGlyph;
 typedef struct {
   i32 start, end;                     /* its text: start..end (end before the newline, if any) */

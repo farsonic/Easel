@@ -13,6 +13,7 @@
 #include "amifont.h"
 #include "live.h"
 #include "gsub.h"                      /* 1.2: OpenType features */
+#include "hyphen.h"                    /* r3: hyphenation */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -264,9 +265,12 @@ static void sanitize(TextParams *tp)
     if (r->size > 2000) r->size = 2000;
     if (!(fabs(r->tracking) <= 5000)) r->tracking = 0;
     if (!(fabs(r->baseline) <= 10000)) r->baseline = 0;
+    if (!(r->hscale >= 0 && r->hscale <= 1000)) r->hscale = 0;      /* (r3) */
+    if (!(r->vscale >= 0 && r->vscale <= 1000)) r->vscale = 0;
     r->color &= 0xFFFFFF;
   }
   if (tp->align > TA_JUSTIFY_RIGHT) tp->align = TA_LEFT;
+  if (tp->aa > TAA_STRONG) tp->aa = TAA_SMOOTH;                        /* (r3: Crisp and Strong) */
   if (!(tp->indent_left >= 0 && tp->indent_left < 100000)) tp->indent_left = 0;      /* (1.2) */
   if (!(tp->indent_right >= 0 && tp->indent_right < 100000)) tp->indent_right = 0;
   if (tp->warp >= TW_N) tp->warp = TW_NONE;
@@ -310,7 +314,8 @@ static int same_style(const TextRun *a, const TextRun *b)
 {
   return !strcmp(a->family, b->family) && a->bold == b->bold && a->italic == b->italic && a->faux_bold == b->faux_bold &&
          a->faux_italic == b->faux_italic && a->underline == b->underline && a->strike == b->strike && a->color == b->color &&
-         a->size == b->size && a->tracking == b->tracking && a->baseline == b->baseline && a->ot == b->ot;
+         a->size == b->size && a->tracking == b->tracking && a->baseline == b->baseline && a->ot == b->ot &&
+         text_hscale(a) == text_hscale(b) && text_vscale(a) == text_vscale(b);   /* (r3) */
 }
 static void tidy_runs(TextParams *tp)
 {
@@ -420,6 +425,8 @@ int text_style(TextParams *tp, int from, int to, const TextRun *st, u32 m)
     if (m & TS_TRACKING) r->tracking = st->tracking;
     if (m & TS_BASELINE) r->baseline = st->baseline;
     if (m & TS_OT) r->ot = st->ot;                       /* 1.2 */
+    if (m & TS_HSCALE) r->hscale = st->hscale;           /* r3 */
+    if (m & TS_VSCALE) r->vscale = st->vscale;
   }
   (void)a; (void)b;
   tidy_runs(tp);
@@ -505,8 +512,26 @@ static void ot_apply(Face *f, const TextRun *run, TGlyph *g, i32 n)
   u8 dead[256];
   i32 at, m;
   if (!k->gsub) return;
-  for (b = 0; b < TO_NFEAT; b++) if (run->ot & (TO_LIGA << b)) tags[nt++] = text_ot_tags[b];
+  for (b = 0; b < TO_NFEAT; b++) if ((run->ot & (TO_LIGA << b)) && (TO_LIGA << b) != TO_FRAC) tags[nt++] = text_ot_tags[b];
   if ((run->ot & TO_CASE) == TO_SMALLCAPS) tags[nt++] = "smcp";
+  if (run->ot & TO_FRAC) {
+    /* r3: Fractions only where digits stand either side of a slash (as HarfBuzz does), so the
+       font's numerator and denominator lookups (contextual) don't turn every figure */
+    const char *ft[1];
+    i32 i0, i1, j;
+    ft[0] = "frac";
+    for (at = 0; at < n; at++) {
+      if (!(g[at].cp == '/' || g[at].cp == 0x2044) || at == 0 || at + 1 >= n) continue;
+      if (!(g[at - 1].cp >= '0' && g[at - 1].cp <= '9') || !(g[at + 1].cp >= '0' && g[at + 1].cp <= '9')) continue;
+      for (i0 = at; i0 > 0 && g[i0 - 1].cp >= '0' && g[i0 - 1].cp <= '9'; i0--) ;
+      for (i1 = at + 1; i1 < n && g[i1].cp >= '0' && g[i1].cp <= '9'; i1++) ;
+      if (i1 - i0 > 256) continue;
+      for (j = i0; j < i1; j++) { gl[j - i0] = g[j].glyph; dead[j - i0] = g[j].dead; }
+      gsub_apply(k->gsub, k->lgsub, ft, 1, gl, dead, (int)(i1 - i0));
+      for (j = i0; j < i1; j++) { g[j].glyph = gl[j - i0]; g[j].dead = dead[j - i0]; }
+      at = i1 - 1;
+    }
+  }
   if (!nt) return;
   for (at = 0; at < n; at += 256) {
     i32 c = n - at < 256 ? n - at : 256;
@@ -516,6 +541,39 @@ static void ot_apply(Face *f, const TextRun *run, TGlyph *g, i32 n)
   }
 }
 
+/* r3: the width of the hyphen drawn after glyph g */
+static double hyphen_w(const TextParams *tp, const RunFont *rf, const TGlyph *g)
+{
+  const RunFont *f = &rf[g->run];
+  return hadv(f, glyph_of(f, '-')) * (g->scale > 0 ? g->scale : 1) * text_hscale(&tp->run[g->run]);
+}
+#define MAXWORD 62
+static int letter(u32 c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= 0xC0 && c != 0xD7 && c != 0xF7 && c < 0x2000) || c == '\''; }
+/* r3: where the line from glyph k should end when glyph j (in a word) no longer fits avail: just
+   after the latest hyphenation point of that word whose first part, with a hyphen, still fits; -1
+   if there is none */
+static i32 hyphen_at(const TextParams *tp, TextLayout *tl, const RunFont *rf, i32 k, i32 j, double avail)
+{
+  i32 ws = j, we = j, b, best = -1;
+  u8 brk[MAXWORD + 1];
+  double w0 = 0, w;
+  u32 b0, n;
+  if (!hyphen_ready()) return -1;
+  while (ws > k && letter(tl->g[ws - 1].cp)) ws--;
+  while (we < tl->ng && letter(tl->g[we].cp)) we++;
+  if (we - ws < 4 || !letter(tl->g[j].cp)) return -1;
+  b0 = (u32)tl->g[ws].byte;
+  n = (u32)(we < tl->ng ? tl->g[we].byte : (i32)strlen(tp->text)) - b0;
+  if (n > MAXWORD || !hyphen_word(tp->text + b0, n, brk)) return -1;
+  for (b = k; b < ws; b++) w0 += tl->g[b].adv;
+  w = w0;
+  for (b = ws + 1; b <= j; b++) {
+    w += tl->g[b - 1].adv;
+    if (tl->g[b].dead || tl->g[b - 1].dead || !brk[tl->g[b].byte - b0]) continue;
+    if (w + hyphen_w(tp, rf, &tl->g[b - 1]) <= avail + 1e-9) best = b;
+  }
+  return best;
+}
 TextLayout *text_layout(const TextParams *tpin)
 {
   TextLayout *tl = (TextLayout *)calloc(1, sizeof *tl);
@@ -577,16 +635,16 @@ TextLayout *text_layout(const TextParams *tpin)
       TGlyph *g = &tl->g[i];
       int r = g->run;
       if (g->dead) { g->adv = 0; continue; }
-      if (tp->vertical) g->adv = (rf[r].asc + rf[r].desc) * g->scale + tp->run[r].tracking * tp->run[r].size / 1000;
+      if (tp->vertical) g->adv = (rf[r].asc + rf[r].desc) * g->scale * text_vscale(&tp->run[r]) + tp->run[r].tracking * tp->run[r].size / 1000;
       else {
-        g->adv = hadv(&rf[r], g->glyph) * g->scale * (g->cp == '\t' ? 4 : 1) + tp->run[r].tracking * tp->run[r].size / 1000;
+        g->adv = hadv(&rf[r], g->glyph) * g->scale * text_hscale(&tp->run[r]) * (g->cp == '\t' ? 4 : 1) + tp->run[r].tracking * tp->run[r].size / 1000;
         if (tp->kern && i > g0) {
           i32 pi = i - 1;
           TGlyph *pg;
           while (pi > g0 && tl->g[pi].dead) pi--;
           pg = &tl->g[pi];
           if (!pg->dead && pg->run == g->run && pg->scale == g->scale && rf[r].face && rf[r].face->upm)
-            pg->adv += (double)text_kern(rf[r].face, pg->glyph, g->glyph) * rf[r].size * g->scale / rf[r].face->upm;
+            pg->adv += (double)text_kern(rf[r].face, pg->glyph, g->glyph) * rf[r].size * g->scale * text_hscale(&tp->run[r]) / rf[r].face->upm;
         }
       }
     }
@@ -600,7 +658,12 @@ TextLayout *text_layout(const TextParams *tpin)
       avail = tp->box ? (tp->vertical ? tp->bh : tp->bw - tp->indent_left - tp->indent_right - (k == g0 ? tp->indent : 0)) : 1e30;
       while (j < tl->ng) {
         TGlyph *g = &tl->g[j];
-        if (w + g->adv > avail + 1e-9 && j > k && !is_space(g->cp)) { if (brk > k) j = brk; break; }
+        if (w + g->adv > avail + 1e-9 && j > k && !is_space(g->cp)) {
+          i32 hb = tp->box && tp->hyphenate && !tp->vertical ? hyphen_at(tp, tl, rf, k, j, avail) : -1;   /* (r3) */
+          if (hb > k) { j = hb; tl->g[j - 1].hyph = 1; }
+          else if (brk > k) j = brk;
+          break;
+        }
         w += g->adv;
         if (is_space(g->cp) || g->cp == '-') brk = j + 1;
         j++;
@@ -622,9 +685,11 @@ TextLayout *text_layout(const TextParams *tpin)
         if (f->lead > lead) lead = f->lead;
       }
       if (tp->vertical) { asc = desc = lead / 2; }
-      /* its width without the spaces at its end */
-      lw = w;
+      /* its width without the spaces at its end (r3: with the hyphen where a word breaks) */
+      lw = 0;
+      for (i = k; i < j; i++) lw += tl->g[i].adv;
       for (i = j - 1; i >= k && is_space(tl->g[i].cp); i--) lw -= tl->g[i].adv;
+      if (j > k && tl->g[j - 1].hyph) lw += hyphen_w(tp, rf, &tl->g[j - 1]);
       for (i = k; i < j && i <= j - 1; i++) if (is_space(tl->g[i].cp)) nsp++;
       for (i = j - 1; i >= k && is_space(tl->g[i].cp); i--) nsp--;
       /* where it starts */
@@ -992,6 +1057,24 @@ static int cv_need(Canvas *c, Box need)
   return 1;
 }
 /* coverage w x h at x0, y0 laid on in colour col */
+/* how cv_put treats coverage: 0 hard, 1 as it is, 2 Crisp (steeper), 3 Strong (heavier) */
+static int aa_mode(const TextParams *tp) { return tp->aa == TAA_NONE ? 0 : tp->aa == TAA_CRISP ? 2 : tp->aa == TAA_STRONG ? 3 : 1; }
+static u8 aa_lut[2][256]; static int aa_lut_ok;
+static int aa_curve(int a, int aa)
+{
+  if (aa < 2) return a;
+  if (!aa_lut_ok) {
+    int k;
+    for (k = 0; k < 256; k++) {
+      double v = k / 255.0, c = (v - 0.5) * 1.6 + 0.5;
+      aa_lut[0][k] = (u8)(c < 0 ? 0 : c > 1 ? 255 : c * 255 + 0.5);            /* Crisp: the edge's ramp narrowed */
+      aa_lut[1][k] = (u8)((1 - pow(1 - v, 2.2)) * 255 + 0.5);                  /* Strong: thin parts filled out */
+    }
+    aa_lut[0][0] = aa_lut[1][0] = 0;
+    aa_lut_ok = 1;
+  }
+  return aa_lut[aa - 2][a];
+}
 static void cv_put(Canvas *c, i32 x0, i32 y0, i32 w, i32 h, const u8 *cov, u32 col, int aa)
 {
   i32 x, y, bw;
@@ -1007,6 +1090,7 @@ static void cv_put(Canvas *c, i32 x0, i32 y0, i32 w, i32 h, const u8 *cov, u32 c
       u8 *p;
       if (!a || px < c->b.x0 || px >= c->b.x1) continue;
       if (!aa) { if (a < 128) continue; a = 255; }
+      else if (aa > 1 && !(a = aa_curve(a, aa))) continue;
       p = c->px + ((size_t)(py - c->b.y0) * bw + (px - c->b.x0)) * 4;
       if (!p[3]) { p[0] = cr; p[1] = cg; p[2] = cb; p[3] = (u8)a; }
       else if (p[0] == cr && p[1] == cg && p[2] == cb) { if (a > p[3]) p[3] = (u8)a; }
@@ -1083,35 +1167,38 @@ static void fill_poly(Render *R, Poly *pl, u32 col, int bold, int aa)
   }
   free(cov);
 }
+double text_hscale(const TextRun *r) { return r->hscale > 0 && r->hscale != 100 ? (r->hscale < 1 ? 0.01 : r->hscale > 1000 ? 10 : r->hscale / 100) : 1; }
+double text_vscale(const TextRun *r) { return r->vscale > 0 && r->vscale != 100 ? (r->vscale < 1 ? 0.01 : r->vscale > 1000 ? 10 : r->vscale / 100) : 1; }
 static int bold_radius(const TextRun *r) { int b = (int)(r->size / 30 + 0.5); return r->faux_bold ? (b < 1 ? 1 : b) : 0; }
 static void draw_glyph(Render *R, const TGlyph *g)
 {
   const TextParams *tp = R->tp;
   const TextRun *run = &tp->run[g->run];
   const RunFont *f = &R->rf[g->run];
-  int bold = bold_radius(run), aa = tp->aa != TAA_NONE;
+  int bold = bold_radius(run), aa = aa_mode(tp);
   u32 col = run->color;
   double ox = g->x, oy = g->y;                             /* the glyph's origin (pen on the baseline) */
   double size = run->size * (g->scale > 0 ? g->scale : 1);   /* (1.2: small caps, super- and subscript) */
+  double hs = text_hscale(run), vs = text_vscale(run);       /* (r3: horizontal and vertical scale) */
   if (is_space(g->cp) || g->cp < 32 || g->dead) return;
   if (tp->vertical) { ox = g->x - hadv(f, g->glyph) * g->scale / 2; oy = g->y + f->asc * g->scale; }
   if (f->ami) {
     /* an Amiga bitmap font: its glyph scaled (nearest), placed as it lies */
     int adv, kern, w, sw, sh, x, y, top;
-    double s = size / f->ami->ysize;
+    double s = size / f->ami->ysize, sxs = s * hs, sys = s * vs;
     u8 *cov, *sc;
     if (R->collect) return;
     amifont_char(f->ami, g->glyph, &adv, &kern, &w, NULL);
     if (w <= 0 || !(cov = (u8 *)malloc((size_t)w * f->ami->ysize))) return;
     amifont_char(f->ami, g->glyph, &adv, &kern, &w, cov);
-    sw = (int)ceil(w * s - 1e-9); sh = (int)ceil(f->ami->ysize * s - 1e-9);
+    sw = (int)ceil(w * sxs - 1e-9); sh = (int)ceil(f->ami->ysize * sys - 1e-9);
     if ((sc = (u8 *)malloc((size_t)sw * sh)) != NULL) {
       for (y = 0; y < sh; y++) for (x = 0; x < sw; x++) {
-        int sx = (int)(x / s), sy = (int)(y / s);
+        int sx = (int)(x / sxs), sy = (int)(y / sys);
         sc[y * sw + x] = cov[(sy < f->ami->ysize ? sy : f->ami->ysize - 1) * w + (sx < w ? sx : w - 1)];
       }
-      top = (int)floor(oy + R->oy + 0.5) - (int)floor((f->ami->baseline + 1) * s + 0.5);
-      x = (int)floor(ox + R->ox + kern * s);
+      top = (int)floor(oy + R->oy + 0.5) - (int)floor((f->ami->baseline + 1) * sys + 0.5);
+      x = (int)floor(ox + R->ox + kern * sxs);
       if (bold) { u8 *d = dilate(sc, sw, sh, bold); if (d) cv_put(&R->cv, x - bold, top - bold, sw + 2 * bold, sh + 2 * bold, d, col, aa); free(d); }
       else cv_put(&R->cv, x, top, sw, sh, sc, col, aa);
       free(sc);
@@ -1120,7 +1207,7 @@ static void draw_glyph(Render *R, const TGlyph *g)
     return;
   }
   if (!f->face) return;
-  if (!R->complex && !R->collect) {
+  if (!R->complex && !R->collect && hs == 1 && vs == 1) {
     TTRaster *r = raster_for(f->face, tp->aa == TAA_SHARP);
     TTBitmap bm;
     i32 gx, gy;
@@ -1150,7 +1237,7 @@ static void draw_glyph(Render *R, const TGlyph *g)
     poly_init(&pl);
     for (i = 0; i < ns; i++) {
       i32 *s = seg + 4 * i;
-      double lx0 = s[0] * k, ly0 = s[1] * k, lx1 = s[2] * k, ly1 = s[3] * k, len;
+      double lx0 = s[0] * k * hs, ly0 = s[1] * k * vs, lx1 = s[2] * k * hs, ly1 = s[3] * k * vs, len;
       int sub, j;
       if (i == 0 || s[0] != seg[4 * i - 2] || s[1] != seg[4 * i - 1]) {
         if (i) poly_end(&pl, 1);
@@ -1207,7 +1294,7 @@ static void draw_lines(Render *R)
           int k;
           if (!R->complex) for (k = 0; k < 4; k++) pl.xy[2 * k + 1] = floor(pl.xy[2 * k + 1] + R->oy + 0.5) - R->oy;
         }
-        fill_poly(R, &pl, run->color, 0, R->tp->aa != TAA_NONE);
+        fill_poly(R, &pl, run->color, 0, aa_mode(R->tp));
         poly_free(&pl);
         i = j;
       }
@@ -1235,7 +1322,15 @@ static int render(const TextParams *tp, i32 w, i32 h, Canvas *cv, Poly *collect)
   }
   for (r = 0; r < tl->tp->nruns; r++) if (tl->tp->run[r].faux_italic || tl->tp->run[r].size > 400) R.complex = 1;
   if (R.complex) R.ox = R.oy = 0;
-  for (i = 0; i < tl->ng && !R.cv.oom; i++) if (!tl->ln[tl->g[i].line].hidden) draw_glyph(&R, &tl->g[i]);
+  for (i = 0; i < tl->ng && !R.cv.oom; i++) if (!tl->ln[tl->g[i].line].hidden) {
+    draw_glyph(&R, &tl->g[i]);
+    if (tl->g[i].hyph) {
+      /* r3: the hyphen where a word breaks */
+      TGlyph h = tl->g[i];
+      h.cp = '-'; h.glyph = glyph_of(&R.rf[h.run], '-'); h.x += h.adv; h.dead = 0; h.hyph = 0;
+      draw_glyph(&R, &h);
+    }
+  }
   draw_lines(&R);
   free(R.rf);
   text_layout_free(tl);

@@ -372,7 +372,7 @@ static const char *const limitlist[] = { "Contiguous", "Discontiguous", "Find Ed
 static const char *fontlist[96];
 /* 0.9: type and shapes */
 static const char *const tstyles[] = { "Regular", "Bold", "Italic", "Bold Italic" };
-static const char *const taa[] = { "None", "Sharp", "Smooth" };
+static const char *const taa[] = { "None", "Sharp", "Smooth", "Crisp", "Strong" };   /* (r3: Crisp, Strong) */
 static const char *const taligns[] = { "Left", "Centre", "Right", "Justify", "Just. All" };
 static const char *const shmodes[] = { "Shape Layer", "Pixels" };
 static const char *const salign[] = { "Centre", "Inside", "Outside" };
@@ -490,7 +490,7 @@ static int fields_for(int t, Field *f)
     if (t == TL_TYPEMASK) SELOPS();
     if (i) CHOICE("", opt.text_font, fontlist, i);
     CHOICE("", opt.text_style, tstyles, 4);
-    SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 3); CHOICE("", opt.text_align, taligns, 5);
+    SCRUB("Size:", opt.text_size, 1, 2000, "px"); CHOICE("", opt.text_aa, taa, 5); CHOICE("", opt.text_align, taligns, 5);
     if (t != TL_TYPEMASK) { fg_show = doc ? (int)doc->fg : 0; SWATCH("", fg_show, ID_TEXTCOLOR); ICONBTN("Warp", IC_WARP, ID_WARPTEXT); }
     ICONBTN("Character", IC_FONTDLG, ID_TYPECHAR); ICONBTN("Paragraph", IC_PARADLG, ID_TYPEPARA);
     if (type_editing) BUTTON("Commit", ID_COMMIT);
@@ -644,7 +644,7 @@ static const char *field_help(const Field *f)
     { "Snapshot", "Takes a snapshot of the layer as it is now for the History Brush to paint back (Edit > Take Snapshot)." },
     { "From History", "The History Brush paints back the snapshot clicked last in the History panel instead." },
     /* 0.9 */
-    { "AA:", "How the text's edges are smoothed: None (hard), Sharp or Smooth." },
+    { "AA:", "How the text's edges are smoothed: None (hard), Sharp, Smooth, Crisp or Strong." },
     { "Warp", "Bends the text into an arc, a wave, a flag and other shapes, and can still be edited." },
     { "Character", "The font, size, leading, tracking, baseline shift, colour and styles of the selected text." },
     { "Paragraph", "Alignment, indents and the space before and after paragraphs." },
@@ -664,7 +664,7 @@ static const char *field_help(const Field *f)
   if (f->kind == F_SCRUB && f->val == &opt.text_size) return "The text's size in pixels: the selected text, or all of it, takes it.";
   for (i = 0; i < (int)(sizeof h / sizeof h[0]); i++) if (!strcmp(h[i].label, f->label)) return h[i].help;
   if (f->kind == F_CHOICE && f->choices == fontlist) return "The font the text is written in (Amiga bitmap fonts are marked).";
-  if (f->kind == F_CHOICE && f->choices == taa) return "How the text's edges are smoothed: None (hard), Sharp or Smooth.";
+  if (f->kind == F_CHOICE && f->choices == taa) return "How the text's edges are smoothed: None (hard), Sharp, Smooth, Crisp or Strong.";
   if (f->kind == F_CHOICE && f->choices == taligns) return "How the lines line up: left, centre, right, or justified to the paragraph's box.";
   if (f->kind == F_CHOICE && f->choices == tstyles) return "Regular, bold, italic or both: the font's own bold and italic faces when it has them, else drawn slanted or heavier.";
   if (f->kind == F_CHOICE && f->choices == shmodes) return "A shape layer stays sharp and can be changed later (Layer > Shape Properties); Pixels paints the shape on the layer in use.";

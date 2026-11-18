@@ -24,6 +24,9 @@ int  r3_command(Doc *d, ULONG id);
 /* Fill Path with its dialog: contents (the foreground colour, the pattern, the history), opacity,
    mode, anti-aliasing; previewed on the picture */
 void r3_fill_path(Doc *d, const Path *p);
+/* the hyphenation patterns for paragraph type, loaded once from PROGDIR:Dict (the interface's
+   language's hyph_xx_XX.dic, else British English); 0 if there are none */
+int  r3_hyphen_patterns(void);
 /* (canvas.c) while set, the picture's presses (phase 0), drags (1) and releases (2) go here in
    image coordinates instead of to the tools; the box it returns is drawn again */
 extern Box (*canvas_brush_hook)(int phase, double x, double y);
