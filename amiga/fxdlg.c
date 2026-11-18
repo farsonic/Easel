@@ -192,7 +192,7 @@ static void dlg_layer_style(Doc *d, int page)
   Object *list, *w, *grp;
   int k, j, ok;
   Layer *l = d->lay[d->active];
-  if (l->kind == LK_GROUP || l->kind == LK_ADJUST) { ask("OK", "%s", tr("Layer styles go on pixel, type, shape and fill layers, not on groups or adjustment layers.")); return; }
+  if (l->kind == LK_ADJUST) { ask("OK", "%s", tr("Layer styles go on pixel, type, shape, fill layers and groups, not on adjustment layers.")); return; }   /* (1.2: groups too) */
   ldoc = d;
   memset(&ls, 0, sizeof ls);
   ls.layer = d->active;
@@ -339,7 +339,7 @@ int layerstyle_command(Doc *d, ULONG id)
 void layerstyle_menus(Doc *d, void (*menu_set)(ULONG id, ULONG attr, ULONG val))
 {
   Layer *l = d ? d->lay[d->active] : NULL;
-  int styled = l && l->kind != LK_GROUP && l->kind != LK_ADJUST, i, any = 0, hidden = 0;
+  int styled = l && l->kind != LK_ADJUST, i, any = 0, hidden = 0;
   ULONG id;
   for (id = ID_FX0; id < ID_FX0 + FX_N; id++) menu_set(id, MUIA_Menuitem_Enabled, styled);
   menu_set(ID_FXBLENDOPT, MUIA_Menuitem_Enabled, l != NULL);

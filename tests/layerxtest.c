@@ -16,6 +16,7 @@
 #include "core/paint.h"
 #include "core/live.h"
 #include "core/codec.h"
+#include "core/fx.h"
 
 static int fails, tests;
 #define CHECK(c, msg) do { tests++; if (!(c)) { fails++; printf("FAIL %s (line %d)\n", msg, __LINE__); } } while (0)
@@ -284,6 +285,30 @@ static void test_ora(void)
   doc_free(d);
 }
 
+static void test_group_fx(void)
+{
+  Doc *d = square_doc();
+  int g;
+  u8 c[4];
+  LayerFx fx;
+  d->active = 1; d->lay[1]->picked = 0;
+  g = doc_group_layers(d);
+  CHECK(g && d->nlay == 3 && d->lay[2]->kind == LK_GROUP, "grouped");
+  fx_defaults_all(&fx);
+  fx.e[FX_DROPSHADOW].on = 1; fx.e[FX_DROPSHADOW].distance = 5; fx.e[FX_DROPSHADOW].angle = 0; fx.e[FX_DROPSHADOW].size = 0;
+  fx.e[FX_DROPSHADOW].opacity = 255; fx.e[FX_DROPSHADOW].color = 0xFF0000; fx.e[FX_DROPSHADOW].flags = 0; fx.e[FX_DROPSHADOW].spread = 0; fx.e[FX_DROPSHADOW].blend = BM_NORMAL;
+  CHECK(doc_set_fx(d, 2, &fx), "a style on a group");
+  comp_px(d, 17, 25, c);
+  CHECK(c[0] > 200 && c[1] < 60, "the group's drop shadow (the light from the right: to the left)");
+  comp_px(d, 30, 25, c);
+  CHECK(c[2] > 200, "the members over it");
+  /* a member changes: the group's shadow follows */
+  doc_begin(d, "Paint"); doc_note_layer(d, 1, doc_box(d)); memset(d->lay[1]->px, 0, (size_t)W * H * 4); doc_end(d);
+  comp_px(d, 17, 25, c);
+  CHECK(c[0] == 0x40, "shadow gone with the member's pixels");
+  doc_free(d);
+}
+
 int main(int argc, char **argv)
 {
   if (argc > 1) tmpdir = argv[1];
@@ -294,6 +319,7 @@ int main(int argc, char **argv)
   test_smart();
   test_artboards_frames();
   test_ora();
+  test_group_fx();
   printf("%d tests, %d failed\n", tests, fails);
   return fails != 0;
 }

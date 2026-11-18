@@ -345,7 +345,7 @@ static void test_kinds(void)
   CHECK(px(c, 50, 11)[0] == 255 && px(c, 50, 11)[1] == 0 && px(c, 50, 7)[1] == 255, "stroke round a masked fill layer");
   free(c);
   i = doc_new_group(d, "Group");
-  CHECK(!doc_set_fx(d, i, &f), "a group takes none");
+  CHECK(doc_set_fx(d, i, &f), "a group takes one too (1.2)");
   doc_free(d);
 }
 

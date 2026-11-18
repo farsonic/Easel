@@ -66,7 +66,7 @@ int fx_has(const Layer *l)
 }
 int fx_any(const Layer *l)
 {
-  if (l->fx.hidden || (l->kind != LK_PIXEL && l->kind != LK_FILL && l->kind != LK_TEXT && l->kind != LK_SHAPE)) return 0;
+  if (l->fx.hidden || (l->kind != LK_PIXEL && l->kind != LK_FILL && l->kind != LK_TEXT && l->kind != LK_SHAPE && l->kind != LK_GROUP)) return 0;   /* (1.2: groups too) */
   return fx_has(l);
 }
 void fx_light(const Doc *d, int *angle, int *alt)
@@ -86,10 +86,12 @@ void fx_free(Layer *l) { cache_free((FxCache *)l->fxc); l->fxc = NULL; l->fx_ok 
 
 /* ------------------------------------------------------------------ the pieces */
 /* the layer's shape at canvas pixel x, y: alpha times mask (the mask's density counted) */
+static const u8 *group_alpha;          /* 1.2: a group's shape while its effects are worked out (build) */
 static int shape_at(Doc *d, Layer *l, const u8 *mask, i32 x, i32 y)
 {
   int a;
-  if (l->kind == LK_FILL) a = 255;
+  if (l->kind == LK_GROUP) a = group_alpha ? group_alpha[(long)y * d->w + x] : 0;
+  else if (l->kind == LK_FILL) a = 255;
   else if (l->kind == LK_PIXEL) a = l->px ? l->px[((long)y * d->w + x) * 4 + 3] : 0;
   else {
     Box b = l->livebox;
@@ -250,17 +252,44 @@ static u8 *soft(const u8 *a, const float *sd, i32 bw, i32 bh, int inner, int gro
   return p;
 }
 /* the effects' planes made for layer l */
+static FxCache *build_shape(Doc *d, Layer *l, FxCache *c, const u8 *mask, const LayerFx *fx);
 static FxCache *build(Doc *d, Layer *l)
 {
   FxCache *c = (FxCache *)calloc(1, sizeof *c);
   const u8 *mask = layer_mask_used(d, l);
   const LayerFx *fx = &l->fx;
+  i32 x, y;
+  if (!c) return NULL;
+  if (l->kind == LK_GROUP) {
+    /* 1.2: a group's shape is its members' composite's alpha (worked out here, kept only while building) */
+    int g, lo;
+    u8 *ga = (u8 *)calloc((size_t)d->w * d->h, 1), *row = (u8 *)malloc((size_t)d->w * 4);
+    for (g = 0; g < d->nlay && d->lay[g] != l; g++) continue;
+    if (!ga || !row || g >= d->nlay) { free(ga); free(row); free(c); return NULL; }
+    for (lo = g; lo > 0 && d->lay[lo - 1]->depth > l->depth; lo--) continue;
+    for (y = 0; y < d->h; y++) {
+      doc_composite_range(d, lo, g, l->depth + 1, box_make(0, y, d->w, y + 1), row, (long)d->w * 4, 0);
+      for (x = 0; x < d->w; x++) ga[(long)y * d->w + x] = row[x * 4 + 3];
+    }
+    free(row);
+    {
+      const u8 *save = group_alpha;
+      group_alpha = ga;
+      c = build_shape(d, l, c, mask, fx);
+      group_alpha = save;
+    }
+    free(ga);
+    return c;
+  }
+  return build_shape(d, l, c, mask, fx);
+}
+static FxCache *build_shape(Doc *d, Layer *l, FxCache *c, const u8 *mask, const LayerFx *fx)
+{
   Box cb = box_make(d->w, d->h, 0, 0), scan = doc_box(d);
   i32 x, y, bw, bh;
   long i, n;
   int k, reach, la, lalt, need_sd = 0;
   float *sd = NULL;
-  if (!c) return NULL;
   c->w = d->w; c->h = d->h; c->made = *fx;
   fx_light(d, &la, &lalt);
   c->la = la; c->lalt = lalt;
@@ -495,7 +524,7 @@ void fx_over(Doc *d, Layer *l, i32 y, i32 x0, i32 n, u8 *acc, int keep)
 }
 
 /* ------------------------------------------------------------------ the menu's operations */
-static int fx_layer_ok(const Doc *d, int i) { return i >= 0 && i < d->nlay && d->lay[i]->kind != LK_GROUP && d->lay[i]->kind != LK_ADJUST; }
+static int fx_layer_ok(const Doc *d, int i) { return i >= 0 && i < d->nlay && d->lay[i]->kind != LK_ADJUST; }   /* (1.2: groups too) */
 static void sanitize(LayerFx *fx)
 {
   int k;
@@ -607,7 +636,7 @@ int doc_fx_to_layers(Doc *d, int i)
   Layer *l, *nl[FX_N + 1];
   int nb = 0, na = 0, j, m, total;
   FxCache *c;
-  if (!fx_layer_ok(d, i) || !fx_any(d->lay[i])) return 0;
+  if (!fx_layer_ok(d, i) || !fx_any(d->lay[i]) || d->lay[i]->kind == LK_GROUP) return 0;   /* (1.2: a group's effects stay effects) */
   l = d->lay[i];
   if (!(c = ensure(d, l))) return 0;
   for (total = 0, j = 0; j < (int)(sizeof order / sizeof order[0]); j++) {

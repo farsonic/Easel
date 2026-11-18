@@ -546,7 +546,8 @@ static void put_group(Comp *c, int lo, int g, u8 *acc)
   if (!G->visible || !G->opacity) return;
   mask = layer_mask_used(c->d, G);
   if (G->artboard && (c->y < G->abox.y0 || c->y >= G->abox.y1)) return;   /* 1.2: an artboard shows only in its box */
-  if (G->blend == BM_PASS && G->opacity == 255 && !mask && !G->artboard) { comp_range(c, lo, g, G->depth + 1, acc); return; }
+  if (G->blend == BM_PASS && G->opacity == 255 && !mask && !G->artboard && !fx_any(G)) { comp_range(c, lo, g, G->depth + 1, acc); return; }
+  if (fx_any(G)) fx_under(c->d, G, c->y, c->x0, c->n, acc, 0);   /* 1.2: a group's effects: shadows and glows below it */
   if (!(t = row_get(c))) { comp_range(c, lo, g, G->depth + 1, acc); return; }
   if (G->blend == BM_PASS) {
     /* the members straight onto a copy of what's below, then mixed in by the group's opacity and mask */
@@ -574,6 +575,7 @@ static void put_group(Comp *c, int lo, int g, u8 *acc)
     }
   }
   c->used--;
+  if (fx_any(G)) fx_over(c->d, G, c->y, c->x0, c->n, acc, 0);    /* 1.2: and the rest over it */
 }
 static void comp_range(Comp *c, int lo, int hi, int depth, u8 *acc)
 {
@@ -1139,6 +1141,7 @@ void doc_end(Doc *d)
   /* 1.1: layers whose pixels or mask changed have their effects drawn again */
   if (u->whole) for (k = 0; k < d->nlay; k++) d->lay[k]->fx_ok = 0;
   for (k = 0; k < u->ntiles; k++) if (u->tiles[k].plane < 2 && u->tiles[k].layer < d->nlay) d->lay[u->tiles[k].layer]->fx_ok = 0;
+  for (k = 0; k < d->nlay; k++) if (d->lay[k]->kind == LK_GROUP) d->lay[k]->fx_ok = 0;   /* 1.2: groups' effects follow their members */
   list_free(d->redo); d->redo = NULL;
   d->dirty = 1;
   d->undo_depth++;
