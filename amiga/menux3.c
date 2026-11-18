@@ -210,87 +210,94 @@ static void open_as_cmd(void)
 }
 
 /* ================================================================== Save for Web (Legacy) */
+static const int dith_of[] = { DI_NONE, DI_FS, DI_BAYER4, DI_RANDOM };
+static struct { Doc *d; SfwOpts o; Object *pb, *tb, *fc, *nc, *mc, *dc, *qs, *pc, *tc, *sc; Rgba opt; } sw;
+static void sfw_read(void)
+{
+  SfwOpts *o = &sw.o;
+  o->fmt = (int)xget(sw.fc, MUIA_Cycle_Active); o->colors = (int)numof(sw.nc); o->method = (int)xget(sw.mc, MUIA_Cycle_Active);
+  o->dither = dith_of[xget(sw.dc, MUIA_Cycle_Active) & 3]; o->quality = (int)xget(sw.qs, MUIA_Numeric_Value); o->pct = (int)numof(sw.sc);
+  o->progressive = (int)xget(sw.pc, MUIA_Selected); o->transparency = (int)xget(sw.tc, MUIA_Selected);
+  if (o->colors < 2) o->colors = 2;
+  if (o->colors > 256) o->colors = 256;
+  if (o->pct < 1 || o->pct > 1000) o->pct = 100;
+}
+/* the dialog's own buttons, while it stays open: Matte..., Preview */
+static void sfw_each(ULONG id)
+{
+  static char sb[120], sz[16];
+  u8 *file;
+  size_t len = 0;
+  if (id == ID_DLGBTN0 + 1) { LONG c = pick_color("Matte", sw.o.matte); if (c >= 0) sw.o.matte = (u32)c; return; }
+  if (id != ID_DLGBTN0) return;
+  sfw_read();
+  /* the preview: written as it will be, then read back */
+  set(app, MUIA_Application_Sleep, TRUE);
+  set(sw.pb, MUIA_M3Pic_Image, NULL);
+  rgba_free(&sw.opt);
+  file = sfw_encode(sw.d, &sw.o, &len);
+  if (file) sfw_preview(file, len, &sw.opt);
+  free(file);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!file) { set(sw.tb, MUIA_Text_Contents, (ULONG)tr("Not enough memory")); return; }
+  size_text(sz, len);
+  snprintf(sb, sizeof sb, "%s %s, %ld s (14.4k), %ld s (56k)", sfw_names[sw.o.fmt], sz, sfw_seconds(len, 14400), sfw_seconds(len, 57600));
+  set(sw.tb, MUIA_Text_Contents, (ULONG)sb);
+  set(sw.pb, MUIA_M3Pic_Image, (ULONG)&sw.opt);
+}
 static void sfw_cmd(Doc *d)
 {
-  static SfwOpts o;
   static int set_up;
   static const char *const methods[] = { "Median Cut", "Octree", "Wu", NULL };
   static const char *const dithers[] = { "No Dither", "Diffusion", "Pattern", "Noise", NULL };
-  static const int dith_of[] = { DI_NONE, DI_FS, DI_BAYER4, DI_RANDOM };
-  Object *w, *pa, *pb, *ta, *tb, *fc, *nc, *mc, *dc, *qs, *pc, *tc, *sc, *mb;
-  Rgba orig, opt;
-  u8 *file = NULL;
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  Object *w, *pa, *ta;
+  Rgba orig;
+  u8 *file;
   size_t len = 0;
   ULONG id;
   int dk = 1, k;
-  char sa[80], sb[120], sz[16], path[512];
-  if (!set_up) { sfw_defaults(&o); set_up = 1; }
-  for (k = 0; k < 4; k++) if (dith_of[k] == o.dither) dk = k;
-  memset(&opt, 0, sizeof opt);
+  char sa[80], sz[16], path[512];
+  if (!set_up) { sfw_defaults(&sw.o); set_up = 1; }
+  sw.d = d;
+  for (k = 0; k < 4; k++) if (dith_of[k] == sw.o.dither) dk = k;
+  memset(&sw.opt, 0, sizeof sw.opt);
   orig.w = d->w; orig.h = d->h;
   if (!(orig.px = doc_flat_rgba(d))) { say("Not enough memory to convert the picture."); return; }
-  sz[0] = 0;
   w = dialog_window("Save for Web (Legacy)", VGroup,
         Child, HGroup,
           Child, VGroup, Child, QTitleObject(tr("Original")), Child, pa = picture(&orig), Child, ta = TextObject, MUIA_Text_Contents, (ULONG)"", End, End,
-          Child, VGroup, Child, QTitleObject(tr("Optimized")), Child, pb = picture(NULL), Child, tb = TextObject, MUIA_Text_Contents, (ULONG)"", End, End,
+          Child, VGroup, Child, QTitleObject(tr("Optimized")), Child, sw.pb = picture(NULL), Child, sw.tb = TextObject, MUIA_Text_Contents, (ULONG)"", End, End,
         End,
         Child, ColGroup(4),
-          Child, label("Format:"), Child, fc = cycle(sfw_names, o.fmt), Child, label("Colors:"), Child, nc = numstr(o.colors),
-          Child, label("Palette:"), Child, mc = cycle(methods, o.method < 3 ? o.method : 0), Child, label("Dither:"), Child, dc = cycle(dithers, dk),
-          Child, label("Quality:"), Child, qs = slider(1, 100, o.quality), Child, label("Scale (%):"), Child, sc = numstr(o.pct),
-          Child, pc = check(o.progressive), Child, QLabel(tr("Progressive / Interlaced"), 0), Child, tc = check(o.transparency), Child, QLabel(tr("Transparency"), 0),
+          Child, label("Format:"), Child, sw.fc = cycle(sfw_names, sw.o.fmt), Child, label("Colors:"), Child, sw.nc = numstr(sw.o.colors),
+          Child, label("Palette:"), Child, sw.mc = cycle(methods, sw.o.method < 3 ? sw.o.method : 0), Child, label("Dither:"), Child, sw.dc = cycle(dithers, dk),
+          Child, label("Quality:"), Child, sw.qs = slider(1, 100, sw.o.quality), Child, label("Scale (%):"), Child, sw.sc = numstr(sw.o.pct),
+          Child, sw.pc = check(sw.o.progressive), Child, QLabel(tr("Progressive / Interlaced"), 0), Child, sw.tc = check(sw.o.transparency), Child, QLabel(tr("Transparency"), 0),
         End,
-        Child, HGroup, Child, mb = button("Matte...", ID_DLGBTN0 + 1), Child, HSpace(0), Child, button("Preview", ID_DLGBTN0), End,
+        Child, HGroup, Child, button("Matte...", ID_DLGBTN0 + 1), Child, HSpace(0), Child, button("Preview", ID_DLGBTN0), End,
       End, "Save...");
   if (!w) { free(orig.px); return; }
-  {
-    size_t n = (size_t)d->w * d->h * 4;
-    size_text(sz, n);
-    snprintf(sa, sizeof sa, "%ld x %ld, %s", (long)d->w, (long)d->h, sz);
-    set(ta, MUIA_Text_Contents, (ULONG)sa);
-  }
-  for (;;) {
-    static const ULONG ends2[] = { ID_DLGOK, ID_DLGBTN0, ID_DLGBTN0 + 1, 0 };
-    id = run_modal(w, ends2, NULL);
-    o.fmt = (int)xget(fc, MUIA_Cycle_Active); o.colors = (int)numof(nc); o.method = (int)xget(mc, MUIA_Cycle_Active);
-    o.dither = dith_of[xget(dc, MUIA_Cycle_Active) & 3]; o.quality = (int)xget(qs, MUIA_Numeric_Value); o.pct = (int)numof(sc);
-    o.progressive = (int)xget(pc, MUIA_Selected); o.transparency = (int)xget(tc, MUIA_Selected);
-    if (o.colors < 2) o.colors = 2;
-    if (o.colors > 256) o.colors = 256;
-    if (o.pct < 1 || o.pct > 1000) o.pct = 100;
-    if (id == ID_DLGBTN0 + 1) { LONG c = pick_color("Matte", o.matte); if (c >= 0) o.matte = (u32)c; continue; }
-    if (id != ID_DLGBTN0) break;
-    /* the preview: written as it will be, then read back */
-    set(app, MUIA_Application_Sleep, TRUE);
-    set(pb, MUIA_M3Pic_Image, NULL);
-    rgba_free(&opt); free(file);
-    file = sfw_encode(d, &o, &len);
-    if (file) sfw_preview(file, len, &opt);
-    set(app, MUIA_Application_Sleep, FALSE);
-    if (!file) { set(tb, MUIA_Text_Contents, (ULONG)tr("Not enough memory")); continue; }
-    size_text(sz, len);
-    snprintf(sb, sizeof sb, "%s %s, %ld s (14.4k), %ld s (56k)", sfw_names[o.fmt], sz, sfw_seconds(len, 14400), sfw_seconds(len, 57600));
-    set(tb, MUIA_Text_Contents, (ULONG)sb);
-    set(pb, MUIA_M3Pic_Image, (ULONG)&opt);
-  }
-  set(pa, MUIA_M3Pic_Image, NULL); set(pb, MUIA_M3Pic_Image, NULL);
+  size_text(sz, (size_t)d->w * d->h * 4);
+  snprintf(sa, sizeof sa, "%ld x %ld, %s", (long)d->w, (long)d->h, sz);
+  set(ta, MUIA_Text_Contents, (ULONG)sa);
+  id = run_modal(w, ends, sfw_each);
+  sfw_read();
+  set(pa, MUIA_M3Pic_Image, NULL); set(sw.pb, MUIA_M3Pic_Image, NULL);
   MUI_DisposeObject(w);
-  rgba_free(&opt); free(orig.px);
-  if (id != ID_DLGOK) { free(file); return; }
-  if (!file) {
-    set(app, MUIA_Application_Sleep, TRUE);
-    file = sfw_encode(d, &o, &len);
-    set(app, MUIA_Application_Sleep, FALSE);
-    if (!file) { free(file); say("Not enough memory to convert the picture."); return; }
-  }
+  rgba_free(&sw.opt); free(orig.px);
+  if (id != ID_DLGOK) return;
+  set(app, MUIA_Application_Sleep, TRUE);
+  file = sfw_encode(d, &sw.o, &len);
+  set(app, MUIA_Application_Sleep, FALSE);
+  if (!file) { say("Not enough memory to convert the picture."); return; }
   strcpy(path, m3dir);
   {
     DocView *v = cur_view();
     char nm[120];
     snprintf(nm, sizeof nm, "%s", v ? v->name : "Untitled");
     if (strrchr(nm, '.')) *strrchr(nm, '.') = 0;
-    strncat(nm, sfw_ext(o.fmt), sizeof nm - 1 - strlen(nm));
+    strncat(nm, sfw_ext(sw.o.fmt), sizeof nm - 1 - strlen(nm));
     AddPart((STRPTR)path, (STRPTR)nm, sizeof path);
   }
   if (m3_file_request(1, "Save the optimized picture as", path, sizeof path, NULL)) {
@@ -653,46 +660,56 @@ static void l1_utf8(const char *s, char *out, size_t cap)
   }
   out[o] = 0;
 }
+static struct { Doc *d; Object *fs, *rs, *mc, *wc, *ac; char find[128], repl[128]; int match_case, whole, all_layers, layer, pos; } fr;
+static void fr_read(void)
+{
+  snprintf(fr.find, sizeof fr.find, "%s", (const char *)xget(fr.fs, MUIA_String_Contents));
+  snprintf(fr.repl, sizeof fr.repl, "%s", (const char *)xget(fr.rs, MUIA_String_Contents));
+  fr.match_case = (int)xget(fr.mc, MUIA_Selected); fr.whole = (int)xget(fr.wc, MUIA_Selected); fr.all_layers = (int)xget(fr.ac, MUIA_Selected);
+}
+/* Find Next and Change, while the window stays open */
+static void fr_each(ULONG id)
+{
+  char f8[400], r8[400];
+  Doc *d = fr.d;
+  if (id != ID_DLGBTN0 && id != ID_DLGBTN0 + 1) return;
+  fr_read();
+  l1_utf8(fr.find, f8, sizeof f8); l1_utf8(fr.repl, r8, sizeof r8);
+  if (!f8[0]) return;
+  if (id == ID_DLGBTN0) {
+    /* the next one: its layer made active */
+    int nl, np;
+    if (type_find_next(d, fr.layer, fr.pos + 1, f8, fr.match_case, fr.whole, &nl, &np) || (fr.all_layers && type_find_next(d, 0, 0, f8, fr.match_case, fr.whole, &nl, &np))) {
+      if (!fr.all_layers && nl != d->active) { say("Not found."); return; }
+      fr.layer = nl; fr.pos = np; d->active = nl; refresh_all();
+    } else say("Not found.");
+    return;
+  }
+  if (!type_find_replace(d, fr.all_layers ? fr.layer : d->active, f8, r8, fr.match_case, fr.whole, 0)) say("Not found.");
+  refresh_all();
+}
 static void find_replace(Doc *d)
 {
-  static char find[128], repl[128];
-  static int match_case, whole, all_layers = 1;
-  static const ULONG ends[] = { ID_DLGOK, ID_DLGBTN0, ID_DLGBTN0 + 1, 0 };
-  Object *w, *fs, *rs, *mc, *wc, *ac;
-  ULONG id;
-  int layer = d->active, pos = -1;
+  static const ULONG ends[] = { ID_DLGOK, 0 };
+  static int set_up;
+  Object *w;
+  char f8[400], r8[400];
+  if (!set_up) { fr.all_layers = 1; set_up = 1; }
+  fr.d = d; fr.layer = d->active; fr.pos = -1;
   w = dialog_window("Find and Replace Text", VGroup,
-        Child, ColGroup(2), Child, label("Find What:"), Child, fs = textstr(find, 120), Child, label("Change To:"), Child, rs = textstr(repl, 120), End,
-        Child, HGroup, Child, ac = check(all_layers), Child, QLabel(tr("Search All Layers"), 0), Child, mc = check(match_case), Child, QLabel(tr("Case Sensitive"), 0),
-          Child, wc = check(whole), Child, QLabel(tr("Whole Word Only"), 0), Child, HSpace(0), End,
+        Child, ColGroup(2), Child, label("Find What:"), Child, fr.fs = textstr(fr.find, 120), Child, label("Change To:"), Child, fr.rs = textstr(fr.repl, 120), End,
+        Child, HGroup, Child, fr.ac = check(fr.all_layers), Child, QLabel(tr("Search All Layers"), 0), Child, fr.mc = check(fr.match_case), Child, QLabel(tr("Case Sensitive"), 0),
+          Child, fr.wc = check(fr.whole), Child, QLabel(tr("Whole Word Only"), 0), Child, HSpace(0), End,
         Child, HGroup, Child, button("Find Next", ID_DLGBTN0), Child, button("Change", ID_DLGBTN0 + 1), Child, HSpace(0), End,
       End, "Change All");
   if (!w) return;
-  set(w, MUIA_Window_ActiveObject, (ULONG)fs);
-  for (;;) {
-    char f8[400], r8[400];
+  set(w, MUIA_Window_ActiveObject, (ULONG)fr.fs);
+  if (run_modal(w, ends, fr_each) == ID_DLGOK) {
     int n;
-    id = run_modal(w, ends, NULL);
-    snprintf(find, sizeof find, "%s", (const char *)xget(fs, MUIA_String_Contents));
-    snprintf(repl, sizeof repl, "%s", (const char *)xget(rs, MUIA_String_Contents));
-    match_case = (int)xget(mc, MUIA_Selected); whole = (int)xget(wc, MUIA_Selected); all_layers = (int)xget(ac, MUIA_Selected);
-    if (id != ID_DLGOK && id != ID_DLGBTN0 && id != ID_DLGBTN0 + 1) break;
-    l1_utf8(find, f8, sizeof f8); l1_utf8(repl, r8, sizeof r8);
-    if (!f8[0]) continue;
-    if (id == ID_DLGBTN0) {
-      /* the next one: its layer made active */
-      int nl, np;
-      if (type_find_next(d, layer, pos + 1, f8, match_case, whole, &nl, &np) || (all_layers && type_find_next(d, 0, 0, f8, match_case, whole, &nl, &np))) {
-        if (!all_layers && nl != d->active) { say("Not found."); continue; }
-        layer = nl; pos = np; d->active = nl; refresh_all();
-      } else say("Not found.");
-      continue;
-    }
-    n = type_find_replace(d, all_layers ? -1 : d->active, f8, r8, match_case, whole, id == ID_DLGOK);
-    refresh_all();
-    if (id == ID_DLGOK) { sayn("%ld changed.", n); break; }
-    if (!n) say("Not found.");
-  }
+    fr_read();
+    l1_utf8(fr.find, f8, sizeof f8); l1_utf8(fr.repl, r8, sizeof r8);
+    if (f8[0]) { n = type_find_replace(d, fr.all_layers ? -1 : d->active, f8, r8, fr.match_case, fr.whole, 1); refresh_all(); sayn("%ld changed.", n); }
+  } else fr_read();
   MUI_DisposeObject(w);
 }
 
