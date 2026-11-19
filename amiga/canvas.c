@@ -1446,7 +1446,7 @@ static void place_text(struct Data *d, Object *obj, double x, double y)
   Face *f;
   Box b;
   size_t i, o = 0;
-  if (!doc || !font_count()) { ask("OK", "%s", tr("There are no TrueType fonts to draw text with.\nKeep the TrueType drawer next to Easel.")); return; }
+  if (!doc || !font_count()) { ask("OK", "%s", tr("There are no TrueType fonts to draw text with.\nKeep the TrueType drawer next to Easel or in Bureau:.")); return; }
   if (!ask_string("Text", "Text:", buf, sizeof buf) || !buf[0]) return;
   for (i = 0; buf[i] && o + 4 < sizeof u; i++) {
     UBYTE c = (UBYTE)buf[i];
@@ -1554,7 +1554,7 @@ static int ty_new(Doc *doc, double x, double y, int box, double w, double h)
   TextParams *tp = (TextParams *)malloc(sizeof(TextParams));
   int i, mask = tool == TL_TYPEMASK;
   if (!tp) return 0;
-  if (!font_count()) { free(tp); ask("OK", "%s", tr("There are no fonts to write with.\nKeep the TrueType drawer next to Easel.")); return 0; }
+  if (!font_count()) { free(tp); ask("OK", "%s", tr("There are no fonts to write with.\nKeep the TrueType drawer next to Easel or in Bureau:.")); return 0; }
   text_params_init(tp, font_name(opt.text_font), opt.text_size, mask ? 0xFF0000 : doc->fg, x, y);
   ty_run_style(&tp->run[0], font_name(opt.text_font), opt.text_style);
   tp->aa = (u8)opt.text_aa; tp->align = (u8)opt.text_align;

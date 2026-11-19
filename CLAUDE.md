@@ -63,6 +63,10 @@ reference. RTG (15-32 bit) and AGA (dithered, 256 colours or fewer) screens both
   write their labels in English.
 - A new feature gets a native test, an update to its row in `docs/photocraft-gap.md`, and a README note.
 - Easel leaves out printing and ARexx on purpose.
+- Shared files (screen fonts, TrueType, Dict) are found through `core/respath.c` (byte-identical in
+  Quill, Ledger, Easel, Folio and Dispatch): beside Easel, then `Bureau:` (the Bureau suite), then
+  `FONTS:`; the drawers are chosen once at start (`amiga/resdirs.h`, `find_dirs` in `main.c`). Never
+  hard-code `PROGDIR:Fonts`, `PROGDIR:TrueType` or `PROGDIR:Dict`: use `res_join` on `res_*_dir`.
 - Don't use `rm -rf` in scripts or by hand on shared machines; move things aside.
 - Commit identity: commits so far use `Claude <noreply@anthropic.com>` or `Easel <easel@localhost>`.
   Never put a personal email address in commits, code or docs.

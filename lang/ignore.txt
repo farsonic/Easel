@@ -161,3 +161,4 @@ canvascolor=
 gamutopacity=
 gamutcol=
 wheelzoom=
+british-english

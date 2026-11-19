@@ -518,8 +518,28 @@ interface and icons. None of the icons are copied from any other program.
 
 Open the Easel drawer and double-click **Install-Easel** (Commodore's Installer 43, or AROS's).
 It copies Easel into a drawer of your choosing, or updates or removes an installed copy. You can
-also just drag the Easel drawer wherever you like. Easel finds its Fonts and TrueType drawers
+also just drag the Easel drawer wherever you like. Easel finds its Fonts, TrueType and Dict drawers
 next to itself.
+
+### Bureau
+
+Easel is also part of **Bureau**, the suite of Quill, Ledger, Easel, Folio and Dispatch, which has
+one package and one installer (Install-Bureau) and installs the shared files once: the screen fonts
+(QuillSans, QuillSerif, QuillMono) in `FONTS:`, the TrueType fonts in `Bureau:TrueType`, the word
+lists and hyphenation patterns in `Bureau:Dict`, and Easel in `Bureau:Easel` with no drawers of its
+own (the installer adds `Assign Bureau: <drawer>` to `S:User-Startup`). For each kind Easel takes the
+first drawer that exists:
+
+| Files | 1st | 2nd | 3rd |
+|---|---|---|---|
+| Screen fonts | `PROGDIR:Fonts` | `Bureau:Fonts` | `FONTS:` |
+| TrueType fonts | `PROGDIR:TrueType` | `Bureau:TrueType` | - |
+| Word list, hyphenation | `PROGDIR:Dict` | `Bureau:Dict` | - |
+
+So the Easel package on its own works as before, and with Bureau installed nothing needs to sit
+beside Easel. Install-Easel offers `Bureau:` as the place to install when the assign exists, and
+leaves out the Fonts, TrueType and Dict drawers when the suite already has them. Easel's own files
+(Easel.prefs, Easel.words, presets, recovery) stay in its drawer either way.
 
 ## The window
 

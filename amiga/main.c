@@ -93,6 +93,7 @@
 #include "../core/cafill.h"
 #include "colorui.h"                    /* 1.2 */
 #include "../core/colorx.h"
+#include "resdirs.h"                    /* Bureau: the shared drawers */
 
 #ifndef MUIA_Window_DisableKeys
 #define MUIA_Window_DisableKeys 0x80424c36UL
@@ -3017,18 +3018,46 @@ static int home_has_fonts(BPTR dir)
   if (l) UnLock(l);
   return l != 0;
 }
-/* PROGDIR: made right if a shell started Easel without it (it holds Fonts and TrueType) */
+/* the shared drawers (resdirs.h): set by find_dirs */
+const char *res_fonts_dir = "PROGDIR:Fonts", *res_truetype_dir = "PROGDIR:TrueType", *res_dict_dir = "PROGDIR:Dict";
+/* (res_pick's question) a drawer exists; never a requester for a missing volume or assign (Bureau:) */
+static int dir_exists(const char *dir, void *ud)
+{
+  struct Process *me = (struct Process *)FindTask(NULL);
+  APTR pw = me->pr_WindowPtr;
+  BPTR l;
+  me->pr_WindowPtr = (APTR)-1;
+  l = Lock((STRPTR)dir, ACCESS_READ);
+  me->pr_WindowPtr = pw;
+  if (l) UnLock(l);
+  return l != 0;
+}
+/* Bureau: where the Fonts, TrueType and Dict drawers are: beside Easel, else in Bureau:, else
+   (the screen fonts) FONTS: */
+static void find_dirs(void)
+{
+  const char *d;
+  res_fonts_dir = res_pick(RES_FONTS, dir_exists, NULL);
+  if ((d = res_pick(RES_TRUETYPE, dir_exists, NULL))) res_truetype_dir = d;
+  if ((d = res_pick(RES_DICT, dir_exists, NULL))) res_dict_dir = d;
+}
+/* Easel's screen fonts are installed beside it, in Bureau:Fonts or in FONTS: */
+static int fonts_found(void)
+{
+  return dir_exists("PROGDIR:Fonts/QuillSans.font", NULL) || dir_exists("Bureau:Fonts/QuillSans.font", NULL) || dir_exists("FONTS:QuillSans.font", NULL);
+}
+/* PROGDIR: made right if a shell started Easel without it (it holds Fonts and TrueType); not
+   needed when the fonts are found in Bureau: or FONTS: (the suite) */
 static void find_home(const char *argv0)
 {
   char name[256];
   const char *tries[2];
   int i;
   struct Process *me = (struct Process *)FindTask(NULL);
-  APTR pw = me->pr_WindowPtr;
-  BPTR l;
+  APTR pw;
+  if (GetProgramDir() && fonts_found()) return;
+  pw = me->pr_WindowPtr;
   me->pr_WindowPtr = (APTR)-1;
-  l = GetProgramDir() ? Lock((STRPTR)"PROGDIR:Fonts/QuillSans.font", ACCESS_READ) : 0;
-  if (l) { UnLock(l); me->pr_WindowPtr = pw; return; }
   tries[0] = argv0;
   tries[1] = GetProgramName((STRPTR)name, sizeof name) ? name : NULL;
   for (i = 0; i < 2 && !home_lock; i++) {
@@ -3048,13 +3077,16 @@ static void free_home(void)
   UnLock(home_lock);
   home_lock = 0;
 }
+/* the Fonts drawer added to FONTS: (not when it is FONTS: or already in it) */
 static void add_fonts(void)
 {
-  BPTR l = Lock((STRPTR)"PROGDIR:Fonts", ACCESS_READ), sys;
+  BPTR l, sys;
   struct Process *me = (struct Process *)FindTask(NULL);
   APTR pw = me->pr_WindowPtr;
-  if (!l) return;
+  if (!strcmp(res_fonts_dir, "FONTS:")) return;
   me->pr_WindowPtr = (APTR)-1;
+  l = Lock((STRPTR)res_fonts_dir, ACCESS_READ);
+  if (!l) { me->pr_WindowPtr = pw; return; }
   if ((sys = Lock((STRPTR)"FONTS:", ACCESS_READ))) {
     LONG same = SameLock(l, sys);
     UnLock(sys);
@@ -3067,7 +3099,7 @@ static void remove_fonts(void)
 {
   BPTR l;
   if (!fonts_assigned) return;
-  if ((l = Lock((STRPTR)"PROGDIR:Fonts", ACCESS_READ))) { RemAssignList((STRPTR)"FONTS", l); UnLock(l); }
+  if ((l = Lock((STRPTR)res_fonts_dir, ACCESS_READ))) { RemAssignList((STRPTR)"FONTS", l); UnLock(l); }
   fonts_assigned = 0;
 }
 static void load_prefs(void)
@@ -3122,6 +3154,7 @@ int main(int argc, char **argv)
   layerx_init(); cafill_init();          /* 1.2: vector masks, patterns, group effects; Spot Healing's Content-Aware type */
   mixer_init(&tool_mixer);
   find_home(argc > 0 ? argv[0] : NULL);
+  find_dirs();
   for (i = 1; i < argc; i++) {
     if (!strncmp(argv[i], "DEBUG=", 6)) qlog = fopen(argv[i] + 6, "w");
     else if (!Strnicmp((STRPTR)argv[i], (STRPTR)"PUBSCREEN=", 10)) { strncpy(arg_screen, argv[i] + 10, sizeof arg_screen - 1); }
@@ -3162,7 +3195,7 @@ int main(int argc, char **argv)
   DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
   add_fonts();
   splash_step(6, tr("Reading the TrueType fonts"));
-  fonts_init(&fonts, "PROGDIR:TrueType");
+  fonts_init(&fonts, res_truetype_dir);
   splash_step(10, tr("Looking for installed fonts"));
   sysfonts_scan(&fonts, scan_step);
   /* 0.9: type layers find their faces among these, and Amiga bitmap fonts in FONTS: */
@@ -3210,7 +3243,7 @@ int main(int argc, char **argv)
   refresh_all();
   jobs_window = 1;
   if (start_cmd) DoMethod(app, MUIM_Application_ReturnID, start_cmd);   /* (through the loop: as a job) */
-  if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel."));
+  if (!theme_fonts_ok()) ask("OK", "%s", tr("Easel couldn't open its own screen fonts, so text is drawn in the\nsystem font. Keep the Fonts drawer next to Easel, or install\nBureau's fonts in FONTS:."));
   for (;;) {
     ULONG id = DoMethod(app, MUIM_Application_NewInput, (ULONG)&sigs);
     if (id) LOG("id %lu", (unsigned long)id);

@@ -17,6 +17,7 @@ CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"  
 CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c core/modex.c core/timeline.c core/measure.c core/grdw.c"   # round 3: file formats, import and export
 CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation additions
 CORE="$CORE core/r4.c core/spell.c"   # round 4: Find and Isolate Layers, Float and Drop, Show Clipping, Check Spelling
+CORE="$CORE core/respath.c"     # Bureau: where the shared Fonts, TrueType and Dict drawers are found
   # 1.1: the interface languages - amiga/lang_table.h as lang/strings.txt makes it, every string of the
   # interface translated and every row used (langcheck lists what is missing), then tr() and the table
   python3 tools/mklang.py --check
@@ -32,6 +33,10 @@ CORE="$CORE core/r4.c core/spell.c"   # round 4: Find and Isolate Layers, Float 
   cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. tests/ctxtest.c -o $T/easel_ctxtest
   $T/easel_ctxtest > $T/easel_ctxtest.txt || { cat $T/easel_ctxtest.txt; exit 1; }
   tail -1 $T/easel_ctxtest.txt
+  # Bureau: the shared drawers' lookup order (beside Easel, Bureau:, FONTS:) and the path joins
+  cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. core/respath.c tests/respathtest.c -o $T/easel_respathtest
+  $T/easel_respathtest > $T/easel_respathtest.txt || { cat $T/easel_respathtest.txt; exit 1; }
+  tail -1 $T/easel_respathtest.txt
   av1/build-av1.sh native $T/easel_dav1d
   # each test linked with the whole core (and dav1d)
   t() { cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -I. -Iav1/include $CORE tests/$1.c $T/easel_dav1d/libdav1d.a -o $T/easel_$1 -lm -lpthread; }

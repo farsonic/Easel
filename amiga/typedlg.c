@@ -224,7 +224,7 @@ int dlg_paragraph(struct TextParams *tp)
     { double v = num_of(il); tp->indent_left = v >= 0 ? v : 0; v = num_of(ir); tp->indent_right = v >= 0 ? v : 0; }   /* 1.2 */
     tp->kern = (u8)sel_of(kc);
     tp->hyphenate = (u8)sel_of(hy);
-    if (tp->hyphenate && !r3_hyphen_patterns()) ask("OK", "%s", tr("No hyphenation patterns were found: put hyph_en_GB.dic (or your language's) in Easel's Dict drawer."));
+    if (tp->hyphenate && !r3_hyphen_patterns()) ask("OK", "%s", tr("No hyphenation patterns were found: put hyph_en_GB.dic (or your language's) in Easel's Dict drawer or in Bureau:Dict."));
     if (bw && num_of(bw) >= 1) tp->bw = num_of(bw);
     if (bh && num_of(bh) >= 1) tp->bh = num_of(bh);
   }

@@ -16,6 +16,7 @@ CORE="$CORE core/vecx.c core/filtr3.c core/selr3.c core/hyphen.c core/colr3.c"  
 CORE="$CORE core/lutlook.c core/foreign.c core/xcf.c core/kra.c core/pdn.c core/filesx.c core/camraw.c core/modex.c core/timeline.c core/measure.c core/grdw.c"   # round 3: file formats, import and export
 CORE="$CORE core/menu3.c"       # 1.3: round 3's menu, tool and automation additions
 CORE="$CORE core/r4.c core/spell.c"   # round 4: Find and Isolate Layers, Float and Drop, Show Clipping, Check Spelling
+CORE="$CORE core/respath.c"     # Bureau: where the shared Fonts, TrueType and Dict drawers are found
 if [ "$1" != "fast" ]; then
   # 1.1: the interface languages (lang/strings.txt, amiga/lang_table.h, every string translated)
   python3 tools/mklang.py --check && python3 tools/langcheck.py | tail -1

@@ -1,6 +1,6 @@
 /*
  * r4ui.c - Easel round 4 on the Amiga side: Select > Find Layers, Isolate Layers, Float and Drop;
- * Edit > Check Spelling (Quill's word list from PROGDIR:Dict, the user's words in PROGDIR:Easel.words).
+ * Edit > Check Spelling (Quill's word list from the Dict drawer (beside Easel or Bureau:Dict), the user's words in PROGDIR:Easel.words).
  * The core work is in core/r4.c and core/spell.c.
  */
 #include <string.h>
@@ -18,6 +18,7 @@
 #include "r4ids.h"
 #include "../core/r4.h"
 #include "../core/spell.h"
+#include "resdirs.h"
 #include "../core/type.h"
 #include "../core/util.h"
 #include "../core/adjust.h"
@@ -80,7 +81,11 @@ static int spell_ready(void)
 {
   if (spell.n || spell_tried) return spell.n != 0;
   spell_tried = 1;
-  if (!spell_load(&spell, "PROGDIR:Dict/british-english")) return 0;
+  {
+    char path[160];
+    res_join(path, sizeof path, res_dict_dir, "british-english");
+    if (!spell_load(&spell, path)) return 0;
+  }
   {
     size_t n;
     u8 *w = file_read("PROGDIR:Easel.words", &n);
@@ -169,7 +174,7 @@ static void check_spelling(Doc *d)
   int i, any = 0;
   for (i = 0; i < d->nlay; i++) if (layer_text(d->lay[i])) any = 1;
   if (!any) { say("There is no type layer to check."); return; }
-  if (!spell_ready()) { say("The word list wasn't found: Easel looks for Dict/british-english\nin its drawer."); return; }
+  if (!spell_ready()) { say("The word list wasn't found: Easel looks for Dict/british-english\nin its drawer and in Bureau:."); return; }
   memset(&sp, 0, sizeof sp);
   sp.d = d;
   w = dialog_window("Check Spelling", VGroup,

@@ -9,6 +9,10 @@
 ;            icons; the Easel drawer gets Easel's own icon. The example pictures' icons are set
 ;            to open in the Easel just installed.
 ; Keeps:     your settings (Easel.prefs, Easel.recent) when updating.
+; Bureau:    if the Bureau suite is installed (a Bureau: assign), Easel goes into Bureau:Easel by
+;            default, and the Fonts, TrueType and Dict drawers are left out when the suite already
+;            has them (Bureau:TrueType, Bureau:Dict and FONTS:QuillSans.font): Easel looks beside
+;            itself first, then in Bureau:, then (screen fonts) in FONTS:.
 ; Needs:     a 68040 or better, MUI 3.8 or later (muimaster.library 19).
 ;
 ; The script runs in the drawer it was unpacked into (Easel/), so its sources are relative to that.
@@ -17,6 +21,13 @@
 
 (set @app-name "Easel")
 (set #version "1.0")
+
+; the Bureau suite: its assign, and whether it already holds the shared fonts and word lists
+(set #bureau (exists "Bureau:" (noreq)))
+(set #shared
+  (if #bureau
+    (and (exists "Bureau:TrueType" (noreq)) (exists "Bureau:Dict" (noreq)) (exists "FONTS:QuillSans.font" (noreq)))
+    0))
 
 ; ------------------------------------------------------------------ install or remove
 
@@ -40,13 +51,14 @@
     (askdir
       (prompt "Which Easel drawer should be removed?")
       (help "Choose the Easel drawer itself: the one holding\n"
-            "the Easel program and its Fonts drawer.")
-      (default (if (exists "Work:Easel" (noreq)) "Work:Easel" "SYS:"))))
-  ; only a drawer that really is Easel's
-  (if (not (and (exists (tackon #old "Easel")) (exists (tackon #old "Fonts/QuillSans.font"))))
+            "the Easel program and its README.md.")
+      (default (if (exists "Bureau:Easel" (noreq)) "Bureau:Easel" (if (exists "Work:Easel" (noreq)) "Work:Easel" "SYS:")))))
+  ; only a drawer that really is Easel's (in the Bureau suite it has no Fonts drawer of its own)
+  (if (not (and (exists (tackon #old "Easel"))
+                (or (exists (tackon #old "Fonts/QuillSans.font")) (exists (tackon #old "README.md")))))
     (abort (cat "\"" #old "\"\n"
                 "doesn't look like a Easel drawer (there is no\n"
-                "Easel program with a Fonts drawer in it),\n"
+                "Easel program with its README in it),\n"
                 "so nothing was removed.")))
   (if (askbool
         (prompt (cat "Delete the whole drawer\n\n" #old "\n\n"
@@ -110,13 +122,17 @@
     (help "Choose the drawer or disk to put Easel in, for\n"
           "example Work:. Easel goes into a drawer of its own,\n"
           "Easel, inside the one you choose. If an older Easel\n"
-          "is there, it is updated and your settings are kept.")
-    (default (if (exists "Work:" (noreq)) "Work:" "SYS:"))
+          "is there, it is updated and your settings are kept.\n\n"
+          "With the Bureau suite installed, Bureau: is offered:\n"
+          "Easel then shares the suite's fonts and word lists.")
+    (default (if #bureau "Bureau:" (if (exists "Work:" (noreq)) "Work:" "SYS:")))
     (disk)))
 (set #dest (tackon #where "Easel"))
 (set @default-dest #dest)
 
 (set #update (exists (tackon #dest "Easel") (noreq)))
+; the shared drawers are left out when Bureau: has them, unless this Easel already has its own
+(set #skipshared (if #shared (not (exists (tackon #dest "Fonts") (noreq))) 0))
 
 ; the parts
 (set #parts
@@ -170,31 +186,35 @@
     (infos)
     (nogauge))
   (complete 10)
-  (copyfiles
-    (prompt "Copying Easel's screen fonts")
-    (help @copyfiles-help)
-    (source "Fonts")
-    (dest (tackon #dest "Fonts"))
-    (all))
-  (if (exists "Fonts.info" (noreq)) (copyfiles (source "Fonts.info") (dest #dest) (nogauge)))
-  (complete 55)
-  (copyfiles
-    (prompt "Copying the fonts for the Text tool")
-    (help @copyfiles-help)
-    (source "TrueType")
-    (dest (tackon #dest "TrueType"))
-    (all))
-  (if (exists "TrueType.info" (noreq)) (copyfiles (source "TrueType.info") (dest #dest) (nogauge)))
-  (complete 80)
-  ; round 4: the word list for Check Spelling and the hyphenation patterns
-  (if (exists "Dict")
+  ; Bureau: the suite's FONTS:, Bureau:TrueType and Bureau:Dict serve Easel instead
+  (if (not #skipshared)
+  (
     (copyfiles
-      (prompt "Copying the word list and hyphenation patterns")
+      (prompt "Copying Easel's screen fonts")
       (help @copyfiles-help)
-      (source "Dict")
-      (dest (tackon #dest "Dict"))
-      (all)))
-  (if (exists "Dict.info" (noreq)) (copyfiles (source "Dict.info") (dest #dest) (nogauge)))
+      (source "Fonts")
+      (dest (tackon #dest "Fonts"))
+      (all))
+    (if (exists "Fonts.info" (noreq)) (copyfiles (source "Fonts.info") (dest #dest) (nogauge)))
+    (complete 55)
+    (copyfiles
+      (prompt "Copying the fonts for the Text tool")
+      (help @copyfiles-help)
+      (source "TrueType")
+      (dest (tackon #dest "TrueType"))
+      (all))
+    (if (exists "TrueType.info" (noreq)) (copyfiles (source "TrueType.info") (dest #dest) (nogauge)))
+    (complete 80)
+    ; round 4: the word list for Check Spelling and the hyphenation patterns
+    (if (exists "Dict")
+      (copyfiles
+        (prompt "Copying the word list and hyphenation patterns")
+        (help @copyfiles-help)
+        (source "Dict")
+        (dest (tackon #dest "Dict"))
+        (all)))
+    (if (exists "Dict.info" (noreq)) (copyfiles (source "Dict.info") (dest #dest) (nogauge)))
+  ))
   (complete 85)
 
   (if (in #parts 0)
@@ -233,6 +253,7 @@
   (cat "Easel " #version " is "
        (if #same "ready in" (if #update "updated in" "installed in"))
        "\n\n" #dest "\n\n"
+       (if #skipshared "It uses the Bureau suite's fonts and word lists.\n\n" "")
        "Double-click the Easel icon to start it, or a\n"
        "picture whose icon has Easel as its default\n"
        "tool. README.md tells you what it can do and\n"

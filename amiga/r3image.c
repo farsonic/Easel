@@ -18,6 +18,7 @@
 #include "ids.h"
 #include "dlgx.h"
 #include "r3ids.h"
+#include "resdirs.h"
 #include "../core/util.h"
 #include "../core/vecx.h"
 #include "../core/pathops.h"
@@ -396,12 +397,13 @@ int r3_hyphen_patterns(void)
 {
   static int tried;
   static const char *const files[UI_NLANG] = { "hyph_en_GB.dic", "hyph_de_DE.dic", "hyph_fr_FR.dic", "hyph_es_ES.dic", "hyph_it_IT.dic" };
-  char path[64];
+  char path[160];
   int l = lang_current();
   if (hyphen_ready() || tried) return hyphen_ready();
   tried = 1;
-  if (l >= 0 && l < UI_NLANG) { snprintf(path, sizeof path, "PROGDIR:Dict/%s", files[l]); if (hyphen_load(path)) return 1; }
-  return hyphen_load("PROGDIR:Dict/hyph_en_GB.dic");
+  if (l >= 0 && l < UI_NLANG) { res_join(path, sizeof path, res_dict_dir, files[l]); if (hyphen_load(path)) return 1; }
+  res_join(path, sizeof path, res_dict_dir, "hyph_en_GB.dic");
+  return hyphen_load(path);
 }
 
 /* ------------------------------------------------------------------ Combine Shapes */
